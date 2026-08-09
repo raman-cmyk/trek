@@ -26,7 +26,8 @@
     "marked": "^18.0.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router": "^8.3.0"
+    "react-router": "^8.3.0",
+    "workers-og": "^0.0.27"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.0",

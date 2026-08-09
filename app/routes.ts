@@ -50,6 +50,7 @@ export default [
     route("ops/permits", "routes/ops.permits.tsx"),
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
+    route("ops/moderation", "routes/ops.moderation.tsx"),
   ]),
 
   // Booking flow (M6) + My Trips & documents (M7).
@@ -58,8 +59,13 @@ export default [
   route("trips", "routes/trips._index.tsx"),
   route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
   route("trips/:bookingId/doc/:docId", "routes/trips.$bookingId.doc.$docId.tsx"),
+  route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
+
+  // Public trek recaps (M8) — shareable SEO pages + OG image.
+  route("recap/:slug", "routes/recap.$slug.tsx"),
+  route("recap/:slug/og", "routes/recap.$slug.og.tsx"),
 
   // Redirects (301) + 404.
   route("*", "routes/$.tsx"),

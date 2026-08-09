@@ -5,6 +5,9 @@ import { requireUser } from "~/lib/auth.server";
 import { getStripe } from "~/lib/stripe.server";
 import { cancelBooking } from "~/lib/booking.server";
 import { uploadDocument } from "~/lib/documents.server";
+import { submitReview, createRecap, addReviewPhoto } from "~/lib/reviews.server";
+import { uploadPublicPhoto } from "~/lib/media.server";
+import { SUBRATINGS } from "~/lib/reviews";
 import { sendEmail } from "~/lib/notify.server";
 import { briefUnlocked, guidePhoneUnlocked, daysUntilStart } from "~/lib/unlocks";
 import { formatUsd } from "~/lib/pricing";
@@ -39,14 +42,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!b) throw new Response("Not found", { status: 404 });
 
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: payments }, { data: docs }, { data: permits }] = await Promise.all([
-    admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
-    admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id).order("created_at"),
-    admin
-      .from("permit_applications")
-      .select("status, reference_no, permit:permits(name)")
-      .eq("booking_id", b.id),
-  ]);
+  const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }] =
+    await Promise.all([
+      admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
+      admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id).order("created_at"),
+      admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
+      admin.from("reviews").select("id").eq("booking_id", b.id).eq("author_id", user.id).maybeSingle(),
+      admin.from("recaps").select("slug").eq("booking_id", b.id).maybeSingle(),
+    ]);
 
   const phoneUnlocked = guidePhoneUnlocked(b.start_date, today);
   return data(
@@ -58,6 +61,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       guidePhone: phoneUnlocked ? (b as any).guide?.users?.phone ?? null : null,
       briefUnlocked: briefUnlocked(b.start_date, today),
       daysUntil: daysUntilStart(b.start_date, today),
+      hasReviewed: !!myReview,
+      recapSlug: recap?.slug ?? null,
     },
     { headers },
   );
@@ -68,7 +73,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireUser(request, env, "trekker");
   const { data: b } = await admin
     .from("bookings")
-    .select("id, status, end_date, guide_id")
+    .select("id, status, end_date, guide_id, offering_id")
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
     .maybeSingle();
@@ -106,8 +111,44 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       .eq("id", b.id);
     // Schedule document deletion 90 days out (retention sweep).
     await admin.from("booking_documents").update({ delete_after: deleteAfter }).eq("booking_id", b.id);
+    // Auto-generate the shareable recap.
+    await createRecap(admin, b.id);
     await sendEmail(env, user.email, "How was your trek?", "Please leave your guide a review.");
     return data({ ok: "Trip marked complete. Please leave a review!" }, { headers });
+  }
+
+  if (intent === "review") {
+    const overall = Number(form.get("overall") ?? 0);
+    const body = String(form.get("body") ?? "").trim() || null;
+    const subRatings: Record<string, number> = {};
+    for (const k of SUBRATINGS.trekker_to_guide) {
+      subRatings[k] = Number(form.get(`sub_${k}`) ?? overall) || overall;
+    }
+    const res = await submitReview(admin, {
+      bookingId: b.id,
+      authorId: user.id,
+      subjectId: b.guide_id,
+      direction: "trekker_to_guide",
+      overall,
+      subRatings,
+      body,
+    });
+    if (!res.ok) return data({ error: res.error ?? "Couldn’t save review." }, { status: 400 });
+    // Optional photo → offering photo moderation queue.
+    const photo = form.get("photo");
+    if (photo instanceof File && photo.size) {
+      const url = await uploadPublicPhoto(admin, `reviews/${b.id}`, photo);
+      if (url) {
+        const person = String(form.get("credit_name") ?? "A trekker");
+        await addReviewPhoto(admin, {
+          offeringId: b.offering_id,
+          url,
+          creditName: person,
+          alt: `Trekker photo from the trek`,
+        });
+      }
+    }
+    return data({ ok: "Thanks for your review!" }, { headers });
   }
 
   if (intent === "cancel") {
@@ -118,7 +159,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil } =
+  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug } =
     loaderData as any;
   const nav = useNavigation();
   const cancelled = b.status.startsWith("cancelled");
@@ -138,6 +179,14 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         with {b.guide?.users?.full_name} · {b.start_date} → {b.end_date} ·{" "}
         {b.party_size}p
       </p>
+      {!cancelled && (
+        <Link
+          to={`/messages/${b.id}`}
+          className="mt-3 inline-block rounded-button border border-border px-3 py-1.5 text-sm text-primary"
+        >
+          Message your guide
+        </Link>
+      )}
 
       {actionData && "ok" in actionData && actionData.ok && (
         <p className="mt-3 rounded-card bg-emerald-50 p-3 text-sm text-emerald-800">
@@ -298,6 +347,55 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* Recap */}
+      {recapSlug && (
+        <section className="mt-6">
+          <Link
+            to={`/recap/${recapSlug}`}
+            className="block rounded-card border border-accent/40 bg-accent/5 p-4 text-center font-medium text-accent"
+          >
+            View & share your trek recap →
+          </Link>
+        </section>
+      )}
+
+      {/* Review (after completion) */}
+      {b.status === "completed" && !hasReviewed && (
+        <section className="mt-6">
+          <h2 className="mb-2 font-display text-xl">Leave a review</h2>
+          <Form
+            method="post"
+            encType="multipart/form-data"
+            className="space-y-3 rounded-card border border-border bg-card p-4"
+          >
+            <input type="hidden" name="intent" value="review" />
+            <label className="block text-sm">
+              <span className="text-ink-soft">Overall</span>
+              <select name="overall" defaultValue="5" className="mt-1 w-full rounded-button border border-border px-3 py-2">
+                {[5, 4, 3, 2, 1].map((n) => (
+                  <option key={n} value={n}>{n} ★</option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {["safety", "communication", "local_knowledge", "english", "pace", "value"].map((k) => (
+                <label key={k} className="text-xs text-ink-soft">
+                  {k.replace(/_/g, " ")}
+                  <select name={`sub_${k}`} defaultValue="5" className="mt-1 w-full rounded border border-border px-2 py-1 text-sm">
+                    {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <textarea name="body" rows={3} placeholder="How was your trek?" className="w-full rounded-button border border-border px-3 py-2 text-sm" />
+            <input name="credit_name" placeholder="Credit name for your photo (optional)" className="w-full rounded-button border border-border px-3 py-2 text-sm" />
+            <input type="file" name="photo" accept="image/*" className="text-sm" />
+            <p className="text-xs text-ink-soft">Your review is hidden until your guide reviews you too, or 14 days pass.</p>
+            <Button type="submit" size="sm" loading={nav.state !== "idle"}>Submit review</Button>
+          </Form>
         </section>
       )}
 

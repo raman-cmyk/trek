@@ -311,3 +311,46 @@ create a **Sparrow SMS** account and set `SPARROW_SMS_TOKEN`; schedule
 `/api/cron/document-retention` daily. Until then notifications log to console.
 
 **Next:** M8 — messaging, check-ins, reviews (double-blind), recap page + OG.
+
+## M8 — Messaging, reviews (double-blind), recaps + OG (2026-08-09)
+
+Built the social layer that turns a completed trek into trust and demand:
+
+- **Messaging** (`/messages/:bookingId`) — one shared thread for the trekker
+  and their guide. Pre-deposit, phone numbers and emails are masked in the
+  rendered body (`mask.ts`), the original is stored, and any contact/bypass
+  attempt sets `flagged_reason` → ops moderation queue. Post-deposit, the raw
+  body shows. Linked from the trip page ("Message your guide") and the guide's
+  bookings list ("Message").
+- **Double-blind reviews** (`reviews.ts` pure + unit-tested; `reviews.server.ts`).
+  A review stays hidden until BOTH sides submit **or 14 days pass** — then both
+  release together. Trekker→guide sub-ratings (safety, communication, local
+  knowledge, english, pace, value); guide→trekker (fitness honesty, punctuality,
+  respect). Trekker reviews from the trip page (optional photo → moderation
+  queue); guide reviews from `/g/bookings`. Lone-review release runs on the
+  `review-release` cron.
+- **Recaps** (`/recap/:slug`) — auto-generated when a booking completes: a
+  public, shareable SSR page (days, max altitude, approved photos, guide chip,
+  "Book <guide> again"). Dynamic **OpenGraph image** at `/recap/:slug/og`
+  rendered with `workers-og` (satori + resvg wasm) and an **embedded** font
+  (`og-font.ts`) so it needs no network at the edge — verified returning a
+  1200×630 PNG.
+- **Ops moderation** (`/ops/moderation`) — flagged-message queue (dismiss) and
+  trekker-photo approval queue (approve → public / reject → delete). New nav
+  item with a live count badge.
+- **Missed check-in sweep** (`runMissedCheckinSweep`, `missed-checkin` cron) —
+  opens an L1 incident for an active booking whose last check-in is stale, with
+  no duplicate.
+- New buckets/tables wiring: `0014_photos_bucket.sql` (public `photos` bucket
+  for review/check-in photos), `media.server.ts` (`uploadPublicPhoto`).
+
+**Verified (real local Supabase):** all 14 migrations + seed apply clean;
+recap page SSRs the real offering + guide with correct `og:image` meta; the OG
+route returns a valid **1200×630 image/png** (font embedded, wasm rendered);
+schema columns for messages/reviews/recaps/photos all present. Build +
+typecheck + **47 tests** green.
+
+**🙋 Founder:** schedule the `review-release` and `missed-checkin` crons daily;
+(same Resend/Sparrow keys from M7 cover review-request emails).
+
+**Next:** M9 — launch gate (deploy to Cloudflare, live env wiring, final QA).

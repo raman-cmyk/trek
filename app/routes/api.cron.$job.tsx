@@ -1,8 +1,9 @@
 import type { Route } from "./+types/api.cron.$job";
 import { getEnv, createAdminClient } from "~/lib/supabase.server";
 import { getStripe } from "~/lib/stripe.server";
-import { runEnquiryExpirySweep, runBalanceSweep } from "~/lib/booking.server";
+import { runEnquiryExpirySweep, runBalanceSweep, runMissedCheckinSweep } from "~/lib/booking.server";
 import { runDocumentRetentionSweep } from "~/lib/documents.server";
+import { releaseStaleReviews } from "~/lib/reviews.server";
 
 /**
  * Cron sweeps (docs/02 §Edge functions). Wire these to Cloudflare Cron Triggers
@@ -28,6 +29,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     case "document-retention":
       result = await runDocumentRetentionSweep(admin, today);
       break;
+    case "review-release":
+      result = await releaseStaleReviews(admin, new Date().toISOString());
+      break;
+    case "missed-checkin": {
+      const { data: ops } = await admin.from("users").select("id").eq("role", "ops").limit(1).maybeSingle();
+      result = ops
+        ? await runMissedCheckinSweep(admin, today, ops.id)
+        : { alerts: 0, note: "no ops user" };
+      break;
+    }
     default:
       return new Response("unknown job", { status: 404 });
   }

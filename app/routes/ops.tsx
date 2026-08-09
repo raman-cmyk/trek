@@ -11,7 +11,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { profile, admin, headers } = await requireOps(request, env);
 
-  const [verifs, incidents, payouts] = await Promise.all([
+  const [verifs, incidents, payouts, flags, pendingPhotos] = await Promise.all([
     admin
       .from("guides")
       .select("user_id", { count: "exact", head: true })
@@ -24,6 +24,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .from("payouts")
       .select("id", { count: "exact", head: true })
       .eq("status", "payable"),
+    admin
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .not("flagged_reason", "is", null),
+    admin
+      .from("offering_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("approved", false)
+      .eq("source", "trekker"),
   ]);
 
   return data(
@@ -33,6 +42,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         verifications: verifs.count ?? 0,
         incidents: incidents.count ?? 0,
         payouts: payouts.count ?? 0,
+        moderation: (flags.count ?? 0) + (pendingPhotos.count ?? 0),
       },
     },
     { headers },
@@ -53,6 +63,7 @@ const NAV = [
   { to: "/ops/permits", label: "Permits", badge: null },
   { to: "/ops/payouts", label: "Payouts", badge: "payouts" },
   { to: "/ops/incidents", label: "Incidents", badge: "incidents" },
+  { to: "/ops/moderation", label: "Moderation", badge: "moderation" },
 ] as const;
 
 export default function OpsLayout({ loaderData }: Route.ComponentProps) {

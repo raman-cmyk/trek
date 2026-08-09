@@ -259,6 +259,54 @@ export async function cancelBooking(
 
 // ---- Sweeps (called by cron; see routes/api.cron.$job.tsx) ------------------
 
+/**
+ * Missed-check-in sweep (docs/01 F7): active multi-day treks whose most recent
+ * check-in is older than yesterday get an ops incident (24h alert). A duplicate
+ * open incident is not created.
+ */
+export async function runMissedCheckinSweep(
+  admin: SupabaseClient,
+  todayIso: string,
+  opsUserId: string,
+) {
+  const { data: active } = await admin
+    .from("bookings")
+    .select("id, start_date")
+    .eq("status", "active");
+  const yesterday = new Date(Date.parse(todayIso) - 86_400_000).toISOString().slice(0, 10);
+
+  let alerts = 0;
+  for (const b of active ?? []) {
+    const { data: last } = await admin
+      .from("checkins")
+      .select("day")
+      .eq("booking_id", b.id)
+      .order("day", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const missed = !last || last.day < yesterday;
+    if (!missed) continue;
+    const { data: open } = await admin
+      .from("incidents")
+      .select("id")
+      .eq("booking_id", b.id)
+      .neq("status", "closed")
+      .ilike("summary", "Missed check-in%")
+      .maybeSingle();
+    if (open) continue;
+    await admin.from("incidents").insert({
+      booking_id: b.id,
+      severity: "L1",
+      summary: "Missed check-in — no check-in in the last 24h.",
+      status: "open",
+      opened_by: opsUserId,
+      timeline: [{ at: todayIso, actor: "system", action: "Auto-flagged: missed check-in" }],
+    });
+    alerts++;
+  }
+  return { alerts };
+}
+
 /** Expire open enquiries past their TTL, and release accepted-but-unpaid holds. */
 export async function runEnquiryExpirySweep(admin: SupabaseClient) {
   const now = new Date().toISOString();

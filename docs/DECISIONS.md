@@ -128,3 +128,21 @@ agreement). Newest first.
   sandbox with `--ignore-health-check`; a fresh clone's `supabase start`
   includes them by default. (The `-x` exclusions are only this sandbox's
   workaround for the analytics/vector rlimit crash.)
+
+## 2026-08-09 (M8)
+
+- **Double-blind release is a pure function of the booking's review set + now**
+  (`reviewsToRelease`), applied both on submit (`releaseForBooking`) and by a
+  daily cron (`releaseStaleReviews`). No scheduled per-review state; the 14-day
+  boundary is "≥ 14 days elapsed" (release on day 15+ / exactly 14, not day 13).
+- **Messaging is one thread per booking, server-mediated.** Masking happens at
+  write time: we store the raw `body` plus a `body_rendered` (masked pre-deposit)
+  and the loader shows `body_rendered` while `status = pending_deposit`, the raw
+  `body` after. Ops never needs to re-mask; the flag is computed once.
+- **OG images embed the font in the bundle** (`og-font.ts`, base64 Liberation
+  Sans) rather than fetching one at render. Cloudflare Workers have no
+  filesystem and outbound fetch at render is a latency/CSP risk; a ~550KB module
+  constant is the reliable trade. Rendered via `workers-og` (satori + resvg wasm).
+- **Trekker review photos are untrusted** → inserted as `offering_photos` with
+  `source='trekker', approved=false` and surfaced only after ops approval
+  (`/ops/moderation`). Recaps only ever show `approved=true` photos.
