@@ -24,13 +24,19 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const id = String(form.get("id"));
   const decision = String(form.get("decision")); // 'accepted' | 'declined'
-  // Guard: only the guide's own open enquiry.
-  await admin
-    .from("enquiries")
-    .update({ status: decision })
-    .eq("id", id)
-    .eq("guide_id", user.id)
-    .eq("status", "open");
+
+  if (decision === "accepted") {
+    // Create the booking (pending_deposit), hold the calendar, quote via pricing.
+    const { acceptEnquiry } = await import("~/lib/booking.server");
+    await acceptEnquiry(admin, id, user.id);
+  } else {
+    await admin
+      .from("enquiries")
+      .update({ status: "declined" })
+      .eq("id", id)
+      .eq("guide_id", user.id)
+      .eq("status", "open");
+  }
   return data({ ok: true }, { headers });
 }
 

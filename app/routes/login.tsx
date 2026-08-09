@@ -8,10 +8,16 @@ export function meta() {
   return [{ title: "Sign in" }, { name: "robots", content: "noindex" }];
 }
 
+function safeNext(raw: string | null): string {
+  // Only allow same-site absolute paths.
+  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const next = safeNext(new URL(request.url).searchParams.get("next"));
   const { user } = await getSessionUser(request, getEnv(context));
-  if (user) throw redirect("/");
-  return null;
+  if (user) throw redirect(next);
+  return { next };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -41,13 +47,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ error: "That code didn’t work. Try again.", sent: true, email }, { status: 400 });
   }
   await ensureTrekkerProfile(env, res.user);
-  // My Trips lands in M7; send trekkers home for now.
-  return redirect("/", { headers });
+  return redirect(safeNext(String(form.get("next") ?? "/")), { headers });
 }
 
-export default function Login({ actionData }: Route.ComponentProps) {
+export default function Login({ actionData, loaderData }: Route.ComponentProps) {
   const nav = useNavigation();
   const busy = nav.state !== "idle";
+  const next = loaderData?.next ?? "/";
   const sent = actionData && "sent" in actionData && actionData.sent;
 
   return (
@@ -60,6 +66,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
       {!sent ? (
         <Form method="post" className="mt-6 space-y-4">
           <input type="hidden" name="intent" value="send" />
+          <input type="hidden" name="next" value={next} />
           <label className="block">
             <span className="text-sm text-ink-soft">Email</span>
             <input
@@ -80,6 +87,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
       ) : (
         <Form method="post" className="mt-6 space-y-4">
           <input type="hidden" name="intent" value="verify" />
+          <input type="hidden" name="next" value={next} />
           <input type="hidden" name="email" value={String((actionData as any).email ?? "")} />
           <p className="text-sm text-ink">
             Code sent to <strong>{String((actionData as any).email ?? "")}</strong>.

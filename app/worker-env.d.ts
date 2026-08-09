@@ -12,4 +12,5 @@ interface Env {
   RESEND_API_KEY?: string;
   SPARROW_SMS_TOKEN?: string;
   POSTHOG_KEY?: string;
+  CRON_SECRET?: string;
 }

@@ -138,6 +138,8 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
 
         <BookingWidget
           offering={{
+            id: o.id,
+            guide_id: o.guide_id,
             kind: o.kind,
             days: o.days,
             price_usd_cents: o.price_usd_cents,
@@ -148,6 +150,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             guide_first_name: o.guide_name.split(" ")[0],
           }}
           availableDays={availableDays}
+          returnTo={data.canonical ? new URL(data.canonical).pathname : "/"}
         />
       </div>
     </main>

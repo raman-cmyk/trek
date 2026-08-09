@@ -232,3 +232,41 @@ email OTP already works.
 
 **Next:** M6 — enquiry → quote → booking → Stripe deposit (needs your Stripe
 test keys).
+
+---
+
+## 2026-08-09 — M6 (enquiry → quote → booking → deposit)
+
+**Shipped** (against a mocked Stripe — real keys slot in with no code change)
+
+- `app/lib/stripe.server.ts` — Stripe behind one interface: `RealStripe` (REST
+  via fetch, Workers-friendly) + `MockStripe`, chosen by `STRIPE_SECRET_KEY`.
+- `app/lib/booking.server.ts` — the booking state machine: `quote` (pricing.ts),
+  `acceptEnquiry` (create booking `pending_deposit` + hold calendar days),
+  `fulfillDeposit` (idempotent: PI-dedupe + status guard), `cancelBooking`
+  (refund per policy.ts + release days), and the `runEnquiryExpirySweep` /
+  `runBalanceSweep` crons. `app/lib/config.ts` for FX + window constants.
+- **Enquiry** from the offering booking widget → `/enquiry` (trekker-auth;
+  redirects to `/login?next=` if signed out).
+- **Guide accept** (M5 inbox) now creates the booking + holds availability.
+- **Checkout** `/checkout/:id` — deposit (30%, or 100% inside 14 days) via the
+  mock PaymentIntent; **Trip** `/trips/:id` — status timeline, payments, cancel.
+- **Webhook** `/api/webhooks/stripe` (deposit success → `deposit_paid` + calendar
+  booked, idempotent) and **cron** `/api/cron/:job` (enquiry-expiry, balance-
+  sweep), secret-gated.
+- Trekker login now honours `?next` (returns to the offering after sign-in).
+- Tests: **40** (added webhook-idempotency incl. the stray-PI guard).
+
+**Verified end-to-end (real local Supabase + mock Stripe):** as a trekker,
+enquired on EBC → guide accepted (booking `pending_deposit`, 14 calendar days
+held) → paid the deposit → booking `deposit_paid`, 14 days `booked`, one deposit
+payment recorded; a stray webhook redelivery stayed idempotent (1 payment);
+cron endpoints return JSON. Build + typecheck + 40 tests green.
+
+**🙋 Founder:** add **Stripe test keys** (`STRIPE_SECRET_KEY`,
+`STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`) to `.dev.vars`/Cloudflare, set
+the webhook endpoint to `/api/webhooks/stripe`, and schedule the two crons
+(Cloudflare Cron Triggers → `/api/cron/enquiry-expiry` every 15m,
+`/api/cron/balance-sweep` daily) with `CRON_SECRET`.
+
+**Next:** M7 — documents, permits, My Trips (private docs bucket + retention).

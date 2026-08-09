@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
+import { useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
 import { PriceBreakdown } from "./bits";
 import { computePricing, formatUsd } from "~/lib/pricing";
 
 export interface BookingWidgetOffering {
+  id: string;
+  guide_id: string;
   kind: string;
   days: number;
   price_usd_cents: number | null;
@@ -58,6 +61,7 @@ function ConfigBody({
   setParty,
   day,
   setDay,
+  returnTo,
 }: {
   o: BookingWidgetOffering;
   availableDays: string[];
@@ -65,9 +69,12 @@ function ConfigBody({
   setParty: (n: number) => void;
   day: string;
   setDay: (d: string) => void;
+  returnTo: string;
 }) {
   const quote = useQuote(o, party);
-  const [requested, setRequested] = useState(false);
+  const fetcher = useFetcher();
+  const sent = fetcher.data?.ok;
+  const busy = fetcher.state !== "idle";
   return (
     <div className="space-y-4">
       <label className="block">
@@ -89,6 +96,7 @@ function ConfigBody({
         <span className="text-sm text-ink-soft">Party size</span>
         <div className="flex items-center gap-3">
           <button
+            type="button"
             aria-label="Fewer"
             onClick={() => setParty(Math.max(o.min_party, party - 1))}
             className="h-8 w-8 rounded-full border border-border text-lg leading-none hover:border-ink-soft"
@@ -97,6 +105,7 @@ function ConfigBody({
           </button>
           <span className="w-6 text-center font-medium">{party}</span>
           <button
+            type="button"
             aria-label="More"
             onClick={() => setParty(Math.min(o.max_party, party + 1))}
             className="h-8 w-8 rounded-full border border-border text-lg leading-none hover:border-ink-soft"
@@ -108,15 +117,31 @@ function ConfigBody({
 
       {quote && <PriceBreakdown rows={quote.rows} total={quote.total} />}
 
-      {requested ? (
+      {sent ? (
         <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Request ready for {o.guide_first_name}. Sign-in to send opens with
-          accounts — you won’t lose your dates.
+          Request sent to {o.guide_first_name}. They have 24 hours to reply — we’ll
+          email you.
         </p>
       ) : (
-        <Button className="w-full" onClick={() => setRequested(true)}>
-          Request to book
-        </Button>
+        <fetcher.Form method="post" action="/enquiry">
+          <input type="hidden" name="offering_id" value={o.id} />
+          <input type="hidden" name="guide_id" value={o.guide_id} />
+          <input type="hidden" name="start_date" value={day} />
+          <input type="hidden" name="party_size" value={party} />
+          <input type="hidden" name="return_to" value={returnTo} />
+          <textarea
+            name="message"
+            rows={2}
+            placeholder={`Message ${o.guide_first_name} (optional)`}
+            className="mb-2 w-full rounded-button border border-border px-3 py-2 text-sm"
+          />
+          {fetcher.data?.error && (
+            <p className="mb-2 text-sm text-danger">{fetcher.data.error}</p>
+          )}
+          <Button type="submit" loading={busy} className="w-full">
+            Request to book
+          </Button>
+        </fetcher.Form>
       )}
       <p className="text-center text-xs text-ink-soft">
         Free cancellation until 30 days before
@@ -128,9 +153,11 @@ function ConfigBody({
 export function BookingWidget({
   offering,
   availableDays,
+  returnTo,
 }: {
   offering: BookingWidgetOffering;
   availableDays: string[];
+  returnTo: string;
 }) {
   const [party, setParty] = useState(offering.min_party || 1);
   const [day, setDay] = useState(availableDays[0] ?? "");
@@ -157,6 +184,7 @@ export function BookingWidget({
           setParty={setParty}
           day={day}
           setDay={setDay}
+          returnTo={returnTo}
         />
       </aside>
 
@@ -188,6 +216,7 @@ export function BookingWidget({
           setParty={setParty}
           day={day}
           setDay={setDay}
+          returnTo={returnTo}
         />
       </Sheet>
     </>

@@ -51,6 +51,13 @@ export default [
     route("ops/incidents", "routes/ops.incidents.tsx"),
   ]),
 
+  // Booking flow (M6).
+  route("enquiry", "routes/enquiry.tsx"),
+  route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
+  route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
+  route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
+  route("api/cron/:job", "routes/api.cron.$job.tsx"),
+
   // Redirects (301) + 404.
   route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

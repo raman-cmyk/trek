@@ -91,3 +91,22 @@ agreement). Newest first.
 - **Guide-editable fields limited to rate + payout** in `/g/profile`; bio/photos
   stay ops-authored (docs/01), surfaced as a change-request. Enforced by the
   action whitelist + the `guard_guide_columns` trigger.
+
+## 2026-08-09 (M6)
+
+- **Stripe behind an interface with a mock default.** No `STRIPE_SECRET_KEY` →
+  `MockStripe` (deterministic fake intents, auto-succeed) so the whole booking→
+  payment flow is buildable/testable now; real keys switch to `RealStripe`
+  (Stripe REST via fetch — the Node SDK doesn't run on Workers) with identical
+  fulfillment. Real webhook-signature verification is stubbed until keys land.
+- **Booking is created at guide-accept, not at payment.** Accept snapshots the
+  quote into a `pending_deposit` booking and holds the calendar (24h TTL), so
+  ops sees the pipeline immediately and the trekker checks out against a fixed
+  price. Deposit fulfillment flips it to `deposit_paid` + books the days.
+- **`fulfillDeposit` is idempotent two ways:** dedupe by PaymentIntent AND a
+  "only from `pending_deposit`" status guard, so a duplicate/stray webhook
+  (even with a different PI) never double-records a deposit.
+- **Crons are HTTP endpoints, not Supabase edge functions.** Hosting is
+  Cloudflare Workers, so Cron Triggers hitting `/api/cron/:job` (secret-gated)
+  is the natural fit; the sweep logic lives in `booking.server.ts` and is unit-
+  testable.
