@@ -190,3 +190,45 @@ to `/g/login`; the trekker email-OTP round-trip establishes a session
 
 **Next:** M5 — guide dashboard (enquiries inbox, bookings, calendar, earnings) at
 360px, expanding the `/g` area.
+
+---
+
+## 2026-08-09 — M5 (guide dashboard)
+
+**Shipped** (mobile-first, ≤ max-w-md, bottom tab bar)
+
+- `/g` layout — guide-auth gated; status page for applicants, dashboard for
+  verified guides; bottom nav (Home · Enquiries · Trips · Calendar · Earnings)
+  with a live open-enquiry badge; sign-out.
+- **Home** — today's state: on an active trek → the giant glove-friendly
+  `CheckinButton` ("I'm safe — Day N", 96px, success moment); otherwise open-
+  enquiry count + next trip + quick links.
+- **Enquiries** `/g/enquiries` — cards (trekker + country + offering + dates +
+  message) with 2-tap **Accept / Decline**.
+- **Trips** `/g/bookings` — upcoming/active + completed; trekker phone released
+  post-deposit (tap-to-call).
+- **Calendar** `/g/calendar` — 3-month grid, tap a day to block/open
+  (optimistic), booked/held days locked.
+- **Earnings** `/g/earnings` — payable/paid totals in NPR + per-trip, with the
+  "you keep 85%" explainer.
+- **Profile** `/g/profile` — read view + guide-editable rate/payout + a
+  bio/photo change request (ops-routed).
+- Check-in records to `checkins`; `CheckinButton` full wiring (SMS path, missed-
+  checkin alerts) remains M8.
+
+**Verified (real local Supabase) at 360px:** signed in as a verified guide
+(Pemba) → dashboard shows the active-trek check-in (Day 5), tapping it records a
+check-in; Enquiries 3 → 2 after Accept (persisted); calendar/earnings/profile
+render. Build + typecheck + 39 tests green.
+
+**Note on how it was verified:** guide login is phone OTP, which needs an SMS
+provider (a 🙋 founder task — see below), so the dashboard was driven with a
+library-accurate `@supabase/ssr` session injected for the test. `config.toml`
+is committed pristine (no dev SMS hacks).
+
+**🙋 Founder:** to let guides actually sign in, configure an **SMS provider**
+in Supabase Auth (Sparrow SMS / Twilio) and enable the Phone provider. Trekker
+email OTP already works.
+
+**Next:** M6 — enquiry → quote → booking → Stripe deposit (needs your Stripe
+test keys).

@@ -23,7 +23,14 @@ export default [
 
   // Guide area (M4 status page; M5 dashboard). Login sits outside the gate.
   route("g/login", "routes/g.login.tsx"),
-  layout("routes/g.tsx", [route("g", "routes/g._index.tsx")]),
+  layout("routes/g.tsx", [
+    route("g", "routes/g._index.tsx"),
+    route("g/enquiries", "routes/g.enquiries.tsx"),
+    route("g/bookings", "routes/g.bookings.tsx"),
+    route("g/calendar", "routes/g.calendar.tsx"),
+    route("g/earnings", "routes/g.earnings.tsx"),
+    route("g/profile", "routes/g.profile.tsx"),
+  ]),
 
   // SEO resource routes.
   route("sitemap.xml", "routes/sitemap.xml.tsx"),

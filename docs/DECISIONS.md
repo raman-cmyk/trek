@@ -75,3 +75,19 @@ agreement). Newest first.
 - **Guide photos/bio stay ops-authored** (per docs/01) — the application collects
   facts (licence, rate, languages, hook line), not media; ops adds photos/bio to
   keep the quality bar. Photo upload is therefore not in the application form.
+
+## 2026-08-09 (M5)
+
+- **Guide dashboard verified via an injected `@supabase/ssr` session**, not a
+  real phone-OTP login, because phone OTP needs an SMS provider enabled
+  (`GOTRUE_EXTERNAL_PHONE_ENABLED`), which requires committing dev-only SMS
+  config. Rather than pollute `config.toml`, the test signs Pemba in through the
+  same `@supabase/ssr` client the app uses (email+password set via admin) and
+  injects the resulting cookies — a library-accurate session. Real guide login
+  works once the founder enables an SMS provider.
+- **Bottom tab bar for the guide app** (Home/Enquiries/Trips/Calendar/Earnings)
+  — native-feeling on the cheap Android phones guides use; Profile is reached
+  from Home to keep the bar to five items.
+- **Guide-editable fields limited to rate + payout** in `/g/profile`; bio/photos
+  stay ops-authored (docs/01), surfaced as a change-request. Enforced by the
+  action whitelist + the `guard_guide_columns` trigger.

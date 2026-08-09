@@ -276,3 +276,17 @@ insert into public.incidents (booking_id, severity, summary, status, opened_by, 
 update auth.users
   set encrypted_password = extensions.crypt('opsdevpass123', extensions.gen_salt('bf'))
   where id = '33333333-3333-3333-3333-000000000001';
+
+-- ============ M5 GUIDE DASHBOARD DATA (Pemba = guide 001) ============
+-- Open enquiries awaiting Pemba's accept/decline.
+insert into public.enquiries (id, trekker_id, guide_id, offering_id, start_date, party_size, message, status, expires_at) values
+  ('77777777-7777-7777-7777-000000000001','22222222-2222-2222-2222-000000000004','11111111-1111-1111-1111-000000000001','55555555-5555-5555-5555-000000000001',current_date + 62, 2,'Hi Pemba! My partner and I would love to do EBC with you in November. Are these dates open?','open', now() + interval '20 hours'),
+  ('77777777-7777-7777-7777-000000000002','22222222-2222-2222-2222-000000000003','11111111-1111-1111-1111-000000000001','55555555-5555-5555-5555-000000000012',current_date + 5, 3,'Are you free for the Kathmandu momo crawl this week? Three of us.','open', now() + interval '10 hours'),
+  ('77777777-7777-7777-7777-000000000003','22222222-2222-2222-2222-000000000005','11111111-1111-1111-1111-000000000001','55555555-5555-5555-5555-000000000001',current_date + 90, 1,'Solo trekker, first time at altitude — is EBC realistic for me?','open', now() + interval '23 hours');
+
+-- An active trek for Pemba so the dashboard shows the check-in button today.
+insert into public.bookings (id, trekker_id, guide_id, offering_id, start_date, end_date,
+  party_size, status, guide_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents,
+  permit_handling_usd_cents, total_usd_cents, commission_usd_cents, fx_rate_npr,
+  guide_payout_npr_paisa, deposit_usd_cents, deposit_paid_at, balance_paid_at) values
+  ('66666666-6666-6666-6666-000000000016','22222222-2222-2222-2222-000000000002','11111111-1111-1111-1111-000000000001','55555555-5555-5555-5555-000000000001',current_date - 4, current_date + 10,2,'active',126000,3800,10080,2500,142380,18900,133,14231700,142380,now(),now());
