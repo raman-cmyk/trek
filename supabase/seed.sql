@@ -4,12 +4,19 @@
 -- sync so a fresh clone can demo (CLAUDE.md working agreement).
 
 -- ============ AUTH + USERS ============
--- Fake auth.users so the public.users FK resolves. These accounts never log in.
+-- Fake auth.users so the public.users FK resolves. The empty-string token
+-- columns are required — GoTrue's scanner errors on NULLs ("Database error
+-- loading user"). Only the ops account gets a password (dev console login);
+-- trekker/guide auth is built in M4.
 insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
-                        created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+                        created_at, updated_at, raw_app_meta_data, raw_user_meta_data,
+                        confirmation_token, recovery_token, email_change_token_new,
+                        email_change, email_change_token_current, phone_change,
+                        phone_change_token, reauthentication_token)
 select '00000000-0000-0000-0000-000000000000', v.id, 'authenticated', 'authenticated',
        v.email, now(), now(), now(),
-       '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb
+       '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+       '', '', '', '', '', '', '', ''
 from (values
   ('11111111-1111-1111-1111-000000000001'::uuid,'pemba@example.com'),
   ('11111111-1111-1111-1111-000000000002'::uuid,'dawa@example.com'),
@@ -192,3 +199,80 @@ insert into public.reviews (booking_id, author_id, subject_id, direction, overal
   ('66666666-6666-6666-6666-000000000008','22222222-2222-2222-2222-000000000003','11111111-1111-1111-1111-000000000012','trekker_to_guide',5,'{"safety":5,"communication":5,"local_knowledge":4,"english":5,"pace":5,"value":5}','Mardi Himal was our first trek and Raju made it joyful. Funny, encouraging, never made us feel slow.',now() - interval '14 days'),
   ('66666666-6666-6666-6666-000000000009','22222222-2222-2222-2222-000000000002','11111111-1111-1111-1111-000000000001','trekker_to_guide',5,'{"safety":5,"communication":5,"local_knowledge":5,"english":5,"pace":5,"value":5}','Did Pemba''s Kathmandu momo crawl on our last night. Five kinds of momo and a hundred stories. Perfect.',now() - interval '10 days'),
   ('66666666-6666-6666-6666-000000000010','22222222-2222-2222-2222-000000000005','11111111-1111-1111-1111-000000000007','trekker_to_guide',4,'{"safety":5,"communication":5,"local_knowledge":4,"english":5,"pace":4,"value":5}','Lovely calm sunrise yoga by the lake with Sunita to end the trip. Exactly what we needed.',now() - interval '7 days');
+
+-- ============ M2 OPS DATA ============
+-- Applicant guides awaiting verification (won't appear in public_guides).
+insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
+                        created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+select '00000000-0000-0000-0000-000000000000', v.id, 'authenticated', 'authenticated',
+       v.email, now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb
+from (values
+  ('11111111-1111-1111-1111-000000000013'::uuid,'gyaljen@example.com'),
+  ('11111111-1111-1111-1111-000000000014'::uuid,'maya@example.com')
+) as v(id, email);
+
+insert into public.users (id, role, email, phone, full_name, country_code) values
+  ('11111111-1111-1111-1111-000000000013','guide','gyaljen@example.com','+9779800000013','Gyaljen Sherpa','NP'),
+  ('11111111-1111-1111-1111-000000000014','guide','maya@example.com','+9779800000014','Maya Tamang','NP');
+
+insert into public.guides (user_id, slug, status, tier, licence_no, licence_expiry, home_district,
+  years_experience, day_rate_usd_cents, hook_line, payout_method, payout_account, payout_account_name) values
+  ('11111111-1111-1111-1111-000000000013','gyaljen-sherpa','applied',0,'TAAN-1013','2029-06-01','Solukhumbu',5,3000,'New applicant — Khumbu day hikes and EBC','esewa','98000ESW13','Gyaljen Sherpa'),
+  ('11111111-1111-1111-1111-000000000014','maya-tamang','in_review',0,'TAAN-1014','2028-12-01','Rasuwa',4,2800,'New applicant — Langtang and Helambu','khalti','98000KHL14','Maya Tamang');
+
+-- Verification checklists for the applicants (mix of pending/passed/failed).
+insert into public.guide_verifications (guide_id, check_type, status, notes) values
+  ('11111111-1111-1111-1111-000000000013','licence','pending',null),
+  ('11111111-1111-1111-1111-000000000013','id_match','pending',null),
+  ('11111111-1111-1111-1111-000000000013','phone','passed','OTP confirmed'),
+  ('11111111-1111-1111-1111-000000000013','payout_account','pending',null),
+  ('11111111-1111-1111-1111-000000000013','reference_1','pending',null),
+  ('11111111-1111-1111-1111-000000000013','first_aid','pending',null),
+  ('11111111-1111-1111-1111-000000000014','licence','passed','Licence verified against TAAN registry'),
+  ('11111111-1111-1111-1111-000000000014','id_match','passed','Citizenship matches licence'),
+  ('11111111-1111-1111-1111-000000000014','phone','passed','OTP confirmed'),
+  ('11111111-1111-1111-1111-000000000014','payout_account','pending',null),
+  ('11111111-1111-1111-1111-000000000014','reference_1','passed','Called; strong reference'),
+  ('11111111-1111-1111-1111-000000000014','reference_2','pending',null),
+  ('11111111-1111-1111-1111-000000000014','first_aid','failed','WFA cert expired — asked to renew');
+
+-- Bookings spread across the pipeline so the kanban has a card in each column.
+insert into public.bookings (id, trekker_id, guide_id, offering_id, start_date, end_date,
+  party_size, status, guide_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents,
+  permit_handling_usd_cents, total_usd_cents, commission_usd_cents, fx_rate_npr,
+  guide_payout_npr_paisa, deposit_usd_cents, deposit_paid_at, balance_paid_at) values
+  ('66666666-6666-6666-6666-000000000011','22222222-2222-2222-2222-000000000004','11111111-1111-1111-1111-000000000001','55555555-5555-5555-5555-000000000001',current_date + 55, current_date + 69,1,'pending_deposit',63000,3800,5040,2500,74340,9450,133,7119150,22302,null,null),
+  ('66666666-6666-6666-6666-000000000012','22222222-2222-2222-2222-000000000006','11111111-1111-1111-1111-000000000003','55555555-5555-5555-5555-000000000002',current_date + 40, current_date + 55,2,'deposit_paid',144000,7600,11520,2500,165620,21600,133,20390400,49686,now(),null),
+  ('66666666-6666-6666-6666-000000000013','22222222-2222-2222-2222-000000000002','11111111-1111-1111-1111-000000000006','55555555-5555-5555-5555-000000000004',current_date + 30, current_date + 46,1,'docs_pending',56000,3800,4480,2500,66780,8400,133,7092800,20034,now(),null),
+  ('66666666-6666-6666-6666-000000000014','22222222-2222-2222-2222-000000000001','11111111-1111-1111-1111-000000000005','55555555-5555-5555-5555-000000000003',current_date + 20, current_date + 32,2,'confirmed',96000,7600,7680,2500,113780,14400,133,10852800,113780,now(),now()),
+  ('66666666-6666-6666-6666-000000000015','22222222-2222-2222-2222-000000000003','11111111-1111-1111-1111-000000000008','55555555-5555-5555-5555-000000000007',current_date - 3, current_date + 11,2,'active',89600,29200,7168,2500,128468,13440,133,10141760,128468,now(),now());
+
+-- Permit applications for the confirmed + active treks (permit ids via route join).
+insert into public.permit_applications (booking_id, permit_id, status, reference_no)
+select '66666666-6666-6666-6666-000000000014', p.id, 'filed', 'SNP-2026-0148'
+from public.permits p join public.offerings o on o.route_id = p.route_id
+where o.id = '55555555-5555-5555-5555-000000000003';
+insert into public.permit_applications (booking_id, permit_id, status, reference_no)
+select '66666666-6666-6666-6666-000000000015', p.id, 'ready', 'MAN-2026-0072'
+from public.permits p join public.offerings o on o.route_id = p.route_id
+where o.id = '55555555-5555-5555-5555-000000000007';
+
+-- Payable payouts for every completed booking (the payout ledger).
+insert into public.payouts (guide_id, booking_id, amount_npr_paisa, method, status)
+select b.guide_id, b.id, b.guide_payout_npr_paisa,
+       coalesce(g.payout_method,'bank'), 'payable'
+from public.bookings b join public.guides g on g.user_id = b.guide_id
+where b.status = 'completed';
+
+-- One open incident on the active trek.
+insert into public.incidents (booking_id, severity, summary, status, opened_by, timeline) values
+  ('66666666-6666-6666-6666-000000000015','L1','Trekker reported mild AMS at 4,300m; guide descended 300m and monitoring.','monitoring',
+   '33333333-3333-3333-3333-000000000001',
+   '[{"at":"day 3","actor":"guide","action":"Reported mild AMS, descended to Samdo"}]'::jsonb);
+
+-- Dev-only: give the ops console a working local login. Seed data is stripped
+-- before production (M9); only this ops account is loginable.
+--   email: ops@example.com   password: opsdevpass123
+update auth.users
+  set encrypted_password = extensions.crypt('opsdevpass123', extensions.gen_salt('bf'))
+  where id = '33333333-3333-3333-3333-000000000001';

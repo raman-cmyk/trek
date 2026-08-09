@@ -65,7 +65,7 @@ create trigger offerings_touch before update on offerings
 create or replace function public.guard_offering_publish()
   returns trigger language plpgsql as $$
 begin
-  if public.is_ops() then
+  if public.is_ops() or current_user in ('service_role','supabase_admin','postgres') then
     return new;
   end if;
   if new.status = 'live' then

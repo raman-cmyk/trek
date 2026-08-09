@@ -67,3 +67,43 @@ and any 🙋 founder browser tasks still pending.
 6. Populate `.dev.vars` from `.dev.vars.example` and set Cloudflare/GitHub secrets.
 
 **Next:** M2 — Ops admin core (needs the Supabase cloud project + auth providers).
+
+---
+
+## 2026-08-09 — M2 (ops admin core)
+
+**Shipped**
+
+- Ops role gate + `/ops` layout (sidebar with live badge counts, sign-out).
+  Auth via Supabase email+password (`@supabase/ssr` cookie sessions); privileged
+  reads/writes via a service-role admin client (`app/lib/supabase.server.ts`).
+- **Verification queue** (`/ops/verifications`): applied/in-review guides with
+  per-check progress; detail page with pass/fail per check, tier assignment,
+  approve→verified and reject.
+- **Booking pipeline** (`/ops/pipeline`): kanban across the 6 happy-path
+  statuses with a one-click status-advance (stamps deposit/balance/completion
+  timestamps).
+- **Permit tracker** (`/ops/permits`): applications sorted by start-date
+  proximity with inline status advance + reference number.
+- **Payout ledger** (`/ops/payouts`): payable rows (NPR) with batch-select →
+  mark-batch-paid (batch ref, paid_at, paid_by) + paid history.
+- **Incident log** (`/ops/incidents`): list with monitor/close + create form.
+- Migration `0010_grants.sql` mirrors Supabase's role privileges (RLS remains
+  the gate) so `service_role` works locally like production; guard triggers
+  now also allow `service_role`/`postgres` so ops writes aren't blocked.
+- Seed extended: 2 applicant guides + verification checklists, bookings across
+  every pipeline status, permit applications, payable payouts, one incident; the
+  seed now sets the GoTrue token columns and a dev ops password
+  (`ops@example.com` / `opsdevpass123`) so a fresh `db reset` is login-ready.
+
+**Verified (real local Supabase, Docker up):** `supabase start` (minimal stack:
+db+kong+rest+auth) + `db reset`; Playwright drove login → verify a guide (pass a
+check, set tier 2, approve→verified, now live in `public_guides`=13) → advance a
+booking out of `pending_deposit`. Build + typecheck + 39 unit tests green.
+
+**🙋 Founder, to run this yourself:** create the Supabase project, then in
+Supabase Auth create an ops user (or set a password on `ops@example.com`) and
+ensure its `public.users.role = 'ops'`. Locally it already works via the seed.
+
+**Next:** M3 — public site (SSR + SEO): home, guide directory, profiles,
+offering pages, route landing pages, consuming the M0 primitives.

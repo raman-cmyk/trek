@@ -1,0 +1,111 @@
+import { Form, NavLink, Outlet, data, redirect } from "react-router";
+import type { Route } from "./+types/ops";
+import { cn } from "~/lib/cn";
+import {
+  createSupabaseServerClient,
+  getEnv,
+  requireOps,
+} from "~/lib/supabase.server";
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const env = getEnv(context);
+  const { profile, admin, headers } = await requireOps(request, env);
+
+  const [verifs, incidents, payouts] = await Promise.all([
+    admin
+      .from("guides")
+      .select("user_id", { count: "exact", head: true })
+      .in("status", ["applied", "in_review"]),
+    admin
+      .from("incidents")
+      .select("id", { count: "exact", head: true })
+      .neq("status", "closed"),
+    admin
+      .from("payouts")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "payable"),
+  ]);
+
+  return data(
+    {
+      profile,
+      counts: {
+        verifications: verifs.count ?? 0,
+        incidents: incidents.count ?? 0,
+        payouts: payouts.count ?? 0,
+      },
+    },
+    { headers },
+  );
+}
+
+export async function action({ request, context }: Route.ActionArgs) {
+  // Logout.
+  const env = getEnv(context);
+  const { supabase, headers } = createSupabaseServerClient(request, env);
+  await supabase.auth.signOut();
+  return redirect("/ops/login", { headers });
+}
+
+const NAV = [
+  { to: "/ops/verifications", label: "Verifications", badge: "verifications" },
+  { to: "/ops/pipeline", label: "Pipeline", badge: null },
+  { to: "/ops/permits", label: "Permits", badge: null },
+  { to: "/ops/payouts", label: "Payouts", badge: "payouts" },
+  { to: "/ops/incidents", label: "Incidents", badge: "incidents" },
+] as const;
+
+export default function OpsLayout({ loaderData }: Route.ComponentProps) {
+  const { profile, counts } = loaderData;
+  return (
+    <div className="min-h-screen bg-surface text-ink">
+      <div className="flex">
+        <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-border bg-card">
+          <div className="border-b border-border px-4 py-4">
+            <p className="font-display text-lg">Trek Ops</p>
+            <p className="text-xs text-ink-soft">Grey Floor</p>
+          </div>
+          <nav className="flex-1 space-y-1 p-2">
+            {NAV.map((item) => {
+              const count = item.badge
+                ? counts[item.badge as keyof typeof counts]
+                : 0;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center justify-between rounded-md px-3 py-2 text-sm",
+                      isActive
+                        ? "bg-primary/10 font-medium text-primary"
+                        : "text-ink-soft hover:bg-black/5",
+                    )
+                  }
+                >
+                  <span>{item.label}</span>
+                  {count > 0 && (
+                    <span className="rounded-full bg-primary px-1.5 text-xs text-white">
+                      {count}
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+          </nav>
+          <div className="border-t border-border p-3 text-sm">
+            <p className="truncate text-ink-soft">{profile.full_name}</p>
+            <Form method="post">
+              <button className="mt-1 text-xs text-primary hover:underline">
+                Sign out
+              </button>
+            </Form>
+          </div>
+        </aside>
+        <main className="min-w-0 flex-1 p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -82,7 +82,9 @@ create trigger guides_touch before update on guides
 create or replace function public.guard_guide_columns()
   returns trigger language plpgsql as $$
 begin
-  if public.is_ops() then
+  -- Ops (authenticated, role=ops) or a privileged server role (service_role,
+  -- used by the ops console; postgres/supabase_admin for migrations/seed).
+  if public.is_ops() or current_user in ('service_role','supabase_admin','postgres') then
     return new;
   end if;
   if new.status is distinct from old.status

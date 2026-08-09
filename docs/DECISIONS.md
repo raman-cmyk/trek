@@ -37,3 +37,27 @@ agreement). Newest first.
 - **Scope of this session: M0 + M1 only.** Both are pure-code and need no
   founder browser tasks. M2+ begins to require live Supabase/Stripe/Cloudflare
   credentials, so stopping at a green, demoable M0+M1 is the correct first slice.
+
+## 2026-08-09 (M2)
+
+- **Ops auth = Supabase email+password** (not magic-link/OTP). M2 only needs a
+  role gate; full trekker/guide auth is M4. Email+password is the simplest thing
+  that's verifiable headlessly. `@supabase/ssr` handles cookie sessions; a
+  service-role admin client does the privileged ops reads/writes.
+
+- **Adopted Supabase's grant model (`0010_grants.sql`).** Roles hold broad table
+  privileges and RLS is the only gate — matching how Supabase cloud is
+  configured — so `service_role` (and `authenticated`/`anon`) behave locally
+  exactly as in production. Our tables are RLS-enabled default-deny, so this
+  doesn't widen exposure.
+
+- **Guard triggers allow `service_role`/`postgres`.** The column-guard and
+  publish-guard triggers key off `is_ops()` (which needs `auth.uid()`); the ops
+  console writes as the service role, so the guards now also pass privileged DB
+  roles. End-user (authenticated) guides are still fully guarded.
+
+- **Local verification stack is partial by necessity.** The sandbox can't run
+  the full `supabase start` (an rlimit restriction kills analytics/edge-runtime),
+  so we run db+kong+rest+auth via `supabase start -x …`. That covers everything
+  M2 needs. The `@supabase/pg-delta` TLS warning during `db reset` is non-fatal
+  (migration-catalog caching only) — migrations and seed apply fine.
