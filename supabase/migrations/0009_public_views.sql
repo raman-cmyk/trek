@@ -50,7 +50,8 @@ create view public_offerings as
     g.slug     as guide_slug,
     u.full_name as guide_name,
     u.avatar_url as guide_avatar_url,
-    g.tier     as guide_tier
+    g.tier     as guide_tier,
+    g.day_rate_usd_cents as guide_day_rate_usd_cents
   from offerings o
   join guides g on g.user_id = o.guide_id
   join users u on u.id = g.user_id

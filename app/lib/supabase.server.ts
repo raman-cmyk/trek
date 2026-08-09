@@ -50,6 +50,17 @@ export function createAdminClient(env: Env): SupabaseClient {
   });
 }
 
+/**
+ * Anon client for public SSR reads (home, directory, profiles, offering pages).
+ * RLS applies — it can only see the public views and public-read tables, so it
+ * is safe to use for anonymous, cacheable public pages (docs/02 §App arch).
+ */
+export function createPublicClient(env: Env): SupabaseClient {
+  return createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export interface OpsSession {
   user: { id: string; email?: string };
   profile: { role: string; full_name: string };

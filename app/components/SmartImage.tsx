@@ -65,8 +65,7 @@ export function SmartImage({
         height={height}
         loading={eager ? "eager" : "lazy"}
         decoding={eager ? "sync" : "async"}
-        // @ts-expect-error fetchPriority is valid but not yet in the RDOM types
-        fetchpriority={eager ? "high" : undefined}
+        fetchPriority={eager ? "high" : undefined}
         onLoad={() => setLoaded(true)}
         className={cn(
           "h-full w-full object-cover transition-opacity duration-base ease-out-soft",

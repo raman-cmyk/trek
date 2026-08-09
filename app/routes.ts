@@ -6,7 +6,23 @@ import {
 } from "@react-router/dev/routes";
 
 export default [
-  index("routes/home.tsx"),
+  // Public site (SSR + SEO), sharing the header/footer shell.
+  layout("routes/_public.tsx", [
+    index("routes/home.tsx"),
+    route("guides", "routes/guides.tsx"),
+    route("guides/:slug", "routes/guides.$slug.tsx"),
+    route("experiences", "routes/experiences.tsx"),
+    route("experiences/:slug", "routes/experiences.$slug.tsx"),
+    route("treks/:slug", "routes/treks.$slug.tsx"),
+    route("routes/:slug", "routes/routes.$slug.tsx"),
+    route("transparency", "routes/transparency.tsx"),
+    route("safety", "routes/safety.tsx"),
+  ]),
+
+  // SEO resource routes.
+  route("sitemap.xml", "routes/sitemap.xml.tsx"),
+  route("robots.txt", "routes/robots.txt.tsx"),
+
   // Dev scratch page for the M0 motion/feel primitives.
   route("_dev/primitives", "routes/_dev.primitives.tsx"),
 
@@ -21,4 +37,7 @@ export default [
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
   ]),
+
+  // Redirects (301) + 404.
+  route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

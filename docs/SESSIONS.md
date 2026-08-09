@@ -107,3 +107,51 @@ ensure its `public.users.role = 'ops'`. Locally it already works via the seed.
 
 **Next:** M3 — public site (SSR + SEO): home, guide directory, profiles,
 offering pages, route landing pages, consuming the M0 primitives.
+
+---
+
+## 2026-08-09 — M3 (public site, SSR + SEO)
+
+**Shipped**
+
+- Public shell (`_public` layout: Header + Footer) reading a public **anon**
+  Supabase client (RLS-safe) — `createPublicClient`.
+- **Home** — all 8 sections, seed-powered: hero, guide scroller, category-tabbed
+  offering grid (signature overlapping GuideChips), trust strip, "on the trail"
+  strip, how-it-works, reviews, footer.
+- **Guide directory** `/guides` — SSR with shareable URL-param filters (tier,
+  language, district, sort), live-updating via a GET form (works with JS off).
+- **Guide profile** `/guides/:slug` — photo carousel, bio, stats, "what we
+  checked" expander, offerings, read-only availability calendar, reviews, sticky
+  mobile bar; **Person + AggregateRating + Breadcrumb JSON-LD**.
+- **Offering detail** `/treks/:slug` + `/experiences/:slug` (shared, split into
+  a `.server` loader + client view) — carousel, above-the-fold guide block, live
+  `PriceBreakdown`, itinerary, included/excluded, reviews, and the **sticky
+  booking widget (desktop) / bottom-bar + draggable sheet (mobile)** with live
+  pricing; **Product/Offer + Breadcrumb JSON-LD**.
+- **Route landing pages** `/routes/:slug` — markdown content
+  (`/content/routes/*.md`, EBC + Annapurna written), TOC, live permit/cost table,
+  guides-who-lead chips, trips grid, FAQ accordion; **TouristTrip + FAQPage +
+  Breadcrumb JSON-LD**.
+- **Transparency** + **Safety** content pages.
+- `sitemap.xml` (DB-generated, cached 1h) + `robots.txt` (disallows /ops, /_dev)
+  + redirects table wired via the `*` catch-all (301 → else 404).
+- New public views/policies: `public_reviews` (0011), verified-guide photo read
+  (0012), guide day-rate added to `public_offerings` (0009). Shared cards/bits
+  (GuideCard, OfferingCard, GuideChip, TierBadge, Stars, PriceBreakdown,
+  ReviewBlock), Carousel, BookingWidget, AvailabilityCalendar — all consuming the
+  M0 primitives (SmartImage blur-up, Sheet, Button) and prefetch-on-intent.
+
+**Verified (real local Supabase):** every public page returns complete SSR HTML
+with content + JSON-LD (JS-disabled), sitemap lists guide/offering/route URLs,
+unknown paths 404. Live pricing on the booking widget matches `pricing.ts`
+(EBC 14d/1p = $743.40). Build + typecheck + 39 unit tests green. Desktop +
+mobile (bottom-bar/sheet) screenshots captured.
+
+**Deferred (noted in BACKLOG/DECISIONS):** MapLibre meeting-point mini-map
+(shown as text for now); the real "on the trail now" check-in feed is M8 (M3
+uses approved trekker photos as a seasonal teaser). Full-screen photo viewer and
+expanding-search animation are polish items.
+
+**Next:** M4 — auth (trekker magic-link, guide phone OTP) + guide application
+form → the verification queue ops already has.

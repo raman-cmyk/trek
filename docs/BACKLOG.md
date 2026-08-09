@@ -24,3 +24,13 @@ Group departures UI · saved searches · Tier-2 video pipeline · insurance
 affiliate integration · airport transfer add-on · guide referral program ·
 Nepali UI · map view (list+map split, "search as I move the map" — interaction
 spec'd in `docs/06` §8 so it isn't retrofitted).
+
+## M3 follow-ups (public site polish)
+
+- **MapLibre meeting-point mini-map** on offering detail — currently the meeting
+  point is shown as text. Wire MapLibre GL + OSM tiles in a polish pass.
+- **Full-screen photo viewer** ("see all photos" mosaic → swipe) — cards have the
+  carousel; the full-screen gallery (docs/06 §7) is deferred.
+- **Expanding search** (docs/06 §8) — header has direct lane links for now.
+- **"On the trail now"** live check-in feed is built in M8; M3 shows approved
+  trekker photos as a seasonal teaser.
