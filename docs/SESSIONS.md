@@ -270,3 +270,44 @@ the webhook endpoint to `/api/webhooks/stripe`, and schedule the two crons
 `/api/cron/balance-sweep` daily) with `CRON_SECRET`.
 
 **Next:** M7 — documents, permits, My Trips (private docs bucket + retention).
+
+---
+
+## 2026-08-09 — M7 (documents, permits, My Trips)
+
+**Shipped**
+
+- **Private documents bucket** (`0013`) — Storage bucket `documents` (private,
+  10MB, image/pdf). No storage RLS → service-role only; all access via
+  server-issued **signed URLs (10-min TTL)**, logged to `document_access_log`,
+  URLs never logged (`app/lib/documents.server.ts`).
+- **Trekker document upload** (passport/insurance per party member) on the trip
+  page → private bucket + `booking_documents`; view via a signed-URL redirect
+  route that authorises + logs.
+- **Ops doc review** (`/ops/bookings/:id`, linked from the pipeline) — view
+  (signed URL) + verify each doc; when all are verified and the balance is
+  settled, the booking → **confirmed**.
+- **Permit applications auto-created** on `confirmed` via a DB trigger
+  (`create_permit_apps_on_confirm`) from the route's permits — the M2 permit
+  tracker picks them up.
+- **My Trips** — list (`/trips`) + detail: status timeline, documents,
+  permit status, **pre-trek brief (unlocks T-7)**, **guide phone (unlocks
+  T-48h)**, SOS card while active, confirm-completion (schedules 90-day doc
+  deletion).
+- **Notifications** (`app/lib/notify.server.ts`) — Resend email + Sparrow SMS,
+  stubbed to console until keys land; wired on confirm.
+- **Retention sweep** (`/api/cron/document-retention`) deletes docs 90 days
+  post-completion (storage object + rows).
+- Unlock schedule is pure + unit-tested (`unlocks.ts`, time-travel). **43 tests.**
+
+**Verified end-to-end (real local Supabase incl. Storage):** deposit paid →
+uploaded passport + insurance to the private bucket → ops verified both →
+booking **confirmed** → **2 permit applications auto-created** → pre-trek brief
++ guide phone visible → retention sweep deleted an expired doc. Build +
+typecheck + 43 tests green.
+
+**🙋 Founder:** verify a **Resend** sending domain and set `RESEND_API_KEY`;
+create a **Sparrow SMS** account and set `SPARROW_SMS_TOKEN`; schedule
+`/api/cron/document-retention` daily. Until then notifications log to console.
+
+**Next:** M8 — messaging, check-ins, reviews (double-blind), recap page + OG.

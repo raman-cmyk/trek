@@ -2,6 +2,7 @@ import type { Route } from "./+types/api.cron.$job";
 import { getEnv, createAdminClient } from "~/lib/supabase.server";
 import { getStripe } from "~/lib/stripe.server";
 import { runEnquiryExpirySweep, runBalanceSweep } from "~/lib/booking.server";
+import { runDocumentRetentionSweep } from "~/lib/documents.server";
 
 /**
  * Cron sweeps (docs/02 §Edge functions). Wire these to Cloudflare Cron Triggers
@@ -23,6 +24,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       break;
     case "balance-sweep":
       result = await runBalanceSweep(admin, getStripe(env), today);
+      break;
+    case "document-retention":
+      result = await runDocumentRetentionSweep(admin, today);
       break;
     default:
       return new Response("unknown job", { status: 404 });

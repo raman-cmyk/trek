@@ -110,3 +110,21 @@ agreement). Newest first.
   Cloudflare Workers, so Cron Triggers hitting `/api/cron/:job` (secret-gated)
   is the natural fit; the sweep logic lives in `booking.server.ts` and is unit-
   testable.
+
+## 2026-08-09 (M7)
+
+- **Documents are server-mediated, not client-RLS.** The `documents` bucket has
+  NO storage policies (service-role only); uploads and views go through server
+  actions that check ownership, and views return a short-lived signed URL whose
+  access is logged. Simpler and stricter than per-object RLS, and it guarantees
+  URLs are never logged.
+- **Permit applications auto-create via a DB trigger** on the `→ confirmed`
+  transition (not app code), so they appear no matter which path confirms a
+  booking (ops doc-verify, or a future flow).
+- **Unlocks are pure functions of (start_date, now)** — no scheduled state — so
+  the brief (T-7) and guide phone (T-48h) are correct without a cron and are
+  trivially unit-tested by varying `now`.
+- **Local stack now includes storage-api + imgproxy.** They start fine in the
+  sandbox with `--ignore-health-check`; a fresh clone's `supabase start`
+  includes them by default. (The `-x` exclusions are only this sandbox's
+  workaround for the analytics/vector rlimit crash.)

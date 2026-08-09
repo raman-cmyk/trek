@@ -46,15 +46,18 @@ export default [
     route("ops/verifications", "routes/ops.verifications.tsx"),
     route("ops/verifications/:guideId", "routes/ops.verifications.$guideId.tsx"),
     route("ops/pipeline", "routes/ops.pipeline.tsx"),
+    route("ops/bookings/:id", "routes/ops.bookings.$id.tsx"),
     route("ops/permits", "routes/ops.permits.tsx"),
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
   ]),
 
-  // Booking flow (M6).
+  // Booking flow (M6) + My Trips & documents (M7).
   route("enquiry", "routes/enquiry.tsx"),
   route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
+  route("trips", "routes/trips._index.tsx"),
   route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
+  route("trips/:bookingId/doc/:docId", "routes/trips.$bookingId.doc.$docId.tsx"),
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
 
