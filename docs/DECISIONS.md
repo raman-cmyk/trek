@@ -61,3 +61,17 @@ agreement). Newest first.
   so we run db+kong+rest+auth via `supabase start -x …`. That covers everything
   M2 needs. The `@supabase/pg-delta` TLS warning during `db reset` is non-fatal
   (migration-catalog caching only) — migrations and seed apply fine.
+
+## 2026-08-09 (M4)
+
+- **Email OTP (6-digit code), not magic-link redirect, for trekkers.** Same
+  friction class, but stateless to verify (no PKCE code-exchange callback),
+  Workers-friendly, and testable headlessly. The spec said "magic link"; OTP is
+  the simpler equivalent and can switch later. Guides use phone OTP (spec).
+- **The guide application creates the auth user up front** (phone-keyed, via the
+  admin API) so the applicant has an identity to sign in with later and ops has a
+  real row to verify. The guides insert is rolled back (auth user deleted) on
+  failure so a phone can retry.
+- **Guide photos/bio stay ops-authored** (per docs/01) — the application collects
+  facts (licence, rate, languages, hook line), not media; ops adds photos/bio to
+  keep the quality bar. Photo upload is therefore not in the application form.

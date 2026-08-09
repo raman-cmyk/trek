@@ -17,7 +17,13 @@ export default [
     route("routes/:slug", "routes/routes.$slug.tsx"),
     route("transparency", "routes/transparency.tsx"),
     route("safety", "routes/safety.tsx"),
+    route("apply", "routes/apply.tsx"),
+    route("login", "routes/login.tsx"),
   ]),
+
+  // Guide area (M4 status page; M5 dashboard). Login sits outside the gate.
+  route("g/login", "routes/g.login.tsx"),
+  layout("routes/g.tsx", [route("g", "routes/g._index.tsx")]),
 
   // SEO resource routes.
   route("sitemap.xml", "routes/sitemap.xml.tsx"),

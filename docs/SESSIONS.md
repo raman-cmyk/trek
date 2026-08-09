@@ -155,3 +155,38 @@ expanding-search animation are polish items.
 
 **Next:** M4 — auth (trekker magic-link, guide phone OTP) + guide application
 form → the verification queue ops already has.
+
+---
+
+## 2026-08-09 — M4 (auth + guide application)
+
+**Shipped**
+
+- Auth server helpers (`app/lib/auth.server.ts`): `getSessionUser`, `requireUser`
+  (role-gated), `getProfile`, `ensureTrekkerProfile`.
+- **Trekker auth** `/login` — email OTP (send code → verify), creates the
+  public.users trekker profile on first sign-in.
+- **Guide auth** `/g/login` — phone OTP (send → verify), gated to guide-role
+  accounts; links to /apply for new guides.
+- **Guide application** `/apply` — public, autosaves to localStorage; on submit
+  creates the auth user (phone-keyed), public.users (role guide), guides
+  (status=applied), guide_languages, and the pending verification checklist —
+  then lands the applicant in the M2 ops queue. Rolls back the auth user if the
+  guides insert fails.
+- **Guide area** `/g` — auth-gated mobile shell + status page (Applied → In
+  review → Verified stepper + checklist), sign-out.
+
+**Verified (real local Supabase):** submitted the `/apply` form as "Ang Rita
+Sherpa" → she appears in the ops verification queue (Applied, 0/6, full
+checklist + languages + phone-keyed auth user created); `/g` redirects unauthed
+to `/g/login`; the trekker email-OTP round-trip establishes a session
+(signInWithOtp → verifyOtp). Build + typecheck + 39 tests green.
+
+**🙋 Founder (to make auth *deliver* in production):**
+1. Supabase → Authentication → enable **Email** (OTP) and **Phone** providers.
+2. Configure an **SMS provider** for guide phone OTP — wire Sparrow SMS (or
+   Twilio) in Supabase Auth settings. Until then, guide phone-OTP delivery
+   won't work (the flow is built and correct); email OTP works out of the box.
+
+**Next:** M5 — guide dashboard (enquiries inbox, bookings, calendar, earnings) at
+360px, expanding the `/g` area.
