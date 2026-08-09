@@ -33,7 +33,28 @@ and any 🙋 founder browser tasks still pending.
 
 **Shipped — M1**
 
-- _(fill in as M1 lands in this session)_
+- Migrations `0001`–`0009` (`/supabase/migrations`), split by domain, derived
+  from `docs/03-database-schema.sql`: identity, catalog, transaction, group
+  departures, safety, social, content/SEO, indexes, public views.
+- **RLS default-deny on every table** (26/26) with helper functions
+  `auth_role()` / `is_ops()` (SECURITY DEFINER, no policy recursion) and
+  column-guard triggers (guides can't self-verify/promote; publishing an
+  offering is ops-gated).
+- **Public-safe views** `public_guides` / `public_offerings` (security-definer,
+  safe columns only — no phone/payout/full licence) granted to `anon`.
+- `seed.sql`: 12 verified guides (varied tiers/languages/districts/day-rates),
+  6 routes with real permit data (EBC, Annapurna Circuit, Langtang, Manaslu,
+  Gokyo, Mardi Himal), 20 offerings (8 treks + 12 experiences), languages,
+  photos, 120-day availability spread, 10 completed bookings backing 10
+  published reviews.
+- `app/lib/pricing.ts` (fee math, single source of truth), `policy.ts`
+  (cancellation matrix + strike ladder), `mask.ts` (contact masking + flag),
+  `copy.ts` (keyed strings) + **39 Vitest tests** (incl. the doc's "$306 of
+  $360" and every cancellation-matrix row).
+- Verified end-to-end on a local Postgres 16: clean apply of all migrations +
+  seed; row counts match spec; as `anon`, the public views + routes/permits/
+  published-reviews are readable while guides/users/payouts/booking_documents
+  return **zero rows** (no PII/payout/passport leak).
 
 **🙋 Founder browser tasks still pending (needed for M2+ / deploy, NOT M0/M1):**
 
