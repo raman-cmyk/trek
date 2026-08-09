@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Design tokens — earthy, Himalayan, warm. (docs/04-design-system.md)
+   Motion tokens — Airbnb-grade feel. (docs/06-interaction-motion-spec.md §2)
+   Exposed to Tailwind v4 via @theme so utilities like `bg-primary`,
+   `text-ink`, `rounded-card`, `duration-quick`, `ease-out-soft` all work.
+   ========================================================================= */
+@theme {
+  /* Color */
+  --color-primary: #c2410c; /* burnt saffron — CTAs, active states */
+  --color-primary-hover: #9a3412;
+  --color-ink: #1c1917; /* warm near-black text */
+  --color-ink-soft: #57534e; /* secondary text */
+  --color-surface: #fafaf9; /* page background — warm off-white */
+  --color-card: #ffffff;
+  --color-border: #e7e5e4;
+  --color-accent: #0f766e; /* deep teal — verified badges, success */
+  --color-gold: #b45309; /* tier 3 elite accents */
+  --color-danger: #b91c1c;
+  --color-himalaya: #1e3a5f; /* deep mountain blue — sparingly, headers/footer */
+
+  /* Skeleton greys — warm, never blue-grey (§3.2) */
+  --color-skeleton-base: #edebe8;
+  --color-skeleton-highlight: #f7f5f3;
+
+  /* Type */
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius: 12px cards, 8px buttons/inputs, 999px pills/badges */
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --radius-pill: 999px;
+  --radius-sheet: 20px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08);
+  --shadow-lift: 0 4px 12px rgb(0 0 0 / 0.1);
+  --shadow-sheet: 0 -8px 30px rgb(0 0 0 / 0.12);
+
+  /* Motion — easing (§2) */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1); /* appearance, expansion */
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1); /* movement between states */
+  --ease-press: cubic-bezier(0.4, 0, 0.6, 1); /* tap feedback */
+
+  /* Motion — duration (§2). Canonical tokens, used by the --animate-* shorthands
+     below and read from JS in app/lib/motion.ts. */
+  --duration-instant: 120ms; /* press feedback, hover */
+  --duration-quick: 220ms; /* most transitions, fades */
+  --duration-base: 300ms; /* card entrance, sheet open */
+  --duration-slow: 450ms; /* page-level, hero, modal */
+
+  /* Tailwind v4 sources `duration-*` utilities from this namespace, so these
+     aliases make duration-quick / duration-base / duration-slow work. */
+  --transition-duration-instant: var(--duration-instant);
+  --transition-duration-quick: var(--duration-quick);
+  --transition-duration-base: var(--duration-base);
+  --transition-duration-slow: var(--duration-slow);
+
+  /* Motion — keyframes */
+  --animate-shimmer: shimmer 1.4s infinite;
+  --animate-fade-rise: fade-rise var(--duration-base) var(--ease-out-soft) both;
+  --animate-fade-in: fade-in var(--duration-quick) var(--ease-out-soft) both;
+  --animate-heart-pop: heart-pop var(--duration-base) var(--ease-out-soft);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+html,
+body {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (min-width: 768px) {
+  html,
+  body {
+    font-size: 16px;
+  }
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
+}
+
+/* Reduced motion is mandatory (§2): kill transforms + shimmer, keep opacity.
+   Utilities below (.shimmer, .press, .fade-rise) all degrade here. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--duration-quick) !important;
+  }
+}

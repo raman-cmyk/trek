@@ -1,0 +1,22 @@
+node_modules/
+
+# build output
+build/
+.wrangler/
+.react-router/
+
+# local env — never commit secrets
+.dev.vars
+.env
+.env.*
+
+# supabase local
+supabase/.temp/
+supabase/.branches/
+
+# generated types
+worker-configuration.d.ts
+
+# os / editor
+.DS_Store
+*.log
