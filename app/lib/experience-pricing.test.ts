@@ -51,4 +51,13 @@ describe("experience pricing", () => {
     expect(fromPerPersonUsdCents(bd, 4)).toBe(computeExperiencePricing(bd, 4).perPersonUsdCents);
     expect(fromPerPersonUsdCents(bd, 4)).toBeLessThan(computeExperiencePricing(bd, 1).perPersonUsdCents);
   });
+
+  it("dropping the porter recomputes the fee on the smaller base", () => {
+    const withPorter = computeExperiencePricing(bd, 2);
+    const noPorter = computeExperiencePricing({ ...bd, porters_usd_cents: 0 }, 2);
+    expect(noPorter.lines[2].amountUsdCents).toBe(0); // porters line
+    expect(noPorter.perPersonUsdCents).toBeLessThan(withPorter.perPersonUsdCents);
+    // trek fee (line 4) is smaller because the base shrank — fee follows the package
+    expect(noPorter.lines[4].amountUsdCents).toBeLessThan(withPorter.lines[4].amountUsdCents);
+  });
 });

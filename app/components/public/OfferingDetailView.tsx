@@ -7,6 +7,7 @@ import { BookingWidget } from "~/components/public/BookingWidget";
 import { ReviewBlock, Stars, TierBadge } from "~/components/public/bits";
 import { ExperienceSplit } from "~/components/Split";
 import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
+import { STANDARD_ADDONS, addonsTotalUsdCents } from "~/lib/addons";
 import { formatUsd } from "~/lib/pricing";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
@@ -14,7 +15,22 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const hasBreakdown = !!breakdown?.guide_fee_total_usd_cents;
   const [party, setParty] = useState(o.min_party || 1);
-  const pricing = hasBreakdown ? computeExperiencePricing(breakdown!, party) : null;
+  const [withPorter, setWithPorter] = useState(true);
+  const [addons, setAddons] = useState<Set<string>>(new Set());
+  // Porter is a real line — toggling it off recomputes the fee on the smaller
+  // base (v3 §1b). Add-ons are pass-through partner services on top.
+  const effBreakdown = hasBreakdown
+    ? { ...breakdown!, porters_usd_cents: withPorter ? breakdown!.porters_usd_cents : 0 }
+    : null;
+  const pricing = effBreakdown ? computeExperiencePricing(effBreakdown, party) : null;
+  const addonsPP = addonsTotalUsdCents(addons);
+  const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
+  const toggleAddon = (k: string) =>
+    setAddons((s) => {
+      const n = new Set(s);
+      n.has(k) ? n.delete(k) : n.add(k);
+      return n;
+    });
   const carousel: Photo[] = (
     photos.length
       ? photos
@@ -121,9 +137,51 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                   each vs going solo.
                 </p>
               )}
+
+              {/* Porter + add-ons — each is a line, nothing hidden (§1b). */}
+              <div className="mt-5 space-y-2 border-t border-line pt-4">
+                {breakdown!.porters_usd_cents > 0 && (
+                  <label className="flex cursor-pointer items-start justify-between gap-3">
+                    <span>
+                      <span className="text-sm font-medium text-ink">Porter</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Carries the shared load so you walk light. Fair-weight, insured (see welfare).
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="font-mono text-sm text-ink">
+                        {withPorter ? formatUsd(breakdown!.porters_usd_cents) : "—"}
+                      </span>
+                      <input type="checkbox" checked={withPorter} onChange={(e) => setWithPorter(e.target.checked)} />
+                    </span>
+                  </label>
+                )}
+                {STANDARD_ADDONS.map((a) => (
+                  <label key={a.key} className="flex cursor-pointer items-start justify-between gap-3">
+                    <span>
+                      <span className="text-sm font-medium text-ink">{a.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted">{a.note}</span>
+                    </span>
+                    <span className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="font-mono text-sm text-ink">+{formatUsd(a.amountUsdCents)}</span>
+                      <input type="checkbox" checked={addons.has(a.key)} onChange={() => toggleAddon(a.key)} />
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {/* Grand total — the one number, matching the booking box. */}
+              <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
+                <span className="font-medium text-ink">Your total</span>
+                <span className="font-mono text-lg font-medium text-ink">
+                  {formatUsd(grandPP!)} <span className="text-sm text-muted">· per person</span>
+                </span>
+              </div>
+
               <p className="mt-2 text-xs text-muted">
                 This is the whole package — no mystery total. Permits, porters and logistics are
-                per person; the guide fee is shared across your group.
+                per person; the guide fee is shared across your group; add-ons are partner services
+                we take no cut of.
               </p>
             </section>
           )}
@@ -216,7 +274,8 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             permit_fees_pp_usd_cents: permitPp,
             guide_first_name: o.guide_name.split(" ")[0],
           }}
-          priceBreakdown={breakdown}
+          priceBreakdown={effBreakdown ?? breakdown}
+          addonsPerPerson={addonsPP}
           party={party}
           setParty={setParty}
           availableDays={availableDays}

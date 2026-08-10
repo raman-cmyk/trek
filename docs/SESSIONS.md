@@ -627,3 +627,19 @@ booking). **Next slice (Phase 1 #5):** guide cards (day-rate) vs experience card
 
 **Next (Phase 1):** #8 add-ons (gear, airport+hotel, porter) + budget slider;
 #9 multi-currency display. Then Phase 2 (booking spine).
+
+## v3 Phase 1 #8a — add-ons (2026-08-10)
+
+- **Add-ons** on the experience page (`addons.ts` catalogue): **Gear rental**
+  (Kathmandu pickup) and **Airport pickup + first-night hotel**, each a labelled
+  per-person line that recomputes the grand total. **Porter** is a toggle on the
+  core line — turning it off recomputes the trek/fund fee on the smaller base
+  (the fee follows the real package). Add-ons are pass-through — "partner
+  services we take no cut of."
+- Grand total ("Your total · per person") is the single number and matches the
+  booking widget (breakdown + add-ons threaded through `useQuote`).
+- Verified: solo core $1,148.08 + gear $60 + airport/hotel $45 = $1,253.08;
+  porter-off recompute unit-tested. 70 tests green.
+
+**Next (Phase 1 #8b):** budget slider (package recomposer — teahouse tier /
+porter / days, showing deltas). Then #9 multi-currency. Then Phase 2.

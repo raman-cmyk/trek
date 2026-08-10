@@ -33,13 +33,18 @@ interface QuoteResult {
   rows: { label: string; usdCents: number }[] | null; // legacy rows, or null when the full Split is shown on-page
 }
 
-function useQuote(o: BookingWidgetOffering, party: number, breakdown?: PB | null): QuoteResult | null {
+function useQuote(
+  o: BookingWidgetOffering,
+  party: number,
+  breakdown?: PB | null,
+  addonsPerPerson = 0,
+): QuoteResult | null {
   return useMemo(() => {
     // v3: an experience with a price_breakdown is priced from the breakdown
     // (shown in full on the page); the widget just states the per-person price.
     if (breakdown?.guide_fee_total_usd_cents) {
       const p = computeExperiencePricing(breakdown, party);
-      return { headline: p.perPersonUsdCents, perPerson: true, rows: null };
+      return { headline: p.perPersonUsdCents + addonsPerPerson, perPerson: true, rows: null };
     }
     const isMultiDay = o.kind === "trek";
     try {
@@ -64,12 +69,13 @@ function useQuote(o: BookingWidgetOffering, party: number, breakdown?: PB | null
     } catch {
       return null;
     }
-  }, [o, party, breakdown]);
+  }, [o, party, breakdown, addonsPerPerson]);
 }
 
 function ConfigBody({
   o,
   breakdown,
+  addonsPerPerson,
   availableDays,
   party,
   setParty,
@@ -79,6 +85,7 @@ function ConfigBody({
 }: {
   o: BookingWidgetOffering;
   breakdown?: PB | null;
+  addonsPerPerson?: number;
   availableDays: string[];
   party: number;
   setParty: (n: number) => void;
@@ -86,7 +93,7 @@ function ConfigBody({
   setDay: (d: string) => void;
   returnTo: string;
 }) {
-  const quote = useQuote(o, party, breakdown);
+  const quote = useQuote(o, party, breakdown, addonsPerPerson);
   const fetcher = useFetcher();
   const sent = fetcher.data?.ok;
   const busy = fetcher.state !== "idle";
@@ -175,6 +182,7 @@ function ConfigBody({
 export function BookingWidget({
   offering,
   priceBreakdown,
+  addonsPerPerson = 0,
   party,
   setParty,
   availableDays,
@@ -182,6 +190,7 @@ export function BookingWidget({
 }: {
   offering: BookingWidgetOffering;
   priceBreakdown?: PB | null;
+  addonsPerPerson?: number;
   party: number;
   setParty: (n: number) => void;
   availableDays: string[];
@@ -189,7 +198,7 @@ export function BookingWidget({
 }) {
   const [day, setDay] = useState(availableDays[0] ?? "");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const quote = useQuote(offering, party, priceBreakdown);
+  const quote = useQuote(offering, party, priceBreakdown, addonsPerPerson);
   const unit = quote?.perPerson
     ? "per person"
     : offering.kind === "trek"
@@ -209,6 +218,7 @@ export function BookingWidget({
         <ConfigBody
           o={offering}
           breakdown={priceBreakdown}
+          addonsPerPerson={addonsPerPerson}
           availableDays={availableDays}
           party={party}
           setParty={setParty}
@@ -235,6 +245,7 @@ export function BookingWidget({
         <ConfigBody
           o={offering}
           breakdown={priceBreakdown}
+          addonsPerPerson={addonsPerPerson}
           availableDays={availableDays}
           party={party}
           setParty={setParty}
