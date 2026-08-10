@@ -6,7 +6,14 @@ import { Carousel, type Photo } from "~/components/public/Carousel";
 import { BookingWidget } from "~/components/public/BookingWidget";
 import { ReviewBlock, Stars, TierBadge } from "~/components/public/bits";
 import { ExperienceSplit } from "~/components/Split";
-import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
+import {
+  computeExperiencePricing,
+  recompose,
+  budgetConfigs,
+  pickConfig,
+  TEAHOUSE_LABEL,
+  type PriceBreakdown,
+} from "~/lib/experience-pricing";
 import { STANDARD_ADDONS, addonsTotalUsdCents } from "~/lib/addons";
 import { formatUsd } from "~/lib/pricing";
 
@@ -15,16 +22,30 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const hasBreakdown = !!breakdown?.guide_fee_total_usd_cents;
   const [party, setParty] = useState(o.min_party || 1);
-  const [withPorter, setWithPorter] = useState(true);
+  const [budgetTarget, setBudgetTarget] = useState<number | null>(null); // null = full package
   const [addons, setAddons] = useState<Set<string>>(new Set());
-  // Porter is a real line — toggling it off recomputes the fee on the smaller
-  // base (v3 §1b). Add-ons are pass-through partner services on top.
-  const effBreakdown = hasBreakdown
-    ? { ...breakdown!, porters_usd_cents: withPorter ? breakdown!.porters_usd_cents : 0 }
+
+  // Budget recomposer (v3 §1c): the slider hits a target by swapping teahouse
+  // tier / porter; the package (and the fee that follows it) recomposes live.
+  const configs = hasBreakdown ? budgetConfigs(breakdown!, party) : [];
+  const minP = configs[0]?.perPersonUsdCents ?? 0;
+  const maxP = configs[configs.length - 1]?.perPersonUsdCents ?? 0;
+  const target = budgetTarget == null ? maxP : Math.min(Math.max(budgetTarget, minP), maxP);
+  const selected = hasBreakdown ? pickConfig(configs, target) : null;
+  const effBreakdown = selected
+    ? recompose(breakdown!, { tier: selected.tier, porter: selected.porter })
     : null;
   const pricing = effBreakdown ? computeExperiencePricing(effBreakdown, party) : null;
   const addonsPP = addonsTotalUsdCents(addons);
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
+  // Exact, sequential per-lever deltas vs the full comfort package (they sum).
+  const afterTeahouse =
+    selected && hasBreakdown
+      ? computeExperiencePricing(recompose(breakdown!, { tier: selected.tier, porter: true }), party)
+          .perPersonUsdCents
+      : 0;
+  const teahouseDelta = afterTeahouse - maxP;
+  const porterDelta = selected ? selected.perPersonUsdCents - afterTeahouse : 0;
   const toggleAddon = (k: string) =>
     setAddons((s) => {
       const n = new Set(s);
@@ -138,24 +159,53 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 </p>
               )}
 
-              {/* Porter + add-ons — each is a line, nothing hidden (§1b). */}
-              <div className="mt-5 space-y-2 border-t border-line pt-4">
-                {breakdown!.porters_usd_cents > 0 && (
-                  <label className="flex cursor-pointer items-start justify-between gap-3">
-                    <span>
-                      <span className="text-sm font-medium text-ink">Porter</span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Carries the shared load so you walk light. Fair-weight, insured (see welfare).
-                      </span>
+              {/* Budget recomposer (§1c): drag to a budget; the package
+                  recomposes to hit it, showing exactly what changed. */}
+              {selected && maxP > minP && (
+                <div className="mt-5 border-t border-line pt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-ink">Set your budget</span>
+                    <span className="font-mono text-sm text-ink">
+                      {formatUsd(selected.perPersonUsdCents)}/person
                     </span>
-                    <span className="flex items-center gap-2 whitespace-nowrap">
-                      <span className="font-mono text-sm text-ink">
-                        {withPorter ? formatUsd(breakdown!.porters_usd_cents) : "—"}
-                      </span>
-                      <input type="checkbox" checked={withPorter} onChange={(e) => setWithPorter(e.target.checked)} />
-                    </span>
-                  </label>
-                )}
+                  </div>
+                  <input
+                    type="range"
+                    min={minP}
+                    max={maxP}
+                    step={100}
+                    value={target}
+                    onChange={(e) => setBudgetTarget(Number(e.target.value))}
+                    className="mt-2 w-full accent-moss"
+                    aria-label="Budget per person"
+                  />
+                  <div className="mt-1 flex justify-between text-xs text-muted">
+                    <span className="font-mono">{formatUsd(minP)}</span>
+                    <span className="font-mono">{formatUsd(maxP)}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-ink">
+                    {TEAHOUSE_LABEL[selected.tier]} · {selected.porter ? "with porter" : "no porter"}
+                  </p>
+                  {(teahouseDelta < 0 || porterDelta < 0) && (
+                    <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                      {teahouseDelta < 0 && (
+                        <li>
+                          {TEAHOUSE_LABEL[selected.tier].toLowerCase()}{" "}
+                          <span className="font-mono text-pine">−{formatUsd(-teahouseDelta)}</span>
+                        </li>
+                      )}
+                      {porterDelta < 0 && (
+                        <li>
+                          no porter <span className="font-mono text-pine">−{formatUsd(-porterDelta)}</span>
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Add-ons — each is a line, nothing hidden (§1b). */}
+              <div className="mt-4 space-y-2 border-t border-line pt-4">
                 {STANDARD_ADDONS.map((a) => (
                   <label key={a.key} className="flex cursor-pointer items-start justify-between gap-3">
                     <span>

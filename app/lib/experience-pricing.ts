@@ -84,3 +84,59 @@ export function validateSum(lines: PricingLine[], claimedTotal: number): { ok: b
 export function fromPerPersonUsdCents(bd: PriceBreakdown, maxParty = 4): number {
   return computeExperiencePricing(bd, maxParty).perPersonUsdCents;
 }
+
+// ── Budget recomposer (v3 §1c) ──────────────────────────────────────────────
+// A budget slider recomposes the package to hit a target — teahouse tier and
+// porter are the honest levers on a fixed-length packaged trek (days/itinerary
+// recomposition belongs on route/custom-trip pages). Fee follows the package.
+
+export type TeahouseTier = "comfort" | "standard" | "basic";
+export const TEAHOUSE_MULT: Record<TeahouseTier, number> = {
+  comfort: 1,
+  standard: 0.8,
+  basic: 0.6,
+};
+export const TEAHOUSE_LABEL: Record<TeahouseTier, string> = {
+  comfort: "Comfort teahouses",
+  standard: "Standard teahouses",
+  basic: "Basic teahouses",
+};
+
+/** Apply the budget levers to the breakdown (teahouse tier + porter on/off). */
+export function recompose(
+  bd: PriceBreakdown,
+  opts: { tier: TeahouseTier; porter: boolean },
+): PriceBreakdown {
+  return {
+    ...bd,
+    logistics_usd_cents: Math.round(bd.logistics_usd_cents * TEAHOUSE_MULT[opts.tier]),
+    porters_usd_cents: opts.porter ? bd.porters_usd_cents : 0,
+  };
+}
+
+export interface BudgetConfig {
+  tier: TeahouseTier;
+  porter: boolean;
+  perPersonUsdCents: number;
+}
+
+/** Every lever combination, priced for the group, sorted cheapest → fullest. */
+export function budgetConfigs(bd: PriceBreakdown, groupSize: number): BudgetConfig[] {
+  const out: BudgetConfig[] = [];
+  for (const tier of ["comfort", "standard", "basic"] as TeahouseTier[]) {
+    for (const porter of [true, false]) {
+      const perPersonUsdCents = computeExperiencePricing(
+        recompose(bd, { tier, porter }),
+        groupSize,
+      ).perPersonUsdCents;
+      out.push({ tier, porter, perPersonUsdCents });
+    }
+  }
+  return out.sort((a, b) => a.perPersonUsdCents - b.perPersonUsdCents);
+}
+
+/** Richest config within the target budget (or the cheapest if none fit). */
+export function pickConfig(configs: BudgetConfig[], targetUsdCents: number): BudgetConfig {
+  const within = configs.filter((c) => c.perPersonUsdCents <= targetUsdCents);
+  return within.length ? within[within.length - 1] : configs[0];
+}

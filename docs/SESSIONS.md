@@ -643,3 +643,19 @@ booking). **Next slice (Phase 1 #5):** guide cards (day-rate) vs experience card
 
 **Next (Phase 1 #8b):** budget slider (package recomposer — teahouse tier /
 porter / days, showing deltas). Then #9 multi-currency. Then Phase 2.
+
+## v3 Phase 1 #8b — budget slider (package recomposer) (2026-08-10)
+
+- **Budget slider** on the experience page (v3 §1c): drag a per-person budget and
+  the package **recomposes** to hit it via honest levers — teahouse tier
+  (comfort/standard/basic, logistics ×1/0.8/0.6) and porter on/off. The trek fee
+  + Fund recompute on the new base (fee follows the package). Shows the config
+  ("Standard teahouses · with porter") and exact, sequential per-lever deltas
+  ("standard teahouses −$47.46", "no porter −$X") that sum to the total change.
+- Pure + tested: `recompose`, `budgetConfigs` (6, sorted), `pickConfig` (richest
+  within budget). Verified: min config = basic + no porter → $958.24 (from
+  $1,148.08), porters $0, logistics ×0.6, fee recomputed; booking bar matches.
+- Days/itinerary recomposition intentionally deferred to route/custom-trip pages
+  (Phase 6) — it doesn't apply to a fixed-length packaged trek. 73 tests green.
+
+**Phase 1 complete except #9 multi-currency (next). Then Phase 2 (booking spine).**

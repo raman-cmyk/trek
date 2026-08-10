@@ -4,6 +4,9 @@ import {
   breakdownTotal,
   validateSum,
   fromPerPersonUsdCents,
+  recompose,
+  budgetConfigs,
+  pickConfig,
   type PriceBreakdown,
 } from "./experience-pricing";
 
@@ -59,5 +62,32 @@ describe("experience pricing", () => {
     expect(noPorter.perPersonUsdCents).toBeLessThan(withPorter.perPersonUsdCents);
     // trek fee (line 4) is smaller because the base shrank — fee follows the package
     expect(noPorter.lines[4].amountUsdCents).toBeLessThan(withPorter.lines[4].amountUsdCents);
+  });
+
+  it("recompose scales teahouse logistics and toggles the porter", () => {
+    const basic = recompose(bd, { tier: "basic", porter: false });
+    expect(basic.logistics_usd_cents).toBe(Math.round(bd.logistics_usd_cents * 0.6));
+    expect(basic.porters_usd_cents).toBe(0);
+  });
+
+  it("budgetConfigs are sorted cheapest→fullest; basic+no-porter is cheapest", () => {
+    const cfgs = budgetConfigs(bd, 2);
+    expect(cfgs).toHaveLength(6);
+    for (let i = 1; i < cfgs.length; i++) {
+      expect(cfgs[i].perPersonUsdCents).toBeGreaterThanOrEqual(cfgs[i - 1].perPersonUsdCents);
+    }
+    expect(cfgs[0].tier).toBe("basic");
+    expect(cfgs[0].porter).toBe(false);
+    expect(cfgs[cfgs.length - 1].tier).toBe("comfort");
+    expect(cfgs[cfgs.length - 1].porter).toBe(true);
+  });
+
+  it("pickConfig chooses the richest package within budget, else the cheapest", () => {
+    const cfgs = budgetConfigs(bd, 2);
+    const full = cfgs[cfgs.length - 1].perPersonUsdCents;
+    expect(pickConfig(cfgs, full).perPersonUsdCents).toBe(full);
+    expect(pickConfig(cfgs, 0).perPersonUsdCents).toBe(cfgs[0].perPersonUsdCents);
+    const mid = cfgs[2].perPersonUsdCents;
+    expect(pickConfig(cfgs, mid).perPersonUsdCents).toBeLessThanOrEqual(mid);
   });
 });
