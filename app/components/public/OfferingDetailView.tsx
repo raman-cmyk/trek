@@ -282,7 +282,11 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               <p className="mt-2 text-xs text-muted">
                 This is the whole package — no mystery total. Permits, porters and logistics are
                 per person; the guide fee is shared across your group; add-ons are partner services
-                we take no cut of.
+                we take no cut of. The Fund line?{" "}
+                <Link to="/fund" className="text-primary hover:underline">
+                  See where it goes →
+                </Link>
+                {" "}
                 {code !== "USD" && (
                   <>
                     {" "}

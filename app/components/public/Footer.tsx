@@ -56,6 +56,16 @@ export function Footer({
                 </Link>
               </li>
               <li>
+                <Link to="/fund" className="hover:text-fern">
+                  The Fund
+                </Link>
+              </li>
+              <li>
+                <Link to="/hosts" className="hover:text-fern">
+                  Guide on Trek
+                </Link>
+              </li>
+              <li>
                 <Link to="/safety" className="hover:text-fern">
                   Trust &amp; safety
                 </Link>

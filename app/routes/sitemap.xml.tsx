@@ -22,6 +22,8 @@ export async function loader({ context }: Route.LoaderArgs) {
     "/trust",
     "/insurance",
     "/transparency",
+    "/fund",
+    "/hosts",
     "/safety",
     ...(guides ?? []).map((g) => `/guides/${g.slug}`),
     ...(offerings ?? []).map(
