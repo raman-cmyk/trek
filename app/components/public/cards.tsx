@@ -1,6 +1,8 @@
 import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { formatUsd } from "~/lib/pricing";
+import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { GuideSplit } from "~/components/Split";
 import { GuideChip, ResponseChip, Stars, TierBadge } from "./bits";
 
 export interface PublicGuide {
@@ -23,6 +25,7 @@ export interface PublicOffering {
   summary: string;
   days: number;
   price_usd_cents: number | null;
+  price_breakdown: PriceBreakdown | null;
   cover_photo_url: string | null;
   guide_slug: string;
   guide_name: string;
@@ -44,10 +47,10 @@ export function offeringPath(o: { kind: string; slug: string }) {
 }
 
 export function offeringFromUsdCents(o: PublicOffering): number | null {
-  if (o.kind === "trek") {
-    return o.guide_day_rate_usd_cents
-      ? o.guide_day_rate_usd_cents * o.days
-      : null;
+  // v3: an experience's price is its packaged breakdown total (cheapest per
+  // person = largest sensible group), NOT day_rate × days.
+  if (o.price_breakdown?.guide_fee_total_usd_cents) {
+    return fromPerPersonUsdCents(o.price_breakdown);
   }
   return o.price_usd_cents;
 }
@@ -93,7 +96,6 @@ export function GuideCard({
           <Stars value={rating?.value ?? 0} count={rating?.count} />
           {guide.day_rate_usd_cents && (
             <span className="text-sm text-muted">
-              from{" "}
               <span className="font-mono font-medium text-ink">
                 {formatUsd(guide.day_rate_usd_cents)}
               </span>
@@ -101,6 +103,13 @@ export function GuideCard({
             </span>
           )}
         </div>
+        {/* Day-rate Split — 90% to the guide (v3 §0). */}
+        {guide.day_rate_usd_cents ? <GuideSplit guide={90} trek={10} showLabels={false} /> : null}
+        {guide.day_rate_usd_cents ? (
+          <p className="text-[11px] text-muted">
+            <span className="font-mono text-ink">90%</span> goes to {guide.full_name.split(" ")[0]}
+          </p>
+        ) : null}
         {languages && languages.length > 0 && (
           <p className="truncate text-caption text-muted">
             {languages.join(" · ")}

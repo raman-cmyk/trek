@@ -611,3 +611,19 @@ at enquiry, so display is correct now; the quote adopts the breakdown when the
 request→deposit spine is rebuilt (needs porters/logistics/fund columns on the
 booking). **Next slice (Phase 1 #5):** guide cards (day-rate) vs experience cards
 (breakdown "from $X · per person") — fix the day_rate×days card bug.
+
+## v3 Phase 1 #5 — card price semantics (2026-08-10)
+
+- **Guide cards** now show the **day rate** (`$X/day`, mono) plus a thin
+  `GuideSplit` 90/10 bar and "90% goes to <first name>" — the guide is hired per
+  day; 90% is theirs.
+- **Experience cards** now price from the **breakdown** (`fromPerPersonUsdCents`,
+  cheapest per-person) as "from $X · per person" — fixing the day_rate×days bug
+  (EBC 14d now $614.16, not $630). Day experiences keep their flat price.
+- `price_breakdown` added to the offering card selects (home/experiences/routes/
+  guide-profile) and the trek JSON-LD price now uses the breakdown too.
+- Verified at 390/1280: guide Split bars render, experience "from" prices are
+  breakdown-derived, equal height, no overflow.
+
+**Next (Phase 1):** #8 add-ons (gear, airport+hotel, porter) + budget slider;
+#9 multi-currency display. Then Phase 2 (booking spine).
