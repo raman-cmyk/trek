@@ -77,18 +77,30 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     return true;
   });
 
+  // Related routes (from the article's frontmatter) — SEO interlinks.
+  const article = getRouteArticle(params.slug);
+  let related: Array<{ slug: string; name: string; region: string; typical_days: number }> = [];
+  if (article?.relatedSlugs.length) {
+    const { data: rel } = await client
+      .from("routes")
+      .select("slug, name, region, typical_days")
+      .in("slug", article.relatedSlugs);
+    related = rel ?? [];
+  }
+
   return {
     route,
     permits: permits ?? [],
     offerings: (offerings ?? []) as PublicOffering[],
     guides,
-    article: getRouteArticle(params.slug),
+    article,
+    related,
     canonical: absoluteUrl(env.SITE_URL, `/routes/${params.slug}`),
   };
 }
 
 export default function RoutePage({ loaderData }: Route.ComponentProps) {
-  const { route, permits, offerings, guides, article } = loaderData;
+  const { route, permits, offerings, guides, article, related } = loaderData;
 
   return (
     <main>
@@ -207,6 +219,27 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               {offerings.map((o) => (
                 <OfferingCard key={o.id} offering={o} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Related routes — interlinks (docs/02 §SEO) */}
+        {related.length > 0 && (
+          <section className="mt-10">
+            <h2 className="mb-3 font-display text-2xl">If you like this route…</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {related.map((r) => (
+                <a
+                  key={r.slug}
+                  href={`/routes/${r.slug}`}
+                  className="rounded-card border border-border bg-card p-4 hover:shadow-card"
+                >
+                  <p className="font-medium text-ink">{r.name}</p>
+                  <p className="mt-0.5 text-sm text-ink-soft">
+                    {r.region} · {r.typical_days} days
+                  </p>
+                </a>
               ))}
             </div>
           </section>

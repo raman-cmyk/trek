@@ -30,6 +30,11 @@ export function Footer({
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link to="/routes" className="font-medium hover:text-fern">
+                  All routes →
+                </Link>
+              </li>
             </ul>
           </div>
           <div>

@@ -15,6 +15,7 @@ export default [
     route("experiences", "routes/experiences.tsx"),
     route("experiences/:slug", "routes/experiences.$slug.tsx"),
     route("treks/:slug", "routes/treks.$slug.tsx"),
+    route("routes", "routes/routes._index.tsx"),
     route("routes/:slug", "routes/routes.$slug.tsx"),
     route("transparency", "routes/transparency.tsx"),
     route("safety", "routes/safety.tsx"),
