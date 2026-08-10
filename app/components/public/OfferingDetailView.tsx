@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 import type { OfferingDetailData } from "~/features/offering-detail.server";
 import { SmartImage } from "~/components/SmartImage";
 import { Carousel, type Photo } from "~/components/public/Carousel";
@@ -102,6 +102,20 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               <p className="text-sm text-primary">Full profile →</p>
             </div>
           </Link>
+
+          {/* Message-before-pay — a free conversation, no money (v3 §2). */}
+          <Form method="post" action="/conversations" className="-mt-4">
+            <input type="hidden" name="guide_id" value={o.guide_id} />
+            <input type="hidden" name="offering_id" value={o.id} />
+            <input
+              type="hidden"
+              name="next"
+              value={data.canonical ? new URL(data.canonical).pathname : "/"}
+            />
+            <button className="w-full rounded-button border border-moss px-4 py-2.5 text-sm font-medium text-moss hover:bg-mist">
+              Message {o.guide_name.split(" ")[0]} — free, before you book
+            </button>
+          </Form>
 
           <section>
             <p className="text-ink">{o.summary}</p>

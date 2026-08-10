@@ -676,3 +676,26 @@ porter / days, showing deltas). Then #9 multi-currency. Then Phase 2.
 **Phase 1 (pricing model) COMPLETE (#4–#9).** Next: **Phase 2 — booking spine**
 (message→request→deposit→instalments, backup guide, cancellation window) — where
 the server quote adopts the breakdown (charged total = displayed total).
+
+## v3 Phase 2 #10 — message-before-pay (2026-08-10)
+
+The differentiator: a **free conversation with a named guide before any money**.
+
+- `0021_conversations.sql`: `conversations` (trekker↔guide, optional offering) +
+  `messages.conversation_id` (relaxed the thread check to conversation OR enquiry
+  OR booking); RLS participant-scoped.
+- `findOrCreateConversation` (one thread per trekker/guide/offering). Routes:
+  `POST /conversations` (auth-gated; self-message blocked; redirects to login
+  with `?next` when signed out) → `/messages/c/:id` thread.
+- Thread: masked contact info pre-booking (bypass attempts still flag to ops),
+  **response time surfaced** ("Usually replies in ~42 min"), free-chat notice,
+  and a **Request to book** escalation CTA.
+- Entry points: "Message <guide> — free" on the guide profile and the experience
+  page.
+- Verified end-to-end (trekker login → Message → thread → a phone number is
+  masked, raw number not leaked). 73 tests green.
+
+**Next (Phase 2):** request→confirm→deposit→**interest-free instalments** (two-
+track: instant pay for day experiences) + adopt the breakdown in the server
+quote; then backup guide + cancellation window. A conversations inbox (both
+sides) is a small follow-up.

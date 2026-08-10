@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 import type { Route } from "./+types/guides.$slug";
 import { pageMeta, personLd, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
@@ -142,6 +142,14 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               {rating && <Stars value={rating.value} count={rating.count} />}
               <ResponseChip mins={guide.median_response_mins} />
             </div>
+            {/* Message-before-pay — free conversation, no money (v3 §2). */}
+            <Form method="post" action="/conversations" className="pt-1">
+              <input type="hidden" name="guide_id" value={guide.user_id} />
+              <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
+              <button className="rounded-button bg-moss px-5 py-2.5 text-sm font-medium text-white hover:bg-pine">
+                Message {guide.full_name.split(" ")[0]} — free
+              </button>
+            </Form>
           </header>
 
           {guide.bio && (
