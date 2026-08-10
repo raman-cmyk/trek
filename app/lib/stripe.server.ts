@@ -39,6 +39,67 @@ export interface StripeClient {
   constructEvent(payload: string, signature: string | null, secret?: string): Promise<StripeEvent>;
 }
 
+// ---- Webhook signature verification ----------------------------------------
+
+const encoder = new TextEncoder();
+
+function toHex(buf: ArrayBuffer): string {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Constant-time compare of two equal-length hex strings. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Verify a Stripe webhook signature (scheme `t=…,v1=…`) and parse the event.
+ *
+ * Recomputes HMAC-SHA256 over `${t}.${payload}` with the endpoint secret using
+ * Web Crypto (works on Cloudflare Workers and Node 18+), compares in constant
+ * time, and rejects timestamps outside the tolerance window — closing the
+ * forged-webhook and replay holes. Pure + injectable clock so it's unit-tested.
+ */
+export async function verifyStripeSignature(
+  payload: string,
+  sigHeader: string | null,
+  secret: string,
+  opts: { toleranceSec?: number; nowMs?: number } = {},
+): Promise<StripeEvent> {
+  if (!secret) throw new Error("missing webhook secret");
+  if (!sigHeader) throw new Error("missing stripe-signature header");
+
+  const parts: Record<string, string> = {};
+  for (const kv of sigHeader.split(",")) {
+    const [k, v] = kv.split("=");
+    if (k && v) parts[k.trim()] = v.trim();
+  }
+  const t = parts.t;
+  const v1 = parts.v1;
+  if (!t || !v1) throw new Error("malformed stripe-signature header");
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(`${t}.${payload}`));
+  const expected = toHex(mac);
+  if (!timingSafeEqual(expected, v1)) throw new Error("signature mismatch");
+
+  const toleranceSec = opts.toleranceSec ?? 300;
+  const nowSec = (opts.nowMs ?? Date.now()) / 1000;
+  if (Math.abs(nowSec - Number(t)) > toleranceSec) {
+    throw new Error("timestamp outside tolerance (replay?)");
+  }
+  return JSON.parse(payload) as StripeEvent;
+}
+
 // ---- Mock ------------------------------------------------------------------
 
 function rand(prefix: string) {
@@ -124,9 +185,9 @@ class RealStripe implements StripeClient {
     });
     return { id: re.id, status: re.status };
   }
-  async constructEvent(payload: string, _sig: string | null, _secret?: string) {
-    // NOTE: signature verification requires an async HMAC; wire when keys land.
-    return JSON.parse(payload) as StripeEvent;
+  async constructEvent(payload: string, sig: string | null, secret?: string) {
+    // Real keys → verify the HMAC signature and reject forged/replayed events.
+    return verifyStripeSignature(payload, sig, secret ?? "");
   }
 }
 

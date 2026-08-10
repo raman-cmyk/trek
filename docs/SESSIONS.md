@@ -354,3 +354,44 @@ typecheck + **47 tests** green.
 (same Resend/Sparrow keys from M7 cover review-request emails).
 
 **Next:** M9 — launch gate (deploy to Cloudflare, live env wiring, final QA).
+
+## M9 (part 1) — Security hardening + error resilience (2026-08-10)
+
+Started the M9 launch gate with the security pass — the item most likely to
+hide a launch-blocker — plus error-page polish. Built an automated **RLS audit**
+(`scripts/rls-audit.mjs`, `npm run audit:rls`) that connects as anon and asserts
+the default-deny contract. It caught **three real defects**:
+
+1. **`reviews` base table leaked to anon.** The public-read policy exposed
+   published rows straight off the table, including `booking_id`/`author_id`/
+   timestamps the `public_reviews` view was built to hide. Every public code
+   path already uses that view, so `0015_tighten_reviews_rls.sql` drops the anon
+   branch — anon now reads reviews only through the safe view.
+2. **Guide photos were invisible to the public (functional bug).** The
+   `guide_photos` public-read policy tested verification via `EXISTS` on the
+   `guides` base table, which denies anon — so the subquery always matched zero
+   and the profile carousel showed **no photos on our primary SEO page**.
+   `0016_fix_guide_photos_public_read.sql` adds a security-definer
+   `is_verified_guide(uuid)` helper (mirroring `is_ops()`) so verification is
+   checked without granting anon any access to `guides`. Verified end-to-end:
+   the seed photo now renders on `/guides/pemba-sherpa` for an anonymous visitor.
+3. **Stripe webhook did not verify signatures.** `RealStripe.constructEvent`
+   just `JSON.parse`d the payload, so in production anyone could POST a forged
+   `payment_intent.succeeded` and mark a booking paid without paying. Implemented
+   real HMAC-SHA256 verification over `${t}.${payload}` via Web Crypto
+   (`verifyStripeSignature`, Workers + Node), constant-time compare, and a
+   timestamp-tolerance check that closes the replay hole. Six unit tests cover
+   valid / tampered / wrong-secret / replayed / unsigned / no-secret.
+
+Also branded the root **ErrorBoundary** (404 vs 500, CTA back to guides/home,
+server-side logging of unexpected 5xx; internals never leak to trekkers).
+
+**Verified:** clean `supabase db reset` applies all **16** migrations + seed;
+`npm run audit:rls` → PASS (anon fully fenced); typecheck + build + **53 tests**
+green (+6 webhook).
+
+**🙋 Founder (still blocking real launch):** domain + DNS, Stripe **live** keys +
+webhook secret, real permit costs confirmed with the TAAN partner.
+
+**Next (M9 part 2):** PostHog events, full copy.ts pass, per-action rate limits,
+strip seed + onboard the first real guides.

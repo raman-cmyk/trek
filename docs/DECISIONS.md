@@ -146,3 +146,23 @@ agreement). Newest first.
 - **Trekker review photos are untrusted** → inserted as `offering_photos` with
   `source='trekker', approved=false` and surfaced only after ops approval
   (`/ops/moderation`). Recaps only ever show `approved=true` photos.
+
+## 2026-08-10 (M9 security pass)
+
+- **RLS is verified by an executable audit, not by reading policies.**
+  `scripts/rls-audit.mjs` connects as anon and asserts deny-reads / allow-views /
+  no-private-columns / published-only / deny-writes. It gates releases (exits
+  non-zero) and already caught three real defects. Kept as a script (not a Vitest
+  test) so `npm test` stays hermetic and Docker-free; run it against a live stack.
+- **Verification checks in RLS policies must not depend on the querying role's
+  own RLS.** A policy that did `EXISTS (select 1 from guides …)` silently failed
+  for anon because `guides` denies anon. Rule going forward: gate cross-table
+  policy checks through a `security definer` helper (`is_verified_guide`,
+  `is_ops`), never a bare subquery over an RLS-protected table.
+- **Public review exposure is view-only.** Anon reads published reviews solely
+  through the security-definer `public_reviews` view; the base `reviews` table is
+  author/subject/ops only. One projection to maintain, no accidental column leak.
+- **Webhook signatures are verified with Web Crypto, not the Stripe SDK.** Keeps
+  the no-Node-SDK, Workers-friendly stance; HMAC + constant-time compare +
+  timestamp tolerance is the whole contract and is unit-tested with an injected
+  clock.

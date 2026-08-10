@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "db:reset": "supabase db reset",
     "db:start": "supabase start",
+    "audit:rls": "node scripts/rls-audit.mjs",
     "db:stop": "supabase stop"
   },
   "dependencies": {
