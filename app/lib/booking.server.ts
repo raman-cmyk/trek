@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computePricing, computeDeposit, type PriceBreakdown } from "~/lib/pricing";
+import { partyAmounts, type PriceBreakdown as ExperienceBreakdown } from "~/lib/experience-pricing";
+import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
 import type { StripeClient } from "~/lib/stripe.server";
@@ -34,35 +36,52 @@ export async function quote(
 ): Promise<Quote> {
   const { data: o } = await admin
     .from("offerings")
-    .select("kind, days, price_usd_cents, route_id, guide_id")
+    .select("kind, days, price_usd_cents, price_breakdown, route_id, guide_id")
     .eq("id", offeringId)
     .single();
   if (!o) throw new Error("offering not found");
 
-  const { data: guide } = await admin
-    .from("guides")
-    .select("day_rate_usd_cents")
-    .eq("user_id", o.guide_id)
-    .single();
-
-  let permitPp = 0;
-  if (o.kind === "trek" && o.route_id) {
-    const { data: permits } = await admin
-      .from("permits")
-      .select("cost_usd_cents")
-      .eq("route_id", o.route_id);
-    permitPp = (permits ?? []).reduce((s, p) => s + p.cost_usd_cents, 0);
+  let breakdown: PriceBreakdown;
+  const pb = (o as any).price_breakdown as ExperienceBreakdown | null;
+  if (pb?.guide_fee_total_usd_cents) {
+    // v3: charge exactly what the page displayed — derive from the breakdown.
+    const a = partyAmounts(pb, partySize);
+    const guideReceives = a.guideUsdCents;
+    breakdown = {
+      guideFeeUsdCents: a.guideUsdCents,
+      porterFeeUsdCents: a.portersUsdCents,
+      permitFeesUsdCents: a.permitsUsdCents,
+      serviceFeeUsdCents: a.trekUsdCents, // the 10% Trek fee is the platform's cut
+      permitHandlingUsdCents: 0,
+      totalUsdCents: a.totalUsdCents, // includes logistics + The Fund
+      commissionUsdCents: a.trekUsdCents,
+      guideReceivesUsdCents: guideReceives,
+      guidePayoutNprPaisa: Math.round(guideReceives * FX_RATE_NPR),
+    };
+  } else {
+    const { data: guide } = await admin
+      .from("guides")
+      .select("day_rate_usd_cents")
+      .eq("user_id", o.guide_id)
+      .single();
+    let permitPp = 0;
+    if (o.kind === "trek" && o.route_id) {
+      const { data: permits } = await admin
+        .from("permits")
+        .select("cost_usd_cents")
+        .eq("route_id", o.route_id);
+      permitPp = (permits ?? []).reduce((s, p) => s + p.cost_usd_cents, 0);
+    }
+    breakdown = computePricing({
+      isMultiDay: o.kind === "trek",
+      partySize,
+      fxRateNpr: FX_RATE_NPR,
+      days: o.days,
+      dayRateUsdCents: guide?.day_rate_usd_cents ?? 0,
+      permitFeesPerPersonUsdCents: permitPp,
+      offeringPriceUsdCents: o.price_usd_cents ?? 0,
+    });
   }
-
-  const breakdown = computePricing({
-    isMultiDay: o.kind === "trek",
-    partySize,
-    fxRateNpr: FX_RATE_NPR,
-    days: o.days,
-    dayRateUsdCents: guide?.day_rate_usd_cents ?? 0,
-    permitFeesPerPersonUsdCents: permitPp,
-    offeringPriceUsdCents: o.price_usd_cents ?? 0,
-  });
 
   const endDate = addDays(startDate, Math.max(0, o.days - 1));
   const daysUntil = daysBetween(new Date().toISOString().slice(0, 10), startDate);
@@ -162,7 +181,7 @@ export async function fulfillDeposit(
 
   const { data: booking } = await admin
     .from("bookings")
-    .select("id, status, deposit_usd_cents, guide_id, start_date, end_date, enquiry_id")
+    .select("id, status, deposit_usd_cents, total_usd_cents, instalment_count, guide_id, start_date, end_date, enquiry_id")
     .eq("id", bookingId)
     .single();
   if (!booking) return { applied: false };
@@ -184,6 +203,21 @@ export async function fulfillDeposit(
     .update({ status: "deposit_paid", deposit_paid_at: new Date().toISOString() })
     .eq("id", bookingId)
     .eq("status", "pending_deposit");
+
+  // Generate the interest-free instalment schedule for the balance (v3 §1d).
+  const balance = booking.total_usd_cents - booking.deposit_usd_cents;
+  if ((booking.instalment_count ?? 1) > 1 && balance > 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    const sched = instalmentSchedule(balance, booking.instalment_count, today, booking.start_date);
+    await admin.from("instalments").insert(
+      sched.map((s) => ({
+        booking_id: bookingId,
+        seq: s.seq,
+        amount_usd_cents: s.amountUsdCents,
+        due_date: s.dueDate,
+      })),
+    );
+  }
 
   // held → booked for the trek days.
   await admin
@@ -337,13 +371,20 @@ export async function runBalanceSweep(
   // Bookings that have paid a deposit but not the balance, starting within 14d.
   const { data: due } = await admin
     .from("bookings")
-    .select("id, total_usd_cents, deposit_usd_cents, start_date, balance_paid_at")
+    .select("id, total_usd_cents, deposit_usd_cents, start_date, balance_paid_at, instalment_count")
     .eq("status", "deposit_paid")
     .is("balance_paid_at", null);
 
   let charged = 0;
   let cancelled = 0;
+  let instalmentsCharged = 0;
   for (const b of due ?? []) {
+    // Instalment bookings pay the balance on their own schedule — never
+    // auto-charge the whole balance or cancel them via the 14-day sweep.
+    if ((b.instalment_count ?? 1) > 1) {
+      instalmentsCharged += await sweepInstalments(admin, stripe, b, todayIso);
+      continue;
+    }
     const daysUntil = daysBetween(todayIso, b.start_date);
     const balance = Math.max(0, b.total_usd_cents - b.deposit_usd_cents);
     if (daysUntil <= 10) {
@@ -372,5 +413,65 @@ export async function runBalanceSweep(
       }
     }
   }
-  return { charged, cancelled };
+  return { charged, cancelled, instalmentsCharged };
+}
+
+/**
+ * Charge any instalments now due (due_date on/before today, still scheduled) for
+ * one booking. When the last instalment is paid the booking's balance is settled
+ * and it advances to docs_pending — same terminal state as the balance sweep.
+ * Returns the number of instalments charged this run.
+ */
+async function sweepInstalments(
+  admin: SupabaseClient,
+  stripe: StripeClient,
+  booking: { id: string; balance_paid_at: string | null },
+  todayIso: string,
+): Promise<number> {
+  const { data: rows } = await admin
+    .from("instalments")
+    .select("id, seq, amount_usd_cents, due_date, status")
+    .eq("booking_id", booking.id)
+    .order("seq", { ascending: true });
+  if (!rows || rows.length === 0) return 0;
+
+  let n = 0;
+  for (const it of rows) {
+    if (it.status !== "scheduled") continue;
+    if (it.due_date > todayIso) continue; // not due yet
+    const pi = await stripe.createDepositIntent({
+      amountUsdCents: it.amount_usd_cents,
+      bookingId: booking.id,
+      saveCard: false,
+    });
+    const res = await stripe.retrievePaymentIntent(pi.paymentIntentId);
+    if (res.status !== "succeeded") continue;
+    await admin.from("payments").insert({
+      booking_id: booking.id,
+      stripe_payment_intent: pi.paymentIntentId,
+      type: "balance",
+      amount_usd_cents: it.amount_usd_cents,
+      status: "succeeded",
+    });
+    await admin
+      .from("instalments")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", it.id);
+    n++;
+  }
+
+  // If nothing is left scheduled, the balance is fully paid → advance the booking.
+  const { count: remaining } = await admin
+    .from("instalments")
+    .select("id", { count: "exact", head: true })
+    .eq("booking_id", booking.id)
+    .eq("status", "scheduled");
+  if ((remaining ?? 0) === 0) {
+    await admin
+      .from("bookings")
+      .update({ balance_paid_at: new Date().toISOString(), status: "docs_pending" })
+      .eq("id", booking.id)
+      .is("balance_paid_at", null);
+  }
+  return n;
 }

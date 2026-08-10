@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Form, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/checkout.$bookingId";
 import { getEnv } from "~/lib/supabase.server";
@@ -7,6 +8,7 @@ import { fulfillDeposit } from "~/lib/booking.server";
 import { PriceBreakdown } from "~/components/public/bits";
 import { Button } from "~/components/Button";
 import { formatUsd } from "~/lib/pricing";
+import { instalmentSchedule, maxInstalments } from "~/lib/instalments";
 
 export function meta() {
   return [{ title: "Pay your deposit" }, { name: "robots", content: "noindex" }];
@@ -34,8 +36,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   });
 
   const balance = b.total_usd_cents - b.deposit_usd_cents;
+  const today = new Date().toISOString().slice(0, 10);
   return data(
-    { booking: b, paymentIntentId: intent.paymentIntentId, isMock: intent.mock, balance },
+    {
+      booking: b,
+      paymentIntentId: intent.paymentIntentId,
+      isMock: intent.mock,
+      balance,
+      today,
+      maxN: maxInstalments(today, b.start_date),
+    },
     { headers },
   );
 }
@@ -60,13 +70,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (pi.status !== "succeeded") {
     return data({ error: "Payment didn’t complete. Try again." }, { status: 400 });
   }
+  // Persist the chosen instalment plan before fulfilment generates the schedule.
+  const instalmentCount = Math.max(1, Math.min(12, Number(form.get("instalment_count") ?? 1)));
+  await admin.from("bookings").update({ instalment_count: instalmentCount }).eq("id", b.id);
   await fulfillDeposit(admin, params.bookingId, paymentIntentId);
   return redirect(`/trips/${params.bookingId}`, { headers });
 }
 
 export default function Checkout({ loaderData }: Route.ComponentProps) {
-  const { booking: b, paymentIntentId, isMock, balance } = loaderData as any;
+  const { booking: b, paymentIntentId, isMock, balance, today, maxN } = loaderData as any;
   const nav = useNavigation();
+  const [count, setCount] = useState(1);
+  const schedule = instalmentSchedule(balance, count, today, b.start_date);
+  const fmtDate = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" });
   const rows = [
     { label: b.offering?.kind === "trek" ? "Guide fee" : "Experience", usdCents: b.guide_fee_usd_cents },
     ...(b.permit_fees_usd_cents ? [{ label: "Permits", usdCents: b.permit_fees_usd_cents }] : []),
@@ -82,13 +99,48 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
       <div className="mt-6 rounded-card border border-border bg-card p-4">
         <PriceBreakdown rows={rows} total={b.total_usd_cents} />
         <div className="mt-3 flex justify-between border-t border-border pt-3 text-sm">
-          <span className="text-ink-soft">Balance on {b.start_date}</span>
-          <span>{formatUsd(balance)}</span>
+          <span className="text-ink-soft">Balance</span>
+          <span className="font-mono">{formatUsd(balance)}</span>
         </div>
       </div>
 
+      {/* Interest-free instalments — all due before departure (v3 §1d). */}
+      {balance > 0 && maxN > 1 && (
+        <div className="mt-4 rounded-card border border-border bg-card p-4">
+          <p className="text-sm font-medium text-ink">Split the balance — interest-free</p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            Pay the {formatUsd(b.deposit_usd_cents)} deposit now, then the rest in equal payments,
+            all before you depart. No interest, ever.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Array.from({ length: maxN }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setCount(n)}
+                className={
+                  "rounded-full px-3 py-1 text-sm " +
+                  (count === n ? "bg-primary text-white" : "border border-border text-ink hover:bg-mist")
+                }
+              >
+                {n === 1 ? "1 payment" : `${n}×`}
+              </button>
+            ))}
+          </div>
+          <ul className="mt-3 space-y-1 text-sm">
+            {schedule.map((it) => (
+              <li key={it.seq} className="flex justify-between">
+                <span className="text-ink-soft">Payment {it.seq} · {fmtDate(it.dueDate)}</span>
+                <span className="font-mono">{formatUsd(it.amountUsdCents)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Form method="post" className="mt-6">
         <input type="hidden" name="payment_intent_id" value={paymentIntentId} />
+        <input type="hidden" name="instalment_count" value={count} />
         {isMock && (
           <p className="mb-2 rounded-button bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Test mode — no real card charged. Add Stripe keys to take live payments.

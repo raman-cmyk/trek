@@ -85,6 +85,36 @@ export function fromPerPersonUsdCents(bd: PriceBreakdown, maxParty = 4): number 
   return computeExperiencePricing(bd, maxParty).perPersonUsdCents;
 }
 
+export interface PartyAmounts {
+  guideUsdCents: number;
+  permitsUsdCents: number;
+  portersUsdCents: number;
+  logisticsUsdCents: number;
+  trekUsdCents: number;
+  fundUsdCents: number;
+  totalUsdCents: number;
+}
+
+/**
+ * Whole-party amounts = per-person line × party, so the charged total is
+ * exactly (per-person price × party) and the sub-amounts sum to it. Used to
+ * reconcile the server quote/booking snapshot with what the page displayed.
+ */
+export function partyAmounts(bd: PriceBreakdown, groupSize: number): PartyAmounts {
+  const g = Math.max(1, Math.floor(groupSize));
+  const pp = computeExperiencePricing(bd, g);
+  const x = (i: number) => pp.lines[i].amountUsdCents * g;
+  return {
+    guideUsdCents: x(0),
+    permitsUsdCents: x(1),
+    portersUsdCents: x(2),
+    logisticsUsdCents: x(3),
+    trekUsdCents: x(4),
+    fundUsdCents: x(5),
+    totalUsdCents: pp.perPersonUsdCents * g,
+  };
+}
+
 // ── Budget recomposer (v3 §1c) ──────────────────────────────────────────────
 // A budget slider recomposes the package to hit a target — teahouse tier and
 // porter are the honest levers on a fixed-length packaged trek (days/itinerary

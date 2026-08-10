@@ -7,6 +7,7 @@ import {
   recompose,
   budgetConfigs,
   pickConfig,
+  partyAmounts,
   type PriceBreakdown,
 } from "./experience-pricing";
 
@@ -80,6 +81,16 @@ describe("experience pricing", () => {
     expect(cfgs[0].porter).toBe(false);
     expect(cfgs[cfgs.length - 1].tier).toBe("comfort");
     expect(cfgs[cfgs.length - 1].porter).toBe(true);
+  });
+
+  it("partyAmounts sum to the total and equal per-person × party", () => {
+    const a = partyAmounts(bd, 3);
+    const pp = computeExperiencePricing(bd, 3);
+    expect(a.totalUsdCents).toBe(pp.perPersonUsdCents * 3);
+    const sum =
+      a.guideUsdCents + a.permitsUsdCents + a.portersUsdCents + a.logisticsUsdCents +
+      a.trekUsdCents + a.fundUsdCents;
+    expect(sum).toBe(a.totalUsdCents); // charged total reconciles with the lines
   });
 
   it("pickConfig chooses the richest package within budget, else the cheapest", () => {

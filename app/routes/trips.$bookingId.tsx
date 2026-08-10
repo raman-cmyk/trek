@@ -43,7 +43,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!b) throw new Response("Not found", { status: 404 });
 
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }] =
+  const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }, { data: instalments }] =
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
       admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id).order("created_at"),
@@ -55,6 +55,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         .select("card_no, trekker_name, nationality, guide_name, guide_licence_no, route_name, region, entry_point, start_date, end_date, party_size, issued_at, status")
         .eq("booking_id", b.id)
         .maybeSingle(),
+      admin.from("instalments").select("seq, amount_usd_cents, due_date, status").eq("booking_id", b.id).order("seq"),
     ]);
 
   const phoneUnlocked = guidePhoneUnlocked(b.start_date, today);
@@ -70,6 +71,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       hasReviewed: !!myReview,
       recapSlug: recap?.slug ?? null,
       tims: tims ?? null,
+      instalments: instalments ?? [],
+      today,
       insuranceAttested: !!b.insurance_attested_at,
       insuranceVerified: !!b.insurance_verified_at,
       isTrek: (b as any).offering?.kind === "trek",
@@ -169,7 +172,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, insuranceAttested, insuranceVerified } =
+  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified } =
     loaderData as any;
   const nav = useNavigation();
   const cancelled = b.status.startsWith("cancelled");
@@ -407,6 +410,37 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
                 <span>{formatUsd(p.amount_usd_cents)}</span>
               </li>
             ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Instalment plan — interest-free balance split (v3 §1d) */}
+      {instalments.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-2 font-display text-xl">Payment plan</h2>
+          <p className="mb-2 text-sm text-ink-soft">
+            Your balance is split into {instalments.length} interest-free payments, charged
+            automatically to your card. All due before you depart.
+          </p>
+          <ul className="divide-y divide-border rounded-card border border-border bg-card">
+            {instalments.map((it: any) => {
+              const paid = it.status === "paid";
+              const overdue = !paid && it.due_date < today;
+              return (
+                <li key={it.seq} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-ink-soft">
+                    Payment {it.seq}
+                    <span className="ml-2 text-ink">{it.due_date}</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono">{formatUsd(it.amount_usd_cents)}</span>
+                    <Badge tone={paid ? "green" : overdue ? "amber" : "neutral"}>
+                      {paid ? "paid" : overdue ? "due" : "scheduled"}
+                    </Badge>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
