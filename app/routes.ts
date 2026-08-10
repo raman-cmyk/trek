@@ -66,6 +66,7 @@ export default [
   route("trips", "routes/trips._index.tsx"),
   route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
   route("trips/:bookingId/doc/:docId", "routes/trips.$bookingId.doc.$docId.tsx"),
+  route("messages", "routes/messages._index.tsx"),
   route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
   route("conversations", "routes/conversations.tsx"),
   route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),

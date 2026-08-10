@@ -346,3 +346,26 @@ set backup_guide_id = pick.user_id
 from leads l
 join verified pick on pick.rn = (l.rn % (select max(n) from verified)) + 1
 where o.id = l.offering_id;
+
+-- ============ Phase 3: verification receipt dates + porter-welfare pledge ============
+update public.guide_verifications gv set status='passed'
+  from public.guides g
+  where g.user_id=gv.guide_id and g.status='verified'
+    and gv.check_type in ('licence','id_match','phone','reference_1');
+update public.guide_verifications gv
+  set verified_at = g.created_at + interval '3 days',
+      expires_at = case when gv.check_type in ('licence','first_aid')
+                        then (g.created_at + interval '3 days' + interval '2 years') end
+  from public.guides g
+  where g.user_id=gv.guide_id and g.status='verified' and gv.status='passed' and gv.verified_at is null;
+update public.guides set porter_welfare = true where status='verified' and tier >= 2;
+insert into public.guide_verifications (guide_id, check_type, status, verified_at, expires_at)
+select g.user_id, ct.check_type, 'passed',
+       g.created_at + interval '3 days',
+       case when ct.check_type in ('licence','first_aid')
+            then g.created_at + interval '3 days' + interval '2 years' end
+from public.guides g
+cross join (values ('licence'),('id_match'),('phone'),('reference_1'),('first_aid')) as ct(check_type)
+where g.status = 'verified'
+  and not exists (select 1 from public.guide_verifications gv
+                  where gv.guide_id = g.user_id and gv.check_type = ct.check_type);

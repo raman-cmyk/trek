@@ -117,6 +117,20 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </button>
           </Form>
 
+          {/* Porter-welfare pledge (v3 Phase 3) */}
+          {o.guide_porter_welfare && (
+            <Link
+              to="/trust#porters"
+              className="-mt-2 flex items-center gap-2 rounded-card border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-ink-soft hover:bg-accent/10"
+            >
+              <span aria-hidden>🎒</span>
+              <span>
+                <span className="font-medium text-ink">Porter-welfare pledge</span> — fair pay,
+                weight limits & insurance for every porter on this trip.
+              </span>
+            </Link>
+          )}
+
           {/* Backup guide — the trek never cancels (v3 §12). */}
           {o.kind === "trek" && o.backup_guide_name && (
             <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3">

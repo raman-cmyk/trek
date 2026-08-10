@@ -166,6 +166,9 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       <div className="grid grid-cols-2 gap-3">
+        <Link to="/messages" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+          Messages →
+        </Link>
         <Link to="/g/calendar" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
           Block dates →
         </Link>

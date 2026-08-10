@@ -81,6 +81,37 @@ export default function Trust({ loaderData: d }: Route.ComponentProps) {
           lapses drops a tier until it's sorted — visibly, on their profile.
         </p>
       </section>
+
+      {/* Porter-welfare pledge (v3 Phase 3) */}
+      <section id="porters" className="mt-10 rounded-lg border border-line bg-card p-6 shadow-card">
+        <div className="flex items-center gap-3">
+          <span aria-hidden className="text-2xl">🎒</span>
+          <h2 className="font-display text-display-m text-ink">The porter-welfare pledge</h2>
+        </div>
+        <p className="mt-3 max-w-[68ch] text-ink">
+          Porters carry the Himalaya on their backs — and are the least protected people on the
+          trail. Guides wearing this badge have signed a pledge, and we check it on the ground:
+        </p>
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {[
+            "Max 25 kg per porter, weighed at the trailhead",
+            "Paid the fair local rate or above, in full, within 7 days",
+            "Accident & helicopter-evacuation insurance, paid by the trip",
+            "Proper gear above 3,000 m — boots, jacket, sunglasses, shelter",
+            "Same food and shelter standard as the crew",
+            "No porter left to descend alone if sick",
+          ].map((c) => (
+            <li key={c} className="flex items-start gap-2 text-sm text-ink">
+              <span aria-hidden className="mt-0.5 text-moss">✓</span>
+              {c}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 max-w-[68ch] text-sm text-muted">
+          Aligned with International Porter Protection Group (IPPG) guidelines. A confirmed
+          violation removes the badge and the guide's tier is reviewed.
+        </p>
+      </section>
     </main>
   );
 }

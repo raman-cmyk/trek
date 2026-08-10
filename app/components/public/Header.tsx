@@ -56,6 +56,18 @@ export function Header({
 
           {account ? (
             <>
+              <NavLink
+                to="/messages"
+                prefetch="intent"
+                className={({ isActive }) =>
+                  cn(
+                    "rounded-pill px-3 py-1.5",
+                    isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
+                  )
+                }
+              >
+                Messages
+              </NavLink>
               {(() => {
                 const dash =
                   account.role === "guide"

@@ -74,7 +74,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   const monthAnchor = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-01`;
   const todayIso = today.toISOString().slice(0, 10);
 
-  const [{ data: photos }, { data: langs }, { data: offerings }, { data: avail }, { data: reviews }] =
+  const [{ data: photos }, { data: langs }, { data: offerings }, { data: avail }, { data: reviews }, { data: receipts }] =
     await Promise.all([
       client
         .from("guide_photos")
@@ -100,6 +100,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         .select("id, overall, body, published_at, author_name, author_country")
         .eq("guide_id", guide.user_id)
         .order("published_at", { ascending: false }),
+      client
+        .from("public_guide_verifications")
+        .select("check_type, verified_at, expires_at")
+        .eq("guide_id", guide.user_id)
+        .order("verified_at"),
     ]);
 
   const ratings = await guideRatings(client, [guide.user_id]);
@@ -111,14 +116,28 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     offerings: (offerings ?? []) as PublicOffering[],
     openDays: (avail ?? []).map((a: { day: string }) => a.day),
     reviews: reviews ?? [],
+    receipts: receipts ?? [],
     rating: ratings[guide.user_id] ?? null,
     monthAnchor,
     canonical: absoluteUrl(env.SITE_URL, `/guides/${params.slug}`),
   };
 }
 
+// Plain-English names for verification receipt rows (v3 Phase 3).
+const CHECK_LABELS: Record<string, string> = {
+  licence: "Trekking licence verified",
+  id_match: "Government ID matched",
+  phone: "Phone verified",
+  reference_1: "Reference called",
+  reference_2: "Second reference called",
+  first_aid: "Wilderness first-aid current",
+  payout_account: "Payout account verified",
+  police_clearance: "Police clearance",
+  altitude_training: "Altitude training",
+};
+
 export default function GuideProfile({ loaderData }: Route.ComponentProps) {
-  const { guide, photos, languages, offerings, openDays, reviews, rating, monthAnchor } =
+  const { guide, photos, languages, offerings, openDays, reviews, receipts, rating, monthAnchor } =
     loaderData;
   const carousel: Photo[] = (photos.length
     ? photos
@@ -170,22 +189,59 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
             )}
           </section>
 
-          {/* TrustExpander — what we checked */}
+          {/* TrustExpander — verification receipts: real checks, real dates */}
           <section>
-            <details className="group rounded-card border border-border p-4">
+            <details className="group rounded-card border border-border p-4" open={receipts.length > 0}>
               <summary className="cursor-pointer font-medium text-ink">
-                What we checked
+                {receipts.length > 0 ? "Verification receipts" : "What we checked"}
               </summary>
-              <ul className="mt-3 space-y-1.5 text-sm">
-                {checks.map((c) => (
-                  <li key={c} className="flex gap-2">
-                    <span className="text-accent">✓</span>
-                    {c}
-                  </li>
-                ))}
-              </ul>
+              {receipts.length > 0 ? (
+                <ul className="mt-3 space-y-1.5 text-sm">
+                  {receipts.map((r: any) => (
+                    <li key={r.check_type} className="flex items-baseline justify-between gap-2">
+                      <span className="flex gap-2">
+                        <span className="text-accent">✓</span>
+                        {CHECK_LABELS[r.check_type] ?? r.check_type.replace(/_/g, " ")}
+                      </span>
+                      <span className="whitespace-nowrap font-mono text-xs text-ink-soft">
+                        {r.verified_at
+                          ? new Date(r.verified_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+                          : ""}
+                        {r.expires_at ? ` → ${new Date(r.expires_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="mt-3 space-y-1.5 text-sm">
+                  {checks.map((c) => (
+                    <li key={c} className="flex gap-2">
+                      <span className="text-accent">✓</span>
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link to="/trust" className="mt-3 inline-block text-xs text-primary hover:underline">
+                How Trek verifies guides →
+              </Link>
             </details>
           </section>
+
+          {/* Porter-welfare pledge (v3 Phase 3) */}
+          {guide.porter_welfare && (
+            <Link
+              to="/trust#porters"
+              className="flex items-center gap-3 rounded-card border border-accent/30 bg-accent/5 p-3 hover:bg-accent/10"
+            >
+              <span aria-hidden className="text-xl">🎒</span>
+              <p className="text-sm text-ink-soft">
+                <span className="font-medium text-ink">Porter-welfare pledge</span> —{" "}
+                {guide.full_name.split(" ")[0]} guarantees fair pay, weight limits, insurance and
+                proper gear for every porter. What this means →
+              </p>
+            </Link>
+          )}
 
           {offerings.length > 0 && (
             <section>
