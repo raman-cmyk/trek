@@ -395,3 +395,30 @@ webhook secret, real permit costs confirmed with the TAAN partner.
 
 **Next (M9 part 2):** PostHog events, full copy.ts pass, per-action rate limits,
 strip seed + onboard the first real guides.
+
+## Deploy — first live preview on Cloudflare + Supabase cloud (2026-08-10)
+
+Deployed the `claude/app-build-lgnkqo` branch to the founder's real Cloudflare
+account against his real Supabase cloud project.
+
+- **Live URL:** https://trek.raman-7d9.workers.dev (Worker `trek`).
+- **Database:** all 16 migrations + the demo seed applied to the cloud project
+  (12 verified guides, 20 offerings, 6 routes, 10 reviews). Verified live RLS
+  over the REST API: `public_guides`/`public_reviews`/`guide_photos` serve anon;
+  `reviews`/`bookings` base tables deny anon. Storage buckets `documents`
+  (private) + `photos` (public) created.
+- **Constraint discovered:** this deploy environment allows HTTPS only — direct
+  Postgres ports (5432/6543) are firewalled and the Supabase direct host is
+  IPv6-only. So migrations were applied over HTTPS via the **Supabase Management
+  API** (`scripts/remote-apply.sh`, needs a `sbp_` personal access token) rather
+  than `supabase db push`. Documented for future deploys/CI.
+- **Secrets set on the Worker:** SUPABASE_URL, SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY, SITE_URL (via `wrangler secret put`; nothing
+  committed).
+
+**Preview caveats (not yet production-safe):** no Stripe keys → payments run in
+mock mode (no money moves); no Resend/Sparrow → emails/SMS log only; cron sweeps
+not scheduled (needs a Cloudflare scheduled() handler — follow-up).
+
+**🙋 Founder:** rotate the service-role key, the `sbp_` token, and the Cloudflare
+token that were shared in chat; add live Stripe keys before taking real bookings.
