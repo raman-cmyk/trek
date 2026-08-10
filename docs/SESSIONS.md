@@ -482,3 +482,22 @@ full-screen (no header/footer chrome), keyboard-first, on the green system.
 codes go through Supabase's built-in sender, capped at **2 emails/hour**. Fine to
 test with, but before real signups add SMTP (your Resend key): Supabase dashboard
 → Authentication → Emails → SMTP settings. Then the cap lifts.
+
+## Auth → email + password (2026-08-10)
+
+Per founder: dropped the email-code (OTP) dependency for customers; signup and
+login are now **email + password** with Supabase **auto-confirm on** (no
+verification email needed — reliable email/SMTP is a later task).
+
+- `/signup` last step is now "Set a password" (≥8 chars) → `auth.signUp` returns
+  a session immediately (verified against the cloud project) → profile created →
+  redirected in.
+- `/login` is now email + password (`signInWithPassword`).
+- Cloud auth config: `mailer_autoconfirm = true`; `site_url` already fixed to the
+  live URL earlier.
+- **Trekker test login** (populated "My Trips" — 4 bookings): set a password on a
+  seed trekker.
+
+**🙋 Founder:** auto-confirm means anyone can register with any email without
+verifying it — fine for now; re-enable confirmation (and add Resend SMTP) before
+real launch. Password reset also needs SMTP.

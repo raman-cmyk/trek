@@ -26,39 +26,30 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const form = await request.formData();
-  const intent = String(form.get("intent"));
   const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const password = String(form.get("password") ?? "");
   const { supabase, headers } = createSupabaseServerClient(request, env);
 
-  if (intent === "send_code") {
-    if (!email) return { error: "Enter your email." };
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true },
-    });
-    if (error) return Response.json({ error: error.message }, { status: 400 });
-    return Response.json({ sent: true }, { headers });
-  }
+  if (!/.+@.+\..+/.test(email)) return Response.json({ error: "Enter a valid email." }, { status: 400 });
+  if (password.length < 8) return Response.json({ error: "Use at least 8 characters." }, { status: 400 });
 
-  // verify — creates the session + the trekker profile, then continues.
-  const token = String(form.get("token") ?? "").trim();
-  const { data: res, error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: "email",
-  });
-  if (error || !res.user) {
+  const { data: res, error } = await supabase.auth.signUp({ email, password });
+  if (error) {
+    const already = /already|registered|exists/i.test(error.message);
     return Response.json(
-      { error: "That code didn’t work — check it and try again." },
+      { error: already ? "That email already has an account — sign in instead." : error.message },
       { status: 400 },
     );
   }
-  const fullName = `${form.get("first") ?? ""} ${form.get("last") ?? ""}`.trim();
-  await ensureTrekkerProfile(env, res.user, fullName || undefined, String(form.get("country") ?? ""));
+  if (res.user) {
+    const fullName = `${form.get("first") ?? ""} ${form.get("last") ?? ""}`.trim();
+    await ensureTrekkerProfile(env, res.user, fullName || undefined, String(form.get("country") ?? ""));
+  }
+  // Auto-confirm returns a session on signUp; if not, establish one now.
+  if (!res.session) await supabase.auth.signInWithPassword({ email, password });
   return redirect(safeNext(String(form.get("next") ?? "")), { headers });
 }
 
-// Common trekker-origin countries; "Somewhere else" reveals the full select.
 const POPULAR = [
   ["US", "United States"],
   ["GB", "United Kingdom"],
@@ -79,31 +70,24 @@ const MORE = [
   ["OT", "Somewhere else"],
 ] as const;
 
-type Values = { first: string; last: string; country: string; email: string };
+type Values = { first: string; last: string; country: string; email: string; password: string };
 
 export default function Signup({ loaderData }: Route.ComponentProps) {
   const next = loaderData?.next ?? "/guides";
-  const fetcher = useFetcher<{ sent?: boolean; error?: string }>();
+  const fetcher = useFetcher<{ error?: string }>();
   const [step, setStep] = useState(0);
-  const [v, setV] = useState<Values>({ first: "", last: "", country: "", email: "" });
-  const [token, setToken] = useState("");
+  const [v, setV] = useState<Values>({ first: "", last: "", country: "", email: "", password: "" });
   const [showMore, setShowMore] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const STEPS = ["name", "country", "email", "code"] as const;
+  const STEPS = ["name", "country", "email", "password"] as const;
   const busy = fetcher.state !== "idle";
   const error = fetcher.data?.error;
 
-  // Focus the primary field on each step for a keyboard-first flow.
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 60);
     return () => clearTimeout(t);
   }, [step]);
-
-  // When the code has been sent, advance to the code step.
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.sent && step === 2) setStep(3);
-  }, [fetcher.state, fetcher.data, step]);
 
   const back = () => setStep((s) => Math.max(0, s - 1));
 
@@ -118,14 +102,13 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
       setStep(2);
     } else if (step === 2) {
       if (!/.+@.+\..+/.test(v.email)) return;
-      fetcher.submit({ intent: "send_code", email: v.email }, { method: "post" });
+      setStep(3);
     } else if (step === 3) {
-      if (token.trim().length < 6) return;
+      if (v.password.length < 8) return;
       fetcher.submit(
         {
-          intent: "verify",
           email: v.email,
-          token: token.trim(),
+          password: v.password,
           first: v.first,
           last: v.last,
           country: v.country,
@@ -137,12 +120,10 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
   }
 
   const pct = ((step + 1) / STEPS.length) * 100;
-  const countryName =
-    [...POPULAR, ...MORE].find(([c]) => c === v.country)?.[1] ?? v.country;
+  const countryName = [...POPULAR, ...MORE].find(([c]) => c === v.country)?.[1] ?? v.country;
 
   return (
     <main className="relative flex min-h-screen flex-col bg-paper">
-      {/* Progress */}
       <div className="h-1 w-full bg-mist">
         <div
           className="h-full bg-moss transition-[width] duration-base ease-out-soft"
@@ -166,11 +147,7 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="flex flex-1 items-center justify-center px-5 pb-24">
-        <form
-          onSubmit={submitStep}
-          key={step}
-          className="w-full max-w-md animate-fade-rise"
-        >
+        <form onSubmit={submitStep} key={step} className="w-full max-w-md animate-fade-rise">
           <p className="label text-moss">
             Step {step + 1} of {STEPS.length}
           </p>
@@ -258,11 +235,9 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
 
           {step === 2 && (
             <>
-              <h1 className="mt-3 font-display text-display-l text-ink">
-                What’s your email?
-              </h1>
+              <h1 className="mt-3 font-display text-display-l text-ink">What’s your email?</h1>
               <p className="mt-2 text-body-l text-muted">
-                We’ll send a 6-digit code — no password to remember, ever.
+                You’ll use this to sign in and to hear from your guide.
               </p>
               <input
                 ref={inputRef}
@@ -280,30 +255,21 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
           {step === 3 && (
             <>
               <h1 className="mt-3 font-display text-display-l text-ink">
-                Check your inbox.
+                Set a password.
               </h1>
               <p className="mt-2 text-body-l text-muted">
-                We emailed a 6-digit code to{" "}
-                <span className="font-medium text-ink">{v.email}</span>.
+                At least 8 characters. You’ll use it with{" "}
+                <span className="font-medium text-ink">{v.email}</span> to sign in.
               </p>
               <input
                 ref={inputRef}
-                value={token}
-                onChange={(e) => setToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="••••••"
-                className="mt-8 w-full rounded-md border border-line bg-card px-4 py-3 text-center font-mono text-2xl tracking-[0.5em] outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
+                value={v.password}
+                onChange={(e) => setV({ ...v, password: e.target.value })}
+                type="password"
+                autoComplete="new-password"
+                placeholder="Create a password"
+                className="mt-8 w-full rounded-md border border-line bg-card px-4 py-3 text-lg outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
               />
-              <button
-                type="button"
-                onClick={() =>
-                  fetcher.submit({ intent: "send_code", email: v.email }, { method: "post" })
-                }
-                className="mt-3 text-sm text-moss hover:underline"
-              >
-                Didn’t get it? Resend the code
-              </button>
             </>
           )}
 
@@ -313,11 +279,9 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
             <Button type="submit" size="lg" loading={busy} className="min-w-40">
               {step === 3 ? "Create my account" : "Continue"}
             </Button>
-            {step < 3 && (
-              <span className="text-sm text-muted">
-                press <kbd className="font-mono">Enter ↵</kbd>
-              </span>
-            )}
+            <span className="text-sm text-muted">
+              press <kbd className="font-mono">Enter ↵</kbd>
+            </span>
           </div>
 
           {step === 1 && v.country && (
