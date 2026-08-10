@@ -56,6 +56,7 @@ export default [
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
     route("ops/moderation", "routes/ops.moderation.tsx"),
+    route("ops/contracts", "routes/ops.contracts.tsx"),
   ]),
 
   // Booking flow (M6) + My Trips & documents (M7).

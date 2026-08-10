@@ -3,6 +3,7 @@ import type { Route } from "./+types/ops.bookings.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { requireOps } from "~/lib/supabase.server";
 import { verifyDocument, signedDocumentUrl } from "~/lib/documents.server";
+import { generateContractForBooking } from "~/lib/contracts.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { Badge, Panel } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
@@ -18,11 +19,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("id", params.id)
     .maybeSingle();
   if (!b) throw new Response("Not found", { status: 404 });
-  const [{ data: docs }, { data: permits }] = await Promise.all([
+  const [{ data: docs }, { data: permits }, { data: contract }] = await Promise.all([
     admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id),
     admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
+    admin
+      .from("contracts")
+      .select("id, title, body_rendered, status, company_signed_at, guide_signed_at, company_signatory")
+      .eq("booking_id", b.id)
+      .maybeSingle(),
   ]);
-  return data({ booking: b, documents: docs ?? [], permits: permits ?? [] }, { headers });
+  return data({ booking: b, documents: docs ?? [], permits: permits ?? [], contract }, { headers });
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -52,11 +58,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const url = await signedDocumentUrl(admin, documentId, user.id);
     return data({ url }, { headers });
   }
+
+  if (intent === "gen_contract") {
+    await generateContractForBooking(admin, params.id!);
+    return data({ ok: true }, { headers });
+  }
   return data({ ok: false }, { headers });
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits } = loaderData as any;
+  const { booking: b, documents, permits, contract } = loaderData as any;
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm text-ink-soft">
@@ -117,6 +128,50 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
               </ul>
             )}
           </Panel>
+
+          <div className="mt-4">
+            <Panel title="Company↔Guide contract">
+              {contract ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge tone={contract.status === "signed" ? "green" : "amber"}>
+                      {contract.status}
+                    </Badge>
+                    <span className="text-ink-soft">
+                      Company signed{" "}
+                      {contract.company_signed_at
+                        ? new Date(contract.company_signed_at).toLocaleDateString()
+                        : "—"}{" "}
+                      · Guide signed{" "}
+                      {contract.guide_signed_at
+                        ? new Date(contract.guide_signed_at).toLocaleDateString()
+                        : "—"}
+                    </span>
+                  </div>
+                  <details>
+                    <summary className="cursor-pointer text-sm font-medium text-primary">
+                      {contract.title} — view
+                    </summary>
+                    <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-mist p-3 text-xs text-ink">
+                      {contract.body_rendered}
+                    </pre>
+                  </details>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-ink-soft">
+                    No contract yet (this booking predates the active template).
+                  </p>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="gen_contract" />
+                    <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                      Generate &amp; sign
+                    </button>
+                  </Form>
+                </div>
+              )}
+            </Panel>
+          </div>
 
           {permits.length > 0 && (
             <div className="mt-4">

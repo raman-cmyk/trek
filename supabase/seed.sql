@@ -290,3 +290,32 @@ insert into public.bookings (id, trekker_id, guide_id, offering_id, start_date, 
   permit_handling_usd_cents, total_usd_cents, commission_usd_cents, fx_rate_npr,
   guide_payout_npr_paisa, deposit_usd_cents, deposit_paid_at, balance_paid_at) values
   ('66666666-6666-6666-6666-000000000016','22222222-2222-2222-2222-000000000002','11111111-1111-1111-1111-000000000001','55555555-5555-5555-5555-000000000001',current_date - 4, current_date + 10,2,'active',126000,3800,10080,2500,142380,18900,133,14231700,142380,now(),now());
+
+-- ============ M-CONTRACTS: default active contract template ============
+insert into public.contract_templates (title, body, version, active) values
+  ('Guide Engagement Agreement',
+   $tpl$# Guide Engagement Agreement
+
+This agreement is made on {{signed_date}} between **{{company_name}}** ("the Company") and **{{guide_name}}** ("the Guide").
+
+## Engagement
+The Guide agrees to lead the trek **{{offering_title}}** from **{{start_date}}** to **{{end_date}}** for a party of **{{party_size}}**.
+
+## Compensation
+- Guide fee: **{{guide_fee}}**
+- Platform commission: {{commission}}
+- Guide payout (NPR): **{{guide_payout_npr}}**
+
+The Company remits the payout above per its published payout schedule after the trek completes.
+
+## Guide undertakings
+The Guide holds a valid, current trekking licence, will conduct the trek professionally and safely, will follow the Company's safety and conduct standards, and will keep the trekker informed at agreed check-in points.
+
+## Safety
+The rescue-flight pledge applies: the Company takes **no margin** on emergency evacuations. The Guide will prioritise trekker safety over schedule at all times.
+
+## Signatures
+Accepted by the Guide on {{signed_date}} (acceptance of the booking constitutes signature).
+Counter-signed by {{company_name}} on {{signed_date}}.
+$tpl$,
+   1, true);

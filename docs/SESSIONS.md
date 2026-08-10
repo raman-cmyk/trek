@@ -519,3 +519,28 @@ Hi Liam / Sign out → Sign out reverts to Sign in / Sign up. Deployed.
 **Deferred (needs email/SMTP):** password reset — genuinely requires sending a
 reset link, so it waits on the founder adding Resend SMTP (the "rest" to add
 later). Everything else in the email+password flow works without email.
+
+## Company↔Guide contracts — auto-sign + templates admin (2026-08-10)
+
+Auto contract signing between the Company and the Guide, plus an ops area to
+manage contract templates.
+
+- **Schema (`0017_contracts.sql`):** `contract_templates` (ops-managed, one
+  active at a time, `{{placeholder}}` body) and `contracts` (one per booking:
+  rendered snapshot, terms jsonb, company/guide signed timestamps, status). RLS:
+  ops all; guide can read their own; no trekker access.
+- **Auto-generation + signing:** wired into `acceptEnquiry` — the moment a guide
+  accepts a booking, a contract is generated from the active template with that
+  booking's terms and **auto-signed by both sides** (the guide's acceptance is
+  their signature; the Company counter-signs). Best-effort/idempotent — never
+  blocks the booking; skips cleanly if no active template.
+  (`contracts.server.ts`: pure `renderTemplate` + `generateContractForBooking`.)
+- **Admin area (`/ops/contracts`):** placeholder reference, create-template form,
+  and inline edit/activate/delete for each template (single active enforced);
+  "Generate for existing bookings" backfill. New "Contracts" nav item.
+- **Booking detail:** a Company↔Guide contract panel showing signed status +
+  both signature dates + the full rendered agreement (or a "Generate & sign"
+  button if missing).
+- Default "Guide Engagement Agreement" template seeded + set active; backfilled
+  16 signed contracts across the demo bookings (cloud + local). Unit test for the
+  renderer. **56 tests**, typecheck + build green. Deployed.

@@ -3,6 +3,7 @@ import { computePricing, computeDeposit, type PriceBreakdown } from "~/lib/prici
 import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
 import type { StripeClient } from "~/lib/stripe.server";
+import { generateContractForBooking } from "~/lib/contracts.server";
 
 function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -130,6 +131,14 @@ export async function acceptEnquiry(
   );
 
   await admin.from("enquiries").update({ status: "accepted" }).eq("id", enq.id);
+
+  // Auto-generate + auto-sign the Company↔Guide contract for this engagement.
+  // Best-effort: never let contract generation block the booking itself.
+  try {
+    await generateContractForBooking(admin, booking.id);
+  } catch {
+    // swallow — ops can regenerate from the booking detail if needed
+  }
   return booking.id;
 }
 
