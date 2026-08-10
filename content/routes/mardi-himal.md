@@ -1,7 +1,7 @@
 ---
 title: Mardi Himal Trek — the honest guide
 meta: The Mardi Himal trek explained — Nepal's best short trek, 5 days on a ridgeline under Machhapuchhre, with days, altitude, permits and real costs.
-hero: https://img.example/routes/mardi-hero.jpg
+hero: /img/routes/mardi-himal.jpg
 region: Annapurna
 related_slugs: annapurna-circuit, langtang-valley
 ---

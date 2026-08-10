@@ -382,3 +382,29 @@ join public.offerings o on o.id = b.offering_id
 left join public.routes r on r.id = o.route_id
 where b.status = 'completed' and o.kind = 'trek'
   and not exists (select 1 from public.recaps rc where rc.booking_id = b.id);
+-- Real photography (anti-AI pass): swap placeholder URLs for real images.
+update public.users u set avatar_url = '/img/guides/' || g.slug || '.jpg'
+from public.guides g where g.user_id = u.id and g.status = 'verified';
+
+update public.offerings o set cover_photo_url = '/img/routes/' || r.slug || '.jpg'
+from public.routes r where r.id = o.route_id and o.kind = 'trek';
+
+update public.offerings o set cover_photo_url = '/img/exp/' || o.slug || '.jpg'
+where o.kind <> 'trek';
+
+update public.guide_photos gp set url = '/img/guides/' || g.slug || '.jpg'
+from public.guides g where g.user_id = gp.guide_id and gp.kind = 'headshot';
+
+update public.guide_photos gp set url = coalesce(
+  (select o.cover_photo_url from public.offerings o
+   where o.guide_id = gp.guide_id and o.cover_photo_url like '/img/%' limit 1),
+  '/img/hero.jpg')
+where gp.kind <> 'headshot';
+
+update public.offering_photos op set url = o.cover_photo_url
+from public.offerings o where o.id = op.offering_id;
+
+update public.recaps rc set photo_urls = (
+  select array_remove(array[o.cover_photo_url, '/img/hero.jpg'], null)
+  from public.bookings b join public.offerings o on o.id = b.offering_id
+  where b.id = rc.booking_id);

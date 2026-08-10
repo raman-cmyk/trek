@@ -1,7 +1,7 @@
 ---
 title: Manaslu Circuit Trek — the honest guide
 meta: The Manaslu Circuit explained — the restricted-area permit, the Larkya La pass, days, altitude, real costs, and why this trek legally requires a guide.
-hero: https://img.example/routes/manaslu-hero.jpg
+hero: /img/routes/manaslu-circuit.jpg
 region: Manaslu
 related_slugs: annapurna-circuit, langtang-valley
 ---

@@ -1,7 +1,7 @@
 ---
 title: Annapurna Circuit Trek — the honest guide
 meta: The Annapurna Circuit, straight — days, the Thorong La pass, permits, real costs, and the guides who lead it. No brochure clichés.
-hero: https://img.example/routes/annapurna-hero.jpg
+hero: /img/routes/annapurna-circuit.jpg
 region: Annapurna
 related_slugs: mardi-himal, everest-base-camp
 ---

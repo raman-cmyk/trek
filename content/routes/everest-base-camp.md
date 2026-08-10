@@ -1,7 +1,7 @@
 ---
 title: Everest Base Camp Trek — the honest guide
 meta: What Everest Base Camp is really like — days, altitude, permits, real costs, and the guides who lead it. No brochure clichés.
-hero: https://img.example/routes/ebc-hero.jpg
+hero: /img/routes/everest-base-camp.jpg
 region: Khumbu
 related_slugs: gokyo-lakes, annapurna-circuit
 ---

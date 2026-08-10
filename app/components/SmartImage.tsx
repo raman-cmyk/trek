@@ -20,6 +20,7 @@ export function SmartImage({
   avgColor = "var(--color-wheat)",
   placeholder,
   eager = false,
+  cover = false,
   className,
   imgClassName,
 }: {
@@ -32,6 +33,8 @@ export function SmartImage({
   placeholder?: string;
   /** True for above-the-fold LCP images (eager + high priority). */
   eager?: boolean;
+  /** Fill the parent box (skip the aspect-ratio lock) — full-bleed heroes. */
+  cover?: boolean;
   className?: string;
   imgClassName?: string;
 }) {
@@ -47,12 +50,17 @@ export function SmartImage({
   return (
     <div
       className={cn(
-        "relative overflow-hidden",
+        "overflow-hidden",
+        // cover mode positions via the caller's className (e.g. absolute inset-0)
+        !cover && "relative",
         // Warm wheat + contour lines while empty — never flat grey (§5).
         !loaded && "placeholder-contour",
         className,
       )}
-      style={{ aspectRatio: `${width} / ${height}`, backgroundColor: avgColor }}
+      style={{
+        ...(cover ? {} : { aspectRatio: `${width} / ${height}` }),
+        backgroundColor: avgColor,
+      }}
     >
       {placeholder && !loaded && (
         <img

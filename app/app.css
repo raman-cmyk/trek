@@ -40,18 +40,18 @@
   --color-skeleton-highlight: #eef3e8;
 
   /* Type — display serif, UI sans, data mono */
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --font-body:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-sans:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
   /* Radius: 8 pills/inputs, 14 cards, 24 images/modals, 999 avatars/chips */
-  --radius-sm:   8px;
-  --radius-md:   14px;
+  --radius-sm:   4px;
+  --radius-md:   6px;
   --radius-lg:   24px;
   --radius-full: 999px;
-  --radius-card:   14px; /* → md */
-  --radius-button: 8px;  /* → sm */
+  --radius-card:   6px; /* crisp — the 12-14px middle is the template tell */
+  --radius-button: 4px;
   --radius-pill:   999px;
   --radius-sheet:  24px;  /* → lg */
 
@@ -167,18 +167,28 @@ body {
   }
 }
 
-/* Fraunces, specific setting: SOFT raised, WONK zero → rounded, hand-cut
-   terminals without the wobble (§3). Never ship Fraunces at defaults. */
+/* Display: Bricolage Grotesque, never at defaults. Tight tracking scales with
+   size; weight contrast is done in markup (a 300 span next to an 800), not by
+   flattening everything to one weight. */
 h1,
 h2,
 h3,
 .font-display {
   font-family: var(--font-display);
-  font-variation-settings: "opsz" 72, "SOFT" 60, "WONK" 0;
-  font-weight: 550;
-  letter-spacing: -0.02em;
-  line-height: 1.08;
+  font-variation-settings: "opsz" 48, "wdth" 100;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
 }
+
+/* Huge display sizes track tighter still — the designer move defaults skip. */
+.display-hero {
+  font-variation-settings: "opsz" 96, "wdth" 100;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+.wt-light { font-weight: 300; }
+.wt-heavy { font-weight: 800; }
 
 /* The mono rule (§3): every number describing the mountain or the money is
    JetBrains Mono, hard-aligned. Apply `font-mono` to numeric spans; this makes

@@ -1,7 +1,7 @@
 ---
 title: Gokyo Lakes Trek — the honest guide
 meta: The Gokyo Lakes trek explained — turquoise lakes, Gokyo Ri, the Ngozumpa glacier, days, altitude, permits and real costs, with verified local guides.
-hero: https://img.example/routes/gokyo-hero.jpg
+hero: /img/routes/gokyo-lakes.jpg
 region: Khumbu
 related_slugs: everest-base-camp, langtang-valley
 ---

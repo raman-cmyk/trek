@@ -1,7 +1,7 @@
 ---
 title: Langtang Valley Trek — the honest guide
 meta: The Langtang Valley trek explained — days, altitude, permits, real costs, the 2015 earthquake and the rebuild, and the guides who lead it.
-hero: https://img.example/routes/langtang-hero.jpg
+hero: /img/routes/langtang-valley.jpg
 region: Langtang
 related_slugs: gokyo-lakes, mardi-himal
 ---

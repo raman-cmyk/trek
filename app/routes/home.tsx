@@ -6,9 +6,10 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { GuideCard, OfferingCard, type PublicOffering } from "~/components/public/cards";
-import { ReviewBlock } from "~/components/public/bits";
-import { Ridgeline } from "~/components/public/Ridgeline";
+import { ReviewBlock, TierBadge, Stars } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
+import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
+import { useMoney } from "~/lib/currency-context";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -22,33 +23,26 @@ export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
 
-  const [{ data: guides }, { data: offerings }, { data: reviews }, { data: trailPhotos }] =
-    await Promise.all([
-      client
-        .from("public_guides")
-        .select(
-          "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, day_rate_usd_cents, median_response_mins",
-        )
-        .order("tier", { ascending: false })
-        .limit(8),
-      client
-        .from("public_offerings")
-        .select(
-          "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, cover_photo_url, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
-        )
-        .limit(24),
-      client
-        .from("public_reviews")
-        .select("id, overall, body, published_at, author_name, author_country")
-        .order("published_at", { ascending: false })
-        .limit(6),
-      client
-        .from("offering_photos")
-        .select("url, alt_text, credit_name")
-        .eq("approved", true)
-        .eq("source", "trekker")
-        .limit(3),
-    ]);
+  const [{ data: guides }, { data: offerings }, { data: reviews }] = await Promise.all([
+    client
+      .from("public_guides")
+      .select(
+        "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, years_experience, day_rate_usd_cents, median_response_mins, treks_completed_platform",
+      )
+      .order("tier", { ascending: false })
+      .limit(8),
+    client
+      .from("public_offerings")
+      .select(
+        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, cover_photo_url, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
+      )
+      .limit(24),
+    client
+      .from("public_reviews")
+      .select("id, overall, body, published_at, author_name, author_country")
+      .order("published_at", { ascending: false })
+      .limit(4),
+  ]);
 
   const ids = (guides ?? []).map((g) => g.user_id);
   const ratings = await guideRatings(client, ids);
@@ -61,13 +55,19 @@ export async function loader({ context }: Route.LoaderArgs) {
     for (const l of langs ?? []) (languagesByGuide[l.guide_id] ??= []).push(l.language);
   }
 
+  // The Split section uses one real trek's real numbers — EBC if present.
+  const splitOffering =
+    (offerings ?? []).find((o) => o.slug === "ebc-classic-with-pemba" && o.price_breakdown) ??
+    (offerings ?? []).find((o) => o.kind === "trek" && o.price_breakdown) ??
+    null;
+
   return {
     guides: guides ?? [],
     offerings: (offerings ?? []) as PublicOffering[],
     reviews: reviews ?? [],
-    trailPhotos: trailPhotos ?? [],
     ratings,
     languagesByGuide,
+    splitOffering,
     canonical: absoluteUrl(env.SITE_URL, "/"),
   };
 }
@@ -81,89 +81,138 @@ const CATEGORIES = [
 ] as const;
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { guides, offerings, reviews, trailPhotos, ratings, languagesByGuide } =
-    loaderData;
+  const { guides, offerings, reviews, ratings, languagesByGuide, splitOffering } = loaderData;
   const [cat, setCat] = useState<string>("trek");
   const shown = offerings.filter((o) => o.kind === cat).slice(0, 6);
+  const featured = guides[0];
+  const restGuides = guides.slice(1);
+  const featuredReview = reviews[0];
 
   return (
     <main>
-      {/* 1 — Hero. Pine overlay, never black (§5); ridgeline cut at the base. */}
-      <section className="relative">
+      {/* 1 — THE dominant element. One photo, one line, one action. */}
+      <section className="relative min-h-[86vh]">
         <SmartImage
-          src="https://img.example/home/hero.jpg"
-          alt="A guide leading trekkers on a Himalayan trail at sunrise"
-          width={1600}
-          height={900}
+          src="/img/hero.jpg"
+          alt="Trekkers crossing a high pass at golden hour, Khumbu"
+          width={2000}
+          height={860}
           eager
-          className="h-[70vh] max-h-[560px] w-full"
+          cover
+          className="absolute inset-0 h-full w-full"
         />
-        <div className="absolute inset-0 flex items-center bg-gradient-to-t from-pine/85 via-pine/30 to-transparent">
-          <div className="mx-auto w-full max-w-6xl px-4">
-            <h1 className="max-w-2xl font-display text-4xl leading-tight text-paper sm:text-5xl">
-              {copy.brand.positioning}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0">
+          <div className="mx-auto max-w-6xl px-4 pb-14">
+            <h1 className="display-hero max-w-[13ch] font-display text-[13vw] text-white sm:text-7xl lg:text-8xl">
+              <span className="wt-heavy">Pick your guide,</span>{" "}
+              <span className="wt-light text-white/85">not your agency.</span>
             </h1>
-            <p className="mt-3 max-w-xl text-lg text-paper/90">
-              Every trek and experience belongs to a specific, verified guide —
-              a real human you choose, not an anonymous package.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                to="/guides"
-                prefetch="intent"
-                className="rounded-md bg-moss px-5 py-3 font-medium text-white transition-colors hover:bg-pine"
-              >
-                {copy.home.ctaFindGuide}
-              </Link>
-              <Link
-                to="/experiences"
-                prefetch="intent"
-                className="rounded-md bg-paper px-5 py-3 font-medium text-pine transition-colors hover:bg-sage"
-              >
-                {copy.home.ctaBrowse}
-              </Link>
+            <div className="mt-8 flex flex-wrap items-center gap-6">
               <Link
                 to="/match"
                 prefetch="intent"
-                className="rounded-md border border-paper/50 px-5 py-3 font-medium text-paper transition-colors hover:bg-white/10"
+                className="bg-chartreuse px-7 py-3.5 font-medium text-pine hover:bg-white"
               >
                 {copy.home.ctaMatch}
+              </Link>
+              <Link
+                to="/guides"
+                prefetch="intent"
+                className="font-medium text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"
+              >
+                or meet all {guides.length ? "twelve" : "our"} guides →
               </Link>
             </div>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0">
-          <Ridgeline fill="paper" />
-        </div>
+        {/* fingerprint: a real caption, not decoration */}
+        <p className="absolute bottom-3 right-4 hidden font-mono text-[11px] text-white/60 sm:block">
+          near Kongma La, 5,535 m · October · photo from Pemba's group
+        </p>
       </section>
 
-      {/* 2 — Meet your guides */}
-      <Section title="Meet your guides" href="/guides" cta="See all guides">
-        {/* scroll-padding matches the gutter so the first card isn't clipped (§7). */}
-        <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-4 px-4 pb-2">
-          {guides.map((g) => (
-            <div key={g.user_id} className="flex w-52 shrink-0 snap-start">
-              <GuideCard
-                guide={g}
-                rating={ratings[g.user_id]}
-                languages={languagesByGuide[g.user_id]}
+      {/* 2 — Featured guide. Asymmetric, photo bleeds, name overlaps the image. */}
+      {featured && (
+        <section className="mx-auto max-w-6xl px-4 pb-4 pt-20">
+          <p className="label text-muted">The product is a person</p>
+          <div className="mt-4 grid items-end gap-0 sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+            <Link to={`/guides/${featured.slug}`} className="relative block">
+              <SmartImage
+                src={featured.avatar_url ?? ""}
+                alt={featured.full_name}
+                width={640}
+                height={800}
+                className="aspect-[3/4] w-full"
               />
+              {/* name breaks out of the photo's edge — deliberate collision */}
+              <h2 className="display-hero absolute -right-4 bottom-6 z-20 font-display text-5xl text-white [text-shadow:0_1px_18px_rgb(0_0_0/0.45)] sm:-right-16 sm:text-6xl">
+                <span className="wt-heavy">{featured.full_name.split(" ")[0]}</span>
+                <span className="wt-light">&nbsp;{featured.full_name.split(" ").slice(1).join(" ")}</span>
+              </h2>
+            </Link>
+            <div className="relative z-10 bg-paper p-6 sm:-ml-6 sm:mb-10 sm:border sm:border-line sm:p-8">
+              <div className="flex items-center gap-2">
+                <TierBadge tier={featured.tier} />
+                {ratings[featured.user_id] && (
+                  <Stars value={ratings[featured.user_id].value} count={ratings[featured.user_id].count} />
+                )}
+              </div>
+              <p className="mt-3 max-w-[48ch] text-lg leading-relaxed text-ink">
+                “{featured.bio ?? featured.hook_line}”
+              </p>
+              <p className="mt-3 font-mono text-sm text-ink-soft">
+                {featured.years_experience} years on the trail · {featured.treks_completed_platform}{" "}
+                treks led · {featured.home_district}
+              </p>
+              <Link
+                to={`/guides/${featured.slug}`}
+                className="mt-5 inline-block border border-ink px-5 py-2.5 text-sm font-medium text-ink hover:bg-ink hover:text-paper"
+              >
+                Meet {featured.full_name.split(" ")[0]} →
+              </Link>
             </div>
-          ))}
-        </div>
-      </Section>
+          </div>
 
-      {/* 3 — Things to do */}
-      <Section title="Things to do" href="/experiences" cta="Browse all">
-        <div className="mb-4 flex flex-wrap gap-2">
+          {/* the rest, quieter, in one tight row */}
+          <div className="-mx-4 mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-4 px-4 pb-2">
+            {restGuides.map((g) => (
+              <div key={g.user_id} className="flex w-52 shrink-0 snap-start">
+                <GuideCard guide={g} rating={ratings[g.user_id]} languages={languagesByGuide[g.user_id]} />
+              </div>
+            ))}
+            <Link
+              to="/guides"
+              className="flex w-52 shrink-0 snap-start items-center justify-center border border-dashed border-line text-sm font-medium text-primary hover:bg-mist"
+            >
+              All guides →
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* 3 — The Split, huge, on confident green. Only Trek has this section. */}
+      {splitOffering?.price_breakdown && (
+        <GiantSplit offering={splitOffering as PublicOffering} />
+      )}
+
+      {/* 4 — Things to do (real photos carry it now) */}
+      <section className="mx-auto max-w-6xl px-4 py-16">
+        <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="font-display text-3xl text-ink">Things to do</h2>
+          <Link to="/experiences" prefetch="intent" className="text-sm font-medium text-primary hover:underline">
+            Browse all →
+          </Link>
+        </div>
+        <div className="mb-5 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => (
             <button
               key={c.kind}
               onClick={() => setCat(c.kind)}
               className={
-                "rounded-full px-4 py-1.5 text-sm transition-colors " +
+                "px-4 py-1.5 text-sm transition-colors " +
                 (cat === c.kind
-                  ? "bg-chartreuse text-pine"
+                  ? "bg-pine text-paper"
                   : "border border-line bg-card text-ink hover:bg-mist")
               }
             >
@@ -178,139 +227,121 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-ink-soft">
-            Nothing here yet in this category.
-          </p>
+          <p className="text-sm text-ink-soft">Nothing here yet in this category.</p>
         )}
-      </Section>
-
-      {/* 4 — Trust strip */}
-      <section className="bg-card">
-        <div className="mx-auto grid max-w-6xl gap-6 px-4 py-12 sm:grid-cols-3">
-          <TrustCol
-            to="/safety"
-            title={copy.trust.everyGuideVerified}
-            body="Licence, ID, references and first-aid — checked, with dates you can see."
-          />
-          <TrustCol
-            to="/transparency"
-            title={copy.trust.transparentPricing}
-            body="Guide fee, permits and our fee — itemised. Never a mystery total."
-          />
-          <TrustCol
-            to="/safety"
-            title={copy.trust.rescuePledge}
-            body="We take nothing on rescue flights. Your safety is not our margin."
-          />
-        </div>
       </section>
 
-      {/* 5 — On the trail right now (full check-in feed lands in M8) */}
-      {trailPhotos.length > 0 && (
-        <Section title="On the trail this season">
-          <div className="grid grid-cols-3 gap-4">
-            {trailPhotos.map((p, i) => (
-              <figure key={i} className="overflow-hidden rounded-lg">
-                <SmartImage
-                  src={p.url}
-                  alt={p.alt_text}
-                  width={400}
-                  height={300}
-                  className="aspect-[4/3] w-full"
-                />
-                {p.credit_name && (
-                  <figcaption className="p-1 text-xs text-ink-soft">
-                    {p.credit_name}
-                  </figcaption>
-                )}
-              </figure>
-            ))}
+      {/* 5 — One review, big, half over the photo. Not a testimonial grid. */}
+      {featuredReview && (
+        <section className="relative">
+          <SmartImage
+            src="/img/routes/gokyo-lakes.jpg"
+            alt="Gokyo lake and the Ngozumpa moraine"
+            width={1400}
+            height={620}
+            className="h-[52vh] w-full"
+          />
+          <div className="mx-auto max-w-6xl px-4">
+            <figure className="relative z-10 -mt-28 max-w-xl border border-line bg-paper p-7 sm:-mt-36 sm:p-9">
+              <Stars value={featuredReview.overall} />
+              <blockquote className="mt-3 text-xl leading-relaxed text-ink">
+                “{featuredReview.body}”
+              </blockquote>
+              <figcaption className="mt-4 font-mono text-sm text-ink-soft">
+                — {featuredReview.author_name}
+                {featuredReview.author_country ? `, ${featuredReview.author_country}` : ""} ·{" "}
+                {new Date(featuredReview.published_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  year: "numeric",
+                })}
+              </figcaption>
+            </figure>
           </div>
-        </Section>
+          <p className="mx-auto mt-3 max-w-6xl px-4 pb-2 text-right font-mono text-[11px] text-ink-soft">
+            third lake, Gokyo, 4,790 m
+          </p>
+        </section>
       )}
 
-      {/* 6 — How it works */}
-      <Section title="How it works">
-        <ol className="grid gap-6 sm:grid-cols-3">
+      {/* 6 — Trust, one quiet line. The pages carry the detail. */}
+      <section className="mx-auto max-w-6xl px-4 py-14">
+        <div className="flex flex-col gap-0 border-y border-line sm:flex-row">
           {[
-            ["Pick your guide", "Browse real, verified guides and the treks they lead."],
-            ["Request to book", "Send your dates. Your guide confirms, we handle permits."],
-            ["Trek with a human", "Daily check-ins, transparent pricing, a person who cares."],
-          ].map(([t, b], i) => (
-            <li key={t} className="rounded-card bg-card p-5 shadow-card">
-              <span className="font-display text-2xl text-primary">{i + 1}</span>
-              <p className="mt-1 font-medium text-ink">{t}</p>
-              <p className="mt-1 text-sm text-ink-soft">{b}</p>
-            </li>
+            ["/trust", "Verification receipts", "every check, dated, public"],
+            ["/transparency", "The whole price", "guide fee, permits, our cut — printed"],
+            ["/fund", "The Fund", "3% of every trek, spent on the trail"],
+          ].map(([to, t, b], i) => (
+            <Link
+              key={t}
+              to={to}
+              className={
+                "group flex-1 py-5 pr-6 " + (i > 0 ? "border-t border-line sm:border-l sm:border-t-0 sm:pl-6" : "")
+              }
+            >
+              <p className="font-medium text-ink group-hover:text-primary">{t} →</p>
+              <p className="mt-0.5 text-sm text-ink-soft">{b}</p>
+            </Link>
           ))}
-        </ol>
-      </Section>
-
-      {/* 7 — Recent reviews */}
-      {reviews.length > 0 && (
-        <Section title="Recent reviews">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {reviews.map((r) => (
-              <div key={r.id} className="rounded-card bg-card p-5 shadow-card">
-                <ReviewBlock
-                  authorName={r.author_name}
-                  country={r.author_country}
-                  overall={r.overall}
-                  body={r.body}
-                  date={r.published_at}
-                />
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+        </div>
+      </section>
     </main>
   );
 }
 
-function Section({
-  title,
-  href,
-  cta,
-  children,
-}: {
-  title: string;
-  href?: string;
-  cta?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="mx-auto max-w-6xl px-4 py-12">
-      <div className="mb-5 flex items-baseline justify-between">
-        <h2 className="font-display text-2xl text-ink">{title}</h2>
-        {href && cta && (
-          <Link
-            to={href}
-            prefetch="intent"
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            {cta} →
-          </Link>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
+/** The money, huge, on green — the one section no template has. */
+function GiantSplit({ offering }: { offering: PublicOffering }) {
+  const { fmtMinor } = useMoney();
+  const bd = offering.price_breakdown as PriceBreakdown;
+  const p = computeExperiencePricing(bd, 2);
+  const total = p.perPersonUsdCents;
+  const rows = p.lines.filter((l) => l.amountUsdCents > 0);
 
-function TrustCol({
-  to,
-  title,
-  body,
-}: {
-  to: string;
-  title: string;
-  body: string;
-}) {
   return (
-    <Link to={to} className="group">
-      <p className="font-medium text-ink group-hover:text-primary">{title}</p>
-      <p className="mt-1 text-sm text-ink-soft">{body}</p>
-    </Link>
+    <section className="bg-pine py-20 text-paper">
+      <div className="mx-auto max-w-6xl px-4">
+        <p className="label text-paper/60">Where your money goes</p>
+        <h2 className="mt-3 max-w-[16ch] font-display text-5xl sm:text-6xl">
+          <span className="wt-heavy">{fmtMinor(total)}</span>{" "}
+          <span className="wt-light text-paper/75">to Base Camp. Split, to the cent.</span>
+        </h2>
+        <p className="mt-3 max-w-[52ch] text-paper/80">
+          {offering.title}, two of you, real numbers from the live listing. No package
+          totals, no mystery margin — this is the whole point of Trek.
+        </p>
+
+        {/* the bar — proportional, edge to edge */}
+        <div className="mt-10 flex h-16 w-full overflow-hidden">
+          {rows.map((l, i) => (
+            <div
+              key={l.key}
+              title={l.label}
+              style={{ width: `${(l.amountUsdCents / total) * 100}%` }}
+              className={
+                l.key === "trek"
+                  ? "bg-chartreuse"
+                  : ["bg-fern", "bg-moss", "bg-sage/70", "bg-paper/25", "bg-paper/10"][i % 5]
+              }
+            />
+          ))}
+        </div>
+        <div className="mt-6 grid gap-x-8 gap-y-3 sm:grid-cols-3">
+          {rows.map((l) => (
+            <div key={l.key} className="flex items-baseline justify-between border-b border-paper/15 pb-2">
+              <span className={"text-sm " + (l.key === "trek" ? "text-chartreuse" : "text-paper/80")}>
+                {l.label}
+                {l.key === "trek" && " — ours"}
+              </span>
+              <span className="font-mono text-paper">{fmtMinor(l.amountUsdCents)}</span>
+            </div>
+          ))}
+        </div>
+        <Link
+          to={`/treks/${offering.slug}`}
+          className="mt-8 inline-block bg-chartreuse px-6 py-3 font-medium text-pine hover:bg-white"
+        >
+          See the live listing →
+        </Link>
+      </div>
+    </section>
   );
 }
