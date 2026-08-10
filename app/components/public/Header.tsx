@@ -1,12 +1,15 @@
 import { Form, Link, NavLink } from "react-router";
 import { cn } from "~/lib/cn";
 import { copy } from "~/lib/copy";
+import { useMoney } from "~/lib/currency-context";
+import { DISPLAY_CURRENCIES, type CurrencyCode } from "~/lib/currency";
 
 export function Header({
   account,
 }: {
   account?: { firstName: string; role: string } | null;
 }) {
+  const { code, setCode } = useMoney();
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -14,6 +17,18 @@ export function Header({
           Trek<span className="text-primary">.</span>
         </Link>
         <nav className="flex items-center gap-1 text-sm">
+          <select
+            aria-label="Display currency"
+            value={code}
+            onChange={(e) => setCode(e.target.value as CurrencyCode)}
+            className="mr-1 rounded-pill border border-line bg-card px-2 py-1 font-mono text-xs text-ink"
+          >
+            {DISPLAY_CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
           <NavLink
             to="/guides"
             prefetch="intent"

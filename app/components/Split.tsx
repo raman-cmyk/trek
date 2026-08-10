@@ -1,4 +1,4 @@
-import { formatUsd } from "~/lib/pricing";
+import { useMoney } from "~/lib/currency-context";
 import { cn } from "~/lib/cn";
 
 /**
@@ -83,11 +83,15 @@ export function ExperienceSplit({
   showAmounts?: boolean;
   perLabel?: string;
 }) {
+  const { toMinor, fmtMinor } = useMoney();
   const order: SliceKey[] = ["guide", "permits", "porters", "logistics", "trek", "fund"];
   const sum = order.reduce((s, k) => s + (amounts[k] || 0), 0);
   const claimed = total ?? sum;
-  const mismatch = claimed !== sum;
+  const mismatch = claimed !== sum; // reconciliation checked in USD (source of truth)
   const denom = sum || 1;
+  // Derive the shown total from the converted lines so it always sums in the
+  // display currency (never convert the total independently).
+  const displayTotalMinor = order.reduce((s, k) => s + toMinor(amounts[k] || 0), 0);
 
   return (
     <div>
@@ -104,18 +108,18 @@ export function ExperienceSplit({
                   <span className="text-xs text-muted">— funds guide insurance &amp; welfare</span>
                 )}
               </dt>
-              <dd className="font-mono text-ink">{formatUsd(amounts[k] || 0)}</dd>
+              <dd className="font-mono text-ink">{fmtMinor(toMinor(amounts[k] || 0))}</dd>
             </div>
           ))}
           <div className="mt-1 flex items-center justify-between border-t border-line pt-2 font-medium">
             <dt>Total</dt>
             <dd className={cn("font-mono", mismatch ? "text-ember" : "text-ink")}>
-              {formatUsd(claimed)} <span className="text-muted">· {perLabel}</span>
+              {fmtMinor(displayTotalMinor)} <span className="text-muted">· {perLabel}</span>
             </dd>
           </div>
           {mismatch && (
             <p className="text-xs text-ember">
-              Line items sum to {formatUsd(sum)} — this total doesn't reconcile. Do not book; contact us.
+              Line items don't reconcile with the total. Do not book; contact us.
             </p>
           )}
         </dl>

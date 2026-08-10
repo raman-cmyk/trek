@@ -3,8 +3,9 @@ import { useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
 import { PriceBreakdown } from "./bits";
-import { computePricing, formatUsd } from "~/lib/pricing";
+import { computePricing } from "~/lib/pricing";
 import { computeExperiencePricing, type PriceBreakdown as PB } from "~/lib/experience-pricing";
+import { useMoney } from "~/lib/currency-context";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -94,6 +95,7 @@ function ConfigBody({
   returnTo: string;
 }) {
   const quote = useQuote(o, party, breakdown, addonsPerPerson);
+  const { m } = useMoney();
   const fetcher = useFetcher();
   const sent = fetcher.data?.ok;
   const busy = fetcher.state !== "idle";
@@ -141,7 +143,7 @@ function ConfigBody({
         <PriceBreakdown rows={quote.rows} total={quote.headline} />
       ) : quote ? (
         <p className="text-sm text-ink-soft">
-          <span className="font-mono font-medium text-ink">{formatUsd(quote.headline)}</span> per
+          <span className="font-mono font-medium text-ink">{m(quote.headline)}</span> per
           person · full breakdown above · {party} {party === 1 ? "person" : "people"}
         </p>
       ) : null}
@@ -199,6 +201,7 @@ export function BookingWidget({
   const [day, setDay] = useState(availableDays[0] ?? "");
   const [sheetOpen, setSheetOpen] = useState(false);
   const quote = useQuote(offering, party, priceBreakdown, addonsPerPerson);
+  const { m } = useMoney();
   const unit = quote?.perPerson
     ? "per person"
     : offering.kind === "trek"
@@ -211,7 +214,7 @@ export function BookingWidget({
       <aside className="sticky top-24 hidden rounded-card border border-border bg-card p-5 shadow-card lg:block">
         <p className="mb-3">
           <span className="font-mono text-2xl font-medium">
-            {quote ? formatUsd(quote.headline) : "—"}
+            {quote ? m(quote.headline) : "—"}
           </span>
           <span className="text-ink-soft"> · {unit}</span>
         </p>
@@ -233,7 +236,7 @@ export function BookingWidget({
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm">
             <span className="font-mono font-medium">
-              {quote ? formatUsd(quote.headline) : "—"}
+              {quote ? m(quote.headline) : "—"}
             </span>
             <span className="text-ink-soft"> · {unit}</span>
           </div>

@@ -15,6 +15,7 @@ import "@fontsource-variable/fraunces";
 import "@fontsource-variable/inter-tight";
 import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
+import { CurrencyProvider } from "~/lib/currency-context";
 
 export const links: Route.LinksFunction = () => [];
 
@@ -37,7 +38,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  return (
+    <CurrencyProvider>
+      <Outlet />
+    </CurrencyProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

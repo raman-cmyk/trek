@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { cn } from "~/lib/cn";
 import { SmartImage } from "~/components/SmartImage";
-import { formatUsd } from "~/lib/pricing";
+import { useMoney } from "~/lib/currency-context";
 
 // Tier badges (§8): Verified mist/moss · Trusted sage/pine · Elite chartreuse/
 // pine. Every badge links to /trust — a tier you can't look up is decoration.
@@ -115,17 +115,18 @@ export function PriceBreakdown({
   rows: Array<{ label: string; usdCents: number }>;
   total: number;
 }) {
+  const { toMinor, fmtMinor } = useMoney();
   return (
     <dl className="space-y-1 text-sm">
       {rows.map((r) => (
         <div key={r.label} className="flex justify-between">
           <dt className="text-muted">{r.label}</dt>
-          <dd className="font-mono">{formatUsd(r.usdCents)}</dd>
+          <dd className="font-mono">{fmtMinor(toMinor(r.usdCents))}</dd>
         </div>
       ))}
       <div className="mt-1 flex justify-between border-t border-line pt-1 font-medium">
         <dt>Total</dt>
-        <dd className="font-mono">{formatUsd(total)}</dd>
+        <dd className="font-mono">{fmtMinor(rows.reduce((s, r) => s + toMinor(r.usdCents), 0))}</dd>
       </div>
     </dl>
   );

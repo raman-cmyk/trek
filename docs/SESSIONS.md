@@ -659,3 +659,20 @@ porter / days, showing deltas). Then #9 multi-currency. Then Phase 2.
   (Phase 6) — it doesn't apply to a fixed-length packaged trek. 73 tests green.
 
 **Phase 1 complete except #9 multi-currency (next). Then Phase 2 (booking spine).**
+
+## v3 Phase 1 #9 — multi-currency display (2026-08-10) — PHASE 1 COMPLETE
+
+- **Currency toggle** (USD/EUR/GBP/AUD) in the header; NPR reserved for guides/
+  ledger. `currency.ts` (cached daily rates, USD-cent source of truth) +
+  `currency-context.tsx` (hydration-safe provider defaulting to USD, adopts the
+  stored choice post-mount; `useMoney()` hook).
+- All shopping prices convert: cards ("from"), day rate, experience Split lines +
+  total, budget rails/deltas, add-ons, booking widget. **Summation preserved** —
+  the shown total is the sum of the *converted* lines, never converted
+  independently. Disclosure: "shown in EUR (approx.) — you're charged in USD."
+- Verified in EUR: EBC breakdown Guide €579.60 / Permits €84.64 / … summing to
+  €1,056.23, cards + widget consistent, no overflow. 73 tests green.
+
+**Phase 1 (pricing model) COMPLETE (#4–#9).** Next: **Phase 2 — booking spine**
+(message→request→deposit→instalments, backup guide, cancellation window) — where
+the server quote adopts the breakdown (charged total = displayed total).

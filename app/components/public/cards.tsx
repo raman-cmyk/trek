@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
-import { formatUsd } from "~/lib/pricing";
 import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { useMoney } from "~/lib/currency-context";
 import { GuideSplit } from "~/components/Split";
 import { GuideChip, ResponseChip, Stars, TierBadge } from "./bits";
 
@@ -64,6 +64,7 @@ export function GuideCard({
   rating?: { value: number; count: number };
   languages?: string[];
 }) {
+  const { m } = useMoney();
   return (
     <Link
       to={`/guides/${guide.slug}`}
@@ -97,7 +98,7 @@ export function GuideCard({
           {guide.day_rate_usd_cents && (
             <span className="text-sm text-muted">
               <span className="font-mono font-medium text-ink">
-                {formatUsd(guide.day_rate_usd_cents)}
+                {m(guide.day_rate_usd_cents)}
               </span>
               /day
             </span>
@@ -122,6 +123,7 @@ export function GuideCard({
 }
 
 export function OfferingCard({ offering }: { offering: PublicOffering }) {
+  const { m } = useMoney();
   const from = offeringFromUsdCents(offering);
   return (
     <Link
@@ -168,7 +170,7 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
           // Consistent price format site-wide: "from $XX · per person" (§8).
           <p className="mt-auto pt-1 text-sm text-muted">
             from{" "}
-            <span className="font-mono font-medium text-ink">{formatUsd(from)}</span>{" "}
+            <span className="font-mono font-medium text-ink">{m(from)}</span>{" "}
             · per person
           </p>
         )}

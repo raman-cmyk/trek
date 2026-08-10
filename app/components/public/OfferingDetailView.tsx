@@ -15,10 +15,11 @@ import {
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
 import { STANDARD_ADDONS, addonsTotalUsdCents } from "~/lib/addons";
-import { formatUsd } from "~/lib/pricing";
+import { useMoney } from "~/lib/currency-context";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
+  const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const hasBreakdown = !!breakdown?.guide_fee_total_usd_cents;
   const [party, setParty] = useState(o.min_party || 1);
@@ -153,7 +154,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 <p className="mt-3 rounded-button bg-mist px-3 py-2 text-sm text-pine">
                   Guide fee split {party} ways → you save{" "}
                   <span className="font-mono font-medium">
-                    {formatUsd(pricing.groupSavingsEachUsdCents)}
+                    {m(pricing.groupSavingsEachUsdCents)}
                   </span>{" "}
                   each vs going solo.
                 </p>
@@ -166,7 +167,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-ink">Set your budget</span>
                     <span className="font-mono text-sm text-ink">
-                      {formatUsd(selected.perPersonUsdCents)}/person
+                      {m(selected.perPersonUsdCents)}/person
                     </span>
                   </div>
                   <input
@@ -180,8 +181,8 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                     aria-label="Budget per person"
                   />
                   <div className="mt-1 flex justify-between text-xs text-muted">
-                    <span className="font-mono">{formatUsd(minP)}</span>
-                    <span className="font-mono">{formatUsd(maxP)}</span>
+                    <span className="font-mono">{m(minP)}</span>
+                    <span className="font-mono">{m(maxP)}</span>
                   </div>
                   <p className="mt-2 text-sm text-ink">
                     {TEAHOUSE_LABEL[selected.tier]} · {selected.porter ? "with porter" : "no porter"}
@@ -191,12 +192,12 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                       {teahouseDelta < 0 && (
                         <li>
                           {TEAHOUSE_LABEL[selected.tier].toLowerCase()}{" "}
-                          <span className="font-mono text-pine">−{formatUsd(-teahouseDelta)}</span>
+                          <span className="font-mono text-pine">−{m(-teahouseDelta)}</span>
                         </li>
                       )}
                       {porterDelta < 0 && (
                         <li>
-                          no porter <span className="font-mono text-pine">−{formatUsd(-porterDelta)}</span>
+                          no porter <span className="font-mono text-pine">−{m(-porterDelta)}</span>
                         </li>
                       )}
                     </ul>
@@ -213,7 +214,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                       <span className="mt-0.5 block text-xs text-muted">{a.note}</span>
                     </span>
                     <span className="flex items-center gap-2 whitespace-nowrap">
-                      <span className="font-mono text-sm text-ink">+{formatUsd(a.amountUsdCents)}</span>
+                      <span className="font-mono text-sm text-ink">+{m(a.amountUsdCents)}</span>
                       <input type="checkbox" checked={addons.has(a.key)} onChange={() => toggleAddon(a.key)} />
                     </span>
                   </label>
@@ -224,7 +225,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
                 <span className="font-medium text-ink">Your total</span>
                 <span className="font-mono text-lg font-medium text-ink">
-                  {formatUsd(grandPP!)} <span className="text-sm text-muted">· per person</span>
+                  {m(grandPP!)} <span className="text-sm text-muted">· per person</span>
                 </span>
               </div>
 
@@ -232,6 +233,12 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 This is the whole package — no mystery total. Permits, porters and logistics are
                 per person; the guide fee is shared across your group; add-ons are partner services
                 we take no cut of.
+                {code !== "USD" && (
+                  <>
+                    {" "}
+                    Prices shown in {code} are approximate — you're charged in USD.
+                  </>
+                )}
               </p>
             </section>
           )}
