@@ -34,6 +34,13 @@ export function Header() {
           >
             {copy.home.ctaBrowse}
           </NavLink>
+          <Link
+            to="/signup"
+            prefetch="intent"
+            className="ml-1 rounded-full bg-moss px-4 py-1.5 font-medium text-white hover:bg-pine"
+          >
+            Sign up
+          </Link>
         </nav>
       </div>
     </header>

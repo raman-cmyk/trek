@@ -53,19 +53,29 @@ export async function ensureTrekkerProfile(
   env: Env,
   user: SessionUser,
   fullName?: string,
+  countryCode?: string,
 ) {
   const admin = createAdminClient(env);
   const { data: existing } = await admin
     .from("users")
-    .select("id")
+    .select("id, full_name, country_code")
     .eq("id", user.id)
     .maybeSingle();
-  if (existing) return;
+  const country = countryCode?.trim().slice(0, 2).toUpperCase() || null;
+  if (existing) {
+    // Backfill name/country if onboarding collected them after a bare login.
+    const patch: Record<string, unknown> = {};
+    if (fullName && !existing.full_name) patch.full_name = fullName;
+    if (country && !existing.country_code) patch.country_code = country;
+    if (Object.keys(patch).length) await admin.from("users").update(patch).eq("id", user.id);
+    return;
+  }
   await admin.from("users").insert({
     id: user.id,
     role: "trekker",
     email: user.email ?? null,
     phone: user.phone ?? null,
     full_name: fullName || user.email?.split("@")[0] || "Trekker",
+    country_code: country,
   });
 }

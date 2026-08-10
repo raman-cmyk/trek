@@ -461,3 +461,24 @@ Deployed to https://trek.raman-7d9.workers.dev.
 **Not done (noted):** photo grading (needs real photography); transparent-over-
 hero nav on scroll; ridgeline on the guide-profile header; a full every-number
 mono sweep on secondary/ops screens.
+
+## Trekker account creation — Typeform-style onboarding (2026-08-10)
+
+Added an immersive, one-question-per-screen signup for customers (`/signup`),
+full-screen (no header/footer chrome), keyboard-first, on the green system.
+
+- **Flow:** name → country (one-tap popular chips + "Somewhere else" select) →
+  email → 6-digit code → account created. Progress bar, per-step fade-rise,
+  Enter-to-advance, Back, personalised copy ("Where are you travelling from,
+  Alex?"). Reuses the existing email-OTP auth and `ensureTrekkerProfile`
+  (extended to capture `country_code`), so no new auth surface.
+- **Entry points:** header "Sign up" CTA; "Create your account →" on `/login`
+  (both carry `?next=` through).
+- **Cloud auth config:** fixed `site_url` (was `localhost:3000`) →
+  https://trek.raman-7d9.workers.dev and set the redirect allow-list.
+- Verified the client flow at 390/1440 (name→country→email→code all advance).
+
+**🙋 Founder — email delivery:** the project has **no custom SMTP**, so signup
+codes go through Supabase's built-in sender, capped at **2 emails/hour**. Fine to
+test with, but before real signups add SMTP (your Resend key): Supabase dashboard
+→ Authentication → Emails → SMTP settings. Then the cap lifts.

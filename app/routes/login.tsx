@@ -62,6 +62,15 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
       <p className="mt-1 text-ink-soft">
         We’ll email you a 6-digit code — no password to remember.
       </p>
+      <p className="mt-2 text-sm text-ink-soft">
+        New to Trek?{" "}
+        <a
+          href={`/signup${next && next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
+          className="font-medium text-primary hover:underline"
+        >
+          Create your account →
+        </a>
+      </p>
 
       {!sent ? (
         <Form method="post" className="mt-6 space-y-4">
