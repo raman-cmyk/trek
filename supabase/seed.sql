@@ -319,3 +319,14 @@ Accepted by the Guide on {{signed_date}} (acceptance of the booking constitutes 
 Counter-signed by {{company_name}} on {{signed_date}}.
 $tpl$,
    1, true);
+
+-- ============ v3: experience price breakdowns (treks) ============
+update public.offerings o set price_breakdown = jsonb_build_object(
+    'guide_fee_total_usd_cents', coalesce(g.day_rate_usd_cents, 4500) * o.days,
+    'permits_usd_cents', 9200,
+    'porters_usd_cents', case when o.days >= 7 then 8400 else 3000 end,
+    'logistics_usd_cents', o.days * 1500,
+    'trek_pct', 0.10,
+    'fund_pct', 0.03)
+  from public.guides g
+  where g.user_id = o.guide_id and o.kind = 'trek';
