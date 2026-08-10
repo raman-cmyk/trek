@@ -422,3 +422,42 @@ not scheduled (needs a Cloudflare scheduled() handler — follow-up).
 
 **🙋 Founder:** rotate the service-role key, the `sbp_` token, and the Cloudflare
 token that were shared in chat; add live Stripe keys before taking real bookings.
+## Brand System v1 — green rebrand (2026-08-10)
+
+Replaced the navy/rust palette with the green field-notebook system (Brand
+System v1). Foundation-first so most of the app recoloured at once:
+
+- **Tokens (`app.css`):** the 13-colour green system (ink/pine/moss/fern/sage/
+  mist/chartreuse/paper/card/wheat/ember/muted/line); legacy semantic aliases
+  (primary→moss, surface→paper, himalaya→pine, danger→ember, gold→chartreuse…)
+  remapped so existing components recoloured without churn. Radius scale
+  (8/14/24/999), type scale tokens, and `.title`/`.label` named styles.
+- **Type:** Fraunces (display, with opsz 72 / SOFT 60 / WONK 0), Inter Tight
+  (body/UI), JetBrains Mono (data) — all self-hosted via fontsource (no CDN, per
+  the CSP rule; the spec's Google-Fonts suggestion was adapted). Verified live
+  that h1=Fraunces, card names=Inter Tight, numbers=JetBrains Mono.
+- **The mono rule:** ratings, prices, response times, days, altitudes set in
+  JetBrains Mono (tabular).
+- **Ridgeline signature (`Ridgeline.tsx`):** one hand-cut path, three placements
+  — under the hero, above the footer (flipped), and as the avatar ring on chips.
+- **Cards rebuilt (§8):** equal-height (flex + pinned bottom row), "New guide"
+  slot never collapses, 2-line clamp, tier badges on paper pills; experience
+  cards show the guide's **full name** and a consistent `from $X · per person`
+  price. Rating star is moss; tier badges Verified=mist/moss, Trusted=sage/pine,
+  Elite=chartreuse/pine, each linking to the new **/trust** page.
+- **Photography (§5):** grey placeholders replaced with warm **wheat + contour**
+  pattern; pine (never black) hero overlay.
+- **New `/trust` page** explaining the verification ladder; footer → pine with
+  sage/fern links + ridgeline.
+- **Bug-fixes that applied:** carousel `scroll-pl` so the first guide card isn't
+  clipped; chartreuse active category pill. (The spec's "duplicate filter row"
+  and chip-filter items don't exist in this build — it uses selects — so they
+  were adapted, not invented.)
+
+**Verified:** typecheck + build green; **zero raw hex** in shipped
+components/routes; screenshots at 390/768/1440 with **no horizontal overflow**.
+Deployed to https://trek.raman-7d9.workers.dev.
+
+**Not done (noted):** photo grading (needs real photography); transparent-over-
+hero nav on scroll; ridgeline on the guide-profile header; a full every-number
+mono sweep on secondary/ops screens.

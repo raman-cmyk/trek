@@ -10,8 +10,10 @@ import {
 import type { Route } from "./+types/root";
 
 // Self-hosted variable fonts (no runtime CDN — CSP/Cloudflare friendly).
+// Fraunces = display, Inter Tight = body/UI, JetBrains Mono = data (§3).
 import "@fontsource-variable/fraunces";
-import "@fontsource-variable/inter";
+import "@fontsource-variable/inter-tight";
+import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [];

@@ -17,7 +17,7 @@ export function SmartImage({
   alt,
   width,
   height,
-  avgColor = "#e7e5e4",
+  avgColor = "var(--color-wheat)",
   placeholder,
   eager = false,
   className,
@@ -46,7 +46,12 @@ export function SmartImage({
 
   return (
     <div
-      className={cn("relative overflow-hidden", className)}
+      className={cn(
+        "relative overflow-hidden",
+        // Warm wheat + contour lines while empty — never flat grey (§5).
+        !loaded && "placeholder-contour",
+        className,
+      )}
       style={{ aspectRatio: `${width} / ${height}`, backgroundColor: avgColor }}
     >
       {placeholder && !loaded && (

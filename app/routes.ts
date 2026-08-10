@@ -17,6 +17,7 @@ export default [
     route("routes/:slug", "routes/routes.$slug.tsx"),
     route("transparency", "routes/transparency.tsx"),
     route("safety", "routes/safety.tsx"),
+    route("trust", "routes/trust.tsx"),
     route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
   ]),

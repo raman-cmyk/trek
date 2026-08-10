@@ -54,7 +54,7 @@ export function Carousel({
             alt={p.alt}
             width={1600}
             height={900}
-            avgColor={p.avgColor ?? "#b9b3ab"}
+            avgColor={p.avgColor}
             eager={idx === 0}
             className="h-full w-full"
           />

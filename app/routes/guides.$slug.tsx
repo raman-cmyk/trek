@@ -123,7 +123,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   const carousel: Photo[] = (photos.length
     ? photos
     : [{ url: guide.avatar_url ?? "", alt_text: guide.full_name, kind: "headshot" }]
-  ).map((p) => ({ url: p.url, alt: p.alt_text, avgColor: "#c9c4be" }));
+  ).map((p) => ({ url: p.url, alt: p.alt_text, avgColor: undefined }));
   const checks = TIER_CHECKS[guide.tier] ?? TIER_CHECKS[1];
 
   return (

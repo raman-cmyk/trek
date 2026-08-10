@@ -7,48 +7,86 @@
    `text-ink`, `rounded-card`, `duration-quick`, `ease-out-soft` all work.
    ========================================================================= */
 @theme {
-  /* Color */
-  --color-primary: #c2410c; /* burnt saffron — CTAs, active states */
-  --color-primary-hover: #9a3412;
-  --color-ink: #1c1917; /* warm near-black text */
-  --color-ink-soft: #57534e; /* secondary text */
-  --color-surface: #fafaf9; /* page background — warm off-white */
-  --color-card: #ffffff;
-  --color-border: #e7e5e4;
-  --color-accent: #0f766e; /* deep teal — verified badges, success */
-  --color-gold: #b45309; /* tier 3 elite accents */
-  --color-danger: #b91c1c;
-  --color-himalaya: #1e3a5f; /* deep mountain blue — sparingly, headers/footer */
+  /* ── Brand System v1: green environment, cream page ──────────────────────
+     Green is the environment, cream is the page. Never a wall of green. */
+  --color-ink:        #12241c; /* primary text — a green-black */
+  --color-pine:       #1b3b2a; /* dark surfaces: nav-on-dark, hero, footer */
+  --color-moss:       #3e6b4a; /* PRIMARY action: buttons, links, focus */
+  --color-fern:       #5f8b58; /* secondary green: hover, icons, tinted borders */
+  --color-sage:       #b7cba8; /* light green: badge fills, dividers, disabled */
+  --color-mist:       #e8f0e2; /* lightest wash: alt sections, input fills */
+  --color-chartreuse: #dff08a; /* SIGNATURE highlight — one per viewport */
+  --color-paper:      #fbf9f3; /* page canvas — warm cream */
+  --color-card:       #ffffff; /* card surfaces on paper */
+  --color-wheat:      #d9cda9; /* warm neutral: photo placeholder, empty states */
+  --color-ember:      #a8482a; /* SYSTEM ONLY: errors, expired, cancellations */
+  --color-muted:      #6b7a6e; /* secondary text, captions, metadata */
+  --color-line:       #e2e0d6; /* hairline borders on cream */
 
-  /* Skeleton greys — warm, never blue-grey (§3.2) */
-  --color-skeleton-base: #edebe8;
-  --color-skeleton-highlight: #f7f5f3;
+  /* Legacy semantic aliases → remapped to the green system so existing
+     components recolour without churn. New code should use the tokens above. */
+  --color-primary:       #3e6b4a; /* → moss */
+  --color-primary-hover: #1b3b2a; /* → pine */
+  --color-ink-soft:      #6b7a6e; /* → muted */
+  --color-surface:       #fbf9f3; /* → paper */
+  --color-border:        #e2e0d6; /* → line */
+  --color-accent:        #3e6b4a; /* → moss (verified ticks, rating stars) */
+  --color-gold:          #dff08a; /* → chartreuse (elite tier) */
+  --color-danger:        #a8482a; /* → ember */
+  --color-himalaya:      #1b3b2a; /* → pine */
 
-  /* Type */
+  /* Skeleton wash — warm, green-tinted (never blue-grey) */
+  --color-skeleton-base:      #dfe6d6;
+  --color-skeleton-highlight: #eef3e8;
+
+  /* Type — display serif, UI sans, data mono */
   --font-display: "Fraunces", ui-serif, Georgia, serif;
-  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  /* Radius: 12px cards, 8px buttons/inputs, 999px pills/badges */
-  --radius-card: 12px;
-  --radius-button: 8px;
-  --radius-pill: 999px;
-  --radius-sheet: 20px;
+  /* Radius: 8 pills/inputs, 14 cards, 24 images/modals, 999 avatars/chips */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   24px;
+  --radius-full: 999px;
+  --radius-card:   14px; /* → md */
+  --radius-button: 8px;  /* → sm */
+  --radius-pill:   999px;
+  --radius-sheet:  24px;  /* → lg */
 
-  /* Shadows */
-  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08);
-  --shadow-lift: 0 4px 12px rgb(0 0 0 / 0.1);
-  --shadow-sheet: 0 -8px 30px rgb(0 0 0 / 0.12);
+  /* Type scale (§3). Generates text-* utilities with matched line-height. */
+  --text-display-xl: 60px;
+  --text-display-xl--line-height: 1.02;
+  --text-display-xl--letter-spacing: -0.025em;
+  --text-display-l: 42px;
+  --text-display-l--line-height: 1.08;
+  --text-display-l--letter-spacing: -0.02em;
+  --text-display-m: 30px;
+  --text-display-m--line-height: 1.15;
+  --text-display-m--letter-spacing: -0.015em;
+  --text-body-l: 17px;
+  --text-body-l--line-height: 1.6;
+  --text-caption: 13px;
+  --text-caption--line-height: 1.4;
+  --text-data: 15px;
+  --text-data--line-height: 1.2;
 
-  /* Motion — easing (§2) */
-  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1); /* appearance, expansion */
-  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1); /* movement between states */
+  /* Elevation — almost none (§4). Cards: hairline + faint shadow; hover lifts. */
+  --shadow-card: 0 1px 2px rgb(18 36 28 / 0.04);
+  --shadow-lift: 0 8px 24px rgb(18 36 28 / 0.08);
+  --shadow-sheet: 0 -8px 30px rgb(18 36 28 / 0.12);
+
+  /* Motion — one restrained curve (§7): 180ms micro, 320ms entrances. */
+  --ease-out-soft: cubic-bezier(0.2, 0, 0.1, 1);
+  --ease-in-out-soft: cubic-bezier(0.2, 0, 0.1, 1);
   --ease-press: cubic-bezier(0.4, 0, 0.6, 1); /* tap feedback */
 
   /* Motion — duration (§2). Canonical tokens, used by the --animate-* shorthands
      below and read from JS in app/lib/motion.ts. */
   --duration-instant: 120ms; /* press feedback, hover */
-  --duration-quick: 220ms; /* most transitions, fades */
-  --duration-base: 300ms; /* card entrance, sheet open */
+  --duration-quick: 180ms; /* micro-interactions (§7) */
+  --duration-base: 320ms; /* entrances (§7) */
   --duration-slow: 450ms; /* page-level, hero, modal */
 
   /* Tailwind v4 sources `duration-*` utilities from this namespace, so these
@@ -114,11 +152,11 @@
 
 html,
 body {
-  background-color: var(--color-surface);
+  background-color: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -129,11 +167,56 @@ body {
   }
 }
 
+/* Fraunces, specific setting: SOFT raised, WONK zero → rounded, hand-cut
+   terminals without the wobble (§3). Never ship Fraunces at defaults. */
 h1,
 h2,
-h3 {
+h3,
+.font-display {
   font-family: var(--font-display);
-  line-height: 1.15;
+  font-variation-settings: "opsz" 72, "SOFT" 60, "WONK" 0;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+/* The mono rule (§3): every number describing the mountain or the money is
+   JetBrains Mono, hard-aligned. Apply `font-mono` to numeric spans; this makes
+   those figures tabular so columns line up like an instrument readout. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Named type styles (§3). `title` for card headings, `label` for the only
+   uppercase in the system — eyebrows and category tags. */
+.title {
+  font-family: var(--font-body);
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+.label {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* Empty-image placeholder (§5): warm wheat with a faint contour-line pattern
+   in sage — never flat grey. An empty state should still look designed. */
+.placeholder-contour {
+  background-color: var(--color-wheat);
+  background-image: repeating-linear-gradient(
+    115deg,
+    transparent 0,
+    transparent 13px,
+    rgb(183 203 168 / 0.3) 13px,
+    rgb(183 203 168 / 0.3) 14px
+  );
 }
 
 /* Reduced motion is mandatory (§2): kill transforms + shimmer, keep opacity.

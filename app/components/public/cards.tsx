@@ -65,41 +65,44 @@ export function GuideCard({
     <Link
       to={`/guides/${guide.slug}`}
       prefetch="intent"
-      className="group block overflow-hidden rounded-card bg-card shadow-card transition-transform duration-instant ease-out-soft hover:-translate-y-0.5 hover:shadow-lift"
+      className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
     >
-      <SmartImage
-        src={guide.avatar_url ?? ""}
-        alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
-        width={300}
-        height={400}
-        avgColor="#c9c4be"
-        className="aspect-[3/4] w-full"
-      />
-      <div className="space-y-1.5 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-medium text-ink">{guide.full_name}</p>
+      <div className="relative">
+        <SmartImage
+          src={guide.avatar_url ?? ""}
+          alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
+          width={300}
+          height={375}
+          className="aspect-[4/5] w-full"
+        />
+        {/* Tier badge on a paper pill, top-right of the photo (§8). */}
+        <div className="absolute right-2 top-2">
           <TierBadge tier={guide.tier} />
         </div>
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <p className="title font-medium text-ink">{guide.full_name}</p>
         {guide.home_district && (
-          <p className="text-xs text-ink-soft">{guide.home_district}</p>
+          <p className="text-caption text-muted">{guide.home_district}</p>
         )}
         {guide.hook_line && (
           <p className="line-clamp-2 text-sm text-ink">{guide.hook_line}</p>
         )}
-        <div className="flex items-center justify-between pt-0.5">
-          {rating ? <Stars value={rating.value} count={rating.count} /> : <span />}
+        {/* Bottom row pinned so every card in a row is equal height (§8). */}
+        <div className="mt-auto flex items-center justify-between pt-1.5">
+          <Stars value={rating?.value ?? 0} count={rating?.count} />
           {guide.day_rate_usd_cents && (
-            <span className="text-sm">
-              <span className="text-ink-soft">from </span>
-              <span className="font-medium">
+            <span className="text-sm text-muted">
+              from{" "}
+              <span className="font-mono font-medium text-ink">
                 {formatUsd(guide.day_rate_usd_cents)}
               </span>
-              <span className="text-ink-soft">/day</span>
+              /day
             </span>
           )}
         </div>
         {languages && languages.length > 0 && (
-          <p className="truncate text-xs text-ink-soft">
+          <p className="truncate text-caption text-muted">
             {languages.join(" · ")}
           </p>
         )}
@@ -115,21 +118,21 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
     <Link
       to={offeringPath(offering)}
       prefetch="intent"
-      className="group block overflow-hidden rounded-card bg-card shadow-card transition-transform duration-instant ease-out-soft hover:-translate-y-0.5 hover:shadow-lift"
+      className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
     >
       <div className="relative">
         <SmartImage
           src={offering.cover_photo_url ?? ""}
           alt={offering.title}
           width={400}
-          height={300}
-          avgColor="#b9b3ab"
-          className="aspect-[4/3] w-full"
+          height={267}
+          className="aspect-[3/2] w-full"
         />
-        <span className="absolute left-2 top-2 rounded-pill bg-card/90 px-2 py-0.5 text-xs font-medium text-ink backdrop-blur">
+        {/* Category tag: label style on a paper pill, top-left (§8). */}
+        <span className="absolute left-2 top-2 rounded-full bg-paper/90 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink backdrop-blur">
           {KIND_LABEL[offering.kind] ?? offering.kind}
         </span>
-        {/* GuideChip overlapping the photo edge — the signature element. */}
+        {/* Guide chip — full name — overlapping the photo edge (§8). */}
         <div className="absolute -bottom-3 left-3">
           <GuideChip
             slug={offering.guide_slug}
@@ -137,23 +140,27 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
             avatarUrl={offering.guide_avatar_url}
             tier={offering.guide_tier}
             overlap
+            fullName
           />
         </div>
       </div>
-      <div className="space-y-1 p-3 pt-5">
-        <p className="line-clamp-1 font-medium text-ink">{offering.title}</p>
-        <p className="text-xs text-ink-soft">
-          {offering.kind === "trek"
-            ? `${offering.days} days`
-            : "Day experience"}
+      <div className="flex flex-1 flex-col gap-1 p-3 pt-5">
+        <p className="title line-clamp-2 font-medium text-ink">{offering.title}</p>
+        <p className="text-caption text-muted">
+          {offering.kind === "trek" ? (
+            <>
+              <span className="font-mono text-ink">{offering.days}</span> days
+            </>
+          ) : (
+            "Day experience"
+          )}
         </p>
         {from != null && (
-          <p className="text-sm">
-            <span className="text-ink-soft">from </span>
-            <span className="font-medium">{formatUsd(from)}</span>
-            {offering.kind !== "trek" && (
-              <span className="text-ink-soft"> / person</span>
-            )}
+          // Consistent price format site-wide: "from $XX · per person" (§8).
+          <p className="mt-auto pt-1 text-sm text-muted">
+            from{" "}
+            <span className="font-mono font-medium text-ink">{formatUsd(from)}</span>{" "}
+            · per person
           </p>
         )}
       </div>

@@ -57,7 +57,7 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
                   alt={b.offering?.title ?? ""}
                   width={96}
                   height={96}
-                  avgColor="#b9b3ab"
+
                   className="h-20 w-20 shrink-0 rounded-lg"
                 />
                 <div className="min-w-0 flex-1">

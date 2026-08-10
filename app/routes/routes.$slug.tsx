@@ -99,7 +99,7 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
           alt={`${route.name} trek`}
           width={1600}
           height={720}
-          avgColor="#1e3a5f"
+
           eager
           className="h-64 w-full sm:h-80"
         />

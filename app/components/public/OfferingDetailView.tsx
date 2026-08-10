@@ -44,7 +44,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               alt={o.guide_name}
               width={64}
               height={64}
-              avgColor="#d6d3d1"
+
               className="h-16 w-16 rounded-full"
             />
             <div className="min-w-0">

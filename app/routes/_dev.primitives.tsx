@@ -26,10 +26,10 @@ const DEMO_IMG =
   encodeURIComponent(
     `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'>
        <defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>
-         <stop offset='0' stop-color='#1e3a5f'/><stop offset='0.6' stop-color='#c2410c'/>
-         <stop offset='1' stop-color='#b45309'/></linearGradient></defs>
+         <stop offset='0' stop-color='#1B3B2A'/><stop offset='0.6' stop-color='#3E6B4A'/>
+         <stop offset='1' stop-color='#DFF08A'/></linearGradient></defs>
        <rect width='600' height='800' fill='url(#g)'/>
-       <polygon points='0,800 200,420 340,560 480,320 600,520 600,800' fill='#fafaf9' opacity='0.85'/>
+       <polygon points='0,800 200,420 340,560 480,320 600,520 600,800' fill='#FBF9F3' opacity='0.85'/>
      </svg>`,
   );
 
@@ -131,7 +131,7 @@ export default function Primitives() {
 
       <Section title="SmartImage — blur-up from average colour">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {["#1e3a5f", "#0f766e", "#b45309", "#57534e"].map((c) => (
+          {["#1B3B2A", "#3E6B4A", "#DFF08A", "#6B7A6E"].map((c) => (
             <SmartImage
               key={c}
               src={DEMO_IMG}

@@ -71,7 +71,7 @@ export default function Recap({ loaderData: d }: Route.ComponentProps) {
               alt="Trek photo"
               width={400}
               height={300}
-              avgColor="#8a8177"
+
               className="aspect-[4/3] w-full rounded-card"
             />
           ))}

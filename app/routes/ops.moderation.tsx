@@ -76,7 +76,7 @@ export default function OpsModeration({ loaderData }: Route.ComponentProps) {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {photos.map((p: any) => (
               <div key={p.id} className="rounded-card border border-border p-2">
-                <SmartImage src={p.url} alt={p.alt_text} width={300} height={225} avgColor="#b9b3ab" className="aspect-[4/3] w-full rounded" />
+                <SmartImage src={p.url} alt={p.alt_text} width={300} height={225} className="aspect-[4/3] w-full rounded" />
                 <p className="mt-1 text-xs text-ink-soft">{p.credit_name} · {p.offering?.title}</p>
                 <div className="mt-2 flex gap-2">
                   <Form method="post" className="flex-1">

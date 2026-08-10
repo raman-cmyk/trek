@@ -7,6 +7,7 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { GuideCard, OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { ReviewBlock } from "~/components/public/bits";
+import { Ridgeline } from "~/components/public/Ridgeline";
 import { SmartImage } from "~/components/SmartImage";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -87,23 +88,22 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
   return (
     <main>
-      {/* 1 — Hero */}
+      {/* 1 — Hero. Pine overlay, never black (§5); ridgeline cut at the base. */}
       <section className="relative">
         <SmartImage
           src="https://img.example/home/hero.jpg"
           alt="A guide leading trekkers on a Himalayan trail at sunrise"
           width={1600}
           height={900}
-          avgColor="#1e3a5f"
           eager
           className="h-[70vh] max-h-[560px] w-full"
         />
-        <div className="absolute inset-0 flex items-center bg-gradient-to-t from-black/60 via-black/25 to-transparent">
+        <div className="absolute inset-0 flex items-center bg-gradient-to-t from-pine/85 via-pine/30 to-transparent">
           <div className="mx-auto w-full max-w-6xl px-4">
-            <h1 className="max-w-2xl font-display text-4xl leading-tight text-white sm:text-5xl">
+            <h1 className="max-w-2xl font-display text-4xl leading-tight text-paper sm:text-5xl">
               {copy.brand.positioning}
             </h1>
-            <p className="mt-3 max-w-xl text-lg text-white/90">
+            <p className="mt-3 max-w-xl text-lg text-paper/90">
               Every trek and experience belongs to a specific, verified guide —
               a real human you choose, not an anonymous package.
             </p>
@@ -111,27 +111,31 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <Link
                 to="/guides"
                 prefetch="intent"
-                className="rounded-button bg-primary px-5 py-3 font-medium text-white transition-colors hover:bg-primary-hover"
+                className="rounded-md bg-moss px-5 py-3 font-medium text-white transition-colors hover:bg-pine"
               >
                 {copy.home.ctaFindGuide}
               </Link>
               <Link
                 to="/experiences"
                 prefetch="intent"
-                className="rounded-button bg-white/95 px-5 py-3 font-medium text-ink transition-colors hover:bg-white"
+                className="rounded-md bg-paper px-5 py-3 font-medium text-pine transition-colors hover:bg-sage"
               >
                 {copy.home.ctaBrowse}
               </Link>
             </div>
           </div>
         </div>
+        <div className="absolute inset-x-0 bottom-0">
+          <Ridgeline fill="paper" />
+        </div>
       </section>
 
       {/* 2 — Meet your guides */}
       <Section title="Meet your guides" href="/guides" cta="See all guides">
-        <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2">
+        {/* scroll-padding matches the gutter so the first card isn't clipped (§7). */}
+        <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-4 px-4 pb-2">
           {guides.map((g) => (
-            <div key={g.user_id} className="w-52 shrink-0 snap-start">
+            <div key={g.user_id} className="flex w-52 shrink-0 snap-start">
               <GuideCard
                 guide={g}
                 rating={ratings[g.user_id]}
@@ -150,10 +154,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               key={c.kind}
               onClick={() => setCat(c.kind)}
               className={
-                "rounded-pill px-3 py-1.5 text-sm transition-colors " +
+                "rounded-full px-4 py-1.5 text-sm transition-colors " +
                 (cat === c.kind
-                  ? "bg-primary text-white"
-                  : "bg-card text-ink hover:bg-black/5")
+                  ? "bg-chartreuse text-pine"
+                  : "border border-line bg-card text-ink hover:bg-mist")
               }
             >
               {c.label}
@@ -199,13 +203,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <Section title="On the trail this season">
           <div className="grid grid-cols-3 gap-4">
             {trailPhotos.map((p, i) => (
-              <figure key={i} className="overflow-hidden rounded-card">
+              <figure key={i} className="overflow-hidden rounded-lg">
                 <SmartImage
                   src={p.url}
                   alt={p.alt_text}
                   width={400}
                   height={300}
-                  avgColor="#8a8177"
                   className="aspect-[4/3] w-full"
                 />
                 {p.credit_name && (
