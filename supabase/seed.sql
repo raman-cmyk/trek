@@ -330,3 +330,19 @@ update public.offerings o set price_breakdown = jsonb_build_object(
     'fund_pct', 0.03)
   from public.guides g
   where g.user_id = o.guide_id and o.kind = 'trek';
+
+-- ============ v3 §12: backup guide on every trek (round-robin, never self) ============
+with verified as (
+  select user_id, row_number() over (order by user_id) as rn, count(*) over () as n
+  from public.guides where status = 'verified'
+),
+leads as (
+  select o.id as offering_id, v.rn
+  from public.offerings o join verified v on v.user_id = o.guide_id
+  where o.kind = 'trek'
+)
+update public.offerings o
+set backup_guide_id = pick.user_id
+from leads l
+join verified pick on pick.rn = (l.rn % (select max(n) from verified)) + 1
+where o.id = l.offering_id;

@@ -217,7 +217,9 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           to={`/checkout/${b.id}`}
           className="mt-5 block rounded-button bg-primary px-4 py-3 text-center font-medium text-white"
         >
-          Pay {formatUsd(b.deposit_usd_cents)} deposit
+          {b.deposit_usd_cents >= b.total_usd_cents
+            ? `Pay ${formatUsd(b.total_usd_cents)} & confirm`
+            : `Pay ${formatUsd(b.deposit_usd_cents)} deposit`}
         </Link>
       )}
 

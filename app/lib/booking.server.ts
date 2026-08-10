@@ -85,7 +85,12 @@ export async function quote(
 
   const endDate = addDays(startDate, Math.max(0, o.days - 1));
   const daysUntil = daysBetween(new Date().toISOString().slice(0, 10), startDate);
-  const depositUsdCents = computeDeposit(breakdown.totalUsdCents, daysUntil);
+  // Two-track (v3 §1e): day experiences are paid in full at checkout — no
+  // deposit/balance split. Multi-day treks keep the 30% deposit flow.
+  const depositUsdCents =
+    o.kind === "trek"
+      ? computeDeposit(breakdown.totalUsdCents, daysUntil)
+      : breakdown.totalUsdCents;
 
   return { ...breakdown, depositUsdCents, endDate, days: o.days };
 }
@@ -181,7 +186,7 @@ export async function fulfillDeposit(
 
   const { data: booking } = await admin
     .from("bookings")
-    .select("id, status, deposit_usd_cents, total_usd_cents, instalment_count, guide_id, start_date, end_date, enquiry_id")
+    .select("id, status, deposit_usd_cents, total_usd_cents, instalment_count, guide_id, start_date, end_date, enquiry_id, offering:offerings(kind)")
     .eq("id", bookingId)
     .single();
   if (!booking) return { applied: false };
@@ -204,8 +209,22 @@ export async function fulfillDeposit(
     .eq("id", bookingId)
     .eq("status", "pending_deposit");
 
-  // Generate the interest-free instalment schedule for the balance (v3 §1d).
+  // Paid in full at checkout (day experiences / inside the full-payment
+  // window): there is no balance to sweep — advance straight past it. Day
+  // experiences need no documents, so they confirm immediately (v3 §1e).
   const balance = booking.total_usd_cents - booking.deposit_usd_cents;
+  if (balance <= 0) {
+    const isTrek = (booking as any).offering?.kind === "trek";
+    await admin
+      .from("bookings")
+      .update({
+        balance_paid_at: new Date().toISOString(),
+        status: isTrek ? "docs_pending" : "confirmed",
+      })
+      .eq("id", bookingId);
+  }
+
+  // Generate the interest-free instalment schedule for the balance (v3 §1d).
   if ((booking.instalment_count ?? 1) > 1 && balance > 0) {
     const today = new Date().toISOString().slice(0, 10);
     const sched = instalmentSchedule(balance, booking.instalment_count, today, booking.start_date);

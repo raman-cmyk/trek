@@ -84,6 +84,11 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
   const schedule = instalmentSchedule(balance, count, today, b.start_date);
   const fmtDate = (iso: string) =>
     new Date(iso + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short" });
+  // Concrete free-cancellation date (v3 §12): 30 days before departure.
+  const freeCancelUntil = new Date(new Date(b.start_date + "T00:00:00").getTime() - 30 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const inFreeWindow = today <= freeCancelUntil;
   const rows = [
     { label: b.offering?.kind === "trek" ? "Guide fee" : "Experience", usdCents: b.guide_fee_usd_cents },
     ...(b.permit_fees_usd_cents ? [{ label: "Permits", usdCents: b.permit_fees_usd_cents }] : []),
@@ -91,17 +96,27 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
     ...(b.permit_handling_usd_cents ? [{ label: "Permit handling", usdCents: b.permit_handling_usd_cents }] : []),
   ];
 
+  const payInFull = balance <= 0;
   return (
     <main className="mx-auto max-w-md px-4 py-10">
-      <h1 className="font-display text-3xl text-ink">Pay your deposit</h1>
+      <h1 className="font-display text-3xl text-ink">
+        {payInFull ? "Pay & confirm" : "Pay your deposit"}
+      </h1>
       <p className="mt-1 text-ink-soft">{b.offering?.title}</p>
 
       <div className="mt-6 rounded-card border border-border bg-card p-4">
         <PriceBreakdown rows={rows} total={b.total_usd_cents} />
-        <div className="mt-3 flex justify-between border-t border-border pt-3 text-sm">
-          <span className="text-ink-soft">Balance</span>
-          <span className="font-mono">{formatUsd(balance)}</span>
-        </div>
+        {!payInFull && (
+          <div className="mt-3 flex justify-between border-t border-border pt-3 text-sm">
+            <span className="text-ink-soft">Balance</span>
+            <span className="font-mono">{formatUsd(balance)}</span>
+          </div>
+        )}
+        <p className="mt-3 border-t border-border pt-3 text-xs text-ink-soft">
+          {inFreeWindow
+            ? `Free cancellation until ${fmtDate(freeCancelUntil)} — full refund minus card fees.`
+            : "Inside 30 days of departure — partial refunds apply if you cancel."}
+        </p>
       </div>
 
       {/* Interest-free instalments — all due before departure (v3 §1d). */}
@@ -147,11 +162,15 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
           </p>
         )}
         <Button type="submit" size="lg" loading={nav.state !== "idle"} className="w-full">
-          Pay {formatUsd(b.deposit_usd_cents)} deposit
+          {payInFull
+            ? `Pay ${formatUsd(b.total_usd_cents)}`
+            : `Pay ${formatUsd(b.deposit_usd_cents)} deposit`}
         </Button>
       </Form>
       <p className="mt-2 text-center text-xs text-ink-soft">
-        The balance of {formatUsd(balance)} is charged automatically 14 days before you start.
+        {payInFull
+          ? "That's everything — you're confirmed the moment payment goes through."
+          : `The balance of ${formatUsd(balance)} is charged automatically 14 days before you start.`}
       </p>
     </main>
   );

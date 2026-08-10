@@ -117,6 +117,28 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </button>
           </Form>
 
+          {/* Backup guide — the trek never cancels (v3 §12). */}
+          {o.kind === "trek" && o.backup_guide_name && (
+            <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3">
+              <SmartImage
+                src={o.backup_guide_avatar_url ?? ""}
+                alt={o.backup_guide_name}
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-full"
+              />
+              <p className="text-sm text-ink-soft">
+                <span className="font-medium text-ink">Backed up by{" "}
+                  <Link to={`/guides/${o.backup_guide_slug}`} className="text-primary hover:underline">
+                    {o.backup_guide_name}
+                  </Link>
+                </span>
+                {" "}— if {o.guide_name.split(" ")[0]} can't lead, {o.backup_guide_name.split(" ")[0]} steps
+                in. Your trek never cancels on you.
+              </p>
+            </div>
+          )}
+
           <section>
             <p className="text-ink">{o.summary}</p>
           </section>
