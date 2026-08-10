@@ -1,4 +1,4 @@
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 import type { Route } from "./+types/guides";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
@@ -84,6 +84,14 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="font-display text-3xl text-ink">Find your guide</h1>
       <p className="mt-1 text-ink-soft">{guides.length} verified guides</p>
+      <Link
+        to="/match"
+        prefetch="intent"
+        className="mt-3 inline-block rounded-card border border-accent/30 bg-accent/5 px-4 py-2.5 text-sm text-ink hover:bg-accent/10"
+      >
+        <span className="font-medium">Not sure who fits?</span> Answer 5 questions and we'll
+        match you →
+      </Link>
 
       <Form
         method="get"

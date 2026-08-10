@@ -13,6 +13,7 @@ export const copy = {
   },
   home: {
     ctaFindGuide: "Find your guide",
+    ctaMatch: "Match me in 5 questions",
     ctaBrowse: "Browse experiences",
   },
   trust: {

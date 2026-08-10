@@ -122,6 +122,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               >
                 {copy.home.ctaBrowse}
               </Link>
+              <Link
+                to="/match"
+                prefetch="intent"
+                className="rounded-md border border-paper/50 px-5 py-3 font-medium text-paper transition-colors hover:bg-white/10"
+              >
+                {copy.home.ctaMatch}
+              </Link>
             </div>
           </div>
         </div>

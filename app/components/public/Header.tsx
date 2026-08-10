@@ -16,7 +16,7 @@ export function Header({
         <Link to="/" className="font-display text-xl text-ink">
           Trek<span className="text-primary">.</span>
         </Link>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex flex-wrap items-center justify-end gap-1 text-sm">
           <select
             aria-label="Display currency"
             value={code}
@@ -34,7 +34,7 @@ export function Header({
             prefetch="intent"
             className={({ isActive }) =>
               cn(
-                "rounded-pill px-3 py-1.5",
+                "hidden rounded-pill px-3 py-1.5 sm:block",
                 isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
               )
             }
@@ -46,7 +46,7 @@ export function Header({
             prefetch="intent"
             className={({ isActive }) =>
               cn(
-                "rounded-pill px-3 py-1.5",
+                "hidden rounded-pill px-3 py-1.5 sm:block",
                 isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
               )
             }

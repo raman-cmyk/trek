@@ -9,6 +9,7 @@ export default [
   // Public site (SSR + SEO), sharing the header/footer shell.
   layout("routes/_public.tsx", [
     index("routes/home.tsx"),
+    route("match", "routes/match.tsx"),
     route("guides", "routes/guides.tsx"),
     route("guides/:slug", "routes/guides.$slug.tsx"),
     route("experiences", "routes/experiences.tsx"),
