@@ -4,6 +4,7 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireOps } from "~/lib/supabase.server";
 import { verifyDocument, signedDocumentUrl } from "~/lib/documents.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
+import { issueTimsCard } from "~/lib/tims.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { Badge, Panel } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
@@ -14,12 +15,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, offering:offerings(title), trekker:users(full_name, email), guide:guides(users(full_name))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users(full_name, email), guide:guides(users(full_name))",
     )
     .eq("id", params.id)
     .maybeSingle();
   if (!b) throw new Response("Not found", { status: 404 });
-  const [{ data: docs }, { data: permits }, { data: contract }] = await Promise.all([
+  const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }] = await Promise.all([
     admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id),
     admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
     admin
@@ -27,8 +28,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .select("id, title, body_rendered, status, company_signed_at, guide_signed_at, company_signatory")
       .eq("booking_id", b.id)
       .maybeSingle(),
+    admin.from("tims_cards").select("card_no, status, issued_at").eq("booking_id", b.id).maybeSingle(),
   ]);
-  return data({ booking: b, documents: docs ?? [], permits: permits ?? [], contract }, { headers });
+  return data({ booking: b, documents: docs ?? [], permits: permits ?? [], contract, tims }, { headers });
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -63,11 +65,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     await generateContractForBooking(admin, params.id!);
     return data({ ok: true }, { headers });
   }
+
+  if (intent === "verify_insurance") {
+    await admin
+      .from("bookings")
+      .update({ insurance_verified_at: new Date().toISOString() })
+      .eq("id", params.id!);
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "issue_tims") {
+    const res = await issueTimsCard(admin, params.id!, user.id);
+    return data(res.ok ? { ok: true } : { error: res.reason }, { headers });
+  }
   return data({ ok: false }, { headers });
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits, contract } = loaderData as any;
+  const { booking: b, documents, permits, contract, tims } = loaderData as any;
+  const meta = b.insurance_meta ?? {};
+  const insuranceOk = meta.altitude && meta.helicopter;
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm text-ink-soft">
@@ -128,6 +145,84 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
               </ul>
             )}
           </Panel>
+
+          {/* Insurance (2026 gate) */}
+          <div className="mt-4">
+            <Panel title="Insurance">
+              {b.insurance_attested_at ? (
+                <div className="space-y-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={insuranceOk ? "green" : "amber"}>
+                      {insuranceOk ? "high-altitude + heli ✓" : "missing required cover"}
+                    </Badge>
+                    {b.insurance_verified_at ? (
+                      <Badge tone="green">verified</Badge>
+                    ) : (
+                      <Badge tone="amber">unverified</Badge>
+                    )}
+                  </div>
+                  <p className="text-ink-soft">
+                    {b.insurance_provider ?? "—"}
+                    {b.insurance_policy_no ? ` · ${b.insurance_policy_no}` : ""}
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    Cover: {["altitude", "helicopter", "medical", "repatriation", "datesCovered"]
+                      .filter((k) => meta[k])
+                      .join(", ") || "none declared"}
+                  </p>
+                  {!b.insurance_verified_at && (
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="verify_insurance" />
+                      <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
+                        Verify insurance
+                      </button>
+                    </Form>
+                  )}
+                </div>
+              ) : (
+                <p className="py-2 text-sm text-ink-soft">
+                  Trekker hasn't run the insurance checker yet.
+                </p>
+              )}
+            </Panel>
+          </div>
+
+          {/* Blue TIMS card (issued in-flow) */}
+          <div className="mt-4">
+            <Panel title="Blue TIMS card">
+              {tims ? (
+                <div className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="font-mono font-medium text-ink">{tims.card_no}</p>
+                    <p className="text-xs text-ink-soft">
+                      Issued {new Date(tims.issued_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge tone="blue">{tims.status}</Badge>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-ink-soft">
+                    {b.insurance_verified_at
+                      ? "Ready to issue."
+                      : "Verify insurance first (2026 rule)."}
+                  </p>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="issue_tims" />
+                    <button
+                      disabled={!b.insurance_verified_at}
+                      className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                    >
+                      Issue blue card
+                    </button>
+                  </Form>
+                </div>
+              )}
+              {(actionData as any)?.error && (
+                <p className="mt-2 text-xs text-danger">{(actionData as any).error}</p>
+              )}
+            </Panel>
+          </div>
 
           <div className="mt-4">
             <Panel title="Company↔Guide contract">

@@ -46,6 +46,11 @@ export function Footer({
                 </Link>
               </li>
               <li>
+                <Link to="/insurance" className="hover:text-fern">
+                  Insurance checker
+                </Link>
+              </li>
+              <li>
                 <Link to="/safety" className="hover:text-fern">
                   Trust &amp; safety
                 </Link>

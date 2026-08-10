@@ -13,6 +13,7 @@ import { briefUnlocked, guidePhoneUnlocked, daysUntilStart } from "~/lib/unlocks
 import { formatUsd } from "~/lib/pricing";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
+import { TimsCard } from "~/components/TimsCard";
 import { cn } from "~/lib/cn";
 
 const STEPS = [
@@ -34,7 +35,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_id, offering:offerings(title, kind, meeting_point), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -42,13 +43,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!b) throw new Response("Not found", { status: 404 });
 
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }] =
+  const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }] =
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
       admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id).order("created_at"),
       admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
       admin.from("reviews").select("id").eq("booking_id", b.id).eq("author_id", user.id).maybeSingle(),
       admin.from("recaps").select("slug").eq("booking_id", b.id).maybeSingle(),
+      admin
+        .from("tims_cards")
+        .select("card_no, trekker_name, nationality, guide_name, guide_licence_no, route_name, region, entry_point, start_date, end_date, party_size, issued_at, status")
+        .eq("booking_id", b.id)
+        .maybeSingle(),
     ]);
 
   const phoneUnlocked = guidePhoneUnlocked(b.start_date, today);
@@ -63,6 +69,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       daysUntil: daysUntilStart(b.start_date, today),
       hasReviewed: !!myReview,
       recapSlug: recap?.slug ?? null,
+      tims: tims ?? null,
+      insuranceAttested: !!b.insurance_attested_at,
+      insuranceVerified: !!b.insurance_verified_at,
+      isTrek: (b as any).offering?.kind === "trek",
     },
     { headers },
   );
@@ -159,7 +169,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug } =
+  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, insuranceAttested, insuranceVerified } =
     loaderData as any;
   const nav = useNavigation();
   const cancelled = b.status.startsWith("cancelled");
@@ -313,6 +323,47 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* Insurance + blue TIMS card (2026 rule) */}
+      {isTrek && !cancelled && (
+        <section className="mt-6">
+          <h2 className="mb-2 font-display text-xl">Insurance &amp; TIMS</h2>
+          <div className="rounded-card border border-border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-ink">Travel insurance</p>
+                <p className="text-sm text-ink-soft">
+                  {insuranceVerified
+                    ? "Verified — high-altitude + helicopter evacuation ✓"
+                    : insuranceAttested
+                      ? "Checked — our team will verify your certificate."
+                      : "Required before we can issue your permits & TIMS card."}
+                </p>
+              </div>
+              <Link
+                to={`/insurance?bookingId=${b.id}`}
+                className="rounded-button border border-border px-3 py-1.5 text-sm text-primary"
+              >
+                {insuranceAttested ? "Re-check policy" : "Check my policy"}
+              </Link>
+            </div>
+          </div>
+
+          {tims ? (
+            <div className="mt-4">
+              <TimsCard tims={tims} />
+              <p className="mt-2 text-center text-xs text-ink-soft">
+                Show this at checkpoints. Your guide's licence is verified alongside it.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 rounded-card bg-surface p-3 text-sm text-ink-soft">
+              Your blue TIMS card is issued by our team once your insurance is verified — it appears
+              here automatically. The old green independent-trekker card no longer exists.
+            </p>
+          )}
         </section>
       )}
 

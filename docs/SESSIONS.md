@@ -544,3 +544,30 @@ manage contract templates.
 - Default "Guide Engagement Agreement" template seeded + set active; backfilled
   16 signed contracts across the demo bookings (cloud + local). Unit test for the
   renderer. **56 tests**, typecheck + build green. Deployed.
+
+## Insurance checker + in-app blue TIMS card (2026 rules) (2026-08-10)
+
+Two connected moats aligned to Nepal's 2026 rules.
+
+- **Insurance checker (`/insurance`)** — a public one-screen "does my policy
+  qualify?" tool. Pure, unit-tested logic (`insurance.ts`): high-altitude cover
+  and helicopter evacuation are the hard gate; medical/repatriation/dates are
+  advisory. Live verdict as you toggle; altitude threshold adapts to the trek
+  when opened with `?bookingId=`, and a signed-in trekker can attest the policy
+  to their booking (provider + number + coverage → `insurance_meta`). Linked in
+  the footer. SEO meta for "does my travel insurance qualify for Nepal".
+- **Blue TIMS card, issued in-flow** — the green independent card is gone; we
+  issue the agency blue card as a product feature (`0018` migration:
+  `tims_cards` + insurance columns on bookings; `tims.server.ts`). Ops verify
+  insurance then **Issue blue card** from the booking detail (gated on the 2026
+  insurance rule); the card auto-fills trekker, nationality, route, region,
+  entry point, **guide name + licence**, and dates, with a deterministic serial
+  `TIMS-B-YYYY-XXXXXX`. Trekkers view/print the styled blue card on their trip
+  page; guide licence is called out for checkpoint verification.
+- Ops booking detail gained Insurance + Blue-TIMS panels. Renderer + card-serial
+  unit-tested (**64 tests**). Migration + a demo verified-insurance/issued-card
+  applied to cloud + local. Typecheck + build green. Deployed.
+
+**🙋 Founder / partner:** the checker is the hook for an insurance-partner
+referral (affiliate link on the "not yet — here's the gap" state). Real TIMS
+issuance should reconcile against TAAN's system; today it's a first-party record.
