@@ -586,3 +586,28 @@ issuance should reconcile against TAAN's system; today it's a first-party record
   buttons on the trip page (TIMS) and ops booking detail (TIMS + contract).
   Verified: valid `%PDF-` bytes, correct content-type, and the trekker→contract
   403 gate holds.
+
+## v3 Phase 0/1 — the Split + experience-page breakdown (2026-08-10)
+
+Brand v2 does not exist; building v3 on Brand System v1 (per founder), in v3's
+phase order.
+
+- **`<Split>` (dual mode, `Split.tsx`)** — `GuideSplit` (90/10 thin bar) and
+  `ExperienceSplit` (6-slice bar + full itemised list, mono amounts). v2's slice
+  tokens mapped to Brand v1 (guide=moss, permits=pine, porters=fern,
+  logistics=sage, trek=wheat, fund=chartreuse). Amounts must sum; a mismatch
+  renders in `--ember` and refuses ("do not book") — never silently normalised.
+- **0020**: `price_breakdown` (+ route `max_altitude_m`) exposed on the
+  `public_offerings` view.
+- **Experience page** now shows a "What you pay" section: the full Split, a live
+  **group-size stepper**, and "Guide fee split N ways → you save $X each." The
+  booking widget reads the **same** breakdown (shared group state) so the page
+  shows ONE per-person total. Verified live at 420/1280 — math reconciles, no
+  overflow.
+
+**Deferred (Phase 2, booking spine):** the server `quote()`/booking money
+snapshot still uses the legacy model (day_rate×days + 8% service). No money moves
+at enquiry, so display is correct now; the quote adopts the breakdown when the
+request→deposit spine is rebuilt (needs porters/logistics/fund columns on the
+booking). **Next slice (Phase 1 #5):** guide cards (day-rate) vs experience cards
+(breakdown "from $X · per person") — fix the day_rate×days card bug.

@@ -4,6 +4,7 @@ import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
 import { PriceBreakdown } from "./bits";
 import { computePricing, formatUsd } from "~/lib/pricing";
+import { computeExperiencePricing, type PriceBreakdown as PB } from "~/lib/experience-pricing";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -26,8 +27,20 @@ function fmtDay(iso: string) {
   });
 }
 
-function useQuote(o: BookingWidgetOffering, party: number) {
+interface QuoteResult {
+  headline: number; // per person when breakdown-priced, else party total
+  perPerson: boolean;
+  rows: { label: string; usdCents: number }[] | null; // legacy rows, or null when the full Split is shown on-page
+}
+
+function useQuote(o: BookingWidgetOffering, party: number, breakdown?: PB | null): QuoteResult | null {
   return useMemo(() => {
+    // v3: an experience with a price_breakdown is priced from the breakdown
+    // (shown in full on the page); the widget just states the per-person price.
+    if (breakdown?.guide_fee_total_usd_cents) {
+      const p = computeExperiencePricing(breakdown, party);
+      return { headline: p.perPersonUsdCents, perPerson: true, rows: null };
+    }
     const isMultiDay = o.kind === "trek";
     try {
       const p = computePricing({
@@ -47,15 +60,16 @@ function useQuote(o: BookingWidgetOffering, party: number) {
           ? [{ label: "Permit handling", usdCents: p.permitHandlingUsdCents }]
           : []),
       ];
-      return { total: p.totalUsdCents, rows };
+      return { headline: p.totalUsdCents, perPerson: false, rows };
     } catch {
       return null;
     }
-  }, [o, party]);
+  }, [o, party, breakdown]);
 }
 
 function ConfigBody({
   o,
+  breakdown,
   availableDays,
   party,
   setParty,
@@ -64,6 +78,7 @@ function ConfigBody({
   returnTo,
 }: {
   o: BookingWidgetOffering;
+  breakdown?: PB | null;
   availableDays: string[];
   party: number;
   setParty: (n: number) => void;
@@ -71,7 +86,7 @@ function ConfigBody({
   setDay: (d: string) => void;
   returnTo: string;
 }) {
-  const quote = useQuote(o, party);
+  const quote = useQuote(o, party, breakdown);
   const fetcher = useFetcher();
   const sent = fetcher.data?.ok;
   const busy = fetcher.state !== "idle";
@@ -115,7 +130,14 @@ function ConfigBody({
         </div>
       </div>
 
-      {quote && <PriceBreakdown rows={quote.rows} total={quote.total} />}
+      {quote?.rows ? (
+        <PriceBreakdown rows={quote.rows} total={quote.headline} />
+      ) : quote ? (
+        <p className="text-sm text-ink-soft">
+          <span className="font-mono font-medium text-ink">{formatUsd(quote.headline)}</span> per
+          person · full breakdown above · {party} {party === 1 ? "person" : "people"}
+        </p>
+      ) : null}
 
       {sent ? (
         <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -152,33 +174,41 @@ function ConfigBody({
 
 export function BookingWidget({
   offering,
+  priceBreakdown,
+  party,
+  setParty,
   availableDays,
   returnTo,
 }: {
   offering: BookingWidgetOffering;
+  priceBreakdown?: PB | null;
+  party: number;
+  setParty: (n: number) => void;
   availableDays: string[];
   returnTo: string;
 }) {
-  const [party, setParty] = useState(offering.min_party || 1);
   const [day, setDay] = useState(availableDays[0] ?? "");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const quote = useQuote(offering, party);
+  const quote = useQuote(offering, party, priceBreakdown);
+  const unit = quote?.perPerson
+    ? "per person"
+    : offering.kind === "trek"
+      ? `${offering.days} days`
+      : "per person";
 
   return (
     <>
       {/* Desktop: sticky right-rail card */}
       <aside className="sticky top-24 hidden rounded-card border border-border bg-card p-5 shadow-card lg:block">
         <p className="mb-3">
-          <span className="text-2xl font-medium">
-            {quote ? formatUsd(quote.total) : "—"}
+          <span className="font-mono text-2xl font-medium">
+            {quote ? formatUsd(quote.headline) : "—"}
           </span>
-          <span className="text-ink-soft">
-            {" "}
-            · {offering.kind === "trek" ? `${offering.days} days` : "per person"}
-          </span>
+          <span className="text-ink-soft"> · {unit}</span>
         </p>
         <ConfigBody
           o={offering}
+          breakdown={priceBreakdown}
           availableDays={availableDays}
           party={party}
           setParty={setParty}
@@ -192,25 +222,19 @@ export function BookingWidget({
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card p-3 lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm">
-            <span className="font-medium">
-              {quote ? formatUsd(quote.total) : "—"}
+            <span className="font-mono font-medium">
+              {quote ? formatUsd(quote.headline) : "—"}
             </span>
-            <span className="text-ink-soft">
-              {" "}
-              · {offering.kind === "trek" ? `${offering.days} days` : "per person"}
-            </span>
+            <span className="text-ink-soft"> · {unit}</span>
           </div>
           <Button onClick={() => setSheetOpen(true)}>Request to book</Button>
         </div>
       </div>
 
-      <Sheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        title="Your trip"
-      >
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Your trip">
         <ConfigBody
           o={offering}
+          breakdown={priceBreakdown}
           availableDays={availableDays}
           party={party}
           setParty={setParty}

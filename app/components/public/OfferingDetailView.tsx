@@ -1,12 +1,20 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import type { OfferingDetailData } from "~/features/offering-detail.server";
 import { SmartImage } from "~/components/SmartImage";
 import { Carousel, type Photo } from "~/components/public/Carousel";
 import { BookingWidget } from "~/components/public/BookingWidget";
 import { ReviewBlock, Stars, TierBadge } from "~/components/public/bits";
+import { ExperienceSplit } from "~/components/Split";
+import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
+import { formatUsd } from "~/lib/pricing";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
+  const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
+  const hasBreakdown = !!breakdown?.guide_fee_total_usd_cents;
+  const [party, setParty] = useState(o.min_party || 1);
+  const pricing = hasBreakdown ? computeExperiencePricing(breakdown!, party) : null;
   const carousel: Photo[] = (
     photos.length
       ? photos
@@ -60,6 +68,65 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           <section>
             <p className="text-ink">{o.summary}</p>
           </section>
+
+          {/* Price breakdown — transaction layer: plain, mono, everything shown.
+              Per-person price recomputes live as the group grows (v3 §0). */}
+          {hasBreakdown && pricing && (
+            <section className="rounded-card border border-line bg-card p-5">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="font-display text-xl text-ink">What you pay</h2>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted">Group</span>
+                  <button
+                    type="button"
+                    aria-label="Fewer"
+                    onClick={() => setParty(Math.max(o.min_party || 1, party - 1))}
+                    className="h-8 w-8 rounded-full border border-line text-lg leading-none hover:border-ink"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center font-mono font-medium">{party}</span>
+                  <button
+                    type="button"
+                    aria-label="More"
+                    onClick={() => setParty(Math.min(o.max_party || 12, party + 1))}
+                    className="h-8 w-8 rounded-full border border-line text-lg leading-none hover:border-ink"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <ExperienceSplit
+                  amounts={{
+                    guide: pricing.lines[0].amountUsdCents,
+                    permits: pricing.lines[1].amountUsdCents,
+                    porters: pricing.lines[2].amountUsdCents,
+                    logistics: pricing.lines[3].amountUsdCents,
+                    trek: pricing.lines[4].amountUsdCents,
+                    fund: pricing.lines[5].amountUsdCents,
+                  }}
+                  total={pricing.perPersonUsdCents}
+                  showAmounts
+                />
+              </div>
+
+              {party > 1 && pricing.groupSavingsEachUsdCents > 0 && (
+                <p className="mt-3 rounded-button bg-mist px-3 py-2 text-sm text-pine">
+                  Guide fee split {party} ways → you save{" "}
+                  <span className="font-mono font-medium">
+                    {formatUsd(pricing.groupSavingsEachUsdCents)}
+                  </span>{" "}
+                  each vs going solo.
+                </p>
+              )}
+              <p className="mt-2 text-xs text-muted">
+                This is the whole package — no mystery total. Permits, porters and logistics are
+                per person; the guide fee is shared across your group.
+              </p>
+            </section>
+          )}
 
           {itinerary.length > 0 && (
             <section>
@@ -149,6 +216,9 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             permit_fees_pp_usd_cents: permitPp,
             guide_first_name: o.guide_name.split(" ")[0],
           }}
+          priceBreakdown={breakdown}
+          party={party}
+          setParty={setParty}
           availableDays={availableDays}
           returnTo={data.canonical ? new URL(data.canonical).pathname : "/"}
         />
