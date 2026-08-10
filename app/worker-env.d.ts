@@ -13,4 +13,8 @@ interface Env {
   SPARROW_SMS_TOKEN?: string;
   POSTHOG_KEY?: string;
   CRON_SECRET?: string;
+  // Insurance-partner referral (shown on the /insurance "gap" state). Set these
+  // as Cloudflare vars/secrets to switch the CTA on — no deploy needed.
+  INSURANCE_PARTNER_NAME?: string;
+  INSURANCE_PARTNER_URL?: string;
 }

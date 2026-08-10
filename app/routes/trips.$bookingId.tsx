@@ -354,9 +354,19 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           {tims ? (
             <div className="mt-4">
               <TimsCard tims={tims} />
-              <p className="mt-2 text-center text-xs text-ink-soft">
-                Show this at checkpoints. Your guide's licence is verified alongside it.
-              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-xs text-ink-soft">
+                  Show this at checkpoints — guide licence is verified alongside it.
+                </p>
+                <a
+                  href={`/pdf/tims/${b.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-button border border-border px-3 py-1.5 text-sm font-medium text-primary"
+                >
+                  Download PDF
+                </a>
+              </div>
             </div>
           ) : (
             <p className="mt-3 rounded-card bg-surface p-3 text-sm text-ink-soft">

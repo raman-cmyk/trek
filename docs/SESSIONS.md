@@ -571,3 +571,18 @@ Two connected moats aligned to Nepal's 2026 rules.
 **🙋 Founder / partner:** the checker is the hook for an insurance-partner
 referral (affiliate link on the "not yet — here's the gap" state). Real TIMS
 issuance should reconcile against TAAN's system; today it's a first-party record.
+
+## Insurance-partner slot + PDF downloads (2026-08-10)
+
+- **Affiliate slot** on the /insurance "gap" state: env-driven partner
+  (`INSURANCE_PARTNER_NAME` / `INSURANCE_PARTNER_URL`) — a moss CTA with a
+  `?ref=trek` + `rel="sponsored"` and a "we may earn a commission" note; a
+  graceful "ask us" mailto fallback when unset. Founder flips it on via
+  Cloudflare vars, no deploy.
+- **PDF downloads** via pdf-lib (pure JS, Workers-friendly): `pdf.server.ts`
+  renders the blue TIMS card and the signed contract as real `application/pdf`
+  files. Resource routes `/pdf/tims/:bookingId` (trekker/guide/ops) and
+  `/pdf/contract/:bookingId` (guide/ops only — trekker gets 403). Download
+  buttons on the trip page (TIMS) and ops booking detail (TIMS + contract).
+  Verified: valid `%PDF-` bytes, correct content-type, and the trekker→contract
+  403 gate holds.

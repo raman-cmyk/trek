@@ -41,7 +41,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       }
     }
   }
-  return { ctx, canonical: absoluteUrl(env.SITE_URL, "/insurance") };
+  // Insurance-partner referral (founder sets these to switch the CTA on).
+  const partner =
+    env.INSURANCE_PARTNER_NAME && env.INSURANCE_PARTNER_URL
+      ? { name: env.INSURANCE_PARTNER_NAME, url: env.INSURANCE_PARTNER_URL }
+      : null;
+  return { ctx, partner, canonical: absoluteUrl(env.SITE_URL, "/insurance") };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -87,7 +92,7 @@ const QUESTIONS: { key: keyof PolicyAnswers; q: string; hint: string }[] = [
 ];
 
 export default function Insurance({ loaderData }: Route.ComponentProps) {
-  const { ctx } = loaderData;
+  const { ctx, partner } = loaderData;
   const fetcher = useFetcher<{ saved?: boolean; error?: string }>();
   const [ans, setAns] = useState<PolicyAnswers>({
     altitude: false,
@@ -173,8 +178,27 @@ export default function Insurance({ loaderData }: Route.ComponentProps) {
             <p className="mt-3 text-sm text-muted">
               Most standard travel policies stop at 2,500–3,000m and exclude heli-rescue. Look for a
               trekking add-on that names your altitude (to <span className="font-mono">{alt.toLocaleString()}m</span>)
-              and emergency helicopter evacuation, or ask us for a partner policy that qualifies.
+              and emergency helicopter evacuation.
             </p>
+            {/* Insurance-partner referral slot */}
+            {partner ? (
+              <a
+                href={partner.url + (partner.url.includes("?") ? "&" : "?") + "ref=trek"}
+                target="_blank"
+                rel="noopener noreferrer sponsored"
+                className="mt-4 inline-flex items-center gap-2 rounded-md bg-moss px-5 py-2.5 font-medium text-white hover:bg-pine"
+              >
+                Get a policy that qualifies with {partner.name} →
+              </a>
+            ) : (
+              <a
+                href="mailto:hello@trekwith.us?subject=Insurance%20that%20qualifies"
+                className="mt-4 inline-flex items-center gap-2 rounded-md border border-line px-5 py-2.5 font-medium text-ink hover:bg-mist"
+              >
+                Ask us for a partner policy that qualifies →
+              </a>
+            )}
+            {partner && <p className="mt-1 text-xs text-muted">Partner offer — we may earn a commission.</p>}
           </>
         )}
       </div>

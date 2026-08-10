@@ -67,6 +67,8 @@ export default [
   route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
   route("trips/:bookingId/doc/:docId", "routes/trips.$bookingId.doc.$docId.tsx"),
   route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
+  route("pdf/tims/:bookingId", "routes/pdf.tims.$bookingId.tsx"),
+  route("pdf/contract/:bookingId", "routes/pdf.contract.$bookingId.tsx"),
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
 

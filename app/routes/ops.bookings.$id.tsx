@@ -198,7 +198,12 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                       Issued {new Date(tims.issued_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <Badge tone="blue">{tims.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <a href={`/pdf/tims/${b.id}`} target="_blank" rel="noreferrer" className="rounded border border-border px-2 py-1 text-xs text-primary">
+                      PDF
+                    </a>
+                    <Badge tone="blue">{tims.status}</Badge>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-3">
@@ -243,6 +248,14 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                         : "—"}
                     </span>
                   </div>
+                  <a
+                    href={`/pdf/contract/${b.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block rounded border border-border px-2 py-1 text-xs text-primary"
+                  >
+                    Download PDF
+                  </a>
                   <details>
                     <summary className="cursor-pointer text-sm font-medium text-primary">
                       {contract.title} — view
