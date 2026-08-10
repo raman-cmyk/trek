@@ -57,6 +57,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const lastByBooking = new Map<string, any>();
   for (const m of bookingMsgs ?? []) if (!lastByBooking.has(m.booking_id)) lastByBooking.set(m.booking_id, m);
 
+  // Unread = other-party messages newer than my last read of that thread.
+  const { data: reads } = await admin
+    .from("thread_reads")
+    .select("thread_key, last_read_at")
+    .eq("user_id", user.id);
+  const readAt = new Map((reads ?? []).map((r) => [r.thread_key, r.last_read_at]));
+  const unreadCount = (msgs: any[], key: string) => {
+    const since = readAt.get(key);
+    return msgs.filter(
+      (m) => m.sender_id !== user.id && (!since || m.created_at > since),
+    ).length;
+  };
+  const unreadByConv = new Map<string, number>();
+  for (const id of convIds) {
+    unreadByConv.set(id, unreadCount((convMsgs ?? []).filter((m) => m.conversation_id === id), `c:${id}`));
+  }
+  const unreadByBooking = new Map<string, number>();
+  for (const id of bookingIds) {
+    unreadByBooking.set(id, unreadCount((bookingMsgs ?? []).filter((m) => m.booking_id === id), `b:${id}`));
+  }
+
   // Names for everyone on the other side, plus offering titles for conversations.
   const otherIds = new Set<string>();
   for (const c of convs ?? []) otherIds.add(c.trekker_id === user.id ? c.guide_id : c.trekker_id);
@@ -86,6 +107,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         about: c.offering_id ? (titleOf.get(c.offering_id) ?? null) : null,
         snippet: last?.body_rendered ?? "No messages yet",
         at: last?.created_at ?? c.last_message_at,
+        unread: unreadByConv.get(c.id) ?? 0,
         kind: "conversation" as const,
       };
     }),
@@ -102,6 +124,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           about: (b as any).offering?.title ?? null,
           snippet: last?.body_rendered ?? "",
           at: last?.created_at,
+          unread: unreadByBooking.get(b.id) ?? 0,
           kind: "booking" as const,
         };
       }),
@@ -158,11 +181,22 @@ export default function Inbox({ loaderData }: Route.ComponentProps) {
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate font-medium text-ink">{t.withName}</span>
-                    <span className="shrink-0 font-mono text-xs text-ink-soft">{timeAgo(t.at)}</span>
+                    <span className={"truncate " + (t.unread > 0 ? "font-semibold text-ink" : "font-medium text-ink")}>
+                      {t.withName}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {t.unread > 0 && (
+                        <span className="rounded-full bg-primary px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none text-white">
+                          {t.unread}
+                        </span>
+                      )}
+                      <span className="font-mono text-xs text-ink-soft">{timeAgo(t.at)}</span>
+                    </span>
                   </span>
                   {t.about && <span className="block truncate text-xs text-ink-soft">{t.about}</span>}
-                  <span className="block truncate text-sm text-ink-soft">{t.snippet}</span>
+                  <span className={"block truncate text-sm " + (t.unread > 0 ? "text-ink" : "text-ink-soft")}>
+                    {t.snippet}
+                  </span>
                 </span>
               </Link>
             </li>

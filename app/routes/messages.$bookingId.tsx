@@ -28,6 +28,10 @@ async function loadParticipant(request: Request, env: Env, bookingId: string) {
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, booking, headers, isGuide } = await loadParticipant(request, env, params.bookingId);
+  // Opening the thread marks it read (inbox unread counts).
+  await admin
+    .from("thread_reads")
+    .upsert({ user_id: user.id, thread_key: `b:${booking.id}`, last_read_at: new Date().toISOString() });
   // Contact info is masked until the deposit is paid (docs/02).
   const preDeposit = booking.status === "pending_deposit";
   const { data: messages } = await admin

@@ -369,3 +369,16 @@ cross join (values ('licence'),('id_match'),('phone'),('reference_1'),('first_ai
 where g.status = 'verified'
   and not exists (select 1 from public.guide_verifications gv
                   where gv.guide_id = g.user_id and gv.check_type = ct.check_type);
+
+-- ============ Phase 7: recaps for completed treks (the /stories gallery) ============
+insert into public.recaps (booking_id, slug, photo_urls, stats)
+select b.id,
+       o.slug || '-' || substr(b.id::text, 1, 8),
+       coalesce((select array_agg(url) from (
+         select url from public.offering_photos where approved limit 6) x), '{}'),
+       jsonb_build_object('days', (b.end_date - b.start_date) + 1, 'max_altitude_m', r.max_altitude_m)
+from public.bookings b
+join public.offerings o on o.id = b.offering_id
+left join public.routes r on r.id = o.route_id
+where b.status = 'completed' and o.kind = 'trek'
+  and not exists (select 1 from public.recaps rc where rc.booking_id = b.id);

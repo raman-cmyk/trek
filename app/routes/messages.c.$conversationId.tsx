@@ -34,6 +34,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     env,
     params.conversationId,
   );
+  // Opening the thread marks it read (inbox unread counts).
+  await admin
+    .from("thread_reads")
+    .upsert({ user_id: user.id, thread_key: `c:${convo.id}`, last_read_at: new Date().toISOString() });
   const [{ data: messages }, { data: guideRow }] = await Promise.all([
     admin
       .from("messages")
