@@ -699,3 +699,37 @@ The differentiator: a **free conversation with a named guide before any money**.
 track: instant pay for day experiences) + adopt the breakdown in the server
 quote; then backup guide + cancellation window. A conversations inbox (both
 sides) is a small follow-up.
+
+## Feature Pack v3 — Phases 2–8 shipped (2026-08-10)
+
+One session, seven deployed slices, all verified in-browser and live:
+
+- **#11 instalments** — interest-free balance split chosen at checkout
+  (schedule preview, all payments ≥7d pre-departure), generated on deposit,
+  charged by the sweep, shown on the trip page. Migration 0022.
+- **#11b two-track** — day experiences pay 100% at checkout ("Pay & confirm")
+  and confirm instantly; sweep can never touch fully-paid bookings.
+- **#12 backup guide + cancellation window** — every trek shows a named
+  verified backup ("your trek never cancels on you"); checkout shows the
+  trekker's concrete free-cancel date. Migration 0023.
+- **Phase 3** — verification receipts with dates on guide profiles
+  (public_guide_verifications view), porter-welfare pledge badge +
+  /trust#porters, /messages inbox for both sides. Migration 0024.
+  Guides can now log in with email+password.
+- **Phase 5 matcher** — /match: five questions → ranked guides with
+  plain-word reasons (region/season/availability/budget-floor/language).
+  Pure scoring lib, 6 unit tests. Fixed a site-wide header overflow ≤390px.
+- **Phase 6 route engine** — 4 new route articles (Langtang, Gokyo, Manaslu,
+  Mardi Himal), /routes hub with real from-prices, related-route interlinks,
+  sitemap additions.
+- **Phase 7+8** — /stories recap gallery (8 seeded), unread badges in the
+  inbox (thread_reads, migration 0025), /fund with a live 3% counter
+  ($434.10 from 13 paid bookings), /hosts recruiting page with an NPR
+  earnings calculator.
+
+84 tests green. Migrations 0022–0025 applied to cloud + local; seed updated
+to demo everything on a fresh reset. Deployed continuously to
+https://trek.raman-7d9.workers.dev.
+
+**🙋 Founder:** domain + Resend SMTP still pending (say "DNS live" with the
+domain when ready). Stripe is still mock — real keys needed before launch.
