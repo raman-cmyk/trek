@@ -35,6 +35,7 @@ export default [
 
   // Immersive full-screen trekker onboarding (no header/footer chrome).
   route("signup", "routes/signup.tsx"),
+  route("logout", "routes/logout.tsx"),
 
   // SEO resource routes.
   route("sitemap.xml", "routes/sitemap.xml.tsx"),

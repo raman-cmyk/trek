@@ -501,3 +501,21 @@ verification email needed — reliable email/SMTP is a later task).
 **🙋 Founder:** auto-confirm means anyone can register with any email without
 verifying it — fine for now; re-enable confirmation (and add Resend SMTP) before
 real launch. Password reset also needs SMTP.
+
+## Auth-aware header + logout (2026-08-10)
+
+Closed the account loop so a signed-in customer is acknowledged across the site:
+
+- `_public` layout loader now resolves the session user + profile and passes an
+  `account` (first name + role) to the header.
+- **Header** is auth-aware: signed out → "Sign in" + "Sign up"; signed in → a
+  role-aware dashboard link (trekker → **My trips**, guide → Dashboard, ops →
+  Ops), "Hi, <first name>", and a **Sign out** button.
+- New `/logout` route (POST signs out + clears cookies → home).
+
+Verified end-to-end locally: sign in as a seed trekker → header shows My trips /
+Hi Liam / Sign out → Sign out reverts to Sign in / Sign up. Deployed.
+
+**Deferred (needs email/SMTP):** password reset — genuinely requires sending a
+reset link, so it waits on the founder adding Resend SMTP (the "rest" to add
+later). Everything else in the email+password flow works without email.
