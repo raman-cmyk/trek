@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, data } from "react-router";
 import type { Route } from "./+types/fund";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
@@ -14,25 +14,42 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   });
 }
 
+// Public, slow-moving number — cache at the edge (the loader also sets this,
+// but document responses need the route-level headers export).
+export function headers() {
+  return { "Cache-Control": "public, max-age=900" };
+}
+
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  // Aggregate only — a single public number computed from paid bookings.
+  // One public number, from the SNAPSHOT stored on each booking — a guide
+  // re-pricing their trek must not rewrite history on a transparency page
+  // (audit R5). Cancelled bookings don't count. Cached for 15 minutes.
   const admin = createAdminClient(env);
   const { data: rows } = await admin
     .from("bookings")
-    .select("party_size, deposit_paid_at, offering:offerings(price_breakdown)")
-    .not("deposit_paid_at", "is", null);
+    .select("fund_usd_cents, party_size, status, offering:offerings(price_breakdown)")
+    .not("deposit_paid_at", "is", null)
+    .not("status", "like", "cancelled%");
 
   let collected = 0;
   let trips = 0;
   for (const b of rows ?? []) {
-    const bd = ((b as any).offering?.price_breakdown ?? null) as PriceBreakdown | null;
-    if (!bd?.guide_fee_total_usd_cents) continue;
-    collected += partyAmounts(bd, b.party_size).fundUsdCents;
+    // Snapshot first; fall back to the live breakdown for pre-0026 bookings.
+    let fund = (b as any).fund_usd_cents ?? 0;
+    if (!fund) {
+      const bd = ((b as any).offering?.price_breakdown ?? null) as PriceBreakdown | null;
+      if (!bd?.guide_fee_total_usd_cents) continue;
+      fund = partyAmounts(bd, b.party_size).fundUsdCents;
+    }
+    collected += fund;
     trips += 1;
   }
 
-  return { collected, trips, canonical: absoluteUrl(env.SITE_URL, "/fund") };
+  return data(
+    { collected, trips, canonical: absoluteUrl(env.SITE_URL, "/fund") },
+    { headers: { "Cache-Control": "public, max-age=900" } },
+  );
 }
 
 const ALLOCATION = [
@@ -70,8 +87,17 @@ export default function Fund({ loaderData }: Route.ComponentProps) {
 
       {/* Live counter — real bookings, real cents. */}
       <div className="mt-8 rounded-card border border-border bg-card p-6">
-        <p className="text-sm text-ink-soft">Collected so far, from {trips} paid booking{trips === 1 ? "" : "s"}</p>
+        <p className="text-sm text-ink-soft">
+          {trips > 0
+            ? `Collected so far, from ${trips} paid booking${trips === 1 ? "" : "s"}`
+            : "Collected so far"}
+        </p>
         <p className="mt-1 font-mono text-4xl text-ink">{m(collected)}</p>
+        {trips === 0 && (
+          <p className="mt-1 text-sm text-ink-soft">
+            The counter starts with the first booking — and every cent is printed here.
+          </p>
+        )}
         <p className="mt-2 text-xs text-ink-soft">
           Computed live from paid bookings — the same 3% line you see at checkout, added up.
         </p>

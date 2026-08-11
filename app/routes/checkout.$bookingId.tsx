@@ -48,12 +48,38 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     }
   }
 
+  // Reuse a pending PaymentIntent across reloads/back-navigation instead of
+  // minting a new one on every GET (audit P9).
   const stripe = getStripe(env);
-  const intent = await stripe.createDepositIntent({
-    amountUsdCents: b.deposit_usd_cents,
-    bookingId: b.id,
-    saveCard: true,
-  });
+  const { data: pending } = await admin
+    .from("payments")
+    .select("stripe_payment_intent, amount_usd_cents")
+    .eq("booking_id", b.id)
+    .eq("type", "deposit")
+    .eq("status", "pending")
+    .maybeSingle();
+
+  let intent: { paymentIntentId: string; mock: boolean };
+  if (pending?.stripe_payment_intent && pending.amount_usd_cents === b.deposit_usd_cents) {
+    intent = { paymentIntentId: pending.stripe_payment_intent, mock: !!stripe.isMock };
+  } else {
+    const created = await stripe.createDepositIntent({
+      amountUsdCents: b.deposit_usd_cents,
+      bookingId: b.id,
+      saveCard: true,
+    });
+    intent = { paymentIntentId: created.paymentIntentId, mock: created.mock };
+    await admin.from("payments").upsert(
+      {
+        booking_id: b.id,
+        stripe_payment_intent: created.paymentIntentId,
+        type: "deposit",
+        amount_usd_cents: b.deposit_usd_cents,
+        status: "pending",
+      },
+      { onConflict: "stripe_payment_intent" },
+    );
+  }
 
   const balance = b.total_usd_cents - b.deposit_usd_cents;
   return data(

@@ -48,6 +48,25 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   };
 }
 
+function ShareRecap({ title }: { title: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const url = window.location.href;
+        if (navigator.share) {
+          void navigator.share({ title, url }).catch(() => {});
+        } else {
+          void navigator.clipboard.writeText(url);
+        }
+      }}
+      className="rounded-button border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-mist"
+    >
+      Share this recap
+    </button>
+  );
+}
+
 export default function Recap({ loaderData: d }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -87,14 +106,22 @@ export default function Recap({ loaderData: d }: Route.ComponentProps) {
           avatarUrl={d.guideAvatar}
           tier={d.guideTier}
         />
-        <Link
-          to={`/guides/${d.guideSlug}`}
-          className="rounded-button bg-primary px-5 py-3 font-medium text-white hover:bg-primary-hover"
-        >
-          Book {d.guideName.split(" ")[0]} →
-        </Link>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to={`/guides/${d.guideSlug}`}
+            className="rounded-button bg-primary px-5 py-3 font-medium text-white hover:bg-primary-hover"
+          >
+            Book {d.guideName.split(" ")[0]} →
+          </Link>
+          <ShareRecap title={d.title} />
+        </div>
       </div>
-      <p className="mt-6 text-center text-xs text-ink-soft">
+      <p className="mt-6 text-center text-sm text-ink-soft">
+        <Link to="/stories" className="text-primary hover:underline">
+          More real treks →
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-xs text-ink-soft">
         Pick your guide, not your agency.
       </p>
     </main>

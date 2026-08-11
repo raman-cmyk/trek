@@ -20,7 +20,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("id", params.id)
     .maybeSingle();
   if (!b) throw new Response("Not found", { status: 404 });
-  const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }] = await Promise.all([
+  const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }, { data: instalments }, { data: payments }] = await Promise.all([
     admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id),
     admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
     admin
@@ -29,8 +29,29 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .eq("booking_id", b.id)
       .maybeSingle(),
     admin.from("tims_cards").select("card_no, status, issued_at").eq("booking_id", b.id).maybeSingle(),
+    admin
+      .from("instalments")
+      .select("seq, amount_usd_cents, due_date, status, paid_at")
+      .eq("booking_id", b.id)
+      .order("seq"),
+    admin
+      .from("payments")
+      .select("type, amount_usd_cents, status, created_at")
+      .eq("booking_id", b.id)
+      .order("created_at"),
   ]);
-  return data({ booking: b, documents: docs ?? [], permits: permits ?? [], contract, tims }, { headers });
+  return data(
+    {
+      booking: b,
+      documents: docs ?? [],
+      permits: permits ?? [],
+      contract,
+      tims,
+      instalments: instalments ?? [],
+      payments: payments ?? [],
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -86,7 +107,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits, contract, tims } = loaderData as any;
+  const { booking: b, documents, permits, contract, tims, instalments, payments } = loaderData as any;
   const meta = b.insurance_meta ?? {};
   const insuranceOk = meta.altitude && meta.helicopter;
   return (
@@ -152,6 +173,58 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
 
           {/* Insurance (2026 gate) */}
           <div className="mt-4">
+            <Panel title="Money">
+              <div className="px-4 py-3 text-sm">
+                <p className="text-ink-soft">
+                  Paid so far:{" "}
+                  <span className="font-mono text-ink">
+                    {formatUsd(
+                      payments
+                        .filter((p: any) => p.status === "succeeded")
+                        .reduce((s: number, p: any) => s + p.amount_usd_cents, 0),
+                    )}
+                  </span>{" "}
+                  of <span className="font-mono text-ink">{formatUsd(b.total_usd_cents)}</span>
+                </p>
+                {instalments.length > 0 ? (
+                  <table className="mt-3 w-full text-left">
+                    <thead className="text-xs uppercase text-ink-soft">
+                      <tr>
+                        <th className="py-1 font-medium">#</th>
+                        <th className="py-1 font-medium">Due</th>
+                        <th className="py-1 font-medium">Amount</th>
+                        <th className="py-1 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {instalments.map((it: any) => (
+                        <tr key={it.seq} className="border-t border-border">
+                          <td className="py-1.5 font-mono">{it.seq}</td>
+                          <td className="py-1.5 font-mono">{it.due_date}</td>
+                          <td className="py-1.5 font-mono">{formatUsd(it.amount_usd_cents)}</td>
+                          <td className="py-1.5">
+                            <Badge
+                              tone={
+                                it.status === "paid"
+                                  ? "green"
+                                  : it.status === "cancelled"
+                                    ? "neutral"
+                                    : "amber"
+                              }
+                            >
+                              {it.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="mt-2 text-ink-soft">Single payment — no instalment plan.</p>
+                )}
+              </div>
+            </Panel>
+
             <Panel title="Insurance">
               {b.insurance_attested_at ? (
                 <div className="space-y-2 text-sm">

@@ -11,6 +11,12 @@ function makeMock(store: any) {
     const api: any = {
       select() { return api; },
       insert(rows: any) { state.op = "insert"; state.payload = rows; return api; },
+      upsert(rows: any, opts?: { onConflict?: string }) {
+        state.op = "upsert";
+        state.payload = rows;
+        state.onConflict = (opts?.onConflict ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+        return api;
+      },
       update(patch: any) { state.op = "update"; state.payload = patch; return api; },
       eq(k: string, v: any) { state.filters.push([k, v]); return api; },
       maybeSingle() { state.single = true; return api; },
@@ -31,6 +37,18 @@ function makeMock(store: any) {
       if (state.op === "insert") {
         const items = Array.isArray(state.payload) ? state.payload : [state.payload];
         rows.push(...items);
+        return { data: null, error: null };
+      }
+      if (state.op === "upsert") {
+        const items = Array.isArray(state.payload) ? state.payload : [state.payload];
+        for (const item of items) {
+          const keys: string[] = state.onConflict ?? [];
+          const hit = keys.length
+            ? rows.find((r: any) => keys.every((k) => r[k] === item[k]))
+            : undefined;
+          if (hit) Object.assign(hit, item);
+          else rows.push(item);
+        }
         return { data: null, error: null };
       }
       if (state.op === "update") {

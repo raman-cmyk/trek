@@ -290,17 +290,25 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
         </aside>
       </div>
 
-      {/* Mobile sticky bar */}
-      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-border bg-card p-3 lg:hidden">
-        <p className="flex-1 text-sm font-medium">
+      {/* Mobile sticky bar — messaging is free and always available; a guide
+          with no live trips must still be reachable (audit 2.10). */}
+      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-border bg-card p-3 lg:hidden">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">
           {guide.day_rate_usd_cents
             ? `From ${m(guide.day_rate_usd_cents)}/day`
             : guide.full_name}
         </p>
+        <Form method="post" action="/conversations" className="shrink-0">
+          <input type="hidden" name="guide_id" value={guide.user_id} />
+          <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
+          <button className="rounded-button border border-moss px-3 py-2 text-sm font-medium text-moss">
+            Message
+          </button>
+        </Form>
         {offerings[0] && (
           <Link
             to={`/${offerings[0].kind === "trek" ? "treks" : "experiences"}/${offerings[0].slug}`}
-            className="rounded-button bg-primary px-4 py-2 font-medium text-white"
+            className="shrink-0 rounded-button bg-primary px-4 py-2 text-sm font-medium text-white"
           >
             See trips
           </Link>

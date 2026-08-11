@@ -12,6 +12,9 @@ export async function matchGuides(
   q: MatchQuery,
 ): Promise<{ results: MatchResult[]; guides: Map<string, any> }> {
   const todayIso = new Date().toISOString().slice(0, 10);
+  const yearOut = new Date();
+  yearOut.setUTCFullYear(yearOut.getUTCFullYear() + 1);
+  const oneYearOut = yearOut.toISOString().slice(0, 10);
 
   const [{ data: guides }, { data: offerings }, { data: routes }, { data: langs }, { data: avail }] =
     await Promise.all([
@@ -25,7 +28,9 @@ export async function matchGuides(
         .from("availability")
         .select("guide_id, day")
         .eq("status", "open")
-        .gte("day", todayIso),
+        .gte("day", todayIso)
+        .lte("day", oneYearOut)
+        .limit(5000),
     ]);
 
   const routeById = new Map((routes ?? []).map((r) => [r.id, r]));
@@ -34,11 +39,18 @@ export async function matchGuides(
     if (!langsByGuide.has(l.guide_id)) langsByGuide.set(l.guide_id, []);
     langsByGuide.get(l.guide_id)!.push({ language: l.language, proficiency: l.proficiency });
   }
+  // Key by month only, but resolve to the NEXT occurrence of that month so
+  // "24 open days in October" can't sum Oct 2026 + Oct 2027 (audit P4).
+  const nowMonth = Number(todayIso.slice(5, 7));
+  const nowYear = Number(todayIso.slice(0, 4));
+  const targetYear = (month: number) => (month >= nowMonth ? nowYear : nowYear + 1);
   const openByGuide = new Map<string, Record<number, number>>();
   for (const a of avail ?? []) {
-    const m = Number(a.day.slice(5, 7));
+    const y = Number(a.day.slice(0, 4));
+    const mth = Number(a.day.slice(5, 7));
+    if (y !== targetYear(mth)) continue; // only the upcoming occurrence counts
     const rec = openByGuide.get(a.guide_id) ?? {};
-    rec[m] = (rec[m] ?? 0) + 1;
+    rec[mth] = (rec[mth] ?? 0) + 1;
     openByGuide.set(a.guide_id, rec);
   }
 

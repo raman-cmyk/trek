@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import type { Route } from "./+types/routes.$slug";
 import {
   pageMeta,
@@ -37,7 +38,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
     ),
     jsonLd(
       breadcrumbLd([
-        { name: "Routes", url: new URL(data.canonical).origin + "/" },
+        { name: "Routes", url: new URL(data.canonical).origin + "/routes" },
         { name: data.route.name, url: data.canonical },
       ]),
     ),
@@ -232,16 +233,17 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
             <h2 className="mb-3 font-display text-2xl">If you like this route…</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {related.map((r) => (
-                <a
+                <Link
                   key={r.slug}
-                  href={`/routes/${r.slug}`}
+                  to={`/routes/${r.slug}`}
+                  prefetch="intent"
                   className="rounded-card border border-border bg-card p-4 hover:shadow-card"
                 >
                   <p className="font-medium text-ink">{r.name}</p>
                   <p className="mt-0.5 text-sm text-ink-soft">
                     {r.region} · {r.typical_days} days
                   </p>
-                </a>
+                </Link>
               ))}
             </div>
           </section>

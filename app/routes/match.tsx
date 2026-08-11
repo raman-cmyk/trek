@@ -27,6 +27,11 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   });
 }
 
+export function headers() {
+  // Results move slowly (availability + ratings) — brief edge cache.
+  return { "Cache-Control": "public, max-age=300" };
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const url = new URL(request.url);

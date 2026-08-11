@@ -142,7 +142,7 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
             ← Back
           </button>
         ) : (
-          <Link to="/login" className="text-sm text-muted hover:text-ink">
+          <Link to={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="text-sm text-muted hover:text-ink">
             Have an account? Sign in
           </Link>
         )}

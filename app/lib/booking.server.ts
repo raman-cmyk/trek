@@ -208,13 +208,18 @@ export async function fulfillDeposit(
   // deposit has already been recorded.
   if (booking.status !== "pending_deposit") return { applied: false };
 
-  await admin.from("payments").insert({
-    booking_id: bookingId,
-    stripe_payment_intent: paymentIntentId,
-    type: "deposit",
-    amount_usd_cents: booking.deposit_usd_cents,
-    status: "succeeded",
-  });
+  // Checkout may have pre-created this row as `pending` (PI reuse) — settle it
+  // rather than inserting a duplicate.
+  await admin.from("payments").upsert(
+    {
+      booking_id: bookingId,
+      stripe_payment_intent: paymentIntentId,
+      type: "deposit",
+      amount_usd_cents: booking.deposit_usd_cents,
+      status: "succeeded",
+    },
+    { onConflict: "stripe_payment_intent,type" },
+  );
 
   await admin
     .from("bookings")
