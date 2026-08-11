@@ -3,7 +3,7 @@ import { Link, redirect, useFetcher } from "react-router";
 import type { Route } from "./+types/signup";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
-import { ensureTrekkerProfile, getSessionUser } from "~/lib/auth.server";
+import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.server";
 
 export function meta() {
   return [
@@ -17,10 +17,16 @@ function safeNext(raw: string | null | undefined): string {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const env = getEnv(context);
   const next = safeNext(new URL(request.url).searchParams.get("next"));
-  const { user } = await getSessionUser(request, getEnv(context));
-  if (user) throw redirect(next);
-  return { next };
+  const { user } = await getSessionUser(request, env);
+  if (!user) return { next };
+  // Role-aware for the same reason as /login: sending a signed-in guide to a
+  // trekker page just bounces them again.
+  const profile = await getProfile(env, user.id);
+  if (profile?.role === "guide") throw redirect("/g");
+  if (profile?.role === "ops") throw redirect("/ops");
+  throw redirect(next);
 }
 
 export async function action({ request, context }: Route.ActionArgs) {

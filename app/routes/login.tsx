@@ -2,7 +2,7 @@ import { Form, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/login";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
-import { ensureTrekkerProfile, getSessionUser } from "~/lib/auth.server";
+import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.server";
 
 export function meta() {
   return [{ title: "Sign in" }, { name: "robots", content: "noindex" }];
@@ -14,10 +14,18 @@ function safeNext(raw: string | null): string {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
+  const env = getEnv(context);
   const next = safeNext(new URL(request.url).searchParams.get("next"));
-  const { user } = await getSessionUser(request, getEnv(context));
-  if (user) throw redirect(next);
-  return { next };
+  const { user } = await getSessionUser(request, env);
+  if (!user) return { next };
+  // Send people where their role can actually go. Redirecting everyone to
+  // `next` dumped a signed-in guide onto a trekker-gated page, which bounced
+  // them somewhere else again — same failure as the /g/login loop, one step
+  // shorter.
+  const profile = await getProfile(env, user.id);
+  if (profile?.role === "guide") throw redirect("/g");
+  if (profile?.role === "ops") throw redirect("/ops");
+  throw redirect(next);
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
