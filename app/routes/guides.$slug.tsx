@@ -15,25 +15,24 @@ import { SmartImage } from "~/components/SmartImage";
 import { JOURNAL_COLS, journalMonth, type PublicJournal } from "~/lib/journals";
 import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
-import { firstName } from "~/lib/names";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Guide not found" }];
   const g = data.guide;
   return [
     ...pageMeta({
-      title: `${firstName(g.full_name)} — trekking guide${g.home_district ? `, ${g.home_district}` : ""}`,
+      title: `${g.full_name} — trekking guide${g.home_district ? `, ${g.home_district}` : ""}`,
       description:
         g.only_with_me ??
         g.hook_line ??
-        `Book ${firstName(g.full_name)}, a verified trekking guide in Nepal.`,
+        `Book ${g.full_name}, a verified trekking guide in Nepal.`,
       canonical: data.canonical,
       image: g.avatar_url ?? undefined,
       type: "profile",
     }),
     jsonLd(
       personLd({
-        name: firstName(g.full_name),
+        name: g.full_name,
         url: data.canonical,
         image: g.avatar_url,
         district: g.home_district,
@@ -44,7 +43,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
     jsonLd(
       breadcrumbLd([
         { name: "Guides", url: new URL(data.canonical).origin + "/guides" },
-        { name: firstName(g.full_name), url: data.canonical },
+        { name: g.full_name, url: data.canonical },
       ]),
     ),
   ];
@@ -211,7 +210,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     monthAnchor,
   } = loaderData as any;
   const { m, mr } = useMoney();
-  const first = firstName(guide.full_name);
+  const first = guide.full_name.split(" ")[0];
   const portrait =
     photos.find((p: any) => p.kind === "headshot")?.url ?? guide.avatar_url ?? "";
   const checks = tierChecks(guide.tier);
@@ -226,7 +225,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
         <div className="grid gap-6 sm:grid-cols-[minmax(0,300px)_1fr] sm:gap-8">
           <SmartImage
             src={portrait}
-            alt={`${first}, trekking guide in ${guide.home_district ?? "Nepal"}`}
+            alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
             width={600}
             height={750}
             eager
@@ -235,7 +234,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 
           <header className="flex flex-col justify-center">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="font-display text-3xl text-ink sm:text-4xl">{first}</h1>
+              <h1 className="font-display text-3xl text-ink sm:text-4xl">{guide.full_name}</h1>
               <TierBadge tier={guide.tier} />
             </div>
             <p className="mt-1 text-ink-soft">{guide.home_district}, Nepal</p>
@@ -298,7 +297,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 
         {guide.voice_intro_url && (
           <div className="mt-6">
-            <VoiceIntro src={guide.voice_intro_url} name={first} />
+            <VoiceIntro src={guide.voice_intro_url} name={guide.full_name} />
           </div>
         )}
       </div>
@@ -306,7 +305,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
       {/* ── 2. THE JOURNAL WALL ───────────────────────────────────────────
           Directly under the header, because this is the argument. */}
       <section id="journals" className="mx-auto mt-12 max-w-6xl scroll-mt-6 px-4">
-        <JournalWall journals={journals} guideName={first} guideId={guide.user_id} slug={guide.slug} />
+        <JournalWall journals={journals} guideName={guide.full_name} guideId={guide.user_id} slug={guide.slug} />
       </section>
 
       <div className="mx-auto max-w-5xl px-4">
@@ -374,7 +373,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               {reviews.map((r: any) => (
                 <ReviewBlock
                   key={r.id}
-                  authorName={firstName(r.author_name)}
+                  authorName={r.author_name}
                   country={r.author_country}
                   overall={r.overall}
                   body={r.body}
@@ -461,7 +460,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                 <span className="text-muted">/day</span>
               </>
             ) : (
-              <span className="font-medium text-ink">{first}</span>
+              <span className="font-medium text-ink">{guide.full_name}</span>
             )}
           </p>
           <Form method="post" action="/conversations" className="shrink-0">
@@ -501,7 +500,7 @@ function JournalWall({
   guideId: string;
   slug: string;
 }) {
-  const first = firstName(guideName);
+  const first = guideName.split(" ")[0];
   const [route, setRoute] = useState("");
   const [season, setSeason] = useState("");
 

@@ -8,7 +8,6 @@ import { useMoney } from "~/lib/currency-context";
 import { TierBadge } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { cn } from "~/lib/cn";
-import { firstName } from "~/lib/names";
 
 const REGIONS: Region[] = ["Khumbu", "Annapurna", "Langtang", "Manaslu"];
 const LANGUAGES = ["English", "German", "Spanish", "Hindi", "French"];
@@ -210,7 +209,7 @@ export default function Match({ loaderData }: Route.ComponentProps) {
                 <div className="flex items-start gap-4">
                   <SmartImage
                     src={g.avatar_url ?? ""}
-                    alt={firstName(g.full_name)}
+                    alt={g.full_name}
                     width={56}
                     height={56}
                     className="h-14 w-14 shrink-0 rounded-full"
@@ -218,7 +217,7 @@ export default function Match({ loaderData }: Route.ComponentProps) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link to={`/guides/${g.slug}`} className="font-medium text-ink hover:underline">
-                        {firstName(g.full_name)}
+                        {g.full_name}
                       </Link>
                       <TierBadge tier={g.tier} />
                     </div>

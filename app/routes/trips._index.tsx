@@ -5,7 +5,6 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { SmartImage } from "~/components/SmartImage";
 import { Badge } from "~/components/ops/ui";
-import { firstName } from "~/lib/names";
 
 const TONE: Record<string, "amber" | "blue" | "teal" | "green" | "neutral" | "red"> = {
   pending_deposit: "amber",
@@ -72,7 +71,7 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
                     </Badge>
                   </div>
                   <p className="text-sm text-ink-soft">
-                    {firstName(b.guide?.users?.full_name)}
+                    {b.guide?.users?.full_name}
                   </p>
                   <p className="text-sm text-ink-soft">
                     {fmtDateRange(b.start_date, b.end_date)}

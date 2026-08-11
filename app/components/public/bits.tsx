@@ -2,22 +2,19 @@ import { Link } from "react-router";
 import { cn } from "~/lib/cn";
 import { SmartImage } from "~/components/SmartImage";
 import { useMoney } from "~/lib/currency-context";
-import { firstName } from "~/lib/names";
 
 // Tier badges (§8): Verified mist/moss · Trusted sage/pine · Elite chartreuse/
 // pine. Every badge links to /trust — a tier you can't look up is decoration.
 export function TierBadge({ tier, static: isStatic = false }: { tier: number; static?: boolean }) {
   if (tier <= 0) return null;
-  // Quiet on purpose. A badge is a footnote about the guide; the face and the
-  // sentence they wrote are the card. Filled chartreuse pulled the eye off both.
   const map = {
-    1: { cls: "border-line bg-paper/90 text-muted", label: "Verified" },
-    2: { cls: "border-sage bg-paper/90 text-moss", label: "Trusted" },
-    3: { cls: "border-moss bg-paper/90 text-moss", label: "Elite" },
+    1: { cls: "bg-mist text-moss border border-sage", label: "✓ Verified" },
+    2: { cls: "bg-sage text-pine", label: "✓✓ Trusted" },
+    3: { cls: "bg-chartreuse text-pine", label: "★ Elite" },
   } as const;
   const t = map[Math.min(tier, 3) as 1 | 2 | 3];
   const cls = cn(
-    "inline-flex items-center gap-1 rounded-full border px-2 py-[3px] text-[10px] font-medium uppercase tracking-[0.06em] backdrop-blur",
+    "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
     t.cls,
   );
   // Inside a card the whole body is a link, and an <a> in an <a> is invalid
@@ -30,14 +27,7 @@ export function TierBadge({ tier, static: isStatic = false }: { tier: number; st
   );
 }
 
-/**
- * Rating: star + score at 15px mono, the count quieter and smaller behind it.
- *
- * The no-rating case renders at the same height rather than collapsing —
- * otherwise a row of cards where two guides are new and three are rated has
- * its whole bottom edge stepping up and down, which is the drift that made
- * the homepage look assembled rather than laid out.
- */
+// Rating star is moss; the number is mono (the mono rule, §3).
 export function Stars({
   value,
   count,
@@ -46,21 +36,15 @@ export function Stars({
   count?: number;
 }) {
   if (!value) {
-    return (
-      <span className="inline-flex h-5 items-center text-[13px] text-muted">New guide</span>
-    );
+    return <span className="text-caption text-muted">New guide</span>;
   }
   return (
-    <span className="inline-flex h-5 items-baseline gap-1.5">
-      <span aria-hidden className="text-[13px] leading-none text-moss">
+    <span className="inline-flex items-center gap-1 text-sm">
+      <span aria-hidden className="text-moss">
         ★
       </span>
-      <span className="font-mono text-[15px] font-medium leading-none text-ink">
-        {value.toFixed(1)}
-      </span>
-      {count != null && (
-        <span className="font-mono text-[13px] leading-none text-muted">{count}</span>
-      )}
+      <span className="font-mono font-medium">{value.toFixed(1)}</span>
+      {count != null && <span className="font-mono text-muted">({count})</span>}
     </span>
   );
 }
@@ -71,11 +55,9 @@ export function ResponseChip({ mins }: { mins?: number | null }) {
     mins < 60
       ? `~${mins} min`
       : `~${Math.round(mins / 60)} hour${Math.round(mins / 60) > 1 ? "s" : ""}`;
-  // Sentence in the sans, figure in the mono. A whole phrase set in mono reads
-  // as a code sample; the point of the mono is to mark the number.
   return (
-    <span className="inline-flex items-center text-[13px] text-muted">
-      Replies in&nbsp;<span className="font-mono text-ink">{label}</span>
+    <span className="inline-flex items-center rounded-full bg-mist px-2 py-0.5 text-xs text-muted">
+      Usually responds in&nbsp;<span className="font-mono text-ink">{label}</span>
     </span>
   );
 }
@@ -116,7 +98,7 @@ export function GuideChip({
         height={32}
         className="h-7 w-7 rounded-full"
       />
-      <span className="font-medium text-ink">{fullName ? name : firstName(name)}</span>
+      <span className="font-medium text-ink">{fullName ? name : name.split(" ")[0]}</span>
       {verified && <span className="text-moss">✓</span>}
     </>
   );
@@ -211,47 +193,22 @@ export function OnlyWithMe({
   line,
   firstName,
   size = "card",
-  large = false,
 }: {
   line: string;
   /** Attribution on the profile variant ("— in Maya's words"). */
   firstName?: string;
   size?: "card" | "profile";
-  /** The lead card in a row gets the quote a step larger. */
-  large?: boolean;
 }) {
-  // A hanging quote mark, not the chartreuse left bar. That bar is the site's
-  // pull-quote device and it is on the journal, the guide profile and the
-  // route page — using it here too made every surface read the same. A mark
-  // that hangs into the margin reads as somebody talking.
   if (size === "card") {
     return (
-      <p
-        className={cn(
-          "relative font-display text-ink",
-          "text-[19px] font-medium leading-[1.3] tracking-[-0.02em]",
-          large && "sm:text-[21px]",
-        )}
-      >
-        <span
-          aria-hidden
-          className="absolute -left-[0.45em] top-[-0.08em] font-display text-[1.4em] leading-none text-sage"
-        >
-          “
-        </span>
+      <p className="border-l-2 border-chartreuse pl-2.5 font-display text-sm leading-snug text-ink">
         {line}
       </p>
     );
   }
   return (
-    <figure className="relative">
-      <blockquote className="relative font-display text-xl font-medium leading-[1.25] tracking-[-0.02em] text-ink sm:text-[28px]">
-        <span
-          aria-hidden
-          className="absolute -left-[0.42em] top-[-0.06em] font-display text-[1.3em] leading-none text-sage"
-        >
-          “
-        </span>
+    <figure className="border-l-[3px] border-chartreuse pl-4 sm:pl-5">
+      <blockquote className="font-display text-xl leading-snug text-ink sm:text-2xl">
         {line}
       </blockquote>
       {firstName && (

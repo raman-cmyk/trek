@@ -5,14 +5,7 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
 import { guideRatings } from "~/lib/ratings.server";
-import {
-  GuideCard,
-  type GuideCardLayout,
-  type PublicGuide,
-  type PublicOffering,
-} from "~/components/public/cards";
-import { Rail } from "~/components/public/Rail";
-import { cn } from "~/lib/cn";
+import { GuideCard, type PublicGuide, type PublicOffering } from "~/components/public/cards";
 import { Stars } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { HeroSearch } from "~/components/public/HeroSearch";
@@ -225,9 +218,6 @@ export async function loader({ context }: Route.LoaderArgs) {
   };
 }
 
-/** Composition cycle for the intent rows. */
-const ROW_LAYOUTS: GuideCardLayout[] = ["stack", "overlay", "beside"];
-
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     rows,
@@ -282,9 +272,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <span className="wt-heavy">Pick your guide,</span>{" "}
             <span className="wt-light text-white/90">not your agency.</span>
           </h1>
-          <p className="mt-4 max-w-[42ch] text-lg text-white/85">
-            <span className="font-mono">{stats.guides}</span> verified Nepali guides.
-            You meet the person before you pay.
+          <p className="mt-4 max-w-[46ch] text-lg text-white/85">
+            {stats.guides} verified Nepali guides, each with their own trips. Search
+            what you want to walk — you'll meet the person before you pay.
           </p>
           <div className="mt-7">
             <HeroSearch today={today} regions={suggestions} />
@@ -324,10 +314,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* 3 — The map. "Guides across the whole country", not a claim but a
           picture of one. */}
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:py-28">
+      <section className="mx-auto max-w-6xl px-4 py-16">
         <p className="label text-muted">Where they are</p>
-        <h2 className="mb-6 mt-2 max-w-[18ch] font-display text-[30px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">
-          Guides from their own valleys.
+        <h2 className="mb-5 mt-2 max-w-[18ch] font-display text-3xl text-ink sm:text-4xl">
+          <span className="wt-heavy">Guides from their own valleys.</span>
         </h2>
         <GuideMap pins={pins} routes={routes} />
       </section>
@@ -338,12 +328,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <Row
           eyebrow="Available now"
           label="Free this week"
-          blurb={
-            <>
-              <span className="font-mono text-ink">{freeThisWeekTotal}</span> guides
-              with open days between now and {fmtDateShort(weekEnd)}.
-            </>
-          }
+          blurb={`${freeThisWeekTotal} guides with open days between now and ${fmtDateShort(
+            weekEnd,
+          )}.`}
           count={freeThisWeekTotal}
           href={`/guides?from=${today}&to=${weekEnd}`}
           guides={freeThisWeek}
@@ -354,7 +341,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* 5 — Browse by intent. Each row is a real filtered search. */}
       <div className="bg-card py-4">
-        {rows.map((r, i) => (
+        {rows.map((r) => (
           <Row
             key={r.key}
             label={r.label}
@@ -364,9 +351,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             guides={r.guides}
             ratings={ratings}
             langMap={langMap}
-            // Three compositions on a three-row cycle: seven rows built from
-            // one template is the loudest machine-made signal on the page.
-            layout={ROW_LAYOUTS[i % ROW_LAYOUTS.length]}
           />
         ))}
       </div>
@@ -375,11 +359,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           written by the guide who led them. Nothing on this page argues the
           product harder than three of these. */}
       {journals.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 py-20 sm:py-28">
+        <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <div>
               <p className="label text-muted">Proof of life</p>
-              <h2 className="mt-2 max-w-[16ch] font-display text-[30px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">
+              <h2 className="mt-2 max-w-[16ch] font-display text-3xl text-ink sm:text-4xl">
                 <span className="wt-heavy">Latest from the trail.</span>
               </h2>
             </div>
@@ -391,9 +375,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               Every journal →
             </Link>
           </div>
-          <p className="mt-3 max-w-[54ch] text-[15px] text-muted">
-            Written by the guide who led it. The teahouses, the weather, the
-            days it went wrong.
+          <p className="mt-2 max-w-[54ch] text-muted">
+            Every trek gets written up by the guide who led it — the teahouses,
+            the weather, and the days it went wrong.
           </p>
           <div className="mt-6 grid gap-5 sm:grid-cols-3">
             {journals.map((j: PublicJournal) => (
@@ -406,11 +390,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {/* 5b — The routes themselves. Named, with the number that matters:
           how many guides on Trek lead it. */}
       {routeRows.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 py-20 sm:py-28">
+        <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="label text-muted">If you already know the walk</p>
-              <h2 className="mt-2 font-display text-[30px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">
+              <h2 className="mt-2 font-display text-3xl text-ink">
                 The routes people actually walk
               </h2>
             </div>
@@ -449,9 +433,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* 6 — Regions, as doorways. */}
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:py-28">
+      <section className="mx-auto max-w-6xl px-4 py-16">
         <p className="label text-muted">Or start from the map in your head</p>
-        <h2 className="mb-7 mt-2 font-display text-[30px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">Browse by region</h2>
+        <h2 className="mb-6 mt-2 font-display text-3xl text-ink">Browse by region</h2>
         <div className="grid gap-px overflow-hidden rounded-md bg-line sm:grid-cols-2 lg:grid-cols-3">
           {REGIONS.map((r) => (
             <Link
@@ -461,7 +445,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               className="group bg-paper p-6 transition-colors hover:bg-mist"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <h3 className="font-display text-[26px] font-medium leading-tight tracking-[-0.03em] text-ink group-hover:text-moss">
+                <h3 className="font-display text-2xl text-ink group-hover:text-moss">
                   {r.name}
                 </h3>
                 {regionCounts[r.name] ? (
@@ -470,7 +454,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1.5 text-[15px] text-muted">{r.blurb}</p>
+              <p className="mt-1 text-sm text-muted">{r.blurb}</p>
             </Link>
           ))}
           <Link
@@ -523,7 +507,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* 9 — Trust, one quiet line. The pages carry the detail. */}
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:py-28">
+      <section className="mx-auto max-w-6xl px-4 py-14">
         <div className="flex flex-col gap-0 border-y border-line sm:flex-row">
           {[
             ["/trust", "Verification receipts", "every check, dated, public"],
@@ -565,18 +549,6 @@ function Stat({ n, label, href }: { n: string; label: string; href?: string }) {
 }
 
 /** A horizontal row of guides framed as a human choice, not a category. */
-/**
- * A titled row of guides.
- *
- * Two things the old version got wrong. The heading was 28px bold with no
- * tracking, which is the generated-heading tell — big, bold and untracked at
- * once. And the gap above the row equalled the gap between elements inside a
- * card, so the page had one uniform rhythm and therefore no rhythm: tight
- * clusters and large breaths are what make a layout read as composed.
- *
- * `layout` varies the composition row to row. Same design system, different
- * arrangement — seven identical rows is why the page looked machine-made.
- */
 function Row({
   eyebrow,
   label,
@@ -586,78 +558,48 @@ function Row({
   guides,
   ratings,
   langMap,
-  layout = "stack",
 }: {
   eyebrow?: string;
   label: string;
-  blurb: React.ReactNode;
+  blurb: string;
   count?: number;
   href: string;
   guides: any[];
   ratings: Record<string, { value: number; count: number }>;
   langMap: Record<string, string[]>;
-  layout?: GuideCardLayout;
 }) {
-  // The lead card is wider — same height, more room for the quote. A row of
-  // identical rectangles is the single loudest machine-made signal on a page.
-  const width = (i: number) =>
-    layout === "beside"
-      ? "w-[19rem] sm:w-[23rem]"
-      : i === 0
-        ? "w-[13.5rem] sm:w-[17rem]"
-        : "w-[11rem] sm:w-[13.5rem]";
-
   return (
-    <section className="mx-auto max-w-6xl px-4 py-14 sm:py-16">
+    <section className="mx-auto max-w-6xl px-4 py-8">
       {eyebrow && <p className="label text-muted">{eyebrow}</p>}
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        {/* Medium weight, negative tracking. Not bold. */}
-        <h2 className="font-display text-[30px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[34px]">
-          {label}
-        </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="font-display text-2xl text-ink sm:text-[1.75rem]">{label}</h2>
         <Link
           to={href}
           prefetch="intent"
           className="text-sm font-medium text-moss hover:underline"
         >
-          {count != null && count > guides.length ? (
-            <>
-              All <span className="font-mono">{count}</span> →
-            </>
-          ) : (
-            "See all →"
-          )}
+          {count != null && count > guides.length ? `All ${count} →` : "See all →"}
         </Link>
       </div>
-      {/* Visibly quieter, and given room to be a subtitle rather than a
-          second line of the heading. */}
-      <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-muted">{blurb}</p>
+      <p className="mt-0.5 text-sm text-muted">{blurb}</p>
 
-      <Rail label={label} className="-mx-4 mt-7 gap-3 px-4 sm:gap-4">
-        {guides.map((g, i) => (
-          <div key={g.user_id} className={cn("flex shrink-0 snap-start", width(i))}>
-            <GuideCard
-              guide={g}
-              rating={ratings[g.user_id]}
-              languages={langMap[g.user_id]}
-              layout={layout}
-              lead={i === 0 && layout !== "beside"}
-            />
+      {/* Scroll on a phone, wrap on a desktop — the row IS the affordance. */}
+      <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-4 px-4 pb-2">
+        {guides.map((g) => (
+          <div key={g.user_id} className="flex w-[10.5rem] shrink-0 snap-start sm:w-52">
+            <GuideCard guide={g} rating={ratings[g.user_id]} languages={langMap[g.user_id]} />
           </div>
         ))}
         {/* Only offer the tail card when there is actually more behind it. */}
         {count != null && count > guides.length && (
           <Link
             to={href}
-            className={cn(
-              "flex shrink-0 snap-start items-center justify-center rounded-card border border-dashed border-line px-4 text-sm font-medium text-moss hover:bg-mist",
-              layout === "beside" ? "w-[13rem]" : "w-[11rem] sm:w-[13.5rem]",
-            )}
+            className="flex w-[10.5rem] shrink-0 snap-start items-center justify-center rounded-md border border-dashed border-line text-sm font-medium text-moss hover:bg-mist sm:w-52"
           >
-            <span className="font-mono">{count - guides.length}</span>&nbsp;more →
+            {count - guides.length} more →
           </Link>
         )}
-      </Rail>
+      </div>
     </section>
   );
 }
@@ -679,8 +621,8 @@ function GiantSplit({ offering }: { offering: PublicOffering }) {
           <span className="wt-light text-paper/75">to Base Camp. Split, to the cent.</span>
         </h2>
         <p className="mt-3 max-w-[52ch] text-paper/80">
-          {offering.title}, two of you. Real numbers off the live listing — no
-          package total, no mystery margin.
+          {offering.title}, two of you, real numbers from the live listing. No package
+          totals, no mystery margin — this is the whole point of Trek.
         </p>
 
         <div className="mt-10 flex h-16 w-full overflow-hidden">

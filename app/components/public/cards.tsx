@@ -3,8 +3,6 @@ import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
-import { cn } from "~/lib/cn";
-import { firstName } from "~/lib/names";
 
 export interface PublicGuide {
   user_id: string;
@@ -60,205 +58,68 @@ export function offeringFromUsdCents(o: PublicOffering): number | null {
   return o.price_usd_cents;
 }
 
-/**
- * How a guide card is arranged. Same design system, different composition —
- * a page of seven rows built from one template is the thing that reads as
- * machine-made, however good the template is.
- *
- *   stack   portrait on top, words under it. The default.
- *   overlay the quote sits over the foot of the portrait.
- *   beside  a small square face to the left of the words, on a wide card.
- */
-export type GuideCardLayout = "stack" | "overlay" | "beside";
-
-/**
- * One guide.
- *
- * The hierarchy used to be upside down: the name at 20px semibold and the
- * guide's own sentence at 14px in a bordered box. Names carry no visual
- * difference — every card's largest text was a proper noun, so every card
- * looked identical. The sentence is the only thing on the card that differs
- * card to card, so it takes the size and the name becomes its byline.
- *
- * Heights are equal by construction: the meta row is pinned with mt-auto and
- * the rating renders a same-height placeholder when a guide has none, so the
- * bottom edges of a row line up instead of stepping.
- */
-/**
- * As many languages as fit on one line, and a count for the rest.
- *
- * `budget` is in characters, tuned per layout width. It is a heuristic, but a
- * deterministic one — the same guide always renders the same line, on the
- * server and on the client, which a measure-the-DOM approach would not.
- */
-function fitLanguages(langs: string[] | undefined, budget: number): [string[], number] {
-  if (!langs?.length) return [[], 0];
-  const shown: string[] = [];
-  let used = 0;
-  for (const l of langs) {
-    const cost = used === 0 ? l.length : l.length + 3; // " · "
-    if (used + cost > budget && shown.length > 0) break;
-    shown.push(l);
-    used += cost;
-  }
-  return [shown, langs.length - shown.length];
-}
-
 export function GuideCard({
   guide,
   rating,
   languages,
-  layout = "stack",
-  lead = false,
 }: {
   guide: PublicGuide;
   rating?: { value: number; count: number };
   languages?: string[];
-  layout?: GuideCardLayout;
-  /** First card in a row: wider, and the quote a step up. */
-  lead?: boolean;
 }) {
   const { mr } = useMoney();
-  const first = firstName(guide.full_name);
-  const alt = `${first}, trekking guide in ${guide.home_district ?? "Nepal"}`;
-  const [shownLangs, hiddenLangs] = fitLanguages(languages, layout === "beside" ? 24 : 30);
-
-  // Hairline, no ambient shadow, crisp radius. A soft drop shadow under every
-  // card is the SaaS-template surface; a 1px line is a decision.
-  const shell =
-    "group flex h-full overflow-hidden rounded-card border border-line bg-card " +
-    "transition-colors duration-instant ease-out-soft hover:border-sage";
-
-  const quote = guide.only_with_me ? (
-    <OnlyWithMe line={guide.only_with_me} large={lead} />
-  ) : guide.hook_line ? (
-    <p
-      className={cn(
-        "font-display font-medium leading-[1.3] tracking-[-0.02em] text-ink",
-        lead ? "text-[19px] sm:text-[21px]" : "text-[19px]",
-      )}
-    >
-      {guide.hook_line}
-    </p>
-  ) : null;
-
-  const byline = (
-    <p className="flex flex-wrap items-baseline gap-x-2">
-      <span className="text-[15px] font-semibold leading-tight text-ink">{first}</span>
-      {guide.home_district && (
-        <span className="text-[13px] leading-tight text-muted">{guide.home_district}</span>
-      )}
-    </p>
-  );
-
-  const meta = (
-    <div className="mt-auto space-y-1.5 pt-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <Stars value={rating?.value ?? 0} count={rating?.count} />
-        {guide.day_rate_usd_cents && (
-          <span className="text-[13px] text-muted">
-            <span className="font-mono text-[15px] font-medium text-ink">
-              {mr(guide.day_rate_usd_cents)}
-            </span>
-            /day
-          </span>
-        )}
-      </div>
-      {/* Cut by character budget, not by pixels or by count. `truncate` and
-          `line-clamp` break wherever the box ends — "Nepali · English · Gurun…"
-          — which reads as a rendering fault; a fixed count of three still
-          wrapped to a second line for long names like Gurung, and a wrapped
-          line pushes the row below it out of alignment with its neighbours.
-          A budget keeps it to exactly one line whatever the languages are. */}
-      {shownLangs.length > 0 && (
-        <p className="text-[13px] text-muted">
-          {shownLangs.join(" · ")}
-          {hiddenLangs > 0 && (
-            <span> +<span className="font-mono">{hiddenLangs}</span></span>
-          )}
-        </p>
-      )}
-      <ResponseChip mins={guide.median_response_mins} />
-    </div>
-  );
-
-  if (layout === "beside") {
-    return (
-      <Link to={`/guides/${guide.slug}`} prefetch="intent" className={cn(shell, "flex-row")}>
-        <div className="relative w-28 shrink-0 sm:w-36">
-          <SmartImage src={guide.avatar_url ?? ""} alt={alt} width={288} height={288} cover
-            className="h-full w-full" />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
-          <div className="space-y-1.5">
-            {quote}
-            {byline}
-          </div>
-          {meta}
-        </div>
-      </Link>
-    );
-  }
-
-  if (layout === "overlay") {
-    // The quote lives on the photograph, so the body below it is only a
-    // byline and a meta row — short. Letting the photo flex means the slack
-    // in a row goes into the image rather than into a hole between the name
-    // and the rating, which is what mt-auto alone produced.
-    return (
-      <Link to={`/guides/${guide.slug}`} prefetch="intent" className={cn(shell, "flex-col")}>
-        <div className="relative min-h-[13rem] flex-1">
-          <SmartImage src={guide.avatar_url ?? ""} alt={alt} width={480} height={600} cover
-            className="h-full w-full" />
-          <div className="absolute right-2.5 top-2.5">
-            <TierBadge tier={guide.tier} static />
-          </div>
-          {/* The quote breaks the frame: it sits on the photograph's foot with
-              a scrim only where it needs one. */}
-          {quote && (
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/45 to-transparent px-4 pb-3.5 pt-10">
-              <div className="[&_p]:text-paper [&_span]:text-paper/60">{quote}</div>
-            </div>
-          )}
-        </div>
-        <div className="flex shrink-0 flex-col p-4">
-          {byline}
-          <div className="space-y-1.5 pt-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <Stars value={rating?.value ?? 0} count={rating?.count} />
-              {guide.day_rate_usd_cents && (
-                <span className="text-[13px] text-muted">
-                  <span className="font-mono text-[15px] font-medium text-ink">
-                    {mr(guide.day_rate_usd_cents)}
-                  </span>
-                  /day
-                </span>
-              )}
-            </div>
-            <ResponseChip mins={guide.median_response_mins} />
-          </div>
-        </div>
-      </Link>
-    );
-  }
-
   return (
-    <Link to={`/guides/${guide.slug}`} prefetch="intent" className={cn(shell, "flex-col")}>
+    <Link
+      to={`/guides/${guide.slug}`}
+      prefetch="intent"
+      className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
+    >
       <div className="relative">
-        <SmartImage src={guide.avatar_url ?? ""} alt={alt} width={480} height={600}
-          className={cn("w-full", lead ? "aspect-[5/4]" : "aspect-[4/5]")} />
-        <div className="absolute right-2.5 top-2.5">
+        <SmartImage
+          src={guide.avatar_url ?? ""}
+          alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
+          width={300}
+          height={375}
+          className="aspect-[4/5] w-full"
+        />
+        {/* Tier badge on a paper pill, top-right of the photo (§8). */}
+        <div className="absolute right-2 top-2">
           <TierBadge tier={guide.tier} static />
         </div>
       </div>
-      {/* Tight cluster inside: quote → name → district sit close, and the
-          only large gap on the card is the one before the meta row. */}
-      <div className="flex flex-1 flex-col p-4 sm:p-5">
-        <div className="space-y-1.5">
-          {quote}
-          {byline}
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <p className="title font-medium text-ink">{guide.full_name}</p>
+        {guide.home_district && (
+          <p className="text-caption text-muted">{guide.home_district}</p>
+        )}
+        {/* The promise leads. The hook_line is a description of the guide;
+            this is the guide talking, so it outranks it — and when a guide
+            hasn't written one yet, the description still carries the card. */}
+        {guide.only_with_me ? (
+          <OnlyWithMe line={guide.only_with_me} />
+        ) : (
+          guide.hook_line && (
+            <p className="line-clamp-2 text-sm text-ink">{guide.hook_line}</p>
+          )
+        )}
+        {/* Bottom row pinned so every card in a row is equal height (§8). */}
+        <div className="mt-auto flex items-center justify-between pt-1.5">
+          <Stars value={rating?.value ?? 0} count={rating?.count} />
+          {guide.day_rate_usd_cents && (
+            <span className="text-sm text-muted">
+              <span className="font-mono font-medium text-ink">
+                {mr(guide.day_rate_usd_cents)}
+              </span>
+              /day
+            </span>
+          )}
         </div>
-        {meta}
+        {languages && languages.length > 0 && (
+          <p className="truncate text-caption text-muted">
+            {languages.join(" · ")}
+          </p>
+        )}
+        <ResponseChip mins={guide.median_response_mins} />
       </div>
     </Link>
   );
@@ -272,7 +133,7 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
     // nested <a> is invalid HTML that breaks hydration. Instead the title link
     // stretches an invisible ::after over the whole card, so the card is still
     // one big tap target and the chip still wins where it sits.
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-card border border-line bg-card transition-colors duration-instant ease-out-soft hover:border-sage">
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift">
       <div className="relative">
         <SmartImage
           src={offering.cover_photo_url ?? ""}
@@ -292,7 +153,7 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         <div className="absolute -bottom-3 left-3">
           <GuideChip
             slug={offering.guide_slug}
-            name={firstName(offering.guide_name)}
+            name={offering.guide_name}
             avatarUrl={offering.guide_avatar_url}
             tier={offering.guide_tier}
             overlap

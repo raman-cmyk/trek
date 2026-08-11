@@ -5,7 +5,6 @@ import { getSessionUser } from "~/lib/auth.server";
 import { maskMessage } from "~/lib/mask";
 import { Thread } from "~/components/messages/Thread";
 import { money } from "~/lib/currency";
-import { firstName } from "~/lib/names";
 
 export function meta() {
   return [{ title: "Message your guide" }, { name: "robots", content: "noindex" }];
@@ -91,12 +90,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const partner = isGuide
     ? {
-        name: firstName(trekkerUser?.full_name) || "Trekker",
+        name: trekkerUser?.full_name ?? "Trekker",
         avatarUrl: trekkerUser?.avatar_url ?? null,
         lastSeenAt: trekkerUser?.last_seen_at ?? null,
       }
     : {
-        name: firstName(guideRow?.full_name) || "Your guide",
+        name: guideRow?.full_name ?? "Your guide",
         slug: guideRow?.slug ?? null,
         avatarUrl: guideRow?.avatar_url ?? null,
         tier: guideRow?.tier ?? null,
@@ -159,7 +158,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const { notifyNewMessage } = await import("~/lib/notifications.server");
   await notifyNewMessage(env, admin, {
     toUserId: otherId,
-    fromName: firstName(me?.full_name) || "Someone",
+    fromName: me?.full_name ?? "Someone",
     threadPath: `/messages/c/${convo.id}`,
   });
   return data({ ok: true }, { headers });

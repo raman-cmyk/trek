@@ -43,7 +43,7 @@
   --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --font-body:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-sans:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono:    "Geist Mono Variable", "Geist Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
   /* Radius: 8 pills/inputs, 14 cards, 24 images/modals, 999 avatars/chips */
   --radius-sm:   4px;
@@ -176,24 +176,16 @@ body {
 
 /* Display: Bricolage Grotesque, never at defaults. Tight tracking scales with
    size; weight contrast is done in markup (a 300 span next to an 800), not by
-   flattening everything to one weight.
-
-   In @layer base on purpose. Unlayered CSS beats anything inside a layer
-   regardless of specificity, so while this rule sat outside the cascade
-   layers a `font-medium` on an <h2> did nothing at all and every heading on
-   the site rendered at 640 — big, bold and untracked, which is the
-   generated-heading look we are trying to get away from. */
-@layer base {
-  h1,
-  h2,
-  h3,
-  .font-display {
-    font-family: var(--font-display);
-    font-variation-settings: "opsz" 48, "wdth" 100;
-    font-weight: 640;
-    letter-spacing: -0.03em;
-    line-height: 1.04;
-  }
+   flattening everything to one weight. */
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 48, "wdth" 100;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
 }
 
 /* Huge display sizes track tighter still — the designer move defaults skip. */
@@ -206,18 +198,11 @@ body {
 .wt-heavy { font-weight: 800; }
 
 /* The mono rule (§3): every number describing the mountain or the money is
-   Geist Mono, hard-aligned. Apply `font-mono` to numeric spans; this makes
-   those figures tabular so columns line up like an instrument readout.
-
-   Only the numeral takes it. "Usually responds in 44 min" keeps the sentence
-   in the sans and puts the figure in mono — a whole phrase set in mono reads
-   as a code sample, not as data. */
+   JetBrains Mono, hard-aligned. Apply `font-mono` to numeric spans; this makes
+   those figures tabular so columns line up like an instrument readout. */
 .font-mono {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
-  /* Geist Mono runs wide next to Inter Tight at the same nominal size. */
-  font-size: 0.96em;
-  letter-spacing: -0.01em;
 }
 
 /* Named type styles (§3). `title` for card headings, `label` for the only
