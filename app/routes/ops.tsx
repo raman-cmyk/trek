@@ -64,6 +64,7 @@ const NAV = [
   { to: "/ops/payouts", label: "Payouts", badge: "payouts" },
   { to: "/ops/incidents", label: "Incidents", badge: "incidents" },
   { to: "/ops/moderation", label: "Moderation", badge: "moderation" },
+  { to: "/ops/events", label: "Group trips", badge: null },
   { to: "/ops/contracts", label: "Contracts", badge: null },
 ] as const;
 

@@ -27,6 +27,7 @@ const BROWSE = [
   { to: "/guides", label: "Guides" },
   { to: "/experiences", label: "Experiences" },
   { to: "/routes", label: "Routes" },
+  { to: "/events", label: "Group trips" },
   { to: "/journals", label: "Stories" },
 ];
 

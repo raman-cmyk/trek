@@ -160,6 +160,8 @@ export function Footer({
                 {[
                   ["/guides", "Find your guide"],
                   ["/experiences", "Browse experiences"],
+                  ["/events", "Group trips"],
+                  ["/events/new", "Organise a trip"],
                   ["/journals", "Trek stories"],
                   ["/transparency", "Transparent pricing"],
                   ["/trust", "How verification works"],

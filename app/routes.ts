@@ -35,6 +35,11 @@ export default [
     route("trips", "routes/trips._index.tsx"),
     // Going together: the group is the container for everything that happens
     // before a booking — who is coming, the chat, and how the money splits.
+    // Events: anyone proposes, the office accepts, the organiser fills it in.
+    route("events", "routes/events._index.tsx"),
+    route("events/new", "routes/events.new.tsx"),
+    route("events/:slug", "routes/events.$slug.tsx"),
+    route("events/:slug/edit", "routes/events.$slug.edit.tsx"),
     route("groups", "routes/groups._index.tsx"),
     route("groups/new", "routes/groups.new.tsx"),
     route("groups/:slug", "routes/groups.$slug.tsx"),
@@ -90,6 +95,7 @@ export default [
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
     route("ops/moderation", "routes/ops.moderation.tsx"),
+    route("ops/events", "routes/ops.events.tsx"),
     route("ops/journals", "routes/ops.journals.tsx"),
     route("ops/journals/:id", "routes/ops.journals.$id.tsx"),
     route("ops/contracts", "routes/ops.contracts.tsx"),
