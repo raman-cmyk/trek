@@ -10,6 +10,7 @@ import {
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { getRouteArticle } from "~/lib/content";
 import { useMoney } from "~/lib/currency-context";
+import { fmtMetres } from "~/lib/format";
 import { SmartImage } from "~/components/SmartImage";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { GuideChip } from "~/components/public/bits";
@@ -123,7 +124,7 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
             </h1>
             <p className="mt-1 text-white/85">
               {route.region} · {route.typical_days} days · up to{" "}
-              {route.max_altitude_m}m · {route.difficulty}
+              {fmtMetres(route.max_altitude_m)} · {route.difficulty}
             </p>
           </div>
         </div>

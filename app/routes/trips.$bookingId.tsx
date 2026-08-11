@@ -11,6 +11,7 @@ import { SUBRATINGS } from "~/lib/reviews";
 import { sendEmail } from "~/lib/notify.server";
 import { briefUnlocked, guidePhoneUnlocked, daysUntilStart } from "~/lib/unlocks";
 import { computeCancellation } from "~/lib/policy";
+import { fmtDate, fmtDateRange } from "~/lib/format";
 import { useMoney } from "~/lib/currency-context";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
@@ -205,7 +206,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
       </Link>
       <h1 className="mt-2 font-display text-2xl text-ink">{b.offering?.title}</h1>
       <p className="text-ink-soft">
-        with {b.guide?.users?.full_name} · {b.start_date} → {b.end_date} ·{" "}
+        with {b.guide?.users?.full_name} · {fmtDateRange(b.start_date, b.end_date)} ·{" "}
         {b.party_size}p
       </p>
       {!cancelled && (
@@ -448,7 +449,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
                 <li key={it.seq} className="flex items-center justify-between px-4 py-2.5 text-sm">
                   <span className="text-ink-soft">
                     Payment {it.seq}
-                    <span className="ml-2 text-ink">{it.due_date}</span>
+                    <span className="ml-2 text-ink">{fmtDate(it.due_date)}</span>
                   </span>
                   <span className="flex items-center gap-2">
                     <span className="font-mono">{m(it.amount_usd_cents)}</span>

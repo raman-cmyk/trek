@@ -1,5 +1,6 @@
 import { Link, data } from "react-router";
 import type { Route } from "./+types/trips._index";
+import { fmtDateRange, statusLabel } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { SmartImage } from "~/components/SmartImage";
@@ -66,14 +67,14 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
                       {b.offering?.title}
                     </p>
                     <Badge tone={TONE[b.status] ?? "neutral"}>
-                      {b.status.replace(/_/g, " ")}
+                      {statusLabel(b.status)}
                     </Badge>
                   </div>
                   <p className="text-sm text-ink-soft">
                     {b.guide?.users?.full_name}
                   </p>
                   <p className="text-sm text-ink-soft">
-                    {b.start_date} → {b.end_date}
+                    {fmtDateRange(b.start_date, b.end_date)}
                   </p>
                 </div>
               </Link>

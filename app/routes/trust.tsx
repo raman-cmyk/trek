@@ -2,6 +2,7 @@ import type { Route } from "./+types/trust";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { getEnv } from "~/lib/supabase.server";
 import { TierBadge } from "~/components/public/bits";
+import { TIERS } from "~/lib/tiers";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -16,23 +17,6 @@ export function loader({ context }: Route.LoaderArgs) {
   return { canonical: absoluteUrl(getEnv(context).SITE_URL, "/trust") };
 }
 
-const TIERS = [
-  {
-    tier: 1,
-    what: "Government licence, photo ID and a working phone — all checked and dated. The starting bar to appear on Trek at all.",
-    checks: ["TAAN / NMA licence verified", "Photo ID matched to the licence", "Reachable phone number"],
-  },
-  {
-    tier: 2,
-    what: "Everything in Verified, plus references and completed treks on the platform with real reviews behind them.",
-    checks: ["2+ professional references", "5+ completed Trek bookings", "Wilderness first-aid certificate on file"],
-  },
-  {
-    tier: 3,
-    what: "Our highest tier. A long track record, top ratings, and a safety record we've audited. Rare by design.",
-    checks: ["50+ completed treks", "4.8+ average rating", "Zero unresolved safety incidents", "Annual re-verification"],
-  },
-] as const;
 
 export default function Trust({ loaderData: d }: Route.ComponentProps) {
   return (

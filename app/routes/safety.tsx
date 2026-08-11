@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import type { Route } from "./+types/safety";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { getEnv } from "~/lib/supabase.server";
@@ -39,14 +40,28 @@ export default function Safety() {
           — including your emergency contact — at 48.
         </Item>
         <Item title="Insurance that covers evacuation">
-          For treks above 4,000m we require travel insurance that covers
-          helicopter evacuation. It’s not optional, because the mountains aren’t
-          forgiving — and if you ever need that flight, we take 0% on it.
+          Travel insurance covering high-altitude trekking and helicopter
+          evacuation is required on every trek — not just the high ones. Nepal
+          won't issue your permits or TIMS card without it, and neither will we.
+          Our one-screen{" "}
+          <Link to="/insurance" className="text-primary hover:underline">
+            policy checker
+          </Link>{" "}
+          tells you in 30 seconds whether yours qualifies. If you ever need that
+          flight, we take 0% on it.
+        </Item>
+        <Item title="Permits and your blue TIMS card">
+          Multi-day treks need national-park or conservation permits plus a TIMS
+          card. Since 2026 the old green independent-trekker card is gone: cards
+          are issued through a registered agency and checkpoints verify your
+          guide's licence alongside them. We file the paperwork, and your blue
+          card appears on your trip page as a downloadable PDF once your
+          insurance is verified. Costs are printed at cost on every route page.
         </Item>
         <Item title="A real team, not a call centre">
-          Our ops team is based in Kathmandu, files your permits, tracks your
-          trek, and is reachable if anything goes wrong. The admin console behind
-          this platform is, honestly, the real product.
+          Our ops team is based in Kathmandu. They file your permits, watch the
+          daily check-ins come in, and pick up the phone if anything goes wrong —
+          in the same time zone as your trek, not eight hours behind it.
         </Item>
       </div>
     </main>

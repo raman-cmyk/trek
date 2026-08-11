@@ -4,31 +4,12 @@ import { pageMeta, personLd, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { useMoney } from "~/lib/currency-context";
+import { tierChecks } from "~/lib/tiers";
 import { Carousel, type Photo } from "~/components/public/Carousel";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
 
-// Plain-English checklist shown per tier (actual verification rows are ops-only).
-const TIER_CHECKS: Record<number, string[]> = {
-  1: ["Trekking licence verified", "Government ID matched", "Phone verified"],
-  2: [
-    "Trekking licence verified",
-    "Government ID matched",
-    "Phone verified",
-    "Two references called",
-    "Wilderness first-aid current",
-  ],
-  3: [
-    "Trekking licence verified",
-    "Government ID matched",
-    "Phone verified",
-    "Two references called",
-    "Wilderness first-aid current",
-    "Police clearance",
-    "Altitude training",
-  ],
-};
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Guide not found" }];
@@ -145,7 +126,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     ? photos
     : [{ url: guide.avatar_url ?? "", alt_text: guide.full_name, kind: "headshot" }]
   ).map((p) => ({ url: p.url, alt: p.alt_text, avgColor: undefined }));
-  const checks = TIER_CHECKS[guide.tier] ?? TIER_CHECKS[1];
+  const checks = tierChecks(guide.tier);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 pb-24 lg:pb-6">

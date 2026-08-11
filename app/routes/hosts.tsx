@@ -3,14 +3,14 @@ import { Link } from "react-router";
 import type { Route } from "./+types/hosts";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { getEnv } from "~/lib/supabase.server";
-import { FX_RATE_NPR } from "~/lib/config";
-import { COMMISSION_RATE, formatUsd } from "~/lib/pricing";
+import { FX_RATE_NPR, TREK_FEE_PCT } from "~/lib/config";
+import { formatUsd } from "~/lib/pricing";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Guide on Trek — your name, your rate, your clients",
     description:
-      "Trek puts your face on the product, not an agency's logo. Set your own day rate, keep 85% of the guide fee, get paid in NPR within 7 days, and build a review record that belongs to you.",
+      "Trek puts your face on the product, not an agency's logo. Set your own day rate, keep your whole fee, get paid in NPR within 7 days, and build a review record that belongs to you.",
     canonical: (data as any)?.canonical ?? "",
   });
 }
@@ -25,8 +25,8 @@ const PROPS = [
     body: "Trekkers book Pemba, not \"Package A\". Your photo, your voice, your reviews — a reputation that compounds and belongs to you, not an agency.",
   },
   {
-    title: "You set the rate",
-    body: "Your day rate is yours to choose and yours to raise as your reviews grow. No agency skimming an invisible margin on top of you.",
+    title: "You set the rate — and keep it",
+    body: "Your day rate is yours to choose, yours to raise as your reviews grow, and yours in full. Trek's 10% is added on top and paid by the trekker, printed on their bill.",
   },
   {
     title: "Paid in NPR, within 7 days",
@@ -52,7 +52,9 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
   const [trips, setTrips] = useState(6);
 
   const guideFeeUsdCents = dayRate * 100 * tripDays * trips;
-  const keepUsdCents = Math.round(guideFeeUsdCents * (1 - COMMISSION_RATE));
+  // v3: the guide's fee is theirs in full; Trek's fee is added on top of the
+  // package and paid by the trekker.
+  const keepUsdCents = guideFeeUsdCents;
   const keepNpr = Math.round((keepUsdCents / 100) * FX_RATE_NPR);
 
   return (
@@ -93,8 +95,9 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
       <section className="mt-12 rounded-card border border-border bg-card p-6">
         <h2 className="font-display text-display-m text-ink">What would a season pay?</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Move the numbers. We take {Math.round(COMMISSION_RATE * 100)}% of the guide fee —
-          printed here, not hidden — and nothing else from you.
+          Move the numbers. Your fee is yours — Trek adds {Math.round(TREK_FEE_PCT * 100)}% on
+          top of the package, paid by the trekker, printed on their bill. We take
+          nothing out of your rate.
         </p>
         <div className="mt-5 grid gap-5 sm:grid-cols-3">
           {[
@@ -127,7 +130,7 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
             </p>
           </div>
           <p className="font-mono text-sm text-ink-soft">
-            ≈ {formatUsd(keepUsdCents)} · after the {Math.round(COMMISSION_RATE * 100)}% platform share
+            ≈ {formatUsd(keepUsdCents)} · your full guide fee, no deductions
           </p>
         </div>
         <p className="mt-3 text-xs text-ink-soft">

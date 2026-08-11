@@ -11,3 +11,8 @@ export const BALANCE_CHARGE_DAYS_BEFORE = 14;
 export const BALANCE_AUTOCANCEL_DAYS_BEFORE = 10;
 // Accepted enquiry hold TTL before it expires back to open.
 export const ENQUIRY_TTL_HOURS = 24;
+
+/** v3 pricing canon: Trek's fee and The Fund, charged ON TOP of the package.
+ *  The guide's fee is theirs in full. Seeded breakdowns use these same rates. */
+export const TREK_FEE_PCT = 0.10;
+export const FUND_PCT = 0.03;

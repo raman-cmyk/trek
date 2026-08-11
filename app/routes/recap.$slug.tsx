@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/recap.$slug";
+import { fmtDateRange, fmtMetres } from "~/lib/format";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { SmartImage } from "~/components/SmartImage";
@@ -9,7 +10,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   if (!d) return [{ title: "Recap not found" }];
   return pageMeta({
     title: `${d.title} — a trek recap`,
-    description: `${d.days} days in the Himalaya, guided by ${d.guideName}. ${d.altitude ? `Up to ${d.altitude}m.` : ""}`.trim(),
+    description: `${d.days} days in the Himalaya, guided by ${d.guideName}. ${d.altitude ? `Up to ${fmtMetres(d.altitude)}.` : ""}`.trim(),
     canonical: d.canonical,
     image: d.ogImage,
     type: "article",
@@ -50,14 +51,14 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 export default function Recap({ loaderData: d }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      <div className="rounded-card bg-himalaya p-8 text-white">
+      <div className="rounded-card bg-pine p-8 text-white">
         <p className="text-sm uppercase tracking-wide opacity-80">Trek · Nepal</p>
         <h1 className="mt-2 font-display text-4xl">{d.title}</h1>
         <div className="mt-3 flex flex-wrap gap-6 text-lg">
           {d.days && <span>{d.days} days</span>}
-          {d.altitude && <span>{d.altitude}m max</span>}
+          {d.altitude && <span>{fmtMetres(d.altitude)} max</span>}
           <span>
-            {d.startDate} → {d.endDate}
+            {fmtDateRange(d.startDate, d.endDate)}
           </span>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { data } from "react-router";
 import type { Route } from "./+types/g.earnings";
+import { copy } from "~/lib/copy";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { formatNpr } from "~/lib/pricing";
@@ -39,8 +40,8 @@ export default function GuideEarnings({ loaderData }: Route.ComponentProps) {
       </div>
 
       <p className="rounded-card bg-surface p-3 text-sm text-ink-soft">
-        You keep 85% of every guide fee — our 15% covers the customer, permits
-        and payments.
+        {copy.guide.earningsExplainer} It pays for verification, permits,
+        payments and support — never taken out of your rate.
       </p>
 
       {payouts.length === 0 ? (

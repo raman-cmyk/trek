@@ -28,7 +28,7 @@ export const copy = {
   },
   guide: {
     earningsExplainer:
-      "our 15% covers the customer, permits and payments.",
+      "Your fee is yours in full — Trek's 10% is added on top of the package, paid by the trekker.",
   },
   empty: {
     noEnquiries:

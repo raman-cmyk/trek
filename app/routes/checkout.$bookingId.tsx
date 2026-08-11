@@ -10,6 +10,7 @@ import { Button } from "~/components/Button";
 import { computeDeposit } from "~/lib/pricing";
 import { useMoney } from "~/lib/currency-context";
 import { instalmentSchedule, maxInstalments } from "~/lib/instalments";
+import { fmtDateShort as fmtDate } from "~/lib/format";
 
 export function meta() {
   return [{ title: "Pay your deposit" }, { name: "robots", content: "noindex" }];
@@ -109,12 +110,6 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
   const { m } = useMoney();
   const [count, setCount] = useState(1);
   const schedule = instalmentSchedule(balance, count, today, b.start_date);
-  const fmtDate = (iso: string) =>
-    new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    });
   // Concrete free-cancellation date (v3 §12): 30 days before departure.
   // UTC throughout so SSR and the client agree (audit P6.2).
   const start = new Date(b.start_date + "T00:00:00Z");
