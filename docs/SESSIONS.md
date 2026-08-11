@@ -951,3 +951,59 @@ recurs, a screenshot with the browser and window width would pin it down.
 phone number for the SOS card, a Baato key if you want Nepali map tiles — and
 now, the first real journals: ring three guides, ask them about their last
 trek, and type it into /ops/journals while they talk.
+
+---
+
+## Session — route catalogue, journal albums, tagging, and the floating icons
+
+**The floating icons, found.** Four reports, two "cannot reproduce" from me,
+and the cause was not overflow at all — it was `SmartImage` rendering
+`<img src="">` whenever a row had no photo. An empty `src` is not "no image"
+to a browser: it resolves against the current URL, fetches the HTML page,
+fails to decode it, and paints the broken-image glyph. Every null
+`avatar_url` — trekkers, ops accounts, guides still in review — produced one,
+which is exactly why they appeared on the guide profile, the matcher, the
+messages thread and the journal and nowhere else. `SmartImage` now returns
+the placeholder block when there is no src, so there is no `<img>` to break.
+Bounding-box probes never would have found it; a broken-image glyph is inside
+its element's box.
+
+**Route pages, the whole Nepali catalogue.** `/routes/{slug}` for 24 named
+routes, driven from data (`routes.day_stops`, `month_profile`, `faq` — all
+jsonb, migration 0035) so adding the 25th is a seed row, not a page. Each
+page: full-bleed hero and a mono stat strip, an elevation profile you scrub
+with a pointer that drives the MapLibre pins alongside it, the day-by-day
+list, route permits with real costs, the cost Split, a 12-month
+crowds/weather/cost heatmap, every guide who runs it with their trek count,
+every journal on it, the bookable experiences, and TouristTrip + FAQPage
+JSON-LD.
+
+They only work as an SEO surface if the site links into them, so:
+`public_offerings` now exposes `route_slug/name/region` (0037), every
+experience card and trek page names its route, the homepage has a named-route
+strip, and the journal header links its route. `OfferingCard` became a div
+with a stretched title link so the route chip can be a real link — a nested
+`<a>` breaks hydration, which is the same bug that bit the tier badges.
+
+**Journals are albums now.** The seed covers every day of all four treks
+(days 1–15, not "6" then "9") with 17–35 photos each drawn from a pool of 22.
+Publish refuses a journal under 8 photos or with a day missing, and names the
+gap: "missing days 2–3 of 14". Layouts rotate full / two / three / portrait /
+panorama so no two blocks share a shape; the portrait block floats so text
+wraps instead of leaving half a row empty, and the three-up grid sizes its
+columns from the photo count so a block never ends in a hole. The dead right
+column became a sticky rail — route mini-map, elevation profile, guide card —
+and "Trek this with Binod" is a sticky bottom bar the whole way down.
+
+**Tagging.** A closed vocabulary (season, difficulty, group, conditions,
+theme — `TAG_VOCAB`), because a free-text tag field gives you "Autumn",
+"autumn", "Fall" and "post-monsoon" for the same week and then the filter
+returns three of the four. Editable in both the ops and guide editors, shown
+under the journal cover, clickable to `/journals?tag=…`. Route is now required
+on a journal — it is what connects it to the route page and the guide's count.
+
+Migrations 0035–0037 + seed_routes + seed_journal_days applied to cloud and
+local. 111 tests green. Live: https://trek.raman-7d9.workers.dev
+
+**🙋 Founder still needed:** unchanged — real domain + Resend key, real Stripe
+keys, an ops phone number, and the first real journals from three guides.
