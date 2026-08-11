@@ -733,3 +733,56 @@ https://trek.raman-7d9.workers.dev.
 
 **🙋 Founder:** domain + Resend SMTP still pending (say "DNS live" with the
 domain when ready). Stripe is still mock — real keys needed before launch.
+
+## The Smoothness Pass — 6 batches (2026-08-11)
+
+Three parallel code audits (trekker flows / guide+ops / data+logic) surfaced
+~100 concrete issues after v3's fast slices. All six batches shipped and
+deployed.
+
+**Batch 1–2 — security, money correctness, lifecycle wiring** (e930203)
+- Mock-Stripe webhook was an unauthenticated free-booking endpoint → 404s
+  under mock. Cron endpoints failed OPEN (public card-charging/document-
+  deleting) → fail closed + CRON_SECRET set. Enquiries RLS let a trekker
+  self-accept. g.calendar could flip a booked day. apply.tsx unthrottled.
+- Checkout HID ~28% of the price (logistics + Fund had no booking columns);
+  refunds were issued against the deposit PI only (would fail on real
+  Stripe for any balance/instalment booking); instalment_count wasn't
+  clamped to what fits; five screens printed USD numbers with EUR symbols.
+- Nothing ever ran the crons (no trigger, no scheduled handler) — added.
+  Holds never released; payouts were never created by code; ten
+  notification seams were empty. All wired.
+
+**Batch 3 — dead ends + silent failures** (efbf5b6)
+Message threads (timestamps, clear-on-send, autoscroll, error, back-links),
+cancel confirm with real refund preview, booking-widget empty state +
+lead-time/consecutive-day rules, enquiry server validation, mobile header
+nav restored, match chips respond to taps, signup says what's wrong.
+
+**Batch 4 — one pricing truth** (797843d)
+/transparency still sold the dead 85/15/8% model; rewritten around the v3
+model with a worked example from a live listing. hosts/copy/g.earnings
+aligned. safety.tsx: insurance required for all treks (not >4,000m), new
+permits/TIMS section, founder aside removed. Tier ladder unified in
+lib/tiers.ts. Shared lib/format.ts killed raw ISO dates and raw status
+enums.
+
+**Batch 5 — guide side** (d1417fd)
+/g/login switched to email+password (OTP needed an SMS provider that
+doesn't exist — every applicant was locked out); apply collects
+credentials. Messages tab + unread badge; guide home shows money owed and
+backup-guide assignments. PDF links, calendar tones, change requests
+persist to an ops queue (migration 0027). Seed realism: 270-day
+availability, bookings hold their days, payment rows, payouts.
+
+**Batch 6 — polish** (bad69dd)
+Voice intros play (3 real recordings); header unread dot; robots/noindex/
+sitemap-recaps; Button primitive onto brand tokens; hardcoded counts gone.
+
+Migrations 0026–0027 + data fixes applied to cloud and local. 84 tests
+green throughout. Live: https://trek.raman-7d9.workers.dev
+
+**🙋 Founder still needed:** real domain + Resend key (email is stubbed),
+real Stripe keys (payments are mock; off-session charging needs saved
+payment methods — TODO noted in booking.server), and a real ops phone
+number for the SOS card (currently a 555 placeholder).
