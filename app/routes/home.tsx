@@ -5,7 +5,14 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
 import { guideRatings } from "~/lib/ratings.server";
-import { GuideCard, type PublicGuide, type PublicOffering } from "~/components/public/cards";
+import { useState } from "react";
+import {
+  GuideCard,
+  OfferingCard,
+  type PublicGuide,
+  type PublicOffering,
+} from "~/components/public/cards";
+import { cn } from "~/lib/cn";
 import { Stars } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { HeroSearch } from "~/components/public/HeroSearch";
@@ -186,8 +193,17 @@ export async function loader({ context }: Route.LoaderArgs) {
     for (const r of set) regionCounts[r] = (regionCounts[r] ?? 0) + 1;
   }
 
+  // The catalogue. The page already loads every offering for the region and
+  // route maths, so rendering them costs nothing extra — and filtering on the
+  // client makes the chips instant instead of a round trip per tap.
+  const experiences = ((offerings ?? []) as any[]).map((o) => ({
+    ...o,
+    region: o.route_id ? (routeById.get(o.route_id)?.region ?? null) : null,
+  }));
+
   return {
     rows,
+    experiences,
     freeThisWeek: freeThisWeek.slice(0, 8),
     freeThisWeekTotal: freeThisWeek.length,
     freeRuns,
@@ -222,6 +238,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     rows,
+    experiences,
     freeThisWeek,
     freeThisWeekTotal,
     pins,
@@ -355,6 +372,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           />
         ))}
       </div>
+
+      {/* 5c — The catalogue. The rows above answer "who"; this answers
+          "what", and it is the only place on the homepage you can browse
+          bookable things rather than people. */}
+      <ExperienceBrowser experiences={experiences} />
 
       {/* Latest from the trail — the proof-of-life feed. Real treks, dated,
           written by the guide who led them. Nothing on this page argues the
@@ -608,6 +630,193 @@ function Row({
           </Link>
         )}
       </div>
+    </section>
+  );
+}
+
+/** Deal one card from each kind in turn, so a mixed list reads as mixed. */
+function interleaveByKind<T extends { kind: string }>(list: T[]): T[] {
+  const buckets = new Map<string, T[]>();
+  for (const o of list) (buckets.get(o.kind) ?? buckets.set(o.kind, []).get(o.kind)!).push(o);
+  const order: string[] = KINDS.map((k) => k.key).filter(Boolean);
+  const queues = [
+    ...order.filter((k) => buckets.has(k)).map((k) => buckets.get(k)!),
+    // Any kind we do not have a chip for still gets dealt, at the back.
+    ...[...buckets.entries()].filter(([k]) => !order.includes(k)).map(([, v]) => v),
+  ];
+  const out: T[] = [];
+  for (let i = 0; out.length < list.length; i++) {
+    for (const q of queues) if (q[i]) out.push(q[i]);
+    if (i > list.length) break; // belt and braces against a bad bucket
+  }
+  return out;
+}
+
+/** The filter facets, in the order a person narrows: what kind, then where. */
+const KINDS = [
+  { key: "", label: "Everything" },
+  { key: "trek", label: "Treks" },
+  { key: "day_hike", label: "Day hikes" },
+  { key: "food_culture", label: "Food & culture" },
+  { key: "adventure", label: "Adventure" },
+  { key: "city", label: "City" },
+] as const;
+
+/**
+ * Bookable things, filtered without a page load.
+ *
+ * The whole catalogue is already in the loader's payload — the page needs it
+ * for the region and route maths — so filtering happens in the browser. Tapping
+ * "Day hikes" is instant instead of a round trip, which is what makes a filter
+ * feel like a filter rather than a search form. The facets are derived from
+ * what is actually listed, so an empty category never appears as a chip that
+ * returns nothing.
+ */
+function ExperienceBrowser({ experiences }: { experiences: any[] }) {
+  const [kind, setKind] = useState<string>("");
+  const [region, setRegion] = useState<string>("");
+  const [showAll, setShowAll] = useState(false);
+
+  const byKind = (list: any[], k: string) => (k ? list.filter((o) => o.kind === k) : list);
+  const byRegion = (list: any[], r: string) => (r ? list.filter((o) => o.region === r) : list);
+
+  // Counts on each chip come from the *other* filter's result, so the numbers
+  // describe what a tap would actually give you.
+  const kindCounts = new Map(
+    KINDS.map((k) => [k.key, byKind(byRegion(experiences, region), k.key).length]),
+  );
+  const regions = [...new Set(experiences.map((o) => o.region).filter(Boolean))].sort();
+  const regionCount = (r: string) => byRegion(byKind(experiences, kind), r).length;
+
+  const matched = byRegion(byKind(experiences, kind), region);
+  // "Everything" means everything. Left in table order the first eight were
+  // all day experiences — treks are 44 of the 56 and none of them appeared,
+  // so the unfiltered view advertised the wrong catalogue. Round-robin by
+  // kind puts one of each up front and keeps the order stable.
+  const ordered = kind ? matched : interleaveByKind(matched);
+  const shown = showAll ? ordered : ordered.slice(0, 8);
+  const narrowed = !!kind || !!region;
+
+  if (experiences.length === 0) return null;
+
+  const chip = (active: boolean) =>
+    cn(
+      "rounded-pill px-3.5 py-1.5 text-sm transition-colors",
+      active
+        ? "bg-pine text-paper"
+        : "border border-line bg-card text-ink hover:border-sage",
+    );
+
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-16">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <p className="label text-muted">Not just treks</p>
+          <h2 className="mt-2 font-display text-3xl text-ink">Things you can book</h2>
+        </div>
+        <Link
+          to="/experiences"
+          prefetch="intent"
+          className="text-sm font-medium text-moss hover:underline"
+        >
+          Search all <span className="font-mono">{experiences.length}</span> →
+        </Link>
+      </div>
+
+      <div className="mt-6 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {KINDS.filter((k) => !k.key || (kindCounts.get(k.key) ?? 0) > 0).map((k) => (
+            <button
+              key={k.key || "all"}
+              type="button"
+              onClick={() => {
+                setKind(k.key);
+                setShowAll(false);
+              }}
+              aria-pressed={kind === k.key}
+              className={chip(kind === k.key)}
+            >
+              {k.label}{" "}
+              <span className={cn("font-mono", kind === k.key ? "text-paper/60" : "text-muted")}>
+                {kindCounts.get(k.key) ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
+        {regions.length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRegion("");
+                setShowAll(false);
+              }}
+              aria-pressed={region === ""}
+              className={chip(region === "")}
+            >
+              Anywhere
+            </button>
+            {regions
+              .filter((r) => regionCount(r as string) > 0)
+              .map((r) => (
+                <button
+                  key={r as string}
+                  type="button"
+                  onClick={() => {
+                    setRegion(r as string);
+                    setShowAll(false);
+                  }}
+                  aria-pressed={region === r}
+                  className={chip(region === r)}
+                >
+                  {r as string}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {/* aria-live so a screen reader hears the count change on a tap — the
+          filtering happens with no navigation, so nothing else announces it. */}
+      <p className="mt-5 text-sm text-muted" aria-live="polite">
+        <span className="font-mono text-ink">{matched.length}</span>
+        {narrowed ? " match" : " listed"}
+        {matched.length === 1 ? "" : narrowed ? "es" : ""}
+      </p>
+
+      {matched.length === 0 ? (
+        <p className="mt-4 text-muted">
+          Nothing listed there yet.{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setKind("");
+              setRegion("");
+            }}
+            className="text-moss underline underline-offset-4"
+          >
+            Clear the filters
+          </button>
+          .
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {shown.map((o: PublicOffering) => (
+              <OfferingCard key={o.id} offering={o} />
+            ))}
+          </div>
+          {!showAll && matched.length > shown.length && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="mt-6 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
+            >
+              Show the other <span className="font-mono">{matched.length - shown.length}</span>
+            </button>
+          )}
+        </>
+      )}
     </section>
   );
 }
