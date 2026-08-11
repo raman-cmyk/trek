@@ -141,6 +141,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
 export default function GuideJournalEdit({ loaderData, actionData }: Route.ComponentProps) {
   const { journal, entries, routes, tags } = loaderData as any;
+  // Every frame already uploaded to a day — the cover is nearly always one.
+  const coverChoices: string[] = [
+    ...new Set(
+      (entries as JournalEntry[]).flatMap((e) =>
+        (e.photos ?? []).filter((m) => m.kind !== "video").map((m) => m.url),
+      ),
+    ),
+  ];
   const nav = useNavigation();
   const nextDay = entries.length ? Math.max(...entries.map((e: any) => e.day_no)) + 1 : 1;
   const live = journal.status === "published";
@@ -183,6 +191,7 @@ export default function GuideJournalEdit({ loaderData, actionData }: Route.Compo
             journal={journal}
             routes={routes}
             tags={tags}
+            coverChoices={coverChoices}
             busy={nav.state !== "idle"}
           />
 

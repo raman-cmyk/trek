@@ -208,33 +208,62 @@ export async function saveTags(
 
 /** Parse the day-block form fields the editor posts. */
 export function parseEntryForm(form: FormData) {
-  const media: {
-    url: string;
-    alt?: string;
-    people?: boolean;
-    kind?: "photo" | "video";
-  }[] = [];
-  const urls = String(form.get("photo_urls") ?? "")
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const peopleFlags = form.getAll("photo_people").map(String);
-  urls.forEach((url, i) => {
-    media.push({
-      url,
-      alt: String(form.get("title") ?? ""),
-      people: peopleFlags.includes(String(i)),
-      // A guide pastes one list of links; we work out which are clips rather
-      // than asking them to sort their own media into two boxes.
-      kind: /\.(mp4|webm|mov)(\?|$)/i.test(url) ? "video" : "photo",
-    });
-  });
   return {
     day_no: Math.max(1, Math.min(99, Number(form.get("day_no")) || 1)),
     title: String(form.get("title") ?? "").trim(),
     body: String(form.get("body") ?? "").trim() || null,
     altitude_m: form.get("altitude_m") ? Number(form.get("altitude_m")) : null,
     is_hard_day: form.get("is_hard_day") === "on",
-    photos: media,
+    photos: parseMedia(form),
   };
 }
+
+/**
+ * The day's media, in the order the guide arranged it.
+ *
+ * The editor posts a JSON array from the picker. The old shape — one URL per
+ * line in a textarea, plus `photo_people` checkboxes indexed by position — is
+ * still read, because an ops tab left open across a deploy would otherwise
+ * post the old fields and silently wipe a day's photographs.
+ */
+export function parseMedia(form: FormData): Array<{
+  url: string;
+  alt?: string;
+  people?: boolean;
+  kind?: "photo" | "video";
+}> {
+  const raw = form.get("media");
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((m) => m && typeof m.url === "string" && m.url.trim())
+          .slice(0, 40)
+          .map((m) => ({
+            url: String(m.url).trim(),
+            alt: typeof m.alt === "string" ? m.alt : undefined,
+            people: !!m.people,
+            kind: isVideoUrl(m.url) || m.kind === "video" ? "video" : "photo",
+          }));
+      }
+    } catch {
+      // Fall through to the legacy fields rather than losing the day.
+    }
+  }
+
+  const urls = String(form.get("photo_urls") ?? "")
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const peopleFlags = form.getAll("photo_people").map(String);
+  return urls.map((url, i) => ({
+    url,
+    alt: String(form.get("title") ?? ""),
+    people: peopleFlags.includes(String(i)),
+    kind: isVideoUrl(url) ? ("video" as const) : ("photo" as const),
+  }));
+}
+
+const isVideoUrl = (u: string) => /\.(mp4|webm|mov)(\?|$)/i.test(u);
+

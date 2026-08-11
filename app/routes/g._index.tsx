@@ -91,9 +91,80 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     .eq("status", "payable");
   const payableNprPaisa = (duePayouts ?? []).reduce((s, p) => s + p.amount_npr_paisa, 0);
 
+  // First-run: what a new guide still has to do before their page can sell.
+  // Read from the same rows the public page renders, so a step goes green
+  // because the thing is actually true, not because a flag was set.
+  const [{ data: me }, { count: langCount }, { count: offeringCount }, { count: journalCount }] =
+    await Promise.all([
+      admin
+        .from("guides")
+        .select("only_with_me, bio, day_rate_usd_cents, users(avatar_url)")
+        .eq("user_id", user.id)
+        .single(),
+      admin
+        .from("guide_languages")
+        .select("language", { count: "exact", head: true })
+        .eq("guide_id", user.id),
+      admin
+        .from("offerings")
+        .select("id", { count: "exact", head: true })
+        .eq("guide_id", user.id)
+        .eq("status", "live"),
+      admin
+        .from("journals")
+        .select("id", { count: "exact", head: true })
+        .eq("guide_id", user.id),
+    ]);
+
+  const setup = [
+    {
+      key: "photo",
+      done: !!(me as any)?.users?.avatar_url,
+      label: "Add your photo",
+      note: "Trekkers pick a face. This is the whole product.",
+      to: "/g/profile",
+    },
+    {
+      key: "promise",
+      done: !!me?.only_with_me?.trim(),
+      label: "Write your one promise",
+      note: "One thing only you offer. Your words — we do not tidy them.",
+      to: "/g/profile",
+    },
+    {
+      key: "rate",
+      done: !!me?.day_rate_usd_cents,
+      label: "Set your day rate",
+      note: "You keep all of it. Trek adds its fee on top.",
+      to: "/g/profile",
+    },
+    {
+      key: "languages",
+      done: (langCount ?? 0) > 0,
+      label: "List your languages",
+      note: "It is how people filter. Missing here means missing from the search.",
+      to: "/g/profile",
+    },
+    {
+      key: "trip",
+      done: (offeringCount ?? 0) > 0,
+      label: "List a trip",
+      note: "The thing people book. Start with the trek you run most.",
+      to: "/g/profile",
+    },
+    {
+      key: "journal",
+      done: (journalCount ?? 0) > 0,
+      label: "Write up one trek",
+      note: "Photos and a few lines. Nothing sells you like a trek you led.",
+      to: "/g/journals",
+    },
+  ];
+
   return data(
     {
       name: profile.full_name,
+      setup,
       guide,
       active,
       nextBooking,
@@ -141,7 +212,7 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, guide, active, nextBooking, enquiries, checkedInToday, today, backupFor, payableNprPaisa } =
+  const { name, setup, guide, active, nextBooking, enquiries, checkedInToday, today, backupFor, payableNprPaisa } =
     loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
@@ -160,6 +231,8 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
   return (
     <div className="space-y-5">
       <h1 className="font-display text-2xl text-ink">Namaste, {first}</h1>
+
+      <SetupChecklist steps={setup} />
 
       {active ? (
         <section className="space-y-2">
@@ -343,5 +416,83 @@ function StatusView({ name, guide, status }: { name: string; guide: any; status:
         </div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * What is still missing from a guide's page.
+ *
+ * A verified guide used to land on a dashboard that told them about bookings
+ * they did not have yet, with nothing to do and no idea why nobody was
+ * enquiring — the answer being that their page had no photo, no rate and no
+ * promise on it. Each step is derived from the row the public page actually
+ * reads, so it goes green because the thing is true.
+ *
+ * It disappears the moment everything is done. A permanent checklist on a
+ * dashboard is a permanent reminder that you are behind.
+ */
+function SetupChecklist({
+  steps,
+}: {
+  steps: Array<{ key: string; done: boolean; label: string; note: string; to: string }>;
+}) {
+  const done = steps.filter((s) => s.done).length;
+  if (done === steps.length) return null;
+  const next = steps.find((s) => !s.done)!;
+
+  return (
+    <section className="rounded-md border border-line bg-card p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-medium text-ink">Finish your page</h2>
+        <p className="font-mono text-caption text-muted">
+          {done}/{steps.length} done
+        </p>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-mist">
+        <div
+          className="h-full rounded-full bg-moss transition-[width] duration-slow ease-out-soft"
+          style={{ width: `${Math.round((done / steps.length) * 100)}%` }}
+        />
+      </div>
+      <p className="mt-2.5 text-sm text-muted">
+        Until these are in, your page is not really findable.
+      </p>
+
+      <ul className="mt-3 space-y-1">
+        {steps.map((s) => (
+          <li key={s.key}>
+            <Link
+              to={s.to}
+              className={cn(
+                "flex items-start gap-2.5 rounded px-2 py-2 -mx-2 transition-colors",
+                s.done ? "text-muted" : "text-ink hover:bg-mist",
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[11px]",
+                  s.done ? "border-moss bg-moss text-paper" : "border-line",
+                )}
+              >
+                {s.done ? "✓" : ""}
+              </span>
+              <span className="min-w-0">
+                <span className={cn("block text-sm", s.done && "line-through")}>{s.label}</span>
+                {!s.done && <span className="block text-caption text-muted">{s.note}</span>}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <Link
+        to={next.to}
+        className="mt-3 inline-block rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+      >
+        {next.label} →
+      </Link>
+    </section>
   );
 }

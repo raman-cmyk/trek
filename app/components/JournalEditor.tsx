@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Form } from "react-router";
 import { Button } from "~/components/Button";
-import { PhotoUpload } from "~/components/PhotoUpload";
+import { MediaPicker } from "~/components/MediaPicker";
 import {
   TAG_KIND_ORDER,
   TAG_VOCAB,
@@ -25,6 +26,7 @@ export function JournalMetaForm({
   routes,
   bookings,
   tags,
+  coverChoices,
   canPublish,
   busy,
 }: {
@@ -32,6 +34,8 @@ export function JournalMetaForm({
   routes: { id: string; name: string }[];
   bookings?: { id: string; start_date: string; offering: any }[];
   tags?: JournalTag[];
+  /** Every photo already on a day — the cover is nearly always one of them. */
+  coverChoices?: string[];
   /** Ops only — a guide writes and submits, ops publishes. */
   canPublish?: boolean;
   busy?: boolean;
@@ -147,10 +151,16 @@ export function JournalMetaForm({
         />
       </label>
 
-      <label className={label}>
-        Cover photo URL
-        <input name="cover_photo_url" defaultValue={journal?.cover_photo_url ?? ""} className={input} />
-      </label>
+      {/* The cover. Almost always a photo already uploaded to a day, so the
+          normal path is one tap rather than finding and pasting a URL. */}
+      <div>
+        <p className={label}>The cover photo</p>
+        <CoverPicker
+          value={journal?.cover_photo_url ?? ""}
+          candidates={coverChoices ?? []}
+          guideId={journal?.guide_id}
+        />
+      </div>
 
       <label className={label}>
         Your closing note — the last thing they read. Your own words.
@@ -325,35 +335,11 @@ export function EntryForm({
         />
       </label>
 
-      <PhotoUpload targetId={areaId} guideId={guideId} />
-
-      <label className={label}>
-        Photos and video on this day — one link per line
-        <textarea
-          id={areaId}
-          name="photo_urls"
-          rows={3}
-          defaultValue={(entry?.photos ?? []).map((p) => p.url).join("\n")}
-          className={input}
-        />
-      </label>
-      <p className="text-caption text-muted">
-        Tick the number of any photo a client is recognisable in — those hide
-        themselves if the client did not agree to photos.
-      </p>
-      <div className="flex flex-wrap gap-3">
-        {[0, 1, 2, 3].map((i) => (
-          <label key={i} className="flex items-center gap-1.5 text-sm text-ink">
-            <input
-              type="checkbox"
-              name="photo_people"
-              value={String(i)}
-              defaultChecked={entry?.photos?.[i]?.people ?? false}
-              className="accent-moss"
-            />
-            photo {i + 1}
-          </label>
-        ))}
+      <div>
+        <p className={label}>Photos from this day</p>
+        <div className="mt-1.5">
+          <MediaPicker name="media" initial={entry?.photos ?? []} guideId={guideId} />
+        </div>
       </div>
 
       <label className="flex items-start gap-2 text-sm text-ink">
@@ -387,5 +373,91 @@ export function EntryForm({
         )}
       </div>
     </Form>
+  );
+}
+
+
+/**
+ * Pick the cover from the photographs already in the journal.
+ *
+ * It used to be a bare text input for a URL, which meant opening the day
+ * blocks, finding the photo, copying its address, coming back and pasting it.
+ * The cover is almost always a frame already uploaded, so the normal path
+ * should be one tap — with an upload for the rare case it is not.
+ */
+function CoverPicker({
+  value,
+  candidates,
+  guideId,
+}: {
+  value: string;
+  candidates: string[];
+  guideId?: string;
+}) {
+  const [url, setUrl] = useState(value);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setBusy(true);
+    setError(null);
+    const body = new FormData();
+    body.append("file", file);
+    if (guideId) body.append("guide_id", guideId);
+    try {
+      const res = await fetch("/api/journal-photo", { method: "POST", body });
+      const json: any = await res.json();
+      if (!res.ok) setError(json?.error ?? "That didn't send. Try again.");
+      else setUrl(json.url);
+    } catch {
+      setError("No connection. Try again when you have signal.");
+    }
+    setBusy(false);
+  }
+
+  const options = [...new Set([url, ...candidates].filter(Boolean))];
+
+  return (
+    <div className="mt-1.5 space-y-2">
+      <input type="hidden" name="cover_photo_url" value={url} />
+      {options.length > 0 ? (
+        <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+          {options.map((u) => (
+            <li key={u}>
+              <button
+                type="button"
+                onClick={() => setUrl(u)}
+                aria-pressed={url === u}
+                aria-label="Use this as the cover"
+                className={
+                  "block w-full overflow-hidden rounded border-2 transition-colors " +
+                  (url === u ? "border-moss" : "border-transparent hover:border-sage")
+                }
+              >
+                <img src={u} alt="" className="aspect-[4/3] w-full object-cover" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-caption text-muted">
+          Add photos to a day below and they will show up here to choose from.
+        </p>
+      )}
+      <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-moss hover:underline">
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) upload(f);
+            e.target.value = "";
+          }}
+        />
+        {busy ? "Sending…" : "or upload a different one"}
+      </label>
+      {error && <p className="text-sm text-ember">{error}</p>}
+    </div>
   );
 }

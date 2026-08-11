@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_JOURNAL_PHOTOS, validateForPublish } from "./journals.server";
+import { MIN_JOURNAL_PHOTOS, parseMedia, validateForPublish } from "./journals.server";
 import { allMedia, isVideo, seasonOf, sortTags } from "./journals";
 
 const ok = {
@@ -96,5 +96,65 @@ describe("tags", () => {
     expect(seasonOf("2025-04-02")).toBe("Spring");
     expect(seasonOf("2025-07-30")).toBe("Monsoon");
     expect(seasonOf("2026-01-05")).toBe("Winter");
+  });
+});
+
+describe("parseMedia", () => {
+  const fd = (entries: Array<[string, string]>) => {
+    const f = new FormData();
+    for (const [k, v] of entries) f.append(k, v);
+    return f;
+  };
+
+  it("reads the picker's JSON, in order, with consent flags", () => {
+    const media = parseMedia(
+      fd([
+        [
+          "media",
+          JSON.stringify([
+            { url: "a.jpg" },
+            { url: "b.jpg", people: true },
+            { url: "c.mp4" },
+          ]),
+        ],
+      ]),
+    );
+    expect(media.map((m) => m.url)).toEqual(["a.jpg", "b.jpg", "c.mp4"]);
+    expect(media[1].people).toBe(true);
+    expect(media[2].kind).toBe("video");
+  });
+
+  it("falls back to the old textarea fields rather than wiping the day", () => {
+    const media = parseMedia(
+      fd([
+        ["photo_urls", "a.jpg\nb.jpg"],
+        ["photo_people", "1"],
+        ["title", "Day one"],
+      ]),
+    );
+    expect(media.map((m) => m.url)).toEqual(["a.jpg", "b.jpg"]);
+    expect(media[1].people).toBe(true);
+    expect(media[0].alt).toBe("Day one");
+  });
+
+  it("does the same when the JSON is unparseable", () => {
+    const media = parseMedia(fd([["media", "{not json"], ["photo_urls", "a.jpg"]]));
+    expect(media.map((m) => m.url)).toEqual(["a.jpg"]);
+  });
+
+  it("drops blanks and caps a runaway list", () => {
+    const many = JSON.stringify([
+      { url: "" },
+      { url: "   " },
+      { noUrl: true },
+      ...Array.from({ length: 50 }, (_, i) => ({ url: `p${i}.jpg` })),
+    ]);
+    const media = parseMedia(fd([["media", many]]));
+    expect(media).toHaveLength(40);
+    expect(media.every((m) => m.url.trim())).toBe(true);
+  });
+
+  it("returns nothing when there is nothing", () => {
+    expect(parseMedia(fd([]))).toEqual([]);
   });
 });
