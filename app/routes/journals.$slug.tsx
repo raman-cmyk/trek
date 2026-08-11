@@ -25,6 +25,7 @@ import {
   type PublicJournal,
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Journal not found" }];
@@ -32,7 +33,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   const origin = new URL(data.canonical).origin;
   return [
     ...pageMeta({
-      title: `${j.title} — a Trek journal by ${j.guide_name}`,
+      title: `${j.title} — a Trek journal by ${firstName(j.guide_name)}`,
       description:
         (j.guide_note ?? "").slice(0, 155) ||
         `${j.days} days on ${j.route_name ?? "the trail"} in Nepal, told by the guide who led it.`,
@@ -50,7 +51,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
       image: j.cover_photo_url ? [j.cover_photo_url] : undefined,
       author: {
         "@type": "Person",
-        name: j.guide_name,
+        name: firstName(j.guide_name),
         url: `${origin}/guides/${j.guide_slug}`,
       },
       publisher: { "@type": "Organization", name: "Trek", url: origin },
@@ -216,7 +217,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
   const { journal: j, entries, tags, route, more, offering, comments, signedIn } =
     loaderData as any;
-  const first = j.guide_name.split(" ")[0];
+  const first = firstName(j.guide_name);
   const points = elevationPoints(entries);
 
   // One gallery for the whole trek. Each day block knows where its own frames
@@ -293,7 +294,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
           <Link to={`/guides/${j.guide_slug}`} prefetch="intent" className="shrink-0">
             <SmartImage
               src={j.guide_avatar_url ?? ""}
-              alt={j.guide_name}
+              alt={firstName(j.guide_name)}
               width={44}
               height={44}
               className="h-10 w-10 rounded-full"
@@ -306,7 +307,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
                 prefetch="intent"
                 className="font-medium text-ink hover:underline"
               >
-                {j.guide_name}
+                {firstName(j.guide_name)}
               </Link>
               <TierBadge tier={j.guide_tier} />
             </p>
@@ -365,7 +366,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
               {j.guide_note}
             </p>
             <p className="mt-3 text-caption text-muted">
-              — {j.guide_name}, who led this trek
+              — {firstName(j.guide_name)}, who led this trek
             </p>
           </section>
         )}
@@ -424,13 +425,13 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
               <Link to={`/guides/${j.guide_slug}`} className="flex items-center gap-3">
                 <SmartImage
                   src={j.guide_avatar_url ?? ""}
-                  alt={j.guide_name}
+                  alt={firstName(j.guide_name)}
                   width={56}
                   height={56}
                   className="h-12 w-12 rounded-full"
                 />
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-ink">{j.guide_name}</span>
+                  <span className="block truncate font-medium text-ink">{firstName(j.guide_name)}</span>
                   <span className="block font-mono text-caption text-muted">
                     {j.guide_district}
                   </span>

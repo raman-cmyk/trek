@@ -16,6 +16,7 @@ import {
 } from "~/lib/experience-pricing";
 import { STANDARD_ADDONS, addonsTotalUsdCents } from "~/lib/addons";
 import { useMoney } from "~/lib/currency-context";
+import { firstName } from "~/lib/names";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
@@ -102,7 +103,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           >
             <SmartImage
               src={o.guide_avatar_url ?? ""}
-              alt={o.guide_name}
+              alt={firstName(o.guide_name)}
               width={64}
               height={64}
 
@@ -110,7 +111,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-ink">Led by {o.guide_name}</p>
+                <p className="font-medium text-ink">Led by {firstName(o.guide_name)}</p>
                 <TierBadge tier={o.guide_tier} static />
               </div>
               {rating && <Stars value={rating.value} count={rating.count} />}
@@ -128,7 +129,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               value={data.canonical ? new URL(data.canonical).pathname : "/"}
             />
             <button className="w-full rounded-button border border-moss px-4 py-2.5 text-sm font-medium text-moss hover:bg-mist">
-              Message {o.guide_name.split(" ")[0]} — free, before you book
+              Message {firstName(o.guide_name)} — free, before you book
             </button>
           </Form>
 
@@ -171,7 +172,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3">
               <SmartImage
                 src={o.backup_guide_avatar_url ?? ""}
-                alt={o.backup_guide_name}
+                alt={firstName(o.backup_guide_name)}
                 width={40}
                 height={40}
                 className="h-10 w-10 rounded-full"
@@ -179,10 +180,10 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               <p className="text-sm text-ink-soft">
                 <span className="font-medium text-ink">Backed up by{" "}
                   <Link to={`/guides/${o.backup_guide_slug}`} className="text-primary hover:underline">
-                    {o.backup_guide_name}
+                    {firstName(o.backup_guide_name)}
                   </Link>
                 </span>
-                {" "}— if {o.guide_name.split(" ")[0]} can't lead, {o.backup_guide_name.split(" ")[0]} steps
+                {" "}— if {firstName(o.guide_name)} can't lead, {firstName(o.backup_guide_name)} steps
                 in. Your trek never cancels on you.
               </p>
             </div>
@@ -396,7 +397,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               {reviews.map((r) => (
                 <ReviewBlock
                   key={r.id}
-                  authorName={r.author_name}
+                  authorName={firstName(r.author_name)}
                   country={r.author_country}
                   overall={r.overall}
                   body={r.body}
@@ -418,7 +419,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             max_party: o.max_party,
             guide_day_rate_usd_cents: o.guide_day_rate_usd_cents,
             permit_fees_pp_usd_cents: permitPp,
-            guide_first_name: o.guide_name.split(" ")[0],
+            guide_first_name: firstName(o.guide_name),
           }}
           priceBreakdown={effBreakdown ?? breakdown}
           addonsPerPerson={addonsPP}

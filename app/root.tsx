@@ -13,7 +13,11 @@ import type { Route } from "./+types/root";
 // Fraunces = display, Inter Tight = body/UI, JetBrains Mono = data (§3).
 import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource-variable/inter-tight";
-import "@fontsource-variable/jetbrains-mono";
+// Geist Mono for every figure on the site: the numerals are plain,
+// unornamented and tabular by design, which is what a price, an altitude and a
+// response time all need. JetBrains Mono is a code face — its slab serifs and
+// tall x-height read as "terminal", not as an instrument readout.
+import "@fontsource-variable/geist-mono";
 import "./app.css";
 import { CurrencyProvider } from "~/lib/currency-context";
 

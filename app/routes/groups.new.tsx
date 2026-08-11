@@ -7,6 +7,7 @@ import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { createGroup } from "~/lib/groups.server";
 import { useMoney } from "~/lib/currency-context";
 import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { firstName } from "~/lib/names";
 
 export function meta() {
   return pageMeta({
@@ -44,7 +45,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     guides: guides ?? [],
     preselect: url.searchParams.get("offering") ?? "",
     preselectGuide: url.searchParams.get("guide") ?? "",
-    suggestedName: profile?.full_name ? `${profile.full_name.split(" ")[0]}'s trip` : "Our trip",
+    suggestedName: profile?.full_name ? `${firstName(profile.full_name)}'s trip` : "Our trip",
   };
 }
 
@@ -224,7 +225,7 @@ export default function NewGroup({ loaderData, actionData }: Route.ComponentProp
                   : o.price_usd_cents;
                 return (
                   <option key={o.id} value={o.id}>
-                    {o.title} · {o.days} days · with {o.guide_name}
+                    {o.title} · {o.days} days · with {firstName(o.guide_name)}
                     {from ? ` · from ${mr(from)} pp` : ""}
                   </option>
                 );

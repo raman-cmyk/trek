@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Form, Link, useNavigation } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 
 export interface PublicComment {
   id: string;
@@ -102,7 +103,7 @@ export function Comments({
                   {replyTo === c.id && (
                     <CommentForm
                       parentId={c.id}
-                      placeholder={`Reply to ${c.author_name.split(" ")[0]}…`}
+                      placeholder={`Reply to ${firstName(c.author_name)}…`}
                       busy={busy}
                       compact
                     />
@@ -168,7 +169,7 @@ function CommentBody({ comment: c, small }: { comment: PublicComment; small?: bo
   const avatar = (
     <SmartImage
       src={c.author_avatar_url ?? ""}
-      alt={c.author_name}
+      alt={firstName(c.author_name)}
       width={small ? 32 : 36}
       height={small ? 32 : 36}
       className={cn("shrink-0 rounded-full", small ? "h-7 w-7" : "h-9 w-9")}
@@ -185,7 +186,7 @@ function CommentBody({ comment: c, small }: { comment: PublicComment; small?: bo
       )}
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="text-sm font-medium text-ink">{c.author_name}</span>
+          <span className="text-sm font-medium text-ink">{firstName(c.author_name)}</span>
           {c.author_is_guide && (
             <span className="rounded-pill bg-chartreuse px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-pine">
               Guide

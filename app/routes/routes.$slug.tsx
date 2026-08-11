@@ -22,6 +22,7 @@ import { ExperienceSplit } from "~/components/Split";
 import { partyAmounts, type PriceBreakdown } from "~/lib/experience-pricing";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -115,7 +116,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     })
     .map((o) => ({
       slug: o.guide_slug,
-      name: o.guide_name,
+      name: firstName(o.guide_name),
       avatar: o.guide_avatar_url,
       tier: o.guide_tier,
       treks: counts.get(o.guide_id) ?? 0,

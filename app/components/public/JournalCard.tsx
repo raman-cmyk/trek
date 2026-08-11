@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { firstSentence, journalMonth, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 
 /**
  * A journal on the wall. Two sizes: `lead` is the dominant first card on a
@@ -36,7 +37,7 @@ export function JournalCard({
       prefetch="intent"
       className={cn(
         "group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card",
-        "transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift",
+        "transition-colors duration-instant ease-out-soft hover:border-sage",
       )}
     >
       <SmartImage
@@ -74,7 +75,7 @@ export function JournalCard({
               className="h-6 w-6 shrink-0 rounded-full"
             />
             <span>
-              led by <span className="font-medium text-ink">{j.guide_name}</span>
+              led by <span className="font-medium text-ink">{firstName(j.guide_name)}</span>
             </span>
           </div>
         )}

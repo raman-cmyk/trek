@@ -15,6 +15,7 @@ import {
 } from "~/lib/groups";
 import { joinGroup, recomputeShares, systemLine } from "~/lib/groups.server";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -319,7 +320,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               <>
                 Trek not picked — going with{" "}
                 <Link to={`/guides/${guide.slug}`} className="text-moss underline underline-offset-4">
-                  {guide.full_name}
+                  {firstName(guide.full_name)}
                 </Link>
               </>
             ) : (
@@ -596,12 +597,12 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 >
                   <SmartImage
                     src={offering.guide_avatar_url ?? ""}
-                    alt={offering.guide_name}
+                    alt={firstName(offering.guide_name)}
                     width={32}
                     height={32}
                     className="h-7 w-7 rounded-full"
                   />
-                  {offering.guide_name}
+                  {firstName(offering.guide_name)}
                 </Link>
               </div>
             </div>
@@ -612,13 +613,13 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               <Link to={`/guides/${guide.slug}`} className="flex items-center gap-3">
                 <SmartImage
                   src={guide.avatar_url ?? ""}
-                  alt={guide.full_name}
+                  alt={firstName(guide.full_name)}
                   width={56}
                   height={56}
                   className="h-12 w-12 rounded-full"
                 />
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-ink">{guide.full_name}</span>
+                  <span className="block truncate font-medium text-ink">{firstName(guide.full_name)}</span>
                   <span className="block font-mono text-caption text-muted">
                     {guide.home_district}
                   </span>
@@ -633,7 +634,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 <input type="hidden" name="guide_id" value={guide.user_id} />
                 <input type="hidden" name="next" value={`/groups/${group.slug}`} />
                 <button className="w-full rounded border border-moss px-3 py-2 text-sm font-medium text-moss hover:bg-mist">
-                  Ask {guide.full_name.split(" ")[0]} what he would run
+                  Ask {firstName(guide.full_name)} what he would run
                 </button>
               </Form>
             </div>
@@ -666,7 +667,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                   disabled={busy || !!blocked}
                   className="w-full rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Ask {offering.guide_name.split(" ")[0]} to hold it
+                  Ask {firstName(offering.guide_name)} to hold it
                 </button>
               </Form>
             )}
@@ -755,12 +756,12 @@ function JoinInvite({
       <p className="mt-3 text-body-l text-ink">
         {offering ? (
           <>
-            {offering.title} — {offering.days} days with {offering.guide_name}
+            {offering.title} — {offering.days} days with {firstName(offering.guide_name)}
             {group.start_date && `, from ${group.start_date}`}.
           </>
         ) : guide ? (
           <>
-            Going with {guide.full_name}
+            Going with {firstName(guide.full_name)}
             {guide.home_district && ` of ${guide.home_district}`}
             {group.start_date && `, from ${group.start_date}`} — the trek is
             still being decided.
