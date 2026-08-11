@@ -1,37 +1,89 @@
-import { Form, Link } from "react-router";
+import { Link } from "react-router";
 import type { Route } from "./+types/guides";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { GuideCard, type PublicGuide } from "~/components/public/cards";
+import { BrowseSearch } from "~/components/public/BrowseSearch";
+import {
+  escapeLike,
+  guideIdsMatchingText,
+  guideMatchesText,
+  openRunsByGuide,
+  parseRange,
+} from "~/lib/browse.server";
+import { fmtDateShort } from "~/lib/format";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Find your trekking guide in Nepal",
     description:
-      "Browse verified, licensed trekking guides in Nepal. Pick the human you'll trek with — filter by language, region, tier and price.",
+      "Search verified, licensed trekking guides in Nepal by name, region, language and the dates you're free. Pick the human you'll trek with, not an agency.",
     canonical: data?.canonical ?? "",
   });
 }
+
+const GUIDE_COLS =
+  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, day_rate_usd_cents, median_response_mins, years_experience, gender";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
   const url = new URL(request.url);
-  const q = url.searchParams;
-  const fTier = q.get("tier") ?? "";
-  const fLang = q.get("lang") ?? "";
-  const fDistrict = q.get("district") ?? "";
-  const sort = q.get("sort") ?? "recommended";
+  const p = url.searchParams;
+  const today = new Date().toISOString().slice(0, 10);
 
-  const { data: guides } = await client
+  const q = (p.get("q") ?? "").trim().slice(0, 80);
+  const range = parseRange(p.get("from"), p.get("to"), today);
+  const fTier = p.get("tier") ?? "";
+  const fLang = p.get("lang") ?? "";
+  const fDistrict = p.get("district") ?? "";
+  const fWomen = p.get("women") === "1";
+  const sort = p.get("sort") ?? "recommended";
+
+  // Text search runs in two halves and unions: the guide's own record, and the
+  // guides who lead a matching route or run a matching trip. "Annapurna" is
+  // the second half — nothing on a guide row says Annapurna.
+  type Row = PublicGuide & { bio: string | null; years_experience: number | null; gender: string | null };
+  let rows: Row[];
+  let viaTrips = new Set<string>();
+  if (q) {
+    const like = `%${escapeLike(q)}%`;
+    const [{ data: direct }, matched] = await Promise.all([
+      client
+        .from("public_guides")
+        .select(GUIDE_COLS)
+        .or(
+          `full_name.ilike.${like},home_district.ilike.${like},hook_line.ilike.${like},bio.ilike.${like}`,
+        ),
+      guideIdsMatchingText(client, q),
+    ]);
+    viaTrips = matched;
+    const byId = new Map<string, Row>();
+    for (const g of (direct ?? []) as Row[]) byId.set(g.user_id, g);
+    const missing = [...viaTrips].filter((id) => !byId.has(id));
+    if (missing.length) {
+      const { data: extra } = await client
+        .from("public_guides")
+        .select(GUIDE_COLS)
+        .in("user_id", missing);
+      for (const g of (extra ?? []) as Row[]) byId.set(g.user_id, g);
+    }
+    rows = [...byId.values()];
+  } else {
+    const { data } = await client.from("public_guides").select(GUIDE_COLS);
+    rows = (data ?? []) as Row[];
+  }
+
+  // Facets are built from the unfiltered set so the dropdowns don't shrink to
+  // whatever the current search happens to have left.
+  const { data: allGuides } = await client
     .from("public_guides")
-    .select(
-      "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, day_rate_usd_cents, median_response_mins, years_experience",
-    );
+    .select("user_id, home_district");
+  const totalGuides = (allGuides ?? []).length;
 
-  const ids = (guides ?? []).map((g) => g.user_id);
-  const [ratings, langMap] = await Promise.all([
+  const ids = rows.map((g) => g.user_id);
+  const [ratings, langMap, allLangs, freeRuns] = await Promise.all([
     guideRatings(client, ids),
     (async () => {
       const map: Record<string, string[]> = {};
@@ -44,77 +96,103 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       }
       return map;
     })(),
+    client.from("guide_languages").select("language"),
+    range ? openRunsByGuide(client, range, ids) : Promise.resolve(null),
   ]);
 
-  let rows = (guides ?? []) as (PublicGuide & { years_experience: number | null })[];
   if (fTier) rows = rows.filter((g) => String(g.tier) === fTier);
   if (fDistrict) rows = rows.filter((g) => g.home_district === fDistrict);
+  if (fWomen) rows = rows.filter((g) => g.gender === "female");
   if (fLang) rows = rows.filter((g) => (langMap[g.user_id] ?? []).includes(fLang));
+  // "Free between X and Y" = at least one open day in the window. Trip-length
+  // fit is the offering's job (a guide free for 3 of your 16 days is still a
+  // useful result on a page about people).
+  if (freeRuns) rows = rows.filter((g) => (freeRuns[g.user_id] ?? 0) >= 1);
+  // Belt-and-braces: `ilike` is accent- and case-insensitive but not word-aware,
+  // so re-check each survivor against the same rule the union used.
+  if (q) rows = rows.filter((g) => guideMatchesText(g, q) || viaTrips.has(g.user_id));
 
   rows.sort((a, b) => {
-    if (sort === "price")
-      return (a.day_rate_usd_cents ?? 0) - (b.day_rate_usd_cents ?? 0);
-    if (sort === "experience")
-      return (b.years_experience ?? 0) - (a.years_experience ?? 0);
-    // recommended: tier desc, then rating desc
+    if (sort === "price") return (a.day_rate_usd_cents ?? 0) - (b.day_rate_usd_cents ?? 0);
+    if (sort === "experience") return (b.years_experience ?? 0) - (a.years_experience ?? 0);
     const rt = (ratings[b.user_id]?.value ?? 0) - (ratings[a.user_id]?.value ?? 0);
     return b.tier - a.tier || rt;
   });
 
   const districts = [
-    ...new Set((guides ?? []).map((g) => g.home_district).filter(Boolean)),
+    ...new Set((allGuides ?? []).map((g) => g.home_district).filter(Boolean)),
   ].sort() as string[];
   const languages = [
-    ...new Set(Object.values(langMap).flat()),
+    ...new Set((allLangs.data ?? []).map((l) => l.language)),
   ].sort();
 
   return {
     guides: rows,
     ratings,
     langMap,
+    totalGuides,
     facets: { districts, languages },
-    filters: { fTier, fLang, fDistrict, sort },
+    filters: { q, from: range?.from ?? "", to: range?.to ?? "", fTier, fLang, fDistrict, fWomen, sort },
+    today,
     canonical: absoluteUrl(env.SITE_URL, "/guides"),
   };
 }
 
+const SELECT_CLS =
+  "rounded border border-line bg-card px-3 py-2 text-sm text-ink";
+
 export default function Guides({ loaderData }: Route.ComponentProps) {
-  const { guides, ratings, langMap, facets, filters } = loaderData;
+  const { guides, ratings, langMap, totalGuides, facets, filters, today } = loaderData;
+  const narrowed =
+    !!filters.q ||
+    !!filters.from ||
+    !!filters.fTier ||
+    !!filters.fLang ||
+    !!filters.fDistrict ||
+    filters.fWomen;
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="font-display text-3xl text-ink">Find your guide</h1>
-      <p className="mt-1 text-ink-soft">
-        {guides.length} verified guide{guides.length === 1 ? "" : "s"}
+      <p className="mt-1 text-muted">
+        {narrowed ? (
+          <>
+            <span className="font-mono text-ink">{guides.length}</span> of{" "}
+            <span className="font-mono text-ink">{totalGuides}</span> verified guides
+          </>
+        ) : (
+          <>
+            <span className="font-mono text-ink">{totalGuides}</span> verified guides,
+            and more joining every week
+          </>
+        )}
       </p>
-      <Link
-        to="/match"
-        prefetch="intent"
-        className="mt-3 inline-block rounded-card border border-accent/30 bg-accent/5 px-4 py-2.5 text-sm text-ink hover:bg-accent/10"
-      >
-        <span className="font-medium">Not sure who fits?</span> Answer 5 questions and we'll
-        match you →
-      </Link>
 
-      <Form
-        method="get"
-        className="mt-5 flex flex-wrap gap-2"
-        onChange={(e) => e.currentTarget.requestSubmit()}
+      <BrowseSearch
+        q={filters.q}
+        from={filters.from}
+        to={filters.to}
+        today={today}
+        placeholder="Annapurna, Sherpa, German, Pokhara…"
+        dateLabel="Free between"
       >
-        <select
-          name="tier"
-          defaultValue={filters.fTier}
-          className="rounded-button border border-border px-3 py-2 text-sm"
-        >
+        <label className="flex cursor-pointer items-center gap-2 rounded border border-line bg-card px-3 py-2 text-sm text-ink has-[:checked]:border-moss has-[:checked]:bg-moss/10">
+          <input
+            type="checkbox"
+            name="women"
+            value="1"
+            defaultChecked={filters.fWomen}
+            className="accent-moss"
+          />
+          Women guides
+        </label>
+        <select name="tier" defaultValue={filters.fTier} className={SELECT_CLS}>
           <option value="">Any tier</option>
           <option value="1">✓ Verified</option>
           <option value="2">✓✓ Trusted</option>
           <option value="3">★ Elite</option>
         </select>
-        <select
-          name="lang"
-          defaultValue={filters.fLang}
-          className="rounded-button border border-border px-3 py-2 text-sm"
-        >
+        <select name="lang" defaultValue={filters.fLang} className={SELECT_CLS}>
           <option value="">Any language</option>
           {facets.languages.map((l) => (
             <option key={l} value={l}>
@@ -122,11 +200,7 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
             </option>
           ))}
         </select>
-        <select
-          name="district"
-          defaultValue={filters.fDistrict}
-          className="rounded-button border border-border px-3 py-2 text-sm"
-        >
+        <select name="district" defaultValue={filters.fDistrict} className={SELECT_CLS}>
           <option value="">Any district</option>
           {facets.districts.map((d) => (
             <option key={d} value={d}>
@@ -134,26 +208,51 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
             </option>
           ))}
         </select>
-        <select
-          name="sort"
-          defaultValue={filters.sort}
-          className="rounded-button border border-border px-3 py-2 text-sm"
-        >
+        <select name="sort" defaultValue={filters.sort} className={SELECT_CLS}>
           <option value="recommended">Recommended</option>
           <option value="price">Price</option>
           <option value="experience">Most experienced</option>
         </select>
-        <noscript>
-          <button className="rounded-button bg-primary px-3 py-2 text-sm text-white">
-            Apply
-          </button>
-        </noscript>
-      </Form>
+        {narrowed && (
+          <Link
+            to="/guides"
+            className="self-center px-2 py-2 text-sm text-moss underline underline-offset-4"
+          >
+            Clear
+          </Link>
+        )}
+      </BrowseSearch>
+
+      {filters.from && (
+        <p className="mt-2 text-caption text-muted">
+          Showing guides with open days between {fmtDateShort(filters.from)} and{" "}
+          {fmtDateShort(filters.to)}.
+        </p>
+      )}
+
+      <Link
+        to="/match"
+        prefetch="intent"
+        className="mt-4 inline-block rounded border border-line bg-mist px-4 py-2.5 text-sm text-ink hover:border-sage"
+      >
+        <span className="font-medium">Not sure who fits?</span> Answer 5 questions and we'll
+        match you →
+      </Link>
 
       {guides.length === 0 ? (
-        <p className="mt-10 text-ink-soft">
-          No guides match those filters. Try widening them.
-        </p>
+        <div className="mt-10">
+          <p className="font-display text-xl text-ink">Nobody matches all of that.</p>
+          <p className="mt-1 max-w-[52ch] text-muted">
+            Try dropping the dates, or widening the region — most guides work across
+            more than one.
+          </p>
+          <Link
+            to="/guides"
+            className="mt-3 inline-block rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+          >
+            Show all {totalGuides} guides
+          </Link>
+        </div>
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {guides.map((g) => (

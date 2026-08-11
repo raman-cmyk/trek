@@ -47,3 +47,14 @@ export function fmtMinor(minor: number, code: CurrencyCode): string {
 export function money(usdCents: number, code: CurrencyCode): string {
   return fmtMinor(toMinor(usdCents, code), code);
 }
+
+/**
+ * Same, but rounded to whole units — for browse grids and "from $X" lines.
+ * A converted price carries cents that are an artefact of the FX rate, not a
+ * real number ("€565.03"); printing them makes a grid of cards read as noise.
+ * Exact cents stay where they're the point: breakdowns, checkout, the Split.
+ */
+export function moneyRounded(usdCents: number, code: CurrencyCode): string {
+  const c = CURRENCIES[code];
+  return c.symbol + Math.round(toMinor(usdCents, code) / 100).toLocaleString("en-US");
+}

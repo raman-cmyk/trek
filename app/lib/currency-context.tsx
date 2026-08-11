@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { type CurrencyCode, money, toMinor, fmtMinor } from "~/lib/currency";
+import { type CurrencyCode, money, moneyRounded, toMinor, fmtMinor } from "~/lib/currency";
 
 interface CurrencyCtx {
   code: CurrencyCode;
   setCode: (c: CurrencyCode) => void;
   /** Convert + format a USD-cent amount in the active display currency. */
   m: (usdCents: number) => string;
+  /** Same, rounded to whole units — browse cards and "from" prices only. */
+  mr: (usdCents: number) => string;
   toMinor: (usdCents: number) => number;
   fmtMinor: (minor: number) => string;
 }
@@ -37,6 +39,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     code,
     setCode,
     m: (usdCents) => money(usdCents, code),
+    mr: (usdCents) => moneyRounded(usdCents, code),
     toMinor: (usdCents) => toMinor(usdCents, code),
     fmtMinor: (minor) => fmtMinor(minor, code),
   };
@@ -51,6 +54,7 @@ export function useMoney(): CurrencyCtx {
       code: "USD",
       setCode: () => {},
       m: (c) => money(c, "USD"),
+      mr: (c) => moneyRounded(c, "USD"),
       toMinor: (c) => toMinor(c, "USD"),
       fmtMinor: (mn) => fmtMinor(mn, "USD"),
     }

@@ -1,7 +1,8 @@
--- seed.sql — a browsable fake marketplace: 12 guides, 6 routes (real permit
--- data), 20 offerings (8 treks + 12 experiences), availability, and 10 published
--- reviews. Runs as superuser on `supabase db reset` (bypasses RLS). Keep this in
--- sync so a fresh clone can demo (CLAUDE.md working agreement).
+-- seed.sql — a browsable fake marketplace: 48 guides (12 here, 36 more in
+-- seed_guides_cohort.sql), 6 routes (real permit data), 56 offerings, 270 days
+-- of availability, and 10 published reviews. Runs as superuser on
+-- `supabase db reset` (bypasses RLS). Keep this in sync so a fresh clone can
+-- demo (CLAUDE.md working agreement).
 
 -- ============ AUTH + USERS ============
 -- Fake auth.users so the public.users FK resolves. The empty-string token
@@ -159,7 +160,7 @@ insert into public.offering_photos (offering_id, url, alt_text, source, approved
   ('55555555-5555-5555-5555-000000000004','https://img.example/o/annapurna-1a.jpg','Thorong La pass sign at 5416 metres','guide',true,0),
   ('55555555-5555-5555-5555-000000000011','https://img.example/o/food-pokhara-1a.jpg','A plate of Newari samay baji','guide',true,0);
 
--- ============ AVAILABILITY (open for the next 120 days, a few blocked) ============
+-- ============ AVAILABILITY (open for the next 270 days, a few blocked) ============
 insert into public.availability (guide_id, day, status)
 select g.user_id, d::date, 'open'
 from public.guides g,
@@ -433,13 +434,13 @@ where status in ('docs_pending','confirmed','active','completed') and balance_pa
 
 -- 3) Payment rows so cancellations/refunds and the payments list are real.
 insert into public.payments (booking_id, stripe_payment_intent, type, amount_usd_cents, status)
-select b.id, 'pi_seed_' || substr(b.id::text, 1, 8), 'deposit', b.deposit_usd_cents, 'succeeded'
+select b.id, 'pi_seed_' || replace(b.id::text, '-', ''), 'deposit', b.deposit_usd_cents, 'succeeded'
 from public.bookings b
 where b.deposit_paid_at is not null
   and not exists (select 1 from public.payments p where p.booking_id = b.id and p.type = 'deposit');
 
 insert into public.payments (booking_id, stripe_payment_intent, type, amount_usd_cents, status)
-select b.id, 'pi_seedbal_' || substr(b.id::text, 1, 8), 'balance',
+select b.id, 'pi_seedbal_' || replace(b.id::text, '-', ''), 'balance',
        b.total_usd_cents - b.deposit_usd_cents, 'succeeded'
 from public.bookings b
 where b.balance_paid_at is not null and b.total_usd_cents > b.deposit_usd_cents

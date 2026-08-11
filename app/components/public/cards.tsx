@@ -2,7 +2,6 @@ import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
-import { GuideSplit } from "~/components/Split";
 import { GuideChip, ResponseChip, Stars, TierBadge } from "./bits";
 
 export interface PublicGuide {
@@ -65,7 +64,7 @@ export function GuideCard({
   rating?: { value: number; count: number };
   languages?: string[];
 }) {
-  const { m } = useMoney();
+  const { mr } = useMoney();
   return (
     <Link
       to={`/guides/${guide.slug}`}
@@ -99,19 +98,12 @@ export function GuideCard({
           {guide.day_rate_usd_cents && (
             <span className="text-sm text-muted">
               <span className="font-mono font-medium text-ink">
-                {m(guide.day_rate_usd_cents)}
+                {mr(guide.day_rate_usd_cents)}
               </span>
               /day
             </span>
           )}
         </div>
-        {/* Day-rate Split — 90% to the guide (v3 §0). */}
-        {guide.day_rate_usd_cents ? <GuideSplit guide={90} trek={10} showLabels={false} /> : null}
-        {guide.day_rate_usd_cents ? (
-          <p className="text-[11px] text-muted">
-            <span className="font-mono text-ink">90%</span> goes to {guide.full_name.split(" ")[0]}
-          </p>
-        ) : null}
         {languages && languages.length > 0 && (
           <p className="truncate text-caption text-muted">
             {languages.join(" · ")}
@@ -124,7 +116,7 @@ export function GuideCard({
 }
 
 export function OfferingCard({ offering }: { offering: PublicOffering }) {
-  const { m } = useMoney();
+  const { mr } = useMoney();
   const from = offeringFromUsdCents(offering);
   return (
     <Link
@@ -169,9 +161,11 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         </p>
         {from != null && (
           // Consistent price format site-wide: "from $XX · per person" (§8).
+          // Rounded — converted cents are FX noise in a grid; the breakdown on
+          // the detail page is where "to the cent" is the point.
           <p className="mt-auto pt-1 text-sm text-muted">
             from{" "}
-            <span className="font-mono font-medium text-ink">{m(from)}</span>{" "}
+            <span className="font-mono font-medium text-ink">{mr(from)}</span>{" "}
             · per person
           </p>
         )}

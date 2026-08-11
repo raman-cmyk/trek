@@ -14,6 +14,10 @@ export function AvailabilityCalendar({
   monthsFrom: string;
 }) {
   const open = new Set(openDays);
+  // One class string, used by the grid AND the key, so the swatch can never
+  // drift from the thing it explains.
+  const dayCls = (isOpen: boolean) =>
+    cn("rounded py-1", isOpen ? "bg-accent/15 font-medium text-accent" : "text-ink-soft/40");
   const [y0, m0] = monthsFrom.split("-").map(Number);
   const months = [0, 1].map((offset) => {
     const d = new Date(Date.UTC(y0, m0 - 1 + offset, 1));
@@ -21,7 +25,25 @@ export function AvailabilityCalendar({
   });
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2">
+    <div>
+      {/* One tiny key. Colour alone is never a label — a green square and a
+          grey square mean nothing until you say which is which. */}
+      <ul className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-caption text-muted">
+        <li className="flex items-center gap-2">
+          <span aria-hidden="true" className={cn(dayCls(true), "w-7 text-center text-xs")}>
+            12
+          </span>
+          Free to book
+        </li>
+        <li className="flex items-center gap-2">
+          <span aria-hidden="true" className={cn(dayCls(false), "w-7 text-center text-xs")}>
+            12
+          </span>
+          Already booked, or the guide has blocked it
+        </li>
+      </ul>
+
+      <div className="grid gap-6 sm:grid-cols-2">
       {months.map(({ year, month }) => {
         const first = new Date(Date.UTC(year, month, 1));
         const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -50,14 +72,13 @@ export function AvailabilityCalendar({
                 return (
                   <span
                     key={iso}
-                    className={cn(
-                      "rounded py-1",
-                      isOpen
-                        ? "bg-accent/10 font-medium text-accent"
-                        : "text-ink-soft/40",
-                    )}
+                    title={isOpen ? "Free to book" : "Not available"}
+                    className={dayCls(isOpen)}
                   >
                     {i + 1}
+                    <span className="sr-only">
+                      {isOpen ? " — free to book" : " — not available"}
+                    </span>
                   </span>
                 );
               })}
@@ -65,6 +86,7 @@ export function AvailabilityCalendar({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
