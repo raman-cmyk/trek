@@ -409,11 +409,17 @@ update public.recaps rc set photo_urls = (
   select array_remove(array[o.cover_photo_url, '/img/hero.jpg'], null)
   from public.bookings b join public.offerings o on o.id = b.offering_id
   where b.id = rc.booking_id);
+-- Demo logins. Trekkers get one too: they own every seeded booking, message
+-- and document, so without a password the entire trekker half of the demo —
+-- My Trips, the message threads, checkout, the document vault — is
+-- unreachable and /login has nothing to sign into but a fresh empty account.
+--   guides:   <name>@example.com / TrekDemo2026
+--   trekkers: sarah@example.com etc. / TrekDemo2026
 update auth.users u
 set encrypted_password = extensions.crypt('TrekDemo2026', extensions.gen_salt('bf')),
     email_confirmed_at = coalesce(u.email_confirmed_at, now())
 from public.users pu
-where pu.id = u.id and pu.role = 'guide';
+where pu.id = u.id and pu.role in ('guide', 'trekker');
 
 -- ============ Seed realism fixes (audit P3) ============
 -- 1) Seeded bookings actually hold their calendar days (a guide on a trek must
