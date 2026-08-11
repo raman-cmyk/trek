@@ -52,7 +52,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const isMember = !!me && me.status !== "removed" && me.status !== "declined";
   const isOrganiser = group.organiser_id === user.id;
 
-  const [{ data: messages }, { data: offering }, { data: profiles }] = await Promise.all([
+  const [{ data: messages }, { data: offering }, { data: booking }, { data: guide }, { data: profiles }] =
+    await Promise.all([
     isMember
       ? admin
           .from("trip_group_messages")
@@ -66,6 +67,20 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           .from("public_offerings")
           .select("id, slug, kind, title, days, cover_photo_url, guide_slug, guide_name, guide_avatar_url, route_name, route_slug, max_party")
           .eq("id", group.offering_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    group.booking_id
+      ? admin
+          .from("bookings")
+          .select("id, total_usd_cents, party_size, status, deposit_usd_cents")
+          .eq("id", group.booking_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    group.guide_id
+      ? admin
+          .from("public_guides")
+          .select("user_id, slug, full_name, avatar_url, home_district, only_with_me, day_rate_usd_cents")
+          .eq("user_id", group.guide_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     admin
@@ -86,6 +101,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       })),
       messages: messages ?? [],
       offering: offering ?? null,
+      booking: booking ?? null,
+      guide: guide ?? null,
       me,
       isMember,
       isOrganiser,
@@ -247,15 +264,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function GroupPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { group, members, messages, offering, me, isMember, isOrganiser, userId, inviteUrl } =
+  const { group, members, messages, offering, booking, guide, me, isMember, isOrganiser, userId, inviteUrl } =
     loaderData as any;
   const { m: money } = useMoney();
   const nav = useNavigation();
   const busy = nav.state !== "idle";
-  const purse = groupMoney(members);
+  // On a booked trip the bill is the booking's, and the seats are the party
+  // that was booked — not however many people have signed in so far.
+  const seats = booking ? booking.party_size : undefined;
+  const purse = groupMoney(members, booking?.total_usd_cents, seats);
   const blocked = blockedFromBooking(group, members);
   const active = activeMembers(members);
   const mine = members.find((x: GroupMember) => x.user_id === userId);
+  const organiserName =
+    members.find((x: GroupMember) => x.role === "organiser")?.display_name ?? "the organiser";
   const iOwe = mine ? Math.max(0, mine.share_usd_cents - mine.paid_usd_cents) : 0;
 
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -264,7 +286,17 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [messages.length]);
 
-  if (!isMember) return <JoinInvite group={group} offering={offering} actionData={actionData} busy={busy} />;
+  if (!isMember) {
+    return (
+      <JoinInvite
+        group={group}
+        offering={offering}
+        guide={guide}
+        actionData={actionData}
+        busy={busy}
+      />
+    );
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -283,8 +315,15 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               >
                 {offering.title}
               </Link>
+            ) : guide ? (
+              <>
+                Trek not picked — going with{" "}
+                <Link to={`/guides/${guide.slug}`} className="text-moss underline underline-offset-4">
+                  {guide.full_name}
+                </Link>
+              </>
             ) : (
-              "No trek picked yet"
+              "No trek or guide picked yet"
             )}
             {group.start_date && ` · ${group.start_date}`}
             {` · ${active.length} of ${group.party_target}`}
@@ -340,6 +379,12 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                     style={{ width: `${Math.round(purse.progress * 100)}%` }}
                   />
                 </div>
+                {purse.unclaimedSeats > 0 && (
+                  <p className="mt-2 font-mono text-caption text-muted">
+                    {purse.unclaimedSeats} of {seats} {seats === 1 ? "seat" : "seats"} still
+                    unclaimed — send them the link below.
+                  </p>
+                )}
                 {iOwe > 0 ? (
                   <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md bg-mist p-3">
                     <p className="min-w-0 flex-1 text-sm text-ink">
@@ -349,9 +394,28 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                         <> — {money(mine.paid_usd_cents)} already in</>
                       )}
                     </p>
-                    <span className="rounded border border-line bg-paper px-3 py-2 text-sm text-muted">
-                      Pay {money(iOwe)} — opens when the trip is booked
-                    </span>
+                    {/* Three different truths, and saying the wrong one is
+                        worse than saying nothing: the organiser of a booked
+                        trip has a real deposit to pay right now; the others
+                        cannot pay us directly until per-person charging is
+                        live; and on an unbooked trip nobody owes anything
+                        yet. */}
+                    {booking && isOrganiser ? (
+                      <Link
+                        to={`/checkout/${booking.id}`}
+                        className="shrink-0 rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+                      >
+                        Pay the deposit — {money(booking.deposit_usd_cents)}
+                      </Link>
+                    ) : booking ? (
+                      <span className="shrink-0 rounded border border-line bg-paper px-3 py-2 text-sm text-muted">
+                        Settle {money(iOwe)} with {organiserName}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded border border-line bg-paper px-3 py-2 text-sm text-muted">
+                        Nothing to pay until the guide confirms
+                      </span>
+                    )}
                   </div>
                 ) : (
                   active.length > 0 && (
@@ -543,6 +607,38 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
             </div>
           )}
 
+          {!offering && guide && (
+            <div className="rounded-md border border-line bg-card p-4">
+              <Link to={`/guides/${guide.slug}`} className="flex items-center gap-3">
+                <SmartImage
+                  src={guide.avatar_url ?? ""}
+                  alt={guide.full_name}
+                  width={56}
+                  height={56}
+                  className="h-12 w-12 rounded-full"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-ink">{guide.full_name}</span>
+                  <span className="block font-mono text-caption text-muted">
+                    {guide.home_district}
+                  </span>
+                </span>
+              </Link>
+              {guide.only_with_me && (
+                <p className="mt-3 border-l-2 border-chartreuse pl-2.5 font-display text-sm leading-snug text-ink">
+                  {guide.only_with_me}
+                </p>
+              )}
+              <Form method="post" action="/conversations" className="mt-3">
+                <input type="hidden" name="guide_id" value={guide.user_id} />
+                <input type="hidden" name="next" value={`/groups/${group.slug}`} />
+                <button className="w-full rounded border border-moss px-3 py-2 text-sm font-medium text-moss hover:bg-mist">
+                  Ask {guide.full_name.split(" ")[0]} what he would run
+                </button>
+              </Form>
+            </div>
+          )}
+
           <div className="rounded-md border border-line bg-card p-4">
             <p className="label text-muted">Next</p>
             {group.status === "booked" ? (
@@ -642,11 +738,13 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
 function JoinInvite({
   group,
   offering,
+  guide,
   actionData,
   busy,
 }: {
   group: TripGroup;
   offering: any;
+  guide: any;
   actionData: unknown;
   busy: boolean;
 }) {
@@ -659,6 +757,13 @@ function JoinInvite({
           <>
             {offering.title} — {offering.days} days with {offering.guide_name}
             {group.start_date && `, from ${group.start_date}`}.
+          </>
+        ) : guide ? (
+          <>
+            Going with {guide.full_name}
+            {guide.home_district && ` of ${guide.home_district}`}
+            {group.start_date && `, from ${group.start_date}`} — the trek is
+            still being decided.
           </>
         ) : (
           "The trek is not decided yet — join and help pick it."

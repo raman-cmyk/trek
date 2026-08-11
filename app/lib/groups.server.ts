@@ -4,6 +4,7 @@ import {
   assignShares,
   groupSlug,
   slugTail,
+  splitEvenly,
   type GroupMember,
   type PaymentMode,
   type TripGroup,
@@ -97,8 +98,7 @@ export async function recomputeShares(admin: SupabaseClient, groupId: string) {
     .eq("id", groupId)
     .maybeSingle();
   if (!group) return;
-  // Once booked the shares are a record of what people paid, not a live quote.
-  if (group.status === "booked") return;
+  if (group.status === "cancelled") return;
 
   const { data: rows } = await admin
     .from("trip_group_members")
@@ -109,6 +109,41 @@ export async function recomputeShares(admin: SupabaseClient, groupId: string) {
   const party = Math.max(1, activeMembers(members).length);
 
   let total = 0;
+  // A booked group splits the real bill, not a fresh quote. The booking is
+  // the authority the moment it exists — re-pricing here would let the group
+  // page disagree with the invoice.
+  if (group.booking_id) {
+    const { data: booking } = await admin
+      .from("bookings")
+      .select("total_usd_cents, party_size")
+      .eq("id", group.booking_id)
+      .maybeSingle();
+    if (booking) {
+      // Split across the party that was booked, not across whoever has
+      // joined so far: two people who have claimed their seats on a trip
+      // booked for four owe two shares, not half the trek each.
+      const seats = Math.max(1, booking.party_size);
+      const perSeat = splitEvenly(booking.total_usd_cents, seats);
+      const ordered = activeMembers(members);
+      const shares = new Map<string, number>();
+      for (const m of members) shares.set(m.id, 0);
+      if (group.payment_mode === "organiser") {
+        const org = ordered.find((m) => m.user_id === group.organiser_id) ?? ordered[0];
+        if (org) shares.set(org.id, booking.total_usd_cents);
+      } else {
+        ordered.forEach((m, i) => shares.set(m.id, perSeat[i] ?? perSeat[perSeat.length - 1] ?? 0));
+      }
+      await Promise.all(
+        members.map((m) =>
+          admin
+            .from("trip_group_members")
+            .update({ share_usd_cents: shares.get(m.id) ?? 0 })
+            .eq("id", m.id),
+        ),
+      );
+      return;
+    }
+  }
   if (group.offering_id) {
     const { data: offering } = await admin
       .from("offerings")
@@ -207,5 +242,83 @@ export async function joinGroup(
   if (error) return error.message;
   await systemLine(admin, group.id, user.id, `${displayName} joined.`);
   await recomputeShares(admin, group.id);
+  return null;
+}
+
+
+/**
+ * Turn an accepted booking into a group.
+ *
+ * The other direction from /groups/new: someone books a trek for four in the
+ * ordinary way, the guide accepts, and only then do they need somewhere to
+ * invite the other three, talk, and split the bill. Waiting for the accept is
+ * the point — a group formed around a trip the guide never confirmed is a room
+ * full of people with nothing to plan.
+ *
+ * Solo bookings get nothing. Idempotent: one group per booking, ever.
+ */
+export async function groupForBooking(
+  admin: SupabaseClient,
+  bookingId: string,
+): Promise<string | null> {
+  const { data: booking } = await admin
+    .from("bookings")
+    .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!booking || booking.party_size < 2) return null;
+
+  const { data: existing } = await admin
+    .from("trip_groups")
+    .select("slug")
+    .eq("booking_id", bookingId)
+    .maybeSingle();
+  if (existing) return existing.slug;
+
+  const [{ data: offering }, { data: trekker }] = await Promise.all([
+    admin.from("offerings").select("title").eq("id", booking.offering_id).maybeSingle(),
+    admin.from("users").select("full_name").eq("id", booking.trekker_id).maybeSingle(),
+  ]);
+  const organiserName = trekker?.full_name ?? "The organiser";
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const name = offering?.title ?? "Our trek";
+    const slug = groupSlug(name, slugTail(crypto.getRandomValues(new Uint8Array(8))));
+    const { data: group, error } = await admin
+      .from("trip_groups")
+      .insert({
+        slug,
+        name,
+        organiser_id: booking.trekker_id,
+        offering_id: booking.offering_id,
+        guide_id: booking.guide_id,
+        start_date: booking.start_date,
+        party_target: booking.party_size,
+        payment_mode: "split",
+        status: "booked",
+        booking_id: booking.id,
+      })
+      .select("id, slug")
+      .single();
+    if (error?.code === "23505") continue;
+    if (error) return null; // never let group creation break an accepted booking
+
+    await admin.from("trip_group_members").insert({
+      group_id: group.id,
+      user_id: booking.trekker_id,
+      display_name: organiserName,
+      role: "organiser",
+      status: "joined",
+      joined_at: new Date().toISOString(),
+    });
+    await systemLine(
+      admin,
+      group.id,
+      booking.trekker_id,
+      `The guide confirmed ${booking.start_date} for ${booking.party_size}. Invite the others and split it here.`,
+    );
+    await recomputeShares(admin, group.id);
+    return group.slug;
+  }
   return null;
 }

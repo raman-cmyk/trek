@@ -158,3 +158,25 @@ describe("groupSlug", () => {
     expect(groupSlug("!!!", "abc")).toBe("trip-abc");
   });
 });
+
+describe("groupMoney on a booked trip", () => {
+  const one = [member({ id: "a", role: "organiser", share_usd_cents: 3240, paid_usd_cents: 0 })];
+
+  it("prices off the booking, not the shares that happen to exist", () => {
+    const m = groupMoney(one, 12960, 4);
+    expect(m.totalUsdCents).toBe(12960);
+    expect(m.unclaimedSeats).toBe(3);
+    expect(m.everyoneIn).toBe(false);
+  });
+
+  it("is not 'everyone in' while seats are unclaimed, even if the members paid", () => {
+    const paid = [{ ...one[0], paid_usd_cents: 3240 }];
+    expect(groupMoney(paid, 12960, 4).everyoneIn).toBe(false);
+    expect(groupMoney(paid, 3240, 1).everyoneIn).toBe(true);
+  });
+
+  it("falls back to the share sum when there is no booking", () => {
+    expect(groupMoney(one).totalUsdCents).toBe(3240);
+    expect(groupMoney(one).unclaimedSeats).toBe(0);
+  });
+});

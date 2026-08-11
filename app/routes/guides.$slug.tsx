@@ -250,13 +250,25 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               <ResponseChip mins={guide.median_response_mins} />
             </div>
 
-            <Form method="post" action="/conversations" className="pt-4">
-              <input type="hidden" name="guide_id" value={guide.user_id} />
-              <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
-              <button className="rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine">
-                Message {first} — free
-              </button>
-            </Form>
+            <div className="flex flex-wrap items-center gap-3 pt-4">
+              <Form method="post" action="/conversations">
+                <input type="hidden" name="guide_id" value={guide.user_id} />
+                <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
+                <button className="rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine">
+                  Message {first} — free
+                </button>
+              </Form>
+              {/* Some people arrive having already picked their guide and will
+                  walk whatever he recommends. Let them start the group here,
+                  before they know which trek. */}
+              <Link
+                to={`/groups/new?guide=${guide.user_id}`}
+                prefetch="intent"
+                className="rounded border border-line px-5 py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
+              >
+                Go with {first} as a group
+              </Link>
+            </div>
           </header>
         </div>
 

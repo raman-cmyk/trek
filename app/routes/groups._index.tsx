@@ -38,6 +38,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin.from("public_offerings").select("id, title, days, kind, slug, cover_photo_url"),
   ]);
 
+  // Booked groups price off their booking, not off the shares that happen to
+  // exist — otherwise a trip for four with one member signed in advertises a
+  // quarter of its own cost.
+  const bookingIds = (groups ?? []).map((g) => g.booking_id).filter(Boolean) as string[];
+  const { data: bookings } = bookingIds.length
+    ? await admin
+        .from("bookings")
+        .select("id, total_usd_cents, party_size")
+        .in("id", bookingIds)
+    : { data: [] };
+  const bookingById = new Map((bookings ?? []).map((b) => [b.id, b]));
+
   const byGroup = new Map<string, GroupMember[]>();
   for (const m of (members ?? []) as GroupMember[] & { group_id: string }[]) {
     const list = byGroup.get((m as any).group_id) ?? [];
@@ -50,10 +62,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     userId: user.id,
     groups: (groups ?? []).map((g) => {
       const list = byGroup.get(g.id) ?? [];
+      const bk = g.booking_id ? bookingById.get(g.booking_id) : null;
       return {
         ...g,
         members: list,
-        money: groupMoney(list),
+        money: groupMoney(list, bk?.total_usd_cents, bk?.party_size),
+        seats: bk?.party_size ?? g.party_target,
         offering: g.offering_id ? (offeringById.get(g.offering_id) ?? null) : null,
         youAreInvited: list.some((m) => m.user_id === user.id && m.status === "invited"),
       };
@@ -140,7 +154,7 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
                     </span>
                   </div>
                   <p className="mt-3 font-mono text-caption text-muted">
-                    {joined}/{g.party_target} in
+                    {joined}/{g.seats} in
                     {g.money.totalUsdCents > 0 && (
                       <>
                         {" · "}

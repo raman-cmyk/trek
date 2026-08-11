@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Form, Link, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/groups.new";
 import { pageMeta } from "~/lib/seo";
@@ -24,17 +25,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, { headers });
   }
   const client = createPublicClient(env);
-  const { data: offerings } = await client
-    .from("public_offerings")
-    .select(
-      "id, slug, kind, title, days, price_usd_cents, price_breakdown, max_party, guide_id, guide_name, route_name",
-    )
-    .order("title");
+  const [{ data: offerings }, { data: guides }] = await Promise.all([
+    client
+      .from("public_offerings")
+      .select(
+        "id, slug, kind, title, days, price_usd_cents, price_breakdown, max_party, guide_id, guide_name, route_name",
+      )
+      .order("title"),
+    client
+      .from("public_guides")
+      .select("user_id, slug, full_name, home_district, day_rate_usd_cents")
+      .order("full_name"),
+  ]);
 
   const profile = await getProfile(env, user.id);
   return {
     offerings: offerings ?? [],
+    guides: guides ?? [],
     preselect: url.searchParams.get("offering") ?? "",
+    preselectGuide: url.searchParams.get("guide") ?? "",
     suggestedName: profile?.full_name ? `${profile.full_name.split(" ")[0]}'s trip` : "Our trip",
   };
 }
@@ -61,7 +70,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const admin = createAdminClient(env);
-  let guideId: string | null = null;
+  // You can start from either end: pick a trek (which carries its guide), or
+  // pick the person and work out the trek later. The trek wins when both are
+  // given, because an offering belongs to exactly one guide and a mismatch
+  // would put a stranger's name on the page.
+  let guideId: string | null = String(form.get("guide_id") ?? "") || null;
   if (offeringId) {
     const { data: o } = await admin
       .from("offerings")
@@ -69,6 +82,16 @@ export async function action({ request, context }: Route.ActionArgs) {
       .eq("id", offeringId)
       .maybeSingle();
     guideId = o?.guide_id ?? null;
+  } else if (guideId) {
+    const { data: g } = await admin
+      .from("guides")
+      .select("user_id")
+      .eq("user_id", guideId)
+      .eq("status", "verified")
+      .maybeSingle();
+    if (!g) {
+      return data({ error: "That guide isn't available." }, { status: 400, headers });
+    }
   }
 
   const profile = await getProfile(env, user.id);
@@ -90,9 +113,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function NewGroup({ loaderData, actionData }: Route.ComponentProps) {
-  const { offerings, preselect, suggestedName } = loaderData as any;
+  const { offerings, guides, preselect, preselectGuide, suggestedName } = loaderData as any;
   const { mr } = useMoney();
   const nav = useNavigation();
+  // Which end you are starting from. Picking a trek fixes the guide (an
+  // offering belongs to one person), so the two are alternatives, not a pair
+  // of independent dropdowns that can contradict each other.
+  const [start, setStart] = useState<"trek" | "guide" | "later">(
+    preselect ? "trek" : preselectGuide ? "guide" : "later",
+  );
+  const [guideId, setGuideId] = useState<string>(preselectGuide);
+  const guideTreks = guideId
+    ? offerings.filter((o: any) => o.guide_id === guideId)
+    : offerings;
   const field =
     "mt-1 w-full rounded border border-line bg-paper px-3 py-2.5 text-base text-ink outline-none focus:border-moss";
 
@@ -125,23 +158,86 @@ export default function NewGroup({ loaderData, actionData }: Route.ComponentProp
           />
         </label>
 
-        <label className="block text-sm text-ink-soft">
-          Which trek — you can decide this later
-          <select name="offering_id" defaultValue={preselect} className={field}>
-            <option value="">— not decided yet —</option>
-            {offerings.map((o: any) => {
-              const from = o.price_breakdown?.guide_fee_total_usd_cents
-                ? fromPerPersonUsdCents(o.price_breakdown as PriceBreakdown, o.max_party ?? undefined)
-                : o.price_usd_cents;
-              return (
-                <option key={o.id} value={o.id}>
-                  {o.title} · {o.days} days · with {o.guide_name}
-                  {from ? ` · from ${mr(from)} pp` : ""}
+        {/* Start from either end. Some people know the walk and want to see
+            who runs it; some have already found their guide and will take
+            whatever he recommends. Both are how this actually happens. */}
+        <fieldset>
+          <legend className="text-sm text-ink-soft">Where you are starting from</legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(
+              [
+                ["trek", "I know the trek"],
+                ["guide", "I know the guide"],
+                ["later", "Neither yet"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStart(value)}
+                aria-pressed={start === value}
+                className={
+                  "rounded-pill px-3.5 py-1.5 text-sm transition-colors " +
+                  (start === value
+                    ? "bg-pine text-paper"
+                    : "border border-line bg-card text-ink hover:border-sage")
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        {start === "guide" && (
+          <label className="block text-sm text-ink-soft">
+            Which guide
+            <select
+              name="guide_id"
+              value={guideId}
+              onChange={(e) => setGuideId(e.target.value)}
+              className={field}
+              required
+            >
+              <option value="">— pick a guide —</option>
+              {guides.map((g: any) => (
+                <option key={g.user_id} value={g.user_id}>
+                  {g.full_name}
+                  {g.home_district ? ` · ${g.home_district}` : ""}
+                  {g.day_rate_usd_cents ? ` · ${mr(g.day_rate_usd_cents)}/day` : ""}
                 </option>
-              );
-            })}
-          </select>
-        </label>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {start !== "later" && (
+          <label className="block text-sm text-ink-soft">
+            {start === "guide"
+              ? "One of their trips — or leave it and decide together"
+              : "Which trek"}
+            <select name="offering_id" defaultValue={preselect} className={field} key={guideId}>
+              <option value="">— not decided yet —</option>
+              {(start === "guide" ? guideTreks : offerings).map((o: any) => {
+                const from = o.price_breakdown?.guide_fee_total_usd_cents
+                  ? fromPerPersonUsdCents(o.price_breakdown as PriceBreakdown, o.max_party ?? undefined)
+                  : o.price_usd_cents;
+                return (
+                  <option key={o.id} value={o.id}>
+                    {o.title} · {o.days} days · with {o.guide_name}
+                    {from ? ` · from ${mr(from)} pp` : ""}
+                  </option>
+                );
+              })}
+            </select>
+            {start === "guide" && guideId && guideTreks.length === 0 && (
+              <span className="mt-1 block text-caption text-muted">
+                They have no packaged trips listed — start the group and ask
+                them what they would run.
+              </span>
+            )}
+          </label>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm text-ink-soft">

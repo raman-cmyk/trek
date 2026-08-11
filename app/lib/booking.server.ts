@@ -176,6 +176,19 @@ export async function acceptEnquiry(
   } catch {
     // swallow — ops can regenerate from the booking detail if needed
   }
+
+  // A trip for two or more gets a group: somewhere to invite the others, talk,
+  // and split the bill. Only now that the guide has confirmed — a group around
+  // an unconfirmed trip is a room full of people with nothing to plan. Also
+  // best-effort: the booking is the thing that must not fail.
+  if (enq.party_size > 1) {
+    try {
+      const { groupForBooking } = await import("~/lib/groups.server");
+      await groupForBooking(admin, booking.id);
+    } catch {
+      // swallow — the trekker can still make one by hand from /groups
+    }
+  }
   return booking.id;
 }
 

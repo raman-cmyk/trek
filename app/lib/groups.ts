@@ -96,11 +96,25 @@ export interface GroupMoney {
   /** 0–1, for the progress bar. 1 when there is nothing to pay. */
   progress: number;
   everyoneIn: boolean;
+  /** Seats on a booked trip that nobody has claimed yet. */
+  unclaimedSeats: number;
 }
 
-export function groupMoney(members: GroupMember[]): GroupMoney {
+/**
+ * @param tripTotalUsdCents The booked bill, when there is one. Without it the
+ *   total is the sum of the shares that exist — which understates a booked
+ *   trip whose other seats nobody has claimed yet. A trip booked for four at
+ *   $129.60 costs $129.60 whether or not the other three have signed in, and
+ *   showing "$0 of $32" makes it look like a different, cheaper trip.
+ */
+export function groupMoney(
+  members: GroupMember[],
+  tripTotalUsdCents?: number,
+  seats?: number,
+): GroupMoney {
   const active = activeMembers(members);
-  const total = active.reduce((n, m) => n + m.share_usd_cents, 0);
+  const shareSum = active.reduce((n, m) => n + m.share_usd_cents, 0);
+  const total = tripTotalUsdCents ?? shareSum;
   // A member cannot pay more than their share into the group's total — an
   // overpayment is a refund question, not a reason to show 103% collected.
   const paid = active.reduce((n, m) => n + Math.min(m.paid_usd_cents, m.share_usd_cents), 0);
@@ -111,7 +125,12 @@ export function groupMoney(members: GroupMember[]): GroupMoney {
     outstandingUsdCents: Math.max(0, total - paid),
     owing,
     progress: total === 0 ? 1 : Math.min(1, paid / total),
-    everyoneIn: owing.length === 0 && active.length > 0,
+    // Everyone who is on the list has paid, AND every seat is on the list.
+    // Without the second half a trip booked for four is "fully paid" the
+    // moment its single member settles up.
+    everyoneIn:
+      owing.length === 0 && active.length > 0 && (seats ?? active.length) <= active.length,
+    unclaimedSeats: Math.max(0, (seats ?? active.length) - active.length),
   };
 }
 

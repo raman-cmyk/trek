@@ -72,9 +72,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     daysUntilStart: daysUntilStart(b.start_date, today),
     reason: "trekker",
   });
+  // A trip for more than one has a group: where the others get invited, the
+  // conversation lives, and the bill splits. Created when the guide accepted.
+  const { data: group } = await admin
+    .from("trip_groups")
+    .select("slug, name, party_target")
+    .eq("booking_id", b.id)
+    .maybeSingle();
+
   return data(
     {
       booking: b,
+      group: group ?? null,
       payments: payments ?? [],
       documents: docs ?? [],
       permits: permits ?? [],
@@ -188,7 +197,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, paidSoFar, refundPreview } =
+  const { booking: b, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -210,12 +219,24 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         {b.party_size}p
       </p>
       {!cancelled && (
-        <Link
-          to={`/messages/${b.id}`}
-          className="mt-3 inline-block rounded-button border border-border px-3 py-1.5 text-sm text-primary"
-        >
-          Message your guide
-        </Link>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            to={`/messages/${b.id}`}
+            className="rounded-button border border-border px-3 py-1.5 text-sm text-primary"
+          >
+            Message your guide
+          </Link>
+          {/* The group is where the other people on this trip live: invites,
+              their chat, and who has paid which share. */}
+          {group && (
+            <Link
+              to={`/groups/${group.slug}`}
+              className="rounded-button border border-border px-3 py-1.5 text-sm text-primary"
+            >
+              Your group — {b.party_size} people, split the cost →
+            </Link>
+          )}
+        </div>
       )}
 
       {actionData && "ok" in actionData && actionData.ok && (
