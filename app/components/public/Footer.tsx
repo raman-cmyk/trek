@@ -61,7 +61,7 @@ export function Footer({
                 </Link>
               </li>
               <li>
-                <Link to="/stories" className="hover:text-fern">
+                <Link to="/journals" className="hover:text-fern">
                   Trek stories
                 </Link>
               </li>

@@ -12,6 +12,11 @@ export async function loader({ context }: Route.LoaderArgs) {
       client.from("public_offerings").select("slug, kind"),
       client.from("routes").select("slug"),
     ]);
+  // Journals are the freshness engine — new dated writing on every route.
+  const { data: journals } = await client
+    .from("public_journals")
+    .select("slug")
+    .limit(1000);
   // Public recaps are indexable long-tail content with OG images.
   const { data: recaps } = await client
     .from("recaps")
@@ -31,6 +36,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     "/fund",
     "/hosts",
     "/stories",
+    "/journals",
     "/safety",
     ...(guides ?? []).map((g) => `/guides/${g.slug}`),
     ...(offerings ?? []).map(
@@ -38,6 +44,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     ),
     ...(routes ?? []).map((r) => `/routes/${r.slug}`),
     ...(recaps ?? []).map((r) => `/recap/${r.slug}`),
+    ...(journals ?? []).map((j) => `/journals/${j.slug}`),
   ];
 
   const body =

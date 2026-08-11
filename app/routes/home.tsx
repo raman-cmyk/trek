@@ -16,6 +16,8 @@ import { INTENTS, REGIONS, matchesKeywords } from "~/lib/intents";
 import { addDays } from "~/lib/browse";
 import { fmtDate, fmtDateShort } from "~/lib/format";
 import { openRunsByGuide } from "~/lib/browse.server";
+import { JournalCard } from "~/components/public/JournalCard";
+import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -43,8 +45,14 @@ export async function loader({ context }: Route.LoaderArgs) {
   const weekEnd = addDays(today, 7);
   const yearStart = today.slice(0, 4) + "-01-01";
 
-  const [{ data: guides }, { data: offerings }, { data: routes }, { data: reviews }, fund] =
-    await Promise.all([
+  const [
+    { data: guides },
+    { data: offerings },
+    { data: routes },
+    { data: reviews },
+    fund,
+    { data: journals },
+  ] = await Promise.all([
       // The whole roster: this page is about scale, and 48 rows of text is
       // cheaper than six round trips for six different slices of it.
       client.from("public_guides").select(GUIDE_COLS),
@@ -61,6 +69,12 @@ export async function loader({ context }: Route.LoaderArgs) {
         .limit(4),
       // Same helper /fund uses — the two numbers must never disagree.
       fundCollected(createAdminClient(env), { sinceStartDate: yearStart }),
+      // Proof of life: the most recent treks anyone actually walked.
+      client
+        .from("public_journals")
+        .select(JOURNAL_COLS)
+        .order("start_date", { ascending: false })
+        .limit(3),
     ]);
 
   const all = (guides ?? []) as HomeGuide[];
@@ -159,6 +173,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     langMap,
     splitOffering,
     review: (reviews ?? [])[0] ?? null,
+    journals: (journals ?? []) as PublicJournal[],
     stats: {
       guides: all.length,
       districts: pins.length,
@@ -189,6 +204,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     langMap,
     splitOffering,
     review,
+    journals,
     stats,
     suggestions,
     today,
@@ -310,6 +326,38 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           />
         ))}
       </div>
+
+      {/* Latest from the trail — the proof-of-life feed. Real treks, dated,
+          written by the guide who led them. Nothing on this page argues the
+          product harder than three of these. */}
+      {journals.length > 0 && (
+        <section className="mx-auto max-w-6xl px-4 py-16">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div>
+              <p className="label text-muted">Proof of life</p>
+              <h2 className="mt-2 max-w-[16ch] font-display text-3xl text-ink sm:text-4xl">
+                <span className="wt-heavy">Latest from the trail.</span>
+              </h2>
+            </div>
+            <Link
+              to="/journals"
+              prefetch="intent"
+              className="text-sm font-medium text-moss hover:underline"
+            >
+              Every journal →
+            </Link>
+          </div>
+          <p className="mt-2 max-w-[54ch] text-muted">
+            Every trek gets written up by the guide who led it — the teahouses,
+            the weather, and the days it went wrong.
+          </p>
+          <div className="mt-6 grid gap-5 sm:grid-cols-3">
+            {journals.map((j: PublicJournal) => (
+              <JournalCard key={j.id} journal={j} showGuide />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 6 — Regions, as doorways. */}
       <section className="mx-auto max-w-6xl px-4 py-16">

@@ -15,6 +15,9 @@ export default [
     route("experiences", "routes/experiences.tsx"),
     route("experiences/:slug", "routes/experiences.$slug.tsx"),
     route("treks/:slug", "routes/treks.$slug.tsx"),
+    // Trek Journals — one album per completed trek. The unit of proof.
+    route("journals", "routes/journals._index.tsx"),
+    route("journals/:slug", "routes/journals.$slug.tsx"),
     route("routes", "routes/routes._index.tsx"),
     route("routes/:slug", "routes/routes.$slug.tsx"),
     route("transparency", "routes/transparency.tsx"),
@@ -48,6 +51,8 @@ export default [
     route("g/calendar", "routes/g.calendar.tsx"),
     route("g/earnings", "routes/g.earnings.tsx"),
     route("g/profile", "routes/g.profile.tsx"),
+    route("g/journals", "routes/g.journals.tsx"),
+    route("g/journals/:id", "routes/g.journals.$id.tsx"),
   ]),
 
   // Immersive full-screen trekker onboarding (no header/footer chrome).
@@ -73,6 +78,8 @@ export default [
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
     route("ops/moderation", "routes/ops.moderation.tsx"),
+    route("ops/journals", "routes/ops.journals.tsx"),
+    route("ops/journals/:id", "routes/ops.journals.$id.tsx"),
     route("ops/contracts", "routes/ops.contracts.tsx"),
   ]),
 
@@ -84,6 +91,7 @@ export default [
   route("pdf/contract/:bookingId", "routes/pdf.contract.$bookingId.tsx"),
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
+  route("api/journal-photo", "routes/api.journal-photo.tsx"),
 
   // Recap OG image (binary resource route — outside the layout).
   route("recap/:slug/og", "routes/recap.$slug.og.tsx"),

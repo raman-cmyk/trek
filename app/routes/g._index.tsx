@@ -233,6 +233,17 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         <Link to="/g/earnings" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
           Earnings →
         </Link>
+        {/* Journals are how a guide wins the next booking, so they sit with
+            the money links, not buried in profile settings. */}
+        <Link
+          to="/g/journals"
+          className="col-span-2 rounded-card border border-moss/40 bg-mist p-4 text-sm font-medium"
+        >
+          Write up a trek →
+          <span className="mt-0.5 block text-xs font-normal text-ink-soft">
+            Your photos and your words. This is what makes people pick you.
+          </span>
+        </Link>
       </div>
       <Link to="/g/profile" className="block text-center text-sm text-primary">
         View my profile
