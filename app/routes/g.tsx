@@ -5,6 +5,10 @@ import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { countUnread } from "~/lib/unread.server";
 
+export function meta() {
+  return [{ title: "Guide dashboard" }, { name: "robots", content: "noindex" }];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, profile, admin, headers } = await requireUser(request, env, "guide");

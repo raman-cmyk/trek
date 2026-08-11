@@ -83,7 +83,9 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="font-display text-3xl text-ink">Find your guide</h1>
-      <p className="mt-1 text-ink-soft">{guides.length} verified guides</p>
+      <p className="mt-1 text-ink-soft">
+        {guides.length} verified guide{guides.length === 1 ? "" : "s"}
+      </p>
       <Link
         to="/match"
         prefetch="intent"

@@ -9,6 +9,7 @@ import { Carousel, type Photo } from "~/components/public/Carousel";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
+import { VoiceIntro } from "~/components/public/VoiceIntro";
 
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -153,6 +154,10 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               </button>
             </Form>
           </header>
+
+          {guide.voice_intro_url && (
+            <VoiceIntro src={guide.voice_intro_url} name={guide.full_name} />
+          )}
 
           {guide.bio && (
             <section>

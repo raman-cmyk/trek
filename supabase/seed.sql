@@ -444,3 +444,5 @@ select b.id, 'pi_seedbal_' || substr(b.id::text, 1, 8), 'balance',
 from public.bookings b
 where b.balance_paid_at is not null and b.total_usd_cents > b.deposit_usd_cents
   and not exists (select 1 from public.payments p where p.booking_id = b.id and p.type = 'balance');
+update public.guides set voice_intro_url = '/img/voice/' || slug || '.wav'
+where slug in ('pemba-sherpa','sunita-gurung','mingma-sherpa');

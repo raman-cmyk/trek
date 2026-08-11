@@ -12,14 +12,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     client.from("routes").select("slug, name").order("name"),
     getSessionUser(request, env),
   ]);
-  // Reflect the signed-in customer in the header (trips + sign out).
-  let account: { firstName: string; role: string } | null = null;
+  // Reflect the signed-in customer in the header (trips + sign out + unread).
+  let account: { firstName: string; role: string; unread: number } | null = null;
   if (user) {
     const profile = await getProfile(env, user.id);
     if (profile) {
+      const { createAdminClient } = await import("~/lib/supabase.server");
+      const { countUnread } = await import("~/lib/unread.server");
+      const { unreadTotal } = await countUnread(createAdminClient(env), user.id);
       account = {
         firstName: (profile.full_name ?? "").split(" ")[0] || "You",
         role: profile.role,
+        unread: unreadTotal,
       };
     }
   }

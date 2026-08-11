@@ -85,7 +85,7 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-5xl px-4 py-10">
       <p className="label text-muted">Routes</p>
       <h1 className="mt-2 font-display text-display-l text-ink">
-        Six routes. Zero brochure clichés.
+        {cards.length} routes. Zero brochure clichés.
       </h1>
       <p className="mt-3 max-w-[62ch] text-ink-soft">
         Every route we run, with honest difficulty, live permit costs, and the

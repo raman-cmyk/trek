@@ -7,14 +7,14 @@ import { DISPLAY_CURRENCIES, type CurrencyCode } from "~/lib/currency";
 export function Header({
   account,
 }: {
-  account?: { firstName: string; role: string } | null;
+  account?: { firstName: string; role: string; unread?: number } | null;
 }) {
   const { code, setCode } = useMoney();
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <Link to="/" className="font-display text-xl text-ink">
-          Trek<span className="text-primary">.</span>
+          Trek<span className="text-moss">.</span>
         </Link>
         <nav className="flex flex-wrap items-center justify-end gap-1 text-sm">
           <select
@@ -63,12 +63,20 @@ export function Header({
                 prefetch="intent"
                 className={({ isActive }) =>
                   cn(
-                    "rounded-pill px-3 py-1.5",
+                    "relative rounded-pill px-3 py-1.5",
                     isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
                   )
                 }
               >
                 Messages
+                {!!account.unread && (
+                  <span
+                    aria-label={`${account.unread} unread`}
+                    className="absolute -right-0.5 top-0.5 min-w-4 rounded-full bg-moss px-1 text-center font-mono text-[10px] leading-4 text-white"
+                  >
+                    {account.unread}
+                  </span>
+                )}
               </NavLink>
               {(() => {
                 const dash =

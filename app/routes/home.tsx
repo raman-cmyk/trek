@@ -121,7 +121,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 prefetch="intent"
                 className="font-medium text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"
               >
-                or meet all {guides.length ? "twelve" : "our"} guides →
+                or meet all our guides →
               </Link>
             </div>
           </div>

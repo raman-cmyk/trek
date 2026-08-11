@@ -12,6 +12,12 @@ export async function loader({ context }: Route.LoaderArgs) {
       client.from("public_offerings").select("slug, kind"),
       client.from("routes").select("slug"),
     ]);
+  // Public recaps are indexable long-tail content with OG images.
+  const { data: recaps } = await client
+    .from("recaps")
+    .select("slug")
+    .eq("visible", true)
+    .limit(500);
 
   const paths = [
     "/",
@@ -31,6 +37,7 @@ export async function loader({ context }: Route.LoaderArgs) {
       (o) => `/${o.kind === "trek" ? "treks" : "experiences"}/${o.slug}`,
     ),
     ...(routes ?? []).map((r) => `/routes/${r.slug}`),
+    ...(recaps ?? []).map((r) => `/recap/${r.slug}`),
   ];
 
   const body =
