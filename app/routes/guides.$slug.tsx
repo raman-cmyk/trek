@@ -15,6 +15,7 @@ import { SmartImage } from "~/components/SmartImage";
 import { JOURNAL_COLS, journalMonth, type PublicJournal } from "~/lib/journals";
 import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
+import { useLightbox } from "~/components/public/Lightbox";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Guide not found" }];
@@ -112,6 +113,53 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   const js = (journals ?? []) as PublicJournal[];
 
+  // The gallery: this guide's own photographs, then every frame from the treks
+  // they have written up. The journal ones carry which trek they came from, so
+  // a picture in the viewer is never an anonymous stock-looking image — it is
+  // "Day 9, Manaslu in late October", with somewhere to go.
+  const { data: journalEntries } = js.length
+    ? await client
+        .from("public_journal_entries")
+        .select("journal_id, day_no, title, photos")
+        .in(
+          "journal_id",
+          js.map((j) => j.id),
+        )
+        .order("day_no")
+    : { data: [] as any[] };
+
+  const journalBySlug = new Map(js.map((j) => [j.id, j]));
+  const seenUrl = new Set<string>();
+  const gallery: Array<{
+    url: string;
+    alt?: string;
+    caption?: string;
+    day?: number;
+    href?: string;
+  }> = [];
+
+  for (const p of (photos ?? []) as any[]) {
+    if (p.kind === "headshot" || !p.url || seenUrl.has(p.url)) continue;
+    seenUrl.add(p.url);
+    gallery.push({ url: p.url, alt: p.alt_text ?? "", caption: p.alt_text ?? undefined });
+  }
+  for (const e of (journalEntries ?? []) as any[]) {
+    const j = journalBySlug.get(e.journal_id);
+    for (const m of (e.photos ?? []) as any[]) {
+      // Video needs a poster to sit in a grid of stills; skip it here rather
+      // than render a black square. The journal page plays it properly.
+      if (!m?.url || m.kind === "video" || seenUrl.has(m.url)) continue;
+      seenUrl.add(m.url);
+      gallery.push({
+        url: m.url,
+        alt: m.alt ?? e.title ?? "",
+        caption: j ? `${e.title} — ${j.title}` : e.title,
+        day: e.day_no,
+        href: j ? `/journals/${j.slug}#day-${e.day_no}` : undefined,
+      });
+    }
+  }
+
   // Routes he actually runs, with how many times he has led each — counted
   // from journals (real trips) and topped up from what he currently offers.
   const routeCounts = new Map<string, { slug: string; name: string; count: number }>();
@@ -167,6 +215,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     languages: (langs ?? []) as Array<{ language: string; proficiency: string }>,
     offerings: (offerings ?? []) as PublicOffering[],
     journals: js,
+    gallery,
     routeChips: [...routeCounts.values()].sort((a, b) => b.count - a.count),
     openDays: (avail ?? []).map((a: { day: string }) => a.day),
     reviews: reviews ?? [],
@@ -196,6 +245,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   const {
     guide,
     photos,
+    gallery,
     languages,
     offerings,
     journals,
@@ -307,6 +357,9 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
       <section id="journals" className="mx-auto mt-12 max-w-6xl scroll-mt-6 px-4">
         <JournalWall journals={journals} guideName={guide.full_name} guideId={guide.user_id} slug={guide.slug} />
       </section>
+
+      {/* ── 2b. The gallery ────────────────────────────────────────────── */}
+      <GuideGallery photos={gallery} first={first} />
 
       <div className="mx-auto max-w-5xl px-4">
         {/* ── 3. Routes he runs ─────────────────────────────────────────── */}
@@ -671,5 +724,85 @@ function PorterIcon() {
       <path d="M9 9V6a3 3 0 0 1 6 0v3" />
       <path d="M9 14h6" />
     </svg>
+  );
+}
+
+
+/**
+ * Everything this guide has photographed.
+ *
+ * The guide_photos rows were being fetched and then used only to find a
+ * headshot — the rest were loaded on every profile view and never rendered.
+ * Together with every frame from their journals that is a real body of work
+ * sitting unused, and it is the most direct answer a profile can give to "what
+ * would it actually be like".
+ *
+ * A masonry-ish grid rather than a tidy row of squares: uniform tiles turn
+ * photographs into thumbnails, and every fourth frame breaking wide is what
+ * keeps it reading as somebody's pictures.
+ */
+function GuideGallery({
+  photos,
+  first,
+}: {
+  photos: Array<{ url: string; alt?: string; caption?: string; day?: number; href?: string }>;
+  first: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const lightbox = useLightbox(photos.map((p) => ({ ...p, dayTitle: p.caption })));
+  if (photos.length < 4) return null;
+
+  const shown = showAll ? photos : photos.slice(0, 12);
+
+  return (
+    <section id="gallery" className="mx-auto mt-14 max-w-6xl scroll-mt-6 px-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="font-display text-2xl text-ink">{first}&rsquo;s photographs</h2>
+        <p className="font-mono text-caption text-muted">
+          {photos.length} from treks he led
+        </p>
+      </div>
+
+      {/* grid-flow-dense: the wide and tall tiles do not tessellate on their
+          own, and without back-filling the row leaves holes that read as
+          missing photographs rather than as a layout. */}
+      <ul className="mt-4 grid auto-rows-[9rem] grid-flow-dense grid-cols-2 gap-2 sm:auto-rows-[11rem] sm:grid-cols-4 sm:gap-3">
+        {shown.map((p, i) => (
+          <li
+            key={p.url + i}
+            // Every fourth frame takes two columns. Regular enough to be a
+            // rhythm, irregular enough not to be a grid of thumbnails.
+            className={cn(i % 7 === 0 && "col-span-2", i % 7 === 3 && "row-span-2")}
+          >
+            <button
+              type="button"
+              onClick={() => lightbox.open(i)}
+              className="group block h-full w-full overflow-hidden rounded-sm bg-mist"
+              aria-label={p.caption ? `Open: ${p.caption}` : "Open photo"}
+            >
+              <SmartImage
+                src={p.url}
+                alt={p.alt ?? ""}
+                width={800}
+                height={600}
+                cover
+                className="h-full w-full transition-transform duration-slow ease-out-soft group-hover:scale-[1.03]"
+              />
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {!showAll && photos.length > shown.length && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="mt-4 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
+        >
+          Show the other <span className="font-mono">{photos.length - shown.length}</span>
+        </button>
+      )}
+      {lightbox.node}
+    </section>
   );
 }
