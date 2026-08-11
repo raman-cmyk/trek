@@ -166,3 +166,30 @@ agreement). Newest first.
   the no-Node-SDK, Workers-friendly stance; HMAC + constant-time compare +
   timestamp tolerance is the whole contract and is unit-tested with an injected
   clock.
+
+## only_with_me is published unedited (2026-08-11)
+
+Guides write their own `only_with_me` line and it goes live with no ops
+review and no copy pass. The action validates length and nothing else.
+
+The obvious objection is quality control — some lines will be weak, and some
+will have imperfect English. Accepted deliberately: the entire positioning is
+"you are booking a person, not an agency", and second-language English from a
+named guide is the strongest available evidence that this is true. A queue
+between a guide and their own sentence would also break rule 8 (max two taps)
+and would, in practice, mean the founder rewriting 48 sentences into one
+voice — which is exactly the agency product we are replacing.
+
+If abuse appears, the answer is a report path and ops takedown, not
+pre-moderation.
+
+## Map geometry lives in code, not PostGIS (2026-08-11)
+
+`app/lib/geo.ts` holds district centroids and simplified route lines as
+constants. They are approximate by design (a pin means "works out of
+Solukhumbu", not "lives here"), they change roughly never, and shipping them
+in the bundle means the homepage map renders without a round trip.
+
+Real GPX tracks — actual trekked lines pulled off recaps — are a different
+thing and would belong in the database. Basemap is OpenStreetMap raster;
+swapping in Baato when the founder has a key is one line in `GuideMap.tsx`.

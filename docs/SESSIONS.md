@@ -834,3 +834,61 @@ Live: https://trek.raman-7d9.workers.dev
 **🙋 Founder still needed:** real domain + Resend key (email is stubbed),
 real Stripe keys (payments are mock; off-session charging needs saved
 payment methods), and a real ops phone number for the SOS card.
+
+---
+
+## Session — only_with_me, and a marketplace homepage (2026-08-11)
+
+**`only_with_me`** (migration 0030). One concrete thing you get with this
+guide and nobody else, first person, under about twelve words. It is not a
+second hook_line: hook_line is a description of a guide, this is the guide
+talking. It leads the guide card as a pull-quote and sits under the name on
+the profile, styled as a quote with "— Chhiring's words, printed as written"
+beneath it. Guides write it themselves in /g/profile — type, save, live. The
+action checks length and nothing else; see docs/DECISIONS.md for why we
+publish it unedited. Seeded for all 48.
+
+**The homepage now leads with search.** Where · when · how many, in the hero,
+as a plain GET to /experiences — no JavaScript required, every result a
+shareable URL. Party size became a real filter (min_party/max_party), so
+"8 people" hides the trips that cannot take 8.
+
+Below it: a MapLibre map of guides pinned by district with routes drawn and a
+map/list toggle; six browse-by-intent rows, each literally `/guides?intent=…`
+so a row can never disagree with its own "see all"; a "free this week" row off
+the availability calendar; regions as doorways; and a mono band of real
+numbers (48 guides · 24 districts · 1,128 treks led · $435 to The Fund this
+year · $0 taken on rescue flights).
+
+Hero contrast was measured rather than eyeballed — sampling the brightest
+pixel behind the headline at six widths. The single scrim was 3.1:1 at 390px.
+Two full-bleed scrims now hold ≥5.5:1 for the headline and ≥9:1 for the
+paragraph from 360 to 1920.
+
+**Two real bugs surfaced and fixed:**
+
+- *Nested `<a>` broke hydration site-wide.* TierBadge and GuideChip both
+  render links and both sit inside cards that are themselves links. Browsers
+  un-nest invalid anchors while parsing, so React hydrated against a DOM it
+  never rendered and threw on every page carrying a card. Both take a `static`
+  prop now; six pages went from one hydration error to zero.
+- *`guide_languages` was invisible to the public* (migration 0031) — RLS on,
+  one owner/ops policy, no public read, the same shape as the 0016
+  guide_photos bug. Anonymous visitors had received zero rows since 0001,
+  which silently broke the language line on every card, the "Any language"
+  filter (it matched nothing, ever), the profile languages row, and the
+  matcher's language score.
+
+94 tests green. Migrations 0030–0031 and the promise seed applied to cloud and
+local. Live: https://trek.raman-7d9.workers.dev
+
+*Verification note:* Chromium cannot reach the live URL from the build sandbox
+(the proxy is curl-only), so browser-level checks — map markers and popups,
+the map/list toggle, hydration, contrast sampling — ran locally against the
+same code and data. The deployed site was verified over curl: every row,
+stat, promise line and filter count above is from the live HTML.
+
+**🙋 Founder still needed:** real domain + Resend key (email is stubbed), real
+Stripe keys (payments are mock), a real ops phone number for the SOS card,
+and — new — a Baato API key if you want Nepali-language map tiles instead of
+OpenStreetMap.

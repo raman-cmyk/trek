@@ -34,3 +34,21 @@ spec'd in `docs/06` §8 so it isn't retrofitted).
 - **Expanding search** (docs/06 §8) — header has direct lane links for now.
 - **"On the trail now"** live check-in feed is built in M8; M3 shows approved
   trekker photos as a seasonal teaser.
+
+## guide_tags — proper intent filtering (from the homepage-rework session)
+
+The homepage "browse by intent" rows currently match keywords against the
+guide's own text (`only_with_me`, `hook_line`, `bio`) — see `app/lib/intents.ts`.
+That is honest scaffolding, not the end state: it means "Photographers" is a
+substring search for "camera", and a guide who writes their promise a different
+way is invisible to the row that was built for them.
+
+Properly this is a `guide_tags` table: the guide ticks "I host you in my
+village" / "I shoot photos" / "I go slow with first-timers" in /g/profile, and
+the rows filter on a column. Deliberately deferred until enough guides have
+written `only_with_me` lines that we can read the real tags off them rather
+than inventing a taxonomy first and asking guides to squeeze into it.
+
+Also deferred with it: the `region` facet on an intent runs a second query per
+request (`guideIdsMatchingText`), which is fine at 48 guides and wants a
+materialised guide↔region view at 4,800.
