@@ -12,6 +12,7 @@ import {
   openRunsByGuide,
   parseRange,
 } from "~/lib/browse.server";
+import { findIntent, matchesKeywords } from "~/lib/intents";
 import { fmtDateShort } from "~/lib/format";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -24,7 +25,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
 }
 
 const GUIDE_COLS =
-  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, day_rate_usd_cents, median_response_mins, years_experience, gender";
+  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, only_with_me, day_rate_usd_cents, median_response_mins, years_experience, gender";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -40,6 +41,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const fDistrict = p.get("district") ?? "";
   const fWomen = p.get("women") === "1";
   const sort = p.get("sort") ?? "recommended";
+  // Homepage "browse by intent" rows land here — every row is this same page
+  // with one more filter, so a row and its "see all" can never disagree.
+  const intent = findIntent(p.get("intent"));
 
   // Text search runs in two halves and unions: the guide's own record, and the
   // guides who lead a matching route or run a matching trip. "Annapurna" is
@@ -54,7 +58,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .from("public_guides")
         .select(GUIDE_COLS)
         .or(
-          `full_name.ilike.${like},home_district.ilike.${like},hook_line.ilike.${like},bio.ilike.${like}`,
+          `full_name.ilike.${like},home_district.ilike.${like},hook_line.ilike.${like},only_with_me.ilike.${like},bio.ilike.${like}`,
         ),
       guideIdsMatchingText(client, q),
     ]);
@@ -112,6 +116,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // so re-check each survivor against the same rule the union used.
   if (q) rows = rows.filter((g) => guideMatchesText(g, q) || viaTrips.has(g.user_id));
 
+  if (intent) {
+    if (intent.gender) rows = rows.filter((g) => g.gender === intent.gender);
+    if (intent.keywords) rows = rows.filter((g) => matchesKeywords(g, intent.keywords!));
+    if (intent.languages) {
+      rows = rows.filter((g) =>
+        (langMap[g.user_id] ?? []).some((l) => intent.languages!.includes(l)),
+      );
+    }
+    if (intent.region) {
+      const inRegion = await guideIdsMatchingText(client, intent.region);
+      rows = rows.filter((g) => inRegion.has(g.user_id));
+    }
+  }
+
   rows.sort((a, b) => {
     if (sort === "price") return (a.day_rate_usd_cents ?? 0) - (b.day_rate_usd_cents ?? 0);
     if (sort === "experience") return (b.years_experience ?? 0) - (a.years_experience ?? 0);
@@ -133,6 +151,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     totalGuides,
     facets: { districts, languages },
     filters: { q, from: range?.from ?? "", to: range?.to ?? "", fTier, fLang, fDistrict, fWomen, sort },
+    intent: intent ? { key: intent.key, label: intent.label, blurb: intent.blurb } : null,
     today,
     canonical: absoluteUrl(env.SITE_URL, "/guides"),
   };
@@ -142,18 +161,22 @@ const SELECT_CLS =
   "rounded border border-line bg-card px-3 py-2 text-sm text-ink";
 
 export default function Guides({ loaderData }: Route.ComponentProps) {
-  const { guides, ratings, langMap, totalGuides, facets, filters, today } = loaderData;
+  const { guides, ratings, langMap, totalGuides, facets, filters, intent, today } = loaderData;
   const narrowed =
     !!filters.q ||
     !!filters.from ||
     !!filters.fTier ||
     !!filters.fLang ||
     !!filters.fDistrict ||
+    !!intent ||
     filters.fWomen;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="font-display text-3xl text-ink">Find your guide</h1>
+      {intent && <p className="label text-muted">{intent.blurb}</p>}
+      <h1 className="font-display text-3xl text-ink">
+        {intent ? intent.label : "Find your guide"}
+      </h1>
       <p className="mt-1 text-muted">
         {narrowed ? (
           <>
@@ -175,6 +198,7 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
         today={today}
         placeholder="Annapurna, Sherpa, German, Pokhara…"
         dateLabel="Free between"
+        hidden={{ intent: intent?.key ?? "" }}
       >
         <label className="flex cursor-pointer items-center gap-2 rounded border border-line bg-card px-3 py-2 text-sm text-ink has-[:checked]:border-moss has-[:checked]:bg-moss/10">
           <input

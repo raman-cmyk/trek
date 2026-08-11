@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
-import { GuideChip, ResponseChip, Stars, TierBadge } from "./bits";
+import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
 
 export interface PublicGuide {
   user_id: string;
@@ -12,6 +12,7 @@ export interface PublicGuide {
   home_district: string | null;
   tier: number;
   hook_line: string | null;
+  only_with_me?: string | null;
   day_rate_usd_cents: number | null;
   median_response_mins: number | null;
 }
@@ -81,7 +82,7 @@ export function GuideCard({
         />
         {/* Tier badge on a paper pill, top-right of the photo (§8). */}
         <div className="absolute right-2 top-2">
-          <TierBadge tier={guide.tier} />
+          <TierBadge tier={guide.tier} static />
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
@@ -89,8 +90,15 @@ export function GuideCard({
         {guide.home_district && (
           <p className="text-caption text-muted">{guide.home_district}</p>
         )}
-        {guide.hook_line && (
-          <p className="line-clamp-2 text-sm text-ink">{guide.hook_line}</p>
+        {/* The promise leads. The hook_line is a description of the guide;
+            this is the guide talking, so it outranks it — and when a guide
+            hasn't written one yet, the description still carries the card. */}
+        {guide.only_with_me ? (
+          <OnlyWithMe line={guide.only_with_me} />
+        ) : (
+          guide.hook_line && (
+            <p className="line-clamp-2 text-sm text-ink">{guide.hook_line}</p>
+          )
         )}
         {/* Bottom row pinned so every card in a row is equal height (§8). */}
         <div className="mt-auto flex items-center justify-between pt-1.5">
@@ -136,7 +144,10 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         <span className="absolute left-2 top-2 rounded-full bg-paper/90 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink backdrop-blur">
           {KIND_LABEL[offering.kind] ?? offering.kind}
         </span>
-        {/* Guide chip — full name — overlapping the photo edge (§8). */}
+        {/* Guide chip — full name — overlapping the photo edge (§8). Static:
+            the whole card is already a link, and a nested <a> is invalid HTML
+            that breaks hydration. Tapping the chip opens the trip, which is
+            the right destination from here anyway. */}
         <div className="absolute -bottom-3 left-3">
           <GuideChip
             slug={offering.guide_slug}
@@ -145,6 +156,7 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
             tier={offering.guide_tier}
             overlap
             fullName
+            static
           />
         </div>
       </div>

@@ -11,7 +11,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const [{ data: guide }, { data: langs }, { count: photoCount }] = await Promise.all([
     admin
       .from("guides")
-      .select("slug, hook_line, bio, home_district, day_rate_usd_cents, payout_method, payout_account, tier")
+      .select(
+        "slug, hook_line, bio, only_with_me, home_district, day_rate_usd_cents, payout_method, payout_account, tier",
+      )
       .eq("user_id", user.id)
       .single(),
     admin.from("guide_languages").select("language").eq("guide_id", user.id),
@@ -45,6 +47,26 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ ok: "Saved." }, { headers });
   }
 
+  if (intent === "promise") {
+    // The guide's own sentence, saved exactly as typed. We check the length
+    // (the column has a 90-char constraint that would otherwise throw an
+    // unexplained error) and nothing else — no spellcheck, no rewrite, no
+    // "improve this with AI" button. Their voice is the product.
+    const raw = String(form.get("only_with_me") ?? "").replace(/\s+/g, " ").trim();
+    if (!raw) {
+      await admin.from("guides").update({ only_with_me: null }).eq("user_id", user.id);
+      return data({ ok: "Cleared." }, { headers });
+    }
+    if (raw.length > 90) {
+      return data(
+        { error: `Too long by ${raw.length - 90} letters. Say one thing only.` },
+        { status: 400, headers },
+      );
+    }
+    await admin.from("guides").update({ only_with_me: raw }).eq("user_id", user.id);
+    return data({ ok: "Saved. This shows on your profile now." }, { headers });
+  }
+
   // Change request for bio/photos — ops-edited to keep quality. Persisted to
   // an ops queue (it used to be discarded silently).
   const note = String(form.get("note") ?? "").trim();
@@ -72,6 +94,45 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
           {(actionData as any).ok}
         </p>
       )}
+      {actionData && "error" in actionData && (actionData as any).error && (
+        <p className="rounded-button bg-ember/10 px-3 py-2 text-sm text-ember">
+          {(actionData as any).error}
+        </p>
+      )}
+
+      {/* The one line that sells this guide, written by this guide. Two taps:
+          type, save. No approval queue — putting ops between a guide and their
+          own sentence would kill the voice we are trying to publish. */}
+      <Form method="post" className="space-y-2 rounded-card border border-border bg-card p-4">
+        <input type="hidden" name="intent" value="promise" />
+        <p className="text-sm font-medium text-ink">Only with me</p>
+        <p className="text-sm text-ink-soft">
+          One thing a trekker gets with you and with no other guide. Write it
+          the way you speak. Short — about ten words.
+        </p>
+        <textarea
+          name="only_with_me"
+          rows={2}
+          maxLength={90}
+          defaultValue={guide?.only_with_me ?? ""}
+          placeholder="You sleep at my family house in Ghandruk, not teahouse."
+          className="w-full rounded-button border border-border px-3 py-2 text-base"
+        />
+        <div className="text-xs text-ink-soft">
+          <p>Good:</p>
+          <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+            <li>I know which teahouse at Lobuche has hot water.</li>
+            <li>I carry a real camera. You go home with photos.</li>
+          </ul>
+          <p className="mt-1.5">
+            Not good: “Amazing trek”, “Unforgettable experience”. Say the real
+            thing you do.
+          </p>
+        </div>
+        <Button type="submit" size="sm" loading={busy}>
+          Save
+        </Button>
+      </Form>
 
       <section className="space-y-1 rounded-card border border-border bg-card p-4 text-sm">
         <Row label="Hook line" value={guide?.hook_line} />

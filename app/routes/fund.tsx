@@ -2,7 +2,7 @@ import { Link, data } from "react-router";
 import type { Route } from "./+types/fund";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
-import { partyAmounts, type PriceBreakdown } from "~/lib/experience-pricing";
+import { fundCollected } from "~/lib/fund.server";
 import { useMoney } from "~/lib/currency-context";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -22,29 +22,10 @@ export function headers() {
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  // One public number, from the SNAPSHOT stored on each booking — a guide
-  // re-pricing their trek must not rewrite history on a transparency page
-  // (audit R5). Cancelled bookings don't count. Cached for 15 minutes.
+  // One public number, shared with the homepage stats band (fund.server).
+  // Cancelled bookings don't count. Cached for 15 minutes.
   const admin = createAdminClient(env);
-  const { data: rows } = await admin
-    .from("bookings")
-    .select("fund_usd_cents, party_size, status, offering:offerings(price_breakdown)")
-    .not("deposit_paid_at", "is", null)
-    .not("status", "like", "cancelled%");
-
-  let collected = 0;
-  let trips = 0;
-  for (const b of rows ?? []) {
-    // Snapshot first; fall back to the live breakdown for pre-0026 bookings.
-    let fund = (b as any).fund_usd_cents ?? 0;
-    if (!fund) {
-      const bd = ((b as any).offering?.price_breakdown ?? null) as PriceBreakdown | null;
-      if (!bd?.guide_fee_total_usd_cents) continue;
-      fund = partyAmounts(bd, b.party_size).fundUsdCents;
-    }
-    collected += fund;
-    trips += 1;
-  }
+  const { collected, trips } = await fundCollected(admin);
 
   return data(
     { collected, trips, canonical: absoluteUrl(env.SITE_URL, "/fund") },

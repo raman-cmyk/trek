@@ -17,7 +17,7 @@ const CATEGORIES = [
 ] as const;
 
 const OFFERING_COLS =
-  "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents";
+  "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -37,9 +37,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const kind = p.get("kind") ?? "";
   const q = (p.get("q") ?? "").trim().slice(0, 80);
   const range = parseRange(p.get("from"), p.get("to"), today);
+  const partyRaw = Number(p.get("party"));
+  const party = Number.isFinite(partyRaw) && partyRaw >= 1 ? Math.min(16, Math.floor(partyRaw)) : 0;
 
   let query = client.from("public_offerings").select(OFFERING_COLS);
   if (kind) query = query.eq("kind", kind);
+  // Party size is a hard constraint, not a preference: a trip capped at 6
+  // cannot take 8, and a restricted-area trek that needs 2 cannot take 1.
+  if (party) query = query.gte("max_party", party).lte("min_party", party);
   if (q) {
     // Route names/regions aren't on the offering row, so resolve them to ids
     // first and OR that in — "Annapurna" has to find the Annapurna trips.
@@ -69,6 +74,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     if (namedIds.size) {
       let byGuide = client.from("public_offerings").select(OFFERING_COLS).in("guide_id", [...namedIds]);
       if (kind) byGuide = byGuide.eq("kind", kind);
+      if (party) byGuide = byGuide.gte("max_party", party).lte("min_party", party);
       const { data: extra } = await byGuide;
       const seen = new Set(offerings.map((o) => o.id));
       for (const o of (extra ?? []) as typeof offerings) {
@@ -96,7 +102,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     offerings: offerings as PublicOffering[],
     total: totalCount ?? offerings.length,
     kind,
-    filters: { q, from: range?.from ?? "", to: range?.to ?? "" },
+    filters: { q, from: range?.from ?? "", to: range?.to ?? "", party },
     today,
     canonical: absoluteUrl(env.SITE_URL, "/experiences"),
   };
@@ -104,7 +110,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function Experiences({ loaderData }: Route.ComponentProps) {
   const { offerings, total, kind, filters, today } = loaderData;
-  const narrowed = !!filters.q || !!filters.from || !!kind;
+  const narrowed = !!filters.q || !!filters.from || !!filters.party || !!kind;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -130,7 +136,7 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
         today={today}
         placeholder="Everest, momo, Pokhara, a guide's name…"
         dateLabel="Departing between"
-        hidden={{ kind }}
+        hidden={{ kind, party: filters.party ? String(filters.party) : "" }}
       />
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -140,6 +146,7 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
           if (filters.q) params.set("q", filters.q);
           if (filters.from) params.set("from", filters.from);
           if (filters.to) params.set("to", filters.to);
+          if (filters.party) params.set("party", String(filters.party));
           const qs = params.toString();
           return (
             <Link
@@ -167,10 +174,15 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
         )}
       </div>
 
-      {filters.from && (
+      {(filters.from || !!filters.party) && (
         <p className="mt-2 text-caption text-muted">
-          Showing trips whose guide is free for the whole trip between{" "}
-          {fmtDateShort(filters.from)} and {fmtDateShort(filters.to)}.
+          {filters.party
+            ? `Showing trips that take a party of ${filters.party}`
+            : "Showing trips"}
+          {filters.from
+            ? `, whose guide is free for the whole trip between ${fmtDateShort(filters.from)} and ${fmtDateShort(filters.to)}`
+            : ""}
+          .
         </p>
       )}
 

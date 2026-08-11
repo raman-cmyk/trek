@@ -96,7 +96,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <p className="font-medium text-ink">Led by {o.guide_name}</p>
-                <TierBadge tier={o.guide_tier} />
+                <TierBadge tier={o.guide_tier} static />
               </div>
               {rating && <Stars value={rating.value} count={rating.count} />}
               <p className="text-sm text-primary">Full profile →</p>

@@ -8,7 +8,7 @@ import { tierChecks } from "~/lib/tiers";
 import { Carousel, type Photo } from "~/components/public/Carousel";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
-import { ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
+import { OnlyWithMe, ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
 import { VoiceIntro } from "~/components/public/VoiceIntro";
 
 
@@ -141,7 +141,18 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               <TierBadge tier={guide.tier} />
             </div>
             <p className="text-ink-soft">{guide.home_district}, Nepal</p>
-            <div className="flex flex-wrap items-center gap-3">
+            {/* The promise sits above everything transactional — it is the
+                reason to pick this person over the next one. */}
+            {guide.only_with_me && (
+              <div className="pt-2">
+                <OnlyWithMe
+                  line={guide.only_with_me}
+                  firstName={guide.full_name.split(" ")[0]}
+                  size="profile"
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               {rating && <Stars value={rating.value} count={rating.count} />}
               <ResponseChip mins={guide.median_response_mins} />
             </div>

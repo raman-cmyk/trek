@@ -48,6 +48,7 @@ export function guideMatchesText(
     home_district: string | null;
     hook_line: string | null;
     bio?: string | null;
+    only_with_me?: string | null;
   },
   q: string,
 ): boolean {
@@ -56,6 +57,7 @@ export function guideMatchesText(
     g.full_name.toLowerCase().includes(n) ||
     (g.home_district ?? "").toLowerCase().includes(n) ||
     (g.hook_line ?? "").toLowerCase().includes(n) ||
+    (g.only_with_me ?? "").toLowerCase().includes(n) ||
     (g.bio ?? "").toLowerCase().includes(n)
   );
 }

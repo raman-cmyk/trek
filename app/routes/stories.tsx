@@ -111,7 +111,7 @@ export default function Stories({ loaderData }: Route.ComponentProps) {
                   <span className="text-sm text-ink-soft">
                     led by <span className="font-medium text-ink">{c.guideName}</span>
                   </span>
-                  <TierBadge tier={c.guideTier} />
+                  <TierBadge tier={c.guideTier} static />
                 </Link>
               )}
             </div>
