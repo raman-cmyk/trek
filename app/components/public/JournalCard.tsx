@@ -4,9 +4,14 @@ import { firstSentence, journalMonth, type PublicJournal } from "~/lib/journals"
 import { cn } from "~/lib/cn";
 
 /**
- * A journal on the wall. Two sizes: `lead` is the dominant first card on a
- * guide's profile (Not-AI doc — one element must clearly win), `normal` is
- * everything after it.
+ * A journal on the wall. Three sizes:
+ *
+ *   normal   the card in a grid.
+ *   lead     the dominant first card on a guide's profile — one element has
+ *            to clearly win.
+ *   feature  a full-width horizontal band, photo beside the words. Used at the
+ *            top of the index, where a column-spanning lead left a hole the
+ *            height of itself beside whatever short card landed next to it.
  *
  * The hook is the first sentence of the guide's closing note, not a summary we
  * wrote: it is the only line on the card in a human voice, and it is what makes
@@ -18,10 +23,11 @@ export function JournalCard({
   showGuide = false,
 }: {
   journal: PublicJournal;
-  size?: "lead" | "normal";
+  size?: "lead" | "normal" | "feature";
   showGuide?: boolean;
 }) {
-  const lead = size === "lead";
+  const feature = size === "feature";
+  const lead = size === "lead" || feature;
   const meta = [
     `${j.days} days`,
     journalMonth(j.start_date),
@@ -35,18 +41,30 @@ export function JournalCard({
       to={`/journals/${j.slug}`}
       prefetch="intent"
       className={cn(
-        "group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card",
-        "transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift",
+        "group flex h-full overflow-hidden rounded-md border border-line bg-card",
+        "transition-colors duration-instant ease-out-soft hover:border-sage",
+        feature ? "flex-col sm:flex-row sm:items-stretch" : "flex-col",
       )}
     >
       <SmartImage
         src={j.cover_photo_url ?? ""}
         alt={j.title}
-        width={lead ? 900 : 450}
-        height={lead ? 600 : 300}
-        className={cn("w-full", lead ? "aspect-[3/2]" : "aspect-[4/3]")}
+        width={feature ? 1000 : lead ? 900 : 450}
+        height={feature ? 750 : lead ? 600 : 300}
+        className={cn(
+          feature
+            ? "aspect-[16/10] w-full sm:aspect-[16/10] sm:w-[48%] sm:shrink-0"
+            : lead
+              ? "aspect-[3/2] w-full"
+              : "aspect-[4/3] w-full",
+        )}
       />
-      <div className={cn("flex flex-1 flex-col gap-1.5", lead ? "p-5" : "p-3.5")}>
+      <div
+        className={cn(
+          "flex flex-1 flex-col gap-1.5",
+          feature ? "p-5 sm:p-7" : lead ? "p-5" : "p-3.5",
+        )}
+      >
         <p className="font-mono text-caption text-muted">{meta}</p>
         <h3
           className={cn(

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import type { Route } from "./+types/journals._index";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
@@ -73,7 +74,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const { data: all } = await client
     .from("public_journals")
-    .select("route_region, route_slug, route_name, guide_slug, guide_name");
+    .select("route_region, route_slug, route_name, guide_slug, guide_name, start_date");
   const regions = [...new Set((all ?? []).map((j) => j.route_region).filter(Boolean))].sort();
   const routes = [
     ...new Map(
@@ -82,6 +83,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .map((j) => [j.route_slug, { slug: j.route_slug, name: j.route_name }]),
     ).values(),
   ].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  const seasonCounts: Record<string, number> = {};
+  for (const [name, months] of Object.entries(SEASONS)) {
+    seasonCounts[name] = (all ?? []).filter((j: any) =>
+      months.includes(Number(String(j.start_date ?? "").slice(5, 7))),
+    ).length;
+  }
 
   const tagCounts = new Map<string, number>();
   for (const list of tagsByJournal.values()) {
@@ -92,6 +100,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     journals: journals.map((j) => ({ ...j, tags: tagsByJournal.get(j.id) ?? [] })),
     total: (all ?? []).length,
     facets: { regions, routes },
+    seasonCounts,
     filters: { region, route, guide, season, tag },
     tags: [...tagCounts.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -104,10 +113,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Journals({ loaderData }: Route.ComponentProps) {
-  const { journals, total, facets, filters, guideName, tags } = loaderData as any;
+  const { journals, total, facets, filters, guideName, tags, seasonCounts } =
+    loaderData as any;
   const narrowed = !!(
     filters.region || filters.route || filters.guide || filters.season || filters.tag
   );
+  // Anything narrowed from the hidden row keeps that row open, or the active
+  // filter would have no visible control.
+  const more = [...facets.routes, ...tags];
+  const [showMore, setMore] = useState(!!(filters.route || filters.tag));
 
   const chip = (label: string, params: Record<string, string>, active: boolean) => {
     const sp = new URLSearchParams({ ...filters, ...params });
@@ -142,23 +156,36 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
         off his phone.
       </p>
 
+      {/* One row of filters, and the rest behind a toggle. A tag that matches
+          a single journal is not a filter, it is a label — showing twelve of
+          them above four cards buries the writing under its own index. */}
       <div className="mt-7 space-y-2">
         <div className="flex flex-wrap gap-2">
           {chip("All", { region: "", route: "", guide: "", season: "", tag: "" }, !narrowed)}
           {facets.regions.map((r: string) =>
             chip(r, { region: r, route: "" }, filters.region === r),
           )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {Object.keys(SEASONS).map((s) => chip(s, { season: s }, filters.season === s))}
-          {facets.routes.map((r: any) =>
-            chip(r.name, { route: r.slug, region: "" }, filters.route === r.slug),
+          {Object.keys(SEASONS)
+            .filter((s) => seasonCounts[s] > 0)
+            .map((s) => chip(s, { season: s }, filters.season === s))}
+          {more.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMore((v) => !v)}
+              aria-expanded={showMore}
+              className="rounded-pill px-3 py-1.5 text-sm text-moss hover:underline"
+            >
+              {showMore ? "Fewer filters" : `More filters (${more.length})`}
+            </button>
           )}
         </div>
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+        {showMore && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {facets.routes.map((r: any) =>
+              chip(r.name, { route: r.slug, region: "" }, filters.route === r.slug),
+            )}
             {tags.map((t: any) =>
-              chip(`${t.value} (${t.count})`, { tag: t.value }, filters.tag === t.value),
+              chip(t.value, { tag: t.value }, filters.tag === t.value),
             )}
           </div>
         )}
@@ -207,13 +234,22 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
           </Link>
         </div>
       ) : (
-        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {journals.map((j: PublicJournal, i: number) => (
-            <div key={j.id} className={i === 0 && !narrowed ? "sm:col-span-2" : ""}>
-              <JournalCard journal={j} size={i === 0 && !narrowed ? "lead" : "normal"} showGuide />
+        <>
+          {/* The lead runs the full width as a horizontal feature rather than
+              spanning two of three columns. Spanning left a hole the height of
+              the lead beside a short card, and an empty third column on the
+              row below — the emptiest possible arrangement of four journals. */}
+          {!narrowed && journals.length > 0 && (
+            <div className="mt-6">
+              <JournalCard journal={journals[0]} size="feature" showGuide />
             </div>
-          ))}
-        </div>
+          )}
+          <div className="mt-5 grid items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {(narrowed ? journals : journals.slice(1)).map((j: PublicJournal) => (
+              <JournalCard key={j.id} journal={j} showGuide />
+            ))}
+          </div>
+        </>
       )}
     </main>
   );

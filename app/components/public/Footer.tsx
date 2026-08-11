@@ -85,7 +85,7 @@ export function Footer({
                 is never a short orphan floating in the middle. Faces are
                 cropped square and butted edge to edge — the gaps are what
                 would make this read as a widget rather than as a crowd. */}
-            <div className="grid grid-cols-8 sm:grid-cols-12 lg:grid-cols-16">
+            <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-12">
               {faces.slice(0, fitRows(faces.length)).map((g) => (
                 <span key={g.slug} className="relative block aspect-square" title={g.name}>
                   <SmartImage
@@ -199,7 +199,10 @@ export function Footer({
  * ragged edge — and a ragged edge in a wall of faces reads as missing data.
  */
 function fitRows(n: number): number {
-  return Math.max(0, Math.floor(n / 48) * 48) || (n >= 16 ? 16 : 0);
+  // The grid is 6 / 8 / 12 columns; 24 is the smallest count that fills a
+  // whole row at every one of them. grid-cols-16 was not a real Tailwind
+  // class and fell back silently, which is what left the wall ragged.
+  return Math.floor(n / 24) * 24;
 }
 
 function Stat({ n, label }: { n?: number; label: string }) {
