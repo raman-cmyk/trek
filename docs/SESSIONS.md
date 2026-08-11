@@ -892,3 +892,62 @@ stat, promise line and filter count above is from the live HTML.
 Stripe keys (payments are mock), a real ops phone number for the SOS card,
 and — new — a Baato API key if you want Nepali-language map tiles instead of
 OpenStreetMap.
+
+---
+
+## Session — Trek Journals + Guide page v2 (2026-08-11)
+
+The thesis of the brief: a guide is proven by his body of work, not his bio.
+
+**The journal** (`/journals/:slug`) — one album per completed trek, written by
+the guide who led it. Title overlaps the cover photo's bottom edge; one mono
+stat line; sticky guide strip; day blocks with the numeral in the left margin
+and photo layouts rotating full → two-up → portrait so no grid shape repeats
+down the page; the hard day as its own ember-ruled block; an elevation strip
+drawn only from altitudes the guide actually recorded (missing days are absent
+rather than interpolated — a smoothed number on a page whose job is "this
+really happened" is the wrong kind of convenient); the closing note set large;
+the client's note; then the CTA to walk it with the same man.
+
+**Two rules are enforced in the database, not in page code** (migration 0032):
+`journals_real_trip` means a journal hangs off a completed booking or an
+ops-verified pre-platform trek and there is no third option; and consent is
+applied in the public views, so `client_names_ok` decides whether the world
+sees "Jef & Simon, BE" or "two guests from Belgium", and `client_photos_ok`
+filters out photos flagged as having a recognisable client. A page that forgets
+to check cannot leak.
+
+**Photo upload** (`/api/journal-photo`) strips the GPS pointer from the JPEG
+EXIF before storage and keeps the dates. Anything it cannot parse is refused
+rather than stored. Its test suite caught a real out-of-bounds read on a
+truncated file — which is exactly what a dropped 3G upload from a lodge looks
+like.
+
+**Guide page v2**: journal wall directly under a two-column header, dominant
+lead card, route chips with per-route counts, mono stat band that links down
+to what proves it. Floating price card and empty right column deleted; price
+moved to the stat band and a sticky bottom bar. Bio demoted below the wall
+with a 3-line clamp. Zero-journal and zero-review states are invitations.
+
+Porter pledge now keys off "does this guide's work carry porters", not tier —
+that mismatch is why it appeared on some profiles and not others.
+
+`/journals` index (filter by region, route, season, guide), a "Latest from the
+trail" strip on the homepage, journals in the sitemap, and the footer's "Trek
+stories" now points here.
+
+Migrations 0032–0033 + the journal seed applied to cloud and local.
+99 tests green. Live: https://trek.raman-7d9.workers.dev
+
+**Not reproduced:** the three floating icons overflowing the right viewport
+edge. I probed every element's bounding box against the viewport at 320, 360,
+390, 1023, 1280 and 1440, in USD and EUR — `scrollWidth === clientWidth` and
+zero overflowing elements at every width, and the only fixed element on the
+old page was the mobile bottom bar. The v2 rebuild removes the right rail and
+the old sticky bar regardless, so if it was one of those it is gone. If it
+recurs, a screenshot with the browser and window width would pin it down.
+
+**🙋 Founder still needed:** real domain + Resend key, real Stripe keys, an ops
+phone number for the SOS card, a Baato key if you want Nepali map tiles — and
+now, the first real journals: ring three guides, ask them about their last
+trek, and type it into /ops/journals while they talk.
