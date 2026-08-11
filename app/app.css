@@ -158,6 +158,13 @@ body {
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  /* Nothing may ever push the page sideways. `clip` rather than `hidden`
+     because `hidden` on <body> silently kills `position: sticky` for every
+     descendant — which would break the thread header and the sticky guide
+     strip on a journal. A stray absolutely-positioned element now gets cut at
+     the viewport edge instead of adding a horizontal scrollbar and floating
+     off the right of the screen. */
+  overflow-x: clip;
 }
 
 @media (min-width: 768px) {

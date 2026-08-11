@@ -19,8 +19,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin.from("guide_languages").select("language").eq("guide_id", user.id),
     admin.from("guide_photos").select("id", { count: "exact", head: true }).eq("guide_id", user.id),
   ]);
+  const { data: canned } = await admin
+    .from("canned_replies")
+    .select("id, label, body, sort")
+    .eq("guide_id", user.id)
+    .order("sort");
   return data(
-    { guide, languages: (langs ?? []).map((l: any) => l.language), photoCount: photoCount ?? 0 },
+    {
+      guide,
+      languages: (langs ?? []).map((l: any) => l.language),
+      photoCount: photoCount ?? 0,
+      canned: canned ?? [],
+    },
     { headers },
   );
 }
@@ -43,6 +53,30 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (acct) patch.payout_account = acct;
     if (Object.keys(patch).length) {
       await admin.from("guides").update(patch).eq("user_id", user.id);
+    }
+    return data({ ok: "Saved." }, { headers });
+  }
+
+  if (intent === "canned") {
+    // Quick answers a guide taps instead of typing on a phone with one bar.
+    const id = String(form.get("canned_id") ?? "");
+    const label = String(form.get("label") ?? "").trim().slice(0, 40);
+    const body = String(form.get("body") ?? "").trim().slice(0, 800);
+    if (form.get("delete")) {
+      await admin.from("canned_replies").delete().eq("id", id).eq("guide_id", user.id);
+      return data({ ok: "Removed." }, { headers });
+    }
+    if (!label || !body) {
+      return data({ error: "Give it a short name and the answer." }, { status: 400, headers });
+    }
+    if (id) {
+      await admin
+        .from("canned_replies")
+        .update({ label, body })
+        .eq("id", id)
+        .eq("guide_id", user.id);
+    } else {
+      await admin.from("canned_replies").insert({ guide_id: user.id, label, body, sort: 99 });
     }
     return data({ ok: "Saved." }, { headers });
   }
@@ -81,7 +115,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideProfile({ loaderData, actionData }: Route.ComponentProps) {
-  const { guide, languages, photoCount } = loaderData as any;
+  const { guide, languages, photoCount, canned } = loaderData as any;
   const nav = useNavigation();
   const busy = nav.state !== "idle";
 
@@ -143,6 +177,62 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
           label="Current day rate"
           value={guide?.day_rate_usd_cents ? formatUsd(guide.day_rate_usd_cents) : "—"}
         />
+      </section>
+
+      {/* Quick answers — tappable in the message composer. Most guides reply
+          on a phone, in their second or third language, on patchy signal; a
+          tap that inserts a sentence they already wrote beats any amount of
+          typing affordance. */}
+      <section className="space-y-3 rounded-card border border-border bg-card p-4">
+        <div>
+          <p className="text-sm font-medium text-ink">Quick answers</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            These appear as buttons above your keyboard when you reply. Tap one
+            and it fills the box — you can still change the words before sending.
+          </p>
+        </div>
+        {canned.map((c: any) => (
+          <Form key={c.id} method="post" className="space-y-2 rounded-button border border-border p-3">
+            <input type="hidden" name="intent" value="canned" />
+            <input type="hidden" name="canned_id" value={c.id} />
+            <input
+              name="label"
+              defaultValue={c.label}
+              className="w-full rounded-button border border-border px-3 py-2 text-sm font-medium"
+            />
+            <textarea
+              name="body"
+              rows={3}
+              defaultValue={c.body}
+              className="w-full rounded-button border border-border px-3 py-2 text-base"
+            />
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" variant="secondary">Save</Button>
+              <button
+                name="delete"
+                value="1"
+                className="rounded-button px-3 py-2 text-sm text-ember hover:bg-mist"
+              >
+                Remove
+              </button>
+            </div>
+          </Form>
+        ))}
+        <Form method="post" className="space-y-2 rounded-button border border-dashed border-border p-3">
+          <input type="hidden" name="intent" value="canned" />
+          <input
+            name="label"
+            placeholder="Short name, e.g. Porters"
+            className="w-full rounded-button border border-border px-3 py-2 text-sm"
+          />
+          <textarea
+            name="body"
+            rows={3}
+            placeholder="The answer you keep writing again and again."
+            className="w-full rounded-button border border-border px-3 py-2 text-base"
+          />
+          <Button type="submit" size="sm">Add answer</Button>
+        </Form>
       </section>
 
       {/* Guide-editable commercial fields */}

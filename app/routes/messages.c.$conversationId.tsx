@@ -1,11 +1,10 @@
-import { Link, data, redirect, useFetcher } from "react-router";
-import { useEffect, useRef } from "react";
+import { data, redirect } from "react-router";
 import type { Route } from "./+types/messages.c.$conversationId";
 import { getEnv, createAdminClient } from "~/lib/supabase.server";
 import { getSessionUser } from "~/lib/auth.server";
 import { maskMessage } from "~/lib/mask";
-import { Button } from "~/components/Button";
-import { cn } from "~/lib/cn";
+import { Thread } from "~/components/messages/Thread";
+import { money } from "~/lib/currency";
 
 export function meta() {
   return [{ title: "Message your guide" }, { name: "robots", content: "noindex" }];
@@ -35,33 +34,82 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     env,
     params.conversationId,
   );
-  // Opening the thread marks it read (inbox unread counts).
+  const now = new Date().toISOString();
   await admin
     .from("thread_reads")
-    .upsert({ user_id: user.id, thread_key: `c:${convo.id}`, last_read_at: new Date().toISOString() });
-  const [{ data: messages }, { data: guideRow }] = await Promise.all([
+    .upsert({ user_id: user.id, thread_key: `c:${convo.id}`, last_read_at: now });
+  // Per-message receipts — the sender's "read" tick.
+  await admin
+    .from("messages")
+    .update({ read_at: now })
+    .eq("conversation_id", convo.id)
+    .neq("sender_id", user.id)
+    .is("read_at", null);
+
+  const [{ data: messages }, { data: guideRow }, { data: offerings }] = await Promise.all([
     admin
       .from("messages")
-      .select("id, sender_id, body_rendered, created_at")
+      .select("id, sender_id, body_rendered, created_at, read_at")
       .eq("conversation_id", convo.id)
       .order("created_at"),
     admin
-      .from("guides")
-      .select("slug, median_response_mins")
+      .from("public_guides")
+      .select(
+        "slug, full_name, avatar_url, tier, home_district, median_response_mins, only_with_me, day_rate_usd_cents",
+      )
       .eq("user_id", convo.guide_id)
+      .maybeSingle(),
+    admin
+      .from("public_offerings")
+      .select("slug, kind, title, days")
+      .eq("guide_id", convo.guide_id)
+      .limit(3),
+  ]);
+
+  const [{ data: guideUser }, { data: trekkerUser }] = await Promise.all([
+    admin.from("users").select("last_seen_at").eq("id", convo.guide_id).maybeSingle(),
+    admin
+      .from("users")
+      .select("full_name, avatar_url, last_seen_at")
+      .eq("id", convo.trekker_id)
       .maybeSingle(),
   ]);
 
+  const canned = isGuide
+    ? (await admin
+        .from("canned_replies")
+        .select("id, label, body")
+        .eq("guide_id", user.id)
+        .order("sort")).data ?? []
+    : [];
+
   const g: any = convo;
-  const mins = guideRow?.median_response_mins as number | null;
-  const respondsIn = mins
-    ? mins < 60
-      ? `~${mins} min`
-      : `~${Math.round(mins / 60)} hour${Math.round(mins / 60) > 1 ? "s" : ""}`
-    : null;
   const bookPath =
     g.offering?.slug &&
     (g.offering.kind === "trek" ? `/treks/${g.offering.slug}` : `/experiences/${g.offering.slug}`);
+
+  const partner = isGuide
+    ? {
+        name: trekkerUser?.full_name ?? "Trekker",
+        avatarUrl: trekkerUser?.avatar_url ?? null,
+        lastSeenAt: trekkerUser?.last_seen_at ?? null,
+      }
+    : {
+        name: guideRow?.full_name ?? "Your guide",
+        slug: guideRow?.slug ?? null,
+        avatarUrl: guideRow?.avatar_url ?? null,
+        tier: guideRow?.tier ?? null,
+        district: guideRow?.home_district ?? null,
+        responseMins: guideRow?.median_response_mins ?? null,
+        lastSeenAt: guideUser?.last_seen_at ?? null,
+        onlyWithMe: guideRow?.only_with_me ?? null,
+        // Settlement currency here: the shell has no currency provider, and a
+        // guide's rate is quoted in USD everywhere else on the site.
+        dayRateLabel: guideRow?.day_rate_usd_cents
+          ? `from ${money(guideRow.day_rate_usd_cents, "USD")}/day`
+          : null,
+        offerings: offerings ?? [],
+      };
 
   return data(
     {
@@ -70,12 +118,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         mine: m.sender_id === user.id,
         text: m.body_rendered, // always masked pre-booking
         at: m.created_at,
+        readAt: m.read_at,
       })),
-      other: isGuide ? g.trekker?.full_name : g.guide?.full_name,
-      subtitle: g.offering?.title ?? "Trekking in Nepal",
-      respondsIn,
+      partner,
       bookPath: isGuide ? null : bookPath || (guideRow?.slug ? `/guides/${guideRow.slug}` : null),
-      convoId: convo.id,
+      canned,
       isGuide,
     },
     { headers },
@@ -118,84 +165,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Conversation({ loaderData }: Route.ComponentProps) {
-  const { messages, other, subtitle, respondsIn, bookPath, isGuide } = loaderData as any;
-  const fetcher = useFetcher<{ ok: boolean; error?: string }>();
-  const formRef = useRef<HTMLFormElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  // Clear the box after a successful send; keep the text on failure.
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) formRef.current?.reset();
-  }, [fetcher.state, fetcher.data]);
-  // Always land on the newest message.
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+  const { messages, partner, bookPath, canned, isGuide } = loaderData as any;
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-4 py-6">
-      <Link to={isGuide ? "/g" : "/messages"} className="text-sm text-primary">
-        ← {isGuide ? "Dashboard" : "Messages"}
-      </Link>
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-xl text-ink">{other}</h1>
-          <p className="text-sm text-ink-soft">{subtitle}</p>
-        </div>
-        {bookPath && (
-          <Link
-            to={bookPath}
-            className="shrink-0 rounded-button bg-primary px-3 py-1.5 text-sm font-medium text-white"
-          >
-            Request to book
-          </Link>
-        )}
-      </div>
-      {respondsIn && (
-        <p className="mt-1 text-xs text-muted">
-          Usually replies in <span className="font-mono">{respondsIn}</span>
-        </p>
-      )}
-      <p className="mt-2 rounded-button bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Chat freely — no charge to message. Phone numbers and emails are hidden until you book.
-      </p>
-
-      <div className="mt-4 flex-1 space-y-2">
-        {messages.length === 0 && (
-          <p className="py-8 text-center text-sm text-ink-soft">
-            Say hello — ask about the route, timing, fitness, anything.
-          </p>
-        )}
-        {messages.map((m: any) => (
-          <div key={m.id} className={cn("flex flex-col", m.mine ? "items-end" : "items-start")}>
-            <p
-              className={cn(
-                "max-w-[80%] rounded-card px-3 py-2 text-sm",
-                m.mine ? "bg-primary text-white" : "bg-card text-ink shadow-card",
-              )}
-            >
-              {m.text}
-            </p>
-            <time dateTime={m.at} suppressHydrationWarning className="mt-0.5 px-1 font-mono text-[10px] text-muted">
-              {new Date(m.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-            </time>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
-
-      {fetcher.data && !fetcher.data.ok && (fetcher.data as any).error && (
-        <p className="mt-2 rounded-button bg-ember/10 px-3 py-2 text-sm text-ember">
-          {(fetcher.data as any).error}
-        </p>
-      )}
-      <fetcher.Form ref={formRef} method="post" className="sticky bottom-0 mt-4 flex gap-2 bg-surface py-2">
-        <input
-          name="body"
-          placeholder="Message…"
-          className="flex-1 rounded-button border border-border px-3 py-2"
-          autoComplete="off"
-        />
-        <Button type="submit" loading={fetcher.state !== "idle"}>Send</Button>
-      </fetcher.Form>
-    </main>
+    <Thread
+      messages={messages}
+      partner={partner}
+      backTo={isGuide ? "/messages" : "/messages"}
+      bookHref={bookPath}
+      isGuide={isGuide}
+      cannedReplies={canned}
+    />
   );
 }

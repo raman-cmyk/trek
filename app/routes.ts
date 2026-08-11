@@ -34,9 +34,6 @@ export default [
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
     route("trips", "routes/trips._index.tsx"),
     route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
-    route("messages", "routes/messages._index.tsx"),
-    route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
-    route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),
     route("recap/:slug", "routes/recap.$slug.tsx"),
     // 404 catch-all gets the site chrome too.
     route("*", "routes/$.tsx"),
@@ -53,6 +50,15 @@ export default [
     route("g/profile", "routes/g.profile.tsx"),
     route("g/journals", "routes/g.journals.tsx"),
     route("g/journals/:id", "routes/g.journals.$id.tsx"),
+  ]),
+
+  // Messaging is an app shell, not a document: full height, no footer, no
+  // ridgeline wave. Under the marketing layout the composer sat behind the
+  // footer and the page looked like it had no input at all.
+  layout("routes/messages.tsx", [
+    route("messages", "routes/messages._index.tsx"),
+    route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
+    route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),
   ]),
 
   // Immersive full-screen trekker onboarding (no header/footer chrome).
@@ -92,6 +98,7 @@ export default [
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
   route("api/journal-photo", "routes/api.journal-photo.tsx"),
+  route("api/message-photo", "routes/api.message-photo.tsx"),
 
   // Recap OG image (binary resource route — outside the layout).
   route("recap/:slug/og", "routes/recap.$slug.og.tsx"),
