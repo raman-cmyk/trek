@@ -14,6 +14,7 @@ import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-
 import { useMoney } from "~/lib/currency-context";
 import { INTENTS, REGIONS, matchesKeywords } from "~/lib/intents";
 import { addDays } from "~/lib/browse";
+import { TREK_FEE_PCT } from "~/lib/config";
 import { fmtDate, fmtDateShort } from "~/lib/format";
 import { openRunsByGuide } from "~/lib/browse.server";
 import { JournalCard } from "~/components/public/JournalCard";
@@ -506,6 +507,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </section>
       )}
 
+      {/* 8b — The other side of the marketplace. Guides are the supply and
+          the product; a marketplace that only ever talks to buyers starves.
+          Placed after the Split, because the Split is the argument: a guide
+          reading this page has just seen exactly what a trekker pays and
+          exactly what the guide keeps. */}
+      <GuideCall count={stats.guides} />
+
       {/* 9 — Trust, one quiet line. The pages carry the detail. */}
       <section className="mx-auto max-w-6xl px-4 py-14">
         <div className="flex flex-col gap-0 border-y border-line sm:flex-row">
@@ -599,6 +607,73 @@ function Row({
             {count - guides.length} more →
           </Link>
         )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Recruitment, addressed to a guide reading a page built for trekkers.
+ *
+ * No stock photograph of a smiling stranger and no "join our team" — the
+ * three lines are the three things a Nepali guide actually asks: what do I
+ * keep, when am I paid, and whose name is on the work. Numbers come from the
+ * same constants the checkout charges by, so this can never drift from what
+ * the product does.
+ */
+function GuideCall({ count }: { count: number }) {
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-16">
+      <div className="overflow-hidden rounded-md border border-line bg-card">
+        <div className="grid gap-8 p-6 sm:p-10 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-14">
+          <div>
+            <p className="label text-muted">For guides</p>
+            <h2 className="mt-2 max-w-[20ch] font-display text-3xl leading-[1.05] text-ink sm:text-4xl">
+              Your name on the work, not an agency&rsquo;s.
+            </h2>
+            <p className="mt-4 max-w-[52ch] text-body-l text-ink">
+              You set your day rate and keep all of it. Trek adds{" "}
+              <span className="font-mono">{Math.round(TREK_FEE_PCT * 100)}%</span> on top,
+              paid by the trekker and printed on their bill. Your reviews are yours.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <Link
+                to="/apply"
+                prefetch="intent"
+                className="rounded bg-pine px-5 py-3 font-medium text-paper hover:bg-moss"
+              >
+                Apply to guide on Trek
+              </Link>
+              <Link
+                to="/hosts"
+                prefetch="intent"
+                className="rounded border border-line px-5 py-3 font-medium text-ink hover:bg-mist"
+              >
+                What you would earn →
+              </Link>
+            </div>
+            <p className="mt-3 text-caption text-muted">
+              Licensed guides only. Ten minutes, and we call you.
+            </p>
+          </div>
+
+          {/* The three answers, as a mono ledger rather than feature cards. */}
+          <dl className="divide-y divide-line border-y border-line">
+            {[
+              ["You keep", "100%", "of the rate you set"],
+              ["Paid within", "7 days", "in NPR, to your bank"],
+              ["Already guiding", String(count), "and none of them an agency"],
+            ].map(([label, figure, note]) => (
+              <div key={label} className="flex items-baseline justify-between gap-4 py-4">
+                <dt className="text-sm text-muted">{label}</dt>
+                <dd className="text-right">
+                  <span className="font-mono text-xl text-ink">{figure}</span>
+                  <span className="ml-2 text-sm text-muted">{note}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </div>
     </section>
   );
