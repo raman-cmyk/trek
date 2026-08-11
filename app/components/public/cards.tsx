@@ -26,6 +26,7 @@ export interface PublicOffering {
   days: number;
   price_usd_cents: number | null;
   price_breakdown: PriceBreakdown | null;
+  max_party?: number | null;
   cover_photo_url: string | null;
   guide_slug: string;
   guide_name: string;
@@ -50,7 +51,7 @@ export function offeringFromUsdCents(o: PublicOffering): number | null {
   // v3: an experience's price is its packaged breakdown total (cheapest per
   // person = largest sensible group), NOT day_rate × days.
   if (o.price_breakdown?.guide_fee_total_usd_cents) {
-    return fromPerPersonUsdCents(o.price_breakdown);
+    return fromPerPersonUsdCents(o.price_breakdown, o.max_party ?? undefined);
   }
   return o.price_usd_cents;
 }

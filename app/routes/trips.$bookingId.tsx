@@ -10,6 +10,7 @@ import { uploadPublicPhoto } from "~/lib/media.server";
 import { SUBRATINGS } from "~/lib/reviews";
 import { sendEmail } from "~/lib/notify.server";
 import { briefUnlocked, guidePhoneUnlocked, daysUntilStart } from "~/lib/unlocks";
+import { computeCancellation } from "~/lib/policy";
 import { useMoney } from "~/lib/currency-context";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
@@ -35,7 +36,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -59,6 +60,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     ]);
 
   const phoneUnlocked = guidePhoneUnlocked(b.start_date, today);
+  // Refund preview for the cancel confirm step — same policy math the real
+  // cancellation uses, on what's actually been paid so far.
+  const paidSoFar = (payments ?? [])
+    .filter((p: any) => p.type !== "refund" && p.status === "succeeded")
+    .reduce((sum: number, p: any) => sum + p.amount_usd_cents, 0);
+  const cancelPreview = computeCancellation({
+    totalPaidUsdCents: paidSoFar,
+    guideFeeUsdCents: b.guide_fee_usd_cents,
+    daysUntilStart: daysUntilStart(b.start_date, today),
+    reason: "trekker",
+  });
   return data(
     {
       booking: b,
@@ -76,6 +88,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       insuranceAttested: !!b.insurance_attested_at,
       insuranceVerified: !!b.insurance_verified_at,
       isTrek: (b as any).offering?.kind === "trek",
+      paidSoFar,
+      refundPreview: cancelPreview.refundToTrekkerUsdCents,
     },
     { headers },
   );
@@ -173,7 +187,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified } =
+  const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -506,13 +520,37 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
             <Button type="submit" size="sm">Confirm completion</Button>
           </Form>
         )}
-        {!cancelled && ["pending_deposit", "deposit_paid", "docs_pending"].includes(b.status) && (
-          <Form method="post">
-            <input type="hidden" name="intent" value="cancel" />
-            <button className="text-sm text-danger hover:underline" disabled={nav.state !== "idle"}>
+        {!cancelled && ["pending_deposit", "deposit_paid", "docs_pending", "confirmed"].includes(b.status) && (
+          <details className="group">
+            <summary className="cursor-pointer list-none text-sm text-danger hover:underline">
               Cancel this booking
-            </button>
-          </Form>
+            </summary>
+            <div className="mt-3 max-w-sm rounded-card border border-ember/30 bg-ember/5 p-4">
+              <p className="text-sm text-ink">
+                {paidSoFar > 0 ? (
+                  <>
+                    You've paid <span className="font-mono">{m(paidSoFar)}</span>. Cancelling{" "}
+                    {daysUntil >= 0 ? `${daysUntil} days before departure` : "now"} refunds{" "}
+                    <span className="font-mono font-medium">{m(refundPreview)}</span>.
+                  </>
+                ) : (
+                  <>Nothing has been paid yet — cancelling is free.</>
+                )}
+              </p>
+              <p className="mt-1 text-xs text-ink-soft">
+                This can't be undone. Your guide's calendar reopens immediately.
+              </p>
+              <Form method="post" className="mt-3">
+                <input type="hidden" name="intent" value="cancel" />
+                <button
+                  className="rounded-button bg-ember px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                  disabled={nav.state !== "idle"}
+                >
+                  Yes, cancel{paidSoFar > 0 ? ` — refund ${m(refundPreview)}` : ""}
+                </button>
+              </Form>
+            </div>
+          </details>
         )}
       </div>
     </main>

@@ -148,7 +148,12 @@ function ConfigBody({
         </p>
       ) : null}
 
-      {sent ? (
+      {availableDays.length === 0 ? (
+        <p className="rounded-button bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          No open dates right now — message {o.guide_first_name} above and they can
+          open their calendar for you.
+        </p>
+      ) : sent ? (
         <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           Request sent to {o.guide_first_name}. They have 24 hours to reply — we’ll
           email you.
@@ -169,7 +174,7 @@ function ConfigBody({
           {fetcher.data?.error && (
             <p className="mb-2 text-sm text-danger">{fetcher.data.error}</p>
           )}
-          <Button type="submit" loading={busy} className="w-full">
+          <Button type="submit" loading={busy} disabled={!day} className="w-full">
             Request to book
           </Button>
         </fetcher.Form>

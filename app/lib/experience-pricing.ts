@@ -81,8 +81,13 @@ export function validateSum(lines: PricingLine[], claimedTotal: number): { ok: b
 }
 
 /** Cheapest per-person price (largest sensible group) for "from $X" on cards. */
-export function fromPerPersonUsdCents(bd: PriceBreakdown, maxParty = 4): number {
-  return computeExperiencePricing(bd, maxParty).perPersonUsdCents;
+export function fromPerPersonUsdCents(bd: PriceBreakdown, maxParty?: number | null): number {
+  // "From" = cheapest per-person at the largest group that can ACTUALLY book
+  // this offering (audit 6.7: a 2-person-max trip must not advertise a
+  // 4-person price). Capped at 4 so tiny per-person figures for huge groups
+  // don't set an unrealistic anchor.
+  const group = Math.max(1, Math.min(maxParty ?? 4, 4));
+  return computeExperiencePricing(bd, group).perPersonUsdCents;
 }
 
 export interface PartyAmounts {

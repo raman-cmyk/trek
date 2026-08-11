@@ -30,7 +30,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   let query = client
     .from("public_offerings")
     .select(
-      "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, cover_photo_url, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
+      "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
     );
   if (kind) query = query.eq("kind", kind);
   const { data: offerings } = await query;

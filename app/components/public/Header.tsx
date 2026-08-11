@@ -34,24 +34,26 @@ export function Header({
             prefetch="intent"
             className={({ isActive }) =>
               cn(
-                "hidden rounded-pill px-3 py-1.5 sm:block",
+                "rounded-pill px-2 py-1.5 sm:px-3",
                 isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
               )
             }
           >
-            {copy.home.ctaFindGuide}
+            <span className="sm:hidden">Guides</span>
+            <span className="hidden sm:inline">{copy.home.ctaFindGuide}</span>
           </NavLink>
           <NavLink
             to="/experiences"
             prefetch="intent"
             className={({ isActive }) =>
               cn(
-                "hidden rounded-pill px-3 py-1.5 sm:block",
+                "rounded-pill px-2 py-1.5 sm:px-3",
                 isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
               )
             }
           >
-            {copy.home.ctaBrowse}
+            <span className="sm:hidden">Trips</span>
+            <span className="hidden sm:inline">{copy.home.ctaBrowse}</span>
           </NavLink>
 
           {account ? (

@@ -72,17 +72,20 @@ function Chip({ name, value, current, children }: {
   name: string; value: string; current: string | null; children: React.ReactNode;
 }) {
   const active = current === value || (!current && value === "");
+  // Styled by the radio's :checked via peer — clicking gives instant feedback
+  // without waiting for a submit round-trip (audit 10.3).
   return (
-    <label
-      className={cn(
-        "cursor-pointer rounded-pill border px-3 py-1.5 text-sm",
-        active
-          ? "border-primary bg-primary/10 font-medium text-primary"
-          : "border-line text-ink hover:bg-mist",
-      )}
-    >
-      <input type="radio" name={name} value={value} defaultChecked={active} className="sr-only" />
-      {children}
+    <label className="cursor-pointer">
+      <input type="radio" name={name} value={value} defaultChecked={active} className="peer sr-only" />
+      <span
+        className={cn(
+          "inline-block rounded-pill border px-3 py-1.5 text-sm",
+          "border-line text-ink hover:bg-mist",
+          "peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:font-medium peer-checked:text-primary",
+        )}
+      >
+        {children}
+      </span>
     </label>
   );
 }

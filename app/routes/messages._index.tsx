@@ -112,7 +112,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       };
     }),
     ...(bookings ?? [])
-      .filter((b) => lastByBooking.has(b.id))
+      // Live bookings appear even before the first message — a trekker who
+      // just paid must be able to start the thread from here.
+      .filter((b) => lastByBooking.has(b.id) || !String(b.status ?? "").startsWith("cancelled"))
       .map((b) => {
         const otherId = b.trekker_id === user.id ? b.guide_id : b.trekker_id;
         const last = lastByBooking.get(b.id);
@@ -122,8 +124,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           withName: nameOf.get(otherId)?.full_name ?? "Guide",
           avatar: nameOf.get(otherId)?.avatar_url ?? null,
           about: (b as any).offering?.title ?? null,
-          snippet: last?.body_rendered ?? "",
-          at: last?.created_at,
+          snippet: last?.body_rendered ?? "No messages yet — say hello",
+          at: last?.created_at ?? null,
           unread: unreadByBooking.get(b.id) ?? 0,
           kind: "booking" as const,
         };
@@ -190,7 +192,7 @@ export default function Inbox({ loaderData }: Route.ComponentProps) {
                           {t.unread}
                         </span>
                       )}
-                      <span className="font-mono text-xs text-ink-soft">{timeAgo(t.at)}</span>
+                      <span suppressHydrationWarning className="font-mono text-xs text-ink-soft">{timeAgo(t.at)}</span>
                     </span>
                   </span>
                   {t.about && <span className="block truncate text-xs text-ink-soft">{t.about}</span>}

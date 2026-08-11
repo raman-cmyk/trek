@@ -54,7 +54,7 @@ export function ResponseChip({ mins }: { mins?: number | null }) {
   const label =
     mins < 60
       ? `~${mins} min`
-      : `~${Math.round(mins / 60)} hour${mins >= 120 ? "s" : ""}`;
+      : `~${Math.round(mins / 60)} hour${Math.round(mins / 60) > 1 ? "s" : ""}`;
   return (
     <span className="inline-flex items-center rounded-full bg-mist px-2 py-0.5 text-xs text-muted">
       Usually responds in&nbsp;<span className="font-mono text-ink">{label}</span>

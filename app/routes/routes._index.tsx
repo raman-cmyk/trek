@@ -33,7 +33,7 @@ export async function loader({ context }: Route.LoaderArgs) {
       .order("typical_days", { ascending: false }),
     client
       .from("public_offerings")
-      .select("route_id, guide_id, price_usd_cents, price_breakdown"),
+      .select("route_id, guide_id, price_usd_cents, price_breakdown, max_party"),
   ]);
 
   const cards = (routes ?? []).map((r) => {
@@ -43,7 +43,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     for (const o of own) {
       const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
       const price = bd?.guide_fee_total_usd_cents
-        ? fromPerPersonUsdCents(bd)
+        ? fromPerPersonUsdCents(bd, (o as any).max_party)
         : (o.price_usd_cents ?? null);
       if (price != null && (from == null || price < from)) from = price;
     }

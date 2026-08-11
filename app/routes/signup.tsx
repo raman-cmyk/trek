@@ -82,7 +82,8 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
 
   const STEPS = ["name", "country", "email", "password"] as const;
   const busy = fetcher.state !== "idle";
-  const error = fetcher.data?.error;
+  const [stepError, setStepError] = useState<string | null>(null);
+  const error = fetcher.data?.error ?? stepError;
 
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 60);
@@ -94,17 +95,18 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
   function submitStep(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    setStepError(null);
     if (step === 0) {
-      if (!v.first.trim()) return;
+      if (!v.first.trim()) return setStepError("Tell us your first name.");
       setStep(1);
     } else if (step === 1) {
-      if (!v.country) return;
+      if (!v.country) return setStepError("Pick your country.");
       setStep(2);
     } else if (step === 2) {
-      if (!/.+@.+\..+/.test(v.email)) return;
+      if (!/.+@.+\..+/.test(v.email)) return setStepError("That email doesn't look right.");
       setStep(3);
     } else if (step === 3) {
-      if (v.password.length < 8) return;
+      if (v.password.length < 8) return setStepError("Password needs at least 8 characters.");
       fetcher.submit(
         {
           email: v.email,

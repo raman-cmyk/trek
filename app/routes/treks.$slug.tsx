@@ -13,7 +13,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   const o = data.o;
   const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const fromCents = bd?.guide_fee_total_usd_cents
-    ? fromPerPersonUsdCents(bd)
+    ? fromPerPersonUsdCents(bd, (o as any).max_party)
     : (o.price_usd_cents ?? 0);
   return [
     ...pageMeta({

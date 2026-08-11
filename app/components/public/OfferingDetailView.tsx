@@ -317,7 +317,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </section>
           )}
 
-          {(o.included?.length || o.excluded?.length) && (
+          {(o.included?.length || o.excluded?.length) ? (
             <section className="grid gap-6 sm:grid-cols-2">
               {o.included?.length ? (
                 <div>
@@ -346,7 +346,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 </div>
               ) : null}
             </section>
-          )}
+          ) : null}
 
           {o.meeting_point && (
             <section>

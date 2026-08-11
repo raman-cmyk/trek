@@ -45,7 +45,8 @@ export async function loadOfferingDetail(
         .eq("guide_id", o.guide_id)
         .eq("status", "open")
         .gte("day", today)
-        .order("day"),
+        .order("day")
+        .limit(400),
       client
         .from("public_reviews")
         .select("id, overall, body, published_at, author_name, author_country")
@@ -66,7 +67,14 @@ export async function loadOfferingDetail(
       alt_text: string;
       credit_name: string | null;
     }>,
-    availableDays: (avail ?? []).map((a: { day: string }) => a.day),
+    // Bookable start days: a lead time of 3 days, and for multi-day treks the
+    // guide must be open for EVERY day of the trek from that start (audit 6.3 —
+    // a 14-day EBC could previously be requested for tomorrow on a 1-day gap).
+    availableDays: bookableStartDays(
+      (avail ?? []).map((a: { day: string }) => a.day),
+      isTrek ? o.days : 1,
+      today,
+    ),
     reviews: (reviews ?? []) as Array<{
       id: string;
       overall: number;
@@ -83,3 +91,23 @@ export async function loadOfferingDetail(
 }
 
 export type OfferingDetailData = Awaited<ReturnType<typeof loadOfferingDetail>>;
+
+
+/** Start days with enough lead time AND `span` consecutive open days. */
+function bookableStartDays(openDays: string[], span: number, todayIso: string): string[] {
+  const LEAD_DAYS = 3;
+  const lead = new Date(todayIso + "T00:00:00Z");
+  lead.setUTCDate(lead.getUTCDate() + LEAD_DAYS);
+  const minStart = lead.toISOString().slice(0, 10);
+  const open = new Set(openDays);
+  return openDays.filter((d) => {
+    if (d < minStart) return false;
+    if (span <= 1) return true;
+    const cur = new Date(d + "T00:00:00Z");
+    for (let i = 1; i < span; i++) {
+      cur.setUTCDate(cur.getUTCDate() + 1);
+      if (!open.has(cur.toISOString().slice(0, 10))) return false;
+    }
+    return true;
+  });
+}
