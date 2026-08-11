@@ -78,6 +78,21 @@ export function Header({
                   </span>
                 )}
               </NavLink>
+              {/* Trekkers only — a guide's groups are their bookings. */}
+              {account.role !== "guide" && account.role !== "ops" && (
+                <NavLink
+                  to="/groups"
+                  prefetch="intent"
+                  className={({ isActive }) =>
+                    cn(
+                      "hidden rounded-pill px-3 py-1.5 sm:inline-block",
+                      isActive ? "bg-primary/10 text-primary" : "text-ink hover:bg-black/5",
+                    )
+                  }
+                >
+                  Groups
+                </NavLink>
+              )}
               {(() => {
                 const dash =
                   account.role === "guide"

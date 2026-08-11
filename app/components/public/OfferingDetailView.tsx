@@ -132,6 +132,26 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </button>
           </Form>
 
+          {/* Going with people is the normal case on a two-week trek, and it
+              is where the plan usually falls apart — one person fronts the
+              cost and chases the rest. Offer the group here, at the moment
+              someone thinks "I should ask Tom". */}
+          <Link
+            to={`/groups/new?offering=${o.id}`}
+            prefetch="intent"
+            className="-mt-2 flex items-center justify-between gap-3 rounded-card border border-line bg-card px-4 py-3 text-sm hover:border-sage hover:bg-mist"
+          >
+            <span className="min-w-0">
+              <span className="block font-medium text-ink">Going with other people?</span>
+              <span className="block text-caption text-muted">
+                Make a trip they can join — split the cost, or one of you pays.
+              </span>
+            </span>
+            <span aria-hidden="true" className="shrink-0 text-moss">
+              →
+            </span>
+          </Link>
+
           {/* Porter-welfare pledge (v3 Phase 3) */}
           {o.guide_porter_welfare && (
             <Link

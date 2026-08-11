@@ -13,6 +13,8 @@ export interface PageMetaInput {
   image?: string;
   /** OpenGraph type, default "website". */
   type?: string;
+  /** Keep this page out of search — private, or per-user. */
+  noindex?: boolean;
 }
 
 export function pageMeta({
@@ -21,6 +23,7 @@ export function pageMeta({
   canonical,
   image,
   type = "website",
+  noindex,
 }: PageMetaInput) {
   const tags: Array<Record<string, unknown>> = [
     { title },
@@ -38,6 +41,9 @@ export function pageMeta({
     tags.push({ property: "og:image", content: image });
     tags.push({ name: "twitter:image", content: image });
   }
+  // Private pages — a group names who is going on holiday and when their
+  // house is empty. That belongs in nobody's index.
+  if (noindex) tags.push({ name: "robots", content: "noindex, nofollow" });
   return tags;
 }
 

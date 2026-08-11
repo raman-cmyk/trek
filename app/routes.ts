@@ -33,6 +33,12 @@ export default [
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
     route("trips", "routes/trips._index.tsx"),
+    // Going together: the group is the container for everything that happens
+    // before a booking — who is coming, the chat, and how the money splits.
+    route("groups", "routes/groups._index.tsx"),
+    route("groups/new", "routes/groups.new.tsx"),
+    route("groups/:slug", "routes/groups.$slug.tsx"),
+    route("groups/:slug/enquire", "routes/groups.$slug.enquire.tsx"),
     route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
     route("recap/:slug", "routes/recap.$slug.tsx"),
     // 404 catch-all gets the site chrome too.
