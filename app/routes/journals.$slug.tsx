@@ -6,12 +6,16 @@ import { SmartImage } from "~/components/SmartImage";
 import { JournalCard } from "~/components/public/JournalCard";
 import { ElevationStrip } from "~/components/public/ElevationStrip";
 import { TierBadge } from "~/components/public/bits";
+import { RouteMap } from "~/components/public/RouteMap";
 import {
   JOURNAL_COLS,
   elevationPoints,
   journalStatLine,
   layoutFor,
+  sortTags,
   type JournalEntry,
+  type JournalTag,
+  type PhotoLayout,
   type PublicJournal,
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
@@ -71,13 +75,24 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   if (!journal) throw new Response("Journal not found", { status: 404 });
   const j = journal as PublicJournal;
 
-  const [{ data: entries }, { data: byGuide }, { data: sameRoute }, { data: offerings }] =
+  const [{ data: entries }, { data: tags }, { data: routeRow }, { data: byGuide }, { data: sameRoute }, { data: offerings }] =
     await Promise.all([
       client
         .from("public_journal_entries")
         .select("id, day_no, title, body, altitude_m, is_hard_day, layout, photos")
         .eq("journal_id", j.id)
         .order("day_no"),
+      client
+        .from("public_journal_tags")
+        .select("kind, value")
+        .eq("journal_id", j.id),
+      j.route_id
+        ? client
+            .from("routes")
+            .select("slug, name, typical_days, max_altitude_m, day_stops")
+            .eq("id", j.route_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       client
         .from("public_journals")
         .select(JOURNAL_COLS)
@@ -113,6 +128,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   return {
     journal: j,
     entries: (entries ?? []) as JournalEntry[],
+    tags: (tags ?? []) as { kind: any; value: string }[],
+    route: routeRow ?? null,
     more,
     offering: (offerings ?? [])[0] ?? null,
     canonical: absoluteUrl(env.SITE_URL, `/journals/${params.slug}`),
@@ -120,14 +137,13 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 }
 
 export default function Journal({ loaderData }: Route.ComponentProps) {
-  const { journal: j, entries, more, offering } = loaderData as {
-    journal: PublicJournal;
-    entries: JournalEntry[];
-    more: PublicJournal[];
-    offering: { slug: string; kind: string; title: string; days: number } | null;
-  };
+  const { journal: j, entries, tags, route, more, offering } = loaderData as any;
   const first = j.guide_name.split(" ")[0];
   const points = elevationPoints(entries);
+  const photoCount = entries.reduce(
+    (n: number, e: JournalEntry) => n + (e.photos?.length ?? 0),
+    0,
+  );
 
   return (
     <main className="pb-16">
@@ -156,6 +172,28 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
           {j.weather_note && (
             <p className="relative mt-1 text-sm text-white/70">{j.weather_note}</p>
           )}
+          {/* Route link next to the stats, not buried at the bottom — it is
+              the second most useful link on the page. */}
+          <div className="relative mt-3 flex flex-wrap items-center gap-2">
+            {j.route_slug && (
+              <Link
+                to={`/routes/${j.route_slug}`}
+                prefetch="intent"
+                className="rounded-pill bg-paper/95 px-3 py-1 text-sm font-medium text-ink hover:bg-white"
+              >
+                {j.route_name} →
+              </Link>
+            )}
+            {sortTags(tags).map((t: JournalTag) => (
+              <Link
+                key={t.kind + t.value}
+                to={`/journals?tag=${encodeURIComponent(t.value)}`}
+                className="rounded-pill border border-white/30 px-2.5 py-1 text-caption text-white/85 hover:bg-white/10"
+              >
+                {t.value}
+              </Link>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -199,9 +237,12 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {/* 3 — The day blocks. */}
-      <div className="mx-auto max-w-4xl px-4">
-        {entries.map((e, i) => (
+      {/* 3 — The album. Editorial measure on the left, sticky rail on the
+          right: the dead column is now the route map, the profile, and the
+          guide, all of which you want while reading. */}
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0">
+        {entries.map((e: JournalEntry, i: number) => (
           <DayBlock key={e.id} entry={e} layout={layoutFor(e, i)} />
         ))}
 
@@ -238,6 +279,87 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
             )}
           </figure>
         )}
+        </div>
+
+        <aside className="hidden lg:block">
+          <div className="sticky top-20 space-y-4">
+            {route?.day_stops?.length ? (
+              <div className="overflow-hidden rounded-md border border-line">
+                <RouteMap
+                  stops={route.day_stops}
+                  className="h-48 w-full bg-mist"
+                />
+                <Link
+                  to={`/routes/${route.slug}`}
+                  className="block border-t border-line bg-card px-3 py-2 text-sm font-medium text-ink hover:text-moss"
+                >
+                  {route.name} →
+                  <span className="block font-mono text-caption text-muted">
+                    {route.typical_days} days · {route.max_altitude_m?.toLocaleString("en-US")} m
+                  </span>
+                </Link>
+              </div>
+            ) : null}
+
+            {points.length >= 3 && (
+              <div className="rounded-md border border-line bg-card p-3">
+                <p className="label text-muted">This trek</p>
+                <ElevationStrip points={points} className="mt-1" />
+              </div>
+            )}
+
+            <div className="rounded-md border border-line bg-card p-4">
+              <Link to={`/guides/${j.guide_slug}`} className="flex items-center gap-3">
+                <SmartImage
+                  src={j.guide_avatar_url ?? ""}
+                  alt={j.guide_name}
+                  width={56}
+                  height={56}
+                  className="h-12 w-12 rounded-full"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-ink">{j.guide_name}</span>
+                  <span className="block font-mono text-caption text-muted">
+                    {j.guide_district}
+                  </span>
+                </span>
+              </Link>
+              {j.guide_only_with_me && (
+                <p className="mt-3 border-l-2 border-chartreuse pl-2.5 font-display text-sm leading-snug text-ink">
+                  {j.guide_only_with_me}
+                </p>
+              )}
+              <p className="mt-3 font-mono text-caption text-muted">
+                {photoCount} photos · {entries.length} days written up
+              </p>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* Sticky book bar — available the whole way down, not only at the end. */}
+      <div className="sticky bottom-0 z-20 mt-12 border-t border-line bg-card/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+          <p className="min-w-0 flex-1 truncate text-sm text-muted">
+            Trek {j.route_name ?? "this route"} with{" "}
+            <span className="font-medium text-ink">{first}</span>
+          </p>
+          <Form method="post" action="/conversations" className="shrink-0">
+            <input type="hidden" name="guide_id" value={j.guide_id} />
+            <input type="hidden" name="next" value={`/journals/${j.slug}`} />
+            <button className="rounded border border-moss px-3 py-2 text-sm font-medium text-moss hover:bg-mist">
+              Message
+            </button>
+          </Form>
+          {offering && (
+            <Link
+              to={`/${offering.kind === "trek" ? "treks" : "experiences"}/${offering.slug}`}
+              className="shrink-0 rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+            >
+              See the trip
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* 8 — Book the same trail with the same man. */}
@@ -280,7 +402,7 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
         <section className="mx-auto mt-14 max-w-6xl px-4">
           <h2 className="mb-4 font-display text-2xl text-ink">More from the trail</h2>
           <div className="grid gap-4 sm:grid-cols-3">
-            {more.map((o) => (
+            {more.map((o: PublicJournal) => (
               <JournalCard key={o.id} journal={o} showGuide={o.guide_id !== j.guide_id} />
             ))}
           </div>
@@ -295,13 +417,7 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
  * photo arrangement changes block to block so the page never settles into a
  * repeating grid.
  */
-function DayBlock({
-  entry,
-  layout,
-}: {
-  entry: JournalEntry;
-  layout: "full" | "two" | "portrait";
-}) {
+function DayBlock({ entry, layout }: { entry: JournalEntry; layout: PhotoLayout }) {
   const photos = entry.photos ?? [];
   return (
     <section
@@ -319,6 +435,20 @@ function DayBlock({
         {entry.is_hard_day && (
           <p className="mb-1 label text-ember">The hard day</p>
         )}
+
+        {/* Portrait: the photo is floated so the day's text runs alongside it
+            instead of leaving half the row empty. It comes first in the source
+            so the float has text to wrap. */}
+        {layout === "portrait" && photos[0] && (
+          <SmartImage
+            src={photos[0].url}
+            alt={photos[0].alt ?? entry.title}
+            width={520}
+            height={700}
+            className="mb-3 aspect-[3/4] w-40 rounded-sm sm:float-right sm:ml-6 sm:mb-2 sm:w-56"
+          />
+        )}
+
         <h2 className="mt-2 font-display text-2xl leading-snug text-ink sm:mt-0">
           {entry.title}
         </h2>
@@ -328,37 +458,87 @@ function DayBlock({
           </p>
         )}
         {entry.body && (
-          <p className="mt-3 max-w-[62ch] whitespace-pre-line leading-relaxed text-ink">
+          <p
+            className={cn(
+              "mt-3 whitespace-pre-line leading-relaxed text-ink",
+              // A float already narrows the column; a max-width on top of it
+              // would leave a second gutter.
+              layout !== "portrait" && "max-w-[62ch]",
+            )}
+          >
             {entry.body}
           </p>
         )}
 
-        {photos.length > 0 && (
-          <div
-            className={cn(
-              "mt-5",
-              layout === "two" && "grid grid-cols-2 gap-2 sm:gap-3",
-              layout === "portrait" && "flex justify-end",
+        {layout === "portrait" ? (
+          // Anything beyond the floated one goes in a normal row underneath.
+          photos.length > 1 && (
+            <div className="clear-both grid gap-2 pt-5 sm:gap-3" style={cols(photos.length - 1)}>
+              {photos.slice(1).map((p, i) => (
+                <SmartImage
+                  key={p.url + i}
+                  src={p.url}
+                  alt={p.alt ?? entry.title}
+                  width={640}
+                  height={800}
+                  className="aspect-[4/5] w-full rounded-sm"
+                />
+              ))}
+            </div>
+          )
+        ) : layout === "three" ? (
+          // One wide frame, then the rest sharing a row evenly — the column
+          // count comes from the photo count, so a block never ends in a hole.
+          <div className="mt-5 space-y-2 sm:space-y-3">
+            <SmartImage
+              src={photos[0].url}
+              alt={photos[0].alt ?? entry.title}
+              width={1200}
+              height={675}
+              className="aspect-[16/9] w-full rounded-sm"
+            />
+            {photos.length > 1 && (
+              <div className="grid gap-2 sm:gap-3" style={cols(photos.length - 1)}>
+                {photos.slice(1).map((p, i) => (
+                  <SmartImage
+                    key={p.url + i}
+                    src={p.url}
+                    alt={p.alt ?? entry.title}
+                    width={640}
+                    height={800}
+                    className="aspect-[4/5] w-full rounded-sm"
+                  />
+                ))}
+              </div>
             )}
-          >
-            {photos.map((p, i) => (
-              <SmartImage
-                key={p.url + i}
-                src={p.url}
-                alt={p.alt ?? entry.title}
-                width={layout === "portrait" ? 520 : 900}
-                height={layout === "portrait" ? 700 : 600}
-                className={cn(
-                  "w-full rounded-sm",
-                  layout === "full" && "aspect-[3/2]",
-                  layout === "two" && "aspect-square",
-                  layout === "portrait" && "aspect-[3/4] max-w-sm",
-                )}
-              />
-            ))}
           </div>
+        ) : (
+          photos.length > 0 && (
+            <div className={cn("mt-5", layout === "two" && "grid grid-cols-2 gap-2 sm:gap-3")}>
+              {photos.map((p, i) => (
+                <SmartImage
+                  key={p.url + i}
+                  src={p.url}
+                  alt={p.alt ?? entry.title}
+                  width={1000}
+                  height={layout === "pano" ? 420 : 660}
+                  className={cn(
+                    "w-full rounded-sm",
+                    layout === "full" && "aspect-[3/2]",
+                    layout === "pano" && "aspect-[21/9]",
+                    layout === "two" && "aspect-square",
+                  )}
+                />
+              ))}
+            </div>
+          )
         )}
       </div>
     </section>
   );
+}
+
+/** Equal columns for n photos, capped so a phone never gets four in a row. */
+function cols(n: number): React.CSSProperties {
+  return { gridTemplateColumns: `repeat(${Math.min(Math.max(n, 1), 3)}, minmax(0, 1fr))` };
 }

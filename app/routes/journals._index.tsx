@@ -33,6 +33,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const route = p.get("route") ?? "";
   const guide = p.get("guide") ?? "";
   const season = p.get("season") ?? "";
+  const tag = p.get("tag") ?? "";
 
   let q = client
     .from("public_journals")
@@ -43,6 +44,23 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (guide) q = q.eq("guide_slug", guide);
 
   let journals = ((await q).data ?? []) as PublicJournal[];
+
+  // Tags live in their own table so one journal can carry several. Filtering
+  // by one narrows the set; the rest are still shown on each card.
+  const { data: allTags } = await client
+    .from("public_journal_tags")
+    .select("journal_id, kind, value");
+  const tagsByJournal = new Map<string, { kind: any; value: string }[]>();
+  for (const t of allTags ?? []) {
+    const list = tagsByJournal.get(t.journal_id) ?? [];
+    list.push({ kind: t.kind, value: t.value });
+    tagsByJournal.set(t.journal_id, list);
+  }
+  if (tag) {
+    journals = journals.filter((j) =>
+      (tagsByJournal.get(j.id) ?? []).some((t) => t.value === tag),
+    );
+  }
 
   // Season is a month-set, not a column — filter in JS rather than teaching
   // the view about hemispheres.
@@ -65,11 +83,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     ).values(),
   ].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
+  const tagCounts = new Map<string, number>();
+  for (const list of tagsByJournal.values()) {
+    for (const t of list) tagCounts.set(t.value, (tagCounts.get(t.value) ?? 0) + 1);
+  }
+
   return {
-    journals,
+    journals: journals.map((j) => ({ ...j, tags: tagsByJournal.get(j.id) ?? [] })),
     total: (all ?? []).length,
     facets: { regions, routes },
-    filters: { region, route, guide, season },
+    filters: { region, route, guide, season, tag },
+    tags: [...tagCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([value, count]) => ({ value, count })),
     guideName:
       guide && (all ?? []).find((j) => j.guide_slug === guide)?.guide_name,
     canonical: absoluteUrl(env.SITE_URL, "/journals"),
@@ -77,8 +104,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Journals({ loaderData }: Route.ComponentProps) {
-  const { journals, total, facets, filters, guideName } = loaderData as any;
-  const narrowed = !!(filters.region || filters.route || filters.guide || filters.season);
+  const { journals, total, facets, filters, guideName, tags } = loaderData as any;
+  const narrowed = !!(
+    filters.region || filters.route || filters.guide || filters.season || filters.tag
+  );
 
   const chip = (label: string, params: Record<string, string>, active: boolean) => {
     const sp = new URLSearchParams({ ...filters, ...params });
@@ -115,7 +144,7 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
 
       <div className="mt-7 space-y-2">
         <div className="flex flex-wrap gap-2">
-          {chip("All", { region: "", route: "", guide: "", season: "" }, !narrowed)}
+          {chip("All", { region: "", route: "", guide: "", season: "", tag: "" }, !narrowed)}
           {facets.regions.map((r: string) =>
             chip(r, { region: r, route: "" }, filters.region === r),
           )}
@@ -126,6 +155,13 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
             chip(r.name, { route: r.slug, region: "" }, filters.route === r.slug),
           )}
         </div>
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {tags.map((t: any) =>
+              chip(`${t.value} (${t.count})`, { tag: t.value }, filters.tag === t.value),
+            )}
+          </div>
+        )}
       </div>
 
       {guideName && (

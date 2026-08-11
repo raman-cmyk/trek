@@ -106,13 +106,17 @@ export function firstSentence(text: string | null, max = 130): string {
  * grid shape (Not-AI doc: never repeat one grid down a page). The guide's own
  * choice wins; this only fills in when a block was left on the default.
  */
-export function layoutFor(entry: JournalEntry, index: number): "full" | "two" | "portrait" {
+export type PhotoLayout = "full" | "two" | "three" | "portrait" | "pano";
+
+export function layoutFor(entry: JournalEntry, index: number): PhotoLayout {
   const n = entry.photos.length;
   if (n === 0) return "full";
-  if (n >= 3) return "two";
-  if (entry.layout !== "full") return entry.layout;
+  if (n >= 3) return "three";
   if (n === 2) return "two";
-  return index % 3 === 1 ? "portrait" : "full";
+  // One photo: alternate full-bleed, tall-with-text, and panorama so the page
+  // never settles into a rhythm. Index-based, so it is stable across renders.
+  const cycle: PhotoLayout[] = ["full", "portrait", "pano"];
+  return entry.layout !== "full" ? (entry.layout as PhotoLayout) : cycle[index % cycle.length];
 }
 
 /**
@@ -125,4 +129,74 @@ export function elevationPoints(entries: JournalEntry[]): { day: number; m: numb
     .filter((e) => e.altitude_m != null)
     .map((e) => ({ day: e.day_no, m: e.altitude_m! }))
     .sort((a, b) => a.day - b.day);
+}
+
+
+export interface JournalTag {
+  kind: "season" | "difficulty" | "group" | "conditions" | "theme";
+  value: string;
+}
+
+/** Human labels for the tag kinds, in the order they read best on a card. */
+export const TAG_KIND_ORDER: JournalTag["kind"][] = [
+  "conditions",
+  "group",
+  "theme",
+  "season",
+  "difficulty",
+];
+
+export function sortTags(tags: JournalTag[]): JournalTag[] {
+  return [...tags].sort(
+    (a, b) => TAG_KIND_ORDER.indexOf(a.kind) - TAG_KIND_ORDER.indexOf(b.kind),
+  );
+}
+
+/**
+ * The tag vocabulary. Closed on purpose: a free-text tag field gives you
+ * "Autumn", "autumn", "Fall" and "post-monsoon" for the same week, and then
+ * /journals?tag=… returns three of the four. Guides pick from this list; the
+ * one thing they type freely is the journal itself.
+ */
+export const TAG_VOCAB: Record<JournalTag["kind"], { label: string; values: string[] }> = {
+  season: {
+    label: "Season",
+    values: ["Spring", "Monsoon", "Autumn", "Winter"],
+  },
+  difficulty: {
+    label: "How hard it was",
+    values: ["Easy", "Moderate", "Hard", "Strenuous"],
+  },
+  group: {
+    label: "Who was on it",
+    values: ["Solo", "Couple", "Family", "Friends", "Small group", "Large group"],
+  },
+  conditions: {
+    label: "Conditions",
+    values: ["Clear", "Snow", "Windy", "Monsoon rain", "Cold snap", "Smoke haze"],
+  },
+  theme: {
+    label: "What it was about",
+    values: [
+      "First-timer",
+      "Altitude",
+      "Photography",
+      "Turned back",
+      "Teahouse",
+      "Camping",
+      "Culture",
+      "Off the trail",
+      "Fast",
+      "Slow and steady",
+    ],
+  },
+};
+
+/** The season a trek's start month falls in — the default season tag. */
+export function seasonOf(iso: string): string {
+  const m = Number(iso.slice(5, 7));
+  if (m >= 3 && m <= 5) return "Spring";
+  if (m >= 6 && m <= 8) return "Monsoon";
+  if (m >= 9 && m <= 11) return "Autumn";
+  return "Winter";
 }

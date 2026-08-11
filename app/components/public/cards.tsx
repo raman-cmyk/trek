@@ -33,6 +33,8 @@ export interface PublicOffering {
   guide_avatar_url: string | null;
   guide_tier: number;
   guide_day_rate_usd_cents: number | null;
+  route_slug?: string | null;
+  route_name?: string | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -127,11 +129,11 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
   const { mr } = useMoney();
   const from = offeringFromUsdCents(offering);
   return (
-    <Link
-      to={offeringPath(offering)}
-      prefetch="intent"
-      className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
-    >
+    // Not a <Link> wrapper: the route chip below has to be its own link, and a
+    // nested <a> is invalid HTML that breaks hydration. Instead the title link
+    // stretches an invisible ::after over the whole card, so the card is still
+    // one big tap target and the chip still wins where it sits.
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift">
       <div className="relative">
         <SmartImage
           src={offering.cover_photo_url ?? ""}
@@ -161,7 +163,13 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-1 p-3 pt-5">
-        <p className="title line-clamp-2 font-medium text-ink">{offering.title}</p>
+        <Link
+          to={offeringPath(offering)}
+          prefetch="intent"
+          className="title line-clamp-2 font-medium text-ink after:absolute after:inset-0 after:content-['']"
+        >
+          {offering.title}
+        </Link>
         <p className="text-caption text-muted">
           {offering.kind === "trek" ? (
             <>
@@ -169,6 +177,18 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
             </>
           ) : (
             "Day experience"
+          )}
+          {offering.route_slug && (
+            <>
+              {" · "}
+              <Link
+                to={`/routes/${offering.route_slug}`}
+                prefetch="intent"
+                className="relative z-10 text-moss underline decoration-sage underline-offset-2 hover:decoration-moss"
+              >
+                {offering.route_name}
+              </Link>
+            </>
           )}
         </p>
         {from != null && (
@@ -182,6 +202,6 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
           </p>
         )}
       </div>
-    </Link>
+    </div>
   );
 }

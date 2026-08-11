@@ -6,11 +6,12 @@ import { EntryForm, JournalMetaForm } from "~/components/JournalEditor";
 import {
   journalableBookings,
   parseEntryForm,
+  saveTags,
   uniqueSlug,
   validateDraft,
   validateForPublish,
 } from "~/lib/journals.server";
-import type { JournalEntry } from "~/lib/journals";
+import type { JournalEntry, JournalTag } from "~/lib/journals";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -23,13 +24,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .maybeSingle();
   if (!journal) throw new Response("Not found", { status: 404 });
 
-  const [{ data: entries }, { data: routes }, bookings] = await Promise.all([
+  const [{ data: entries }, { data: routes }, { data: tags }, bookings] = await Promise.all([
     admin
       .from("journal_entries")
       .select("*")
       .eq("journal_id", journal.id)
       .order("day_no"),
     admin.from("routes").select("id, name").order("name"),
+    admin.from("journal_tags").select("kind, value").eq("journal_id", journal.id),
     journalableBookings(admin, journal.guide_id),
   ]);
 
@@ -38,6 +40,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       journal,
       entries: (entries ?? []) as JournalEntry[],
       routes: routes ?? [],
+      tags: (tags ?? []) as JournalTag[],
       bookings,
     },
     { headers },
@@ -82,11 +85,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         .eq("id", journal.id);
       return data({ ok: "Unpublished." }, { headers });
     }
-    const { count } = await admin
+    const { data: entries } = await admin
       .from("journal_entries")
-      .select("id", { count: "exact", head: true })
+      .select("day_no, photos")
       .eq("journal_id", journal.id);
-    const bad = validateForPublish(journal, count ?? 0);
+    const bad = validateForPublish(journal, entries ?? []);
     if (bad) return data({ error: bad }, { status: 400, headers });
     await admin
       .from("journals")
@@ -136,11 +139,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     .update({ ...patch, slug })
     .eq("id", journal.id);
   if (error) return data({ error: error.message }, { status: 400, headers });
+  await saveTags(admin, journal.id, form);
   return data({ ok: "Saved." }, { headers });
 }
 
 export default function OpsJournalEdit({ loaderData, actionData }: Route.ComponentProps) {
-  const { journal, entries, routes, bookings } = loaderData as any;
+  const { journal, entries, routes, bookings, tags } = loaderData as any;
   const nav = useNavigation();
   const nextDay = entries.length ? Math.max(...entries.map((e: any) => e.day_no)) + 1 : 1;
 
@@ -178,6 +182,7 @@ export default function OpsJournalEdit({ loaderData, actionData }: Route.Compone
         journal={journal}
         routes={routes}
         bookings={bookings}
+        tags={tags}
         canPublish
         busy={nav.state !== "idle"}
       />

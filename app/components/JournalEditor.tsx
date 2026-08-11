@@ -1,7 +1,12 @@
 import { Form } from "react-router";
 import { Button } from "~/components/Button";
 import { PhotoUpload } from "~/components/PhotoUpload";
-import type { JournalEntry } from "~/lib/journals";
+import {
+  TAG_KIND_ORDER,
+  TAG_VOCAB,
+  type JournalEntry,
+  type JournalTag,
+} from "~/lib/journals";
 
 /**
  * The journal editor, shared by /ops/journals/:id and /g/journals/:id.
@@ -19,12 +24,14 @@ export function JournalMetaForm({
   journal,
   routes,
   bookings,
+  tags,
   canPublish,
   busy,
 }: {
   journal: any;
   routes: { id: string; name: string }[];
   bookings?: { id: string; start_date: string; offering: any }[];
+  tags?: JournalTag[];
   /** Ops only — a guide writes and submits, ops publishes. */
   canPublish?: boolean;
   busy?: boolean;
@@ -55,10 +62,19 @@ export function JournalMetaForm({
         </label>
       </div>
 
+      {/* Required. The route is the spine: it is how this journal reaches the
+          route page, the guide's trek count, and /journals?route=… */}
       <label className={label}>
         Route
-        <select name="route_id" defaultValue={journal?.route_id ?? ""} className={input}>
-          <option value="">— none —</option>
+        <select
+          name="route_id"
+          defaultValue={journal?.route_id ?? ""}
+          className={input}
+          required
+        >
+          <option value="" disabled>
+            — pick the route —
+          </option>
           {routes.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name}
@@ -184,6 +200,37 @@ export function JournalMetaForm({
         </p>
       </fieldset>
 
+      {/* Tags. A closed list on purpose — see TAG_VOCAB. Each one becomes a
+          clickable filter on the journal, so a wrong tag is a wrong page. */}
+      <fieldset className="rounded border border-line p-3">
+        <legend className="px-1 text-sm font-medium text-ink">Tags</legend>
+        <p className="text-caption text-muted">
+          Tick what was true. These are how someone finds this trek — “snow”,
+          “first-timer”, “turned back”.
+        </p>
+        <div className="mt-3 space-y-3">
+          {TAG_KIND_ORDER.map((kind) => (
+            <div key={kind}>
+              <p className="text-sm text-ink-soft">{TAG_VOCAB[kind].label}</p>
+              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2">
+                {TAG_VOCAB[kind].values.map((v) => (
+                  <label key={v} className="flex items-center gap-1.5 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      name="tag"
+                      value={`${kind}:${v}`}
+                      defaultChecked={tags?.some((t) => t.kind === kind && t.value === v)}
+                      className="accent-moss"
+                    />
+                    {v}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </fieldset>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <label className={label}>
           A note from the client, if they sent one
@@ -278,7 +325,9 @@ export function EntryForm({
           <select name="layout" defaultValue={entry?.layout ?? "full"} className={input}>
             <option value="full">One big photo</option>
             <option value="two">Two side by side</option>
+            <option value="three">Three in a row</option>
             <option value="portrait">Tall photo, to the right</option>
+            <option value="pano">Wide panorama</option>
           </select>
         </label>
       </div>

@@ -76,6 +76,21 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             <p className="mt-1 text-sm text-ink-soft">
               {o.kind === "trek" ? `${o.days} days` : "Day experience"}
               {o.max_party ? ` · up to ${o.max_party} people` : ""}
+              {/* The route page is where the altitude profile, the permits and
+                  every other guide who runs it live. From a trek page it is the
+                  most useful next click there is. */}
+              {(o as any).route_slug && (
+                <>
+                  {" · "}
+                  <Link
+                    to={`/routes/${(o as any).route_slug}`}
+                    prefetch="intent"
+                    className="text-moss underline decoration-sage underline-offset-2 hover:decoration-moss"
+                  >
+                    {(o as any).route_name} route
+                  </Link>
+                </>
+              )}
             </p>
           </header>
 

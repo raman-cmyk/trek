@@ -40,12 +40,36 @@ export function SmartImage({
 }) {
   const [loaded, setLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  // No src means NO <img>. `src=""` is not "no image" to a browser — it
+  // resolves against the current URL, fetches the HTML page, fails to decode
+  // it, and paints the broken-image glyph. Those are the little icons that
+  // have been floating around the guide profile, the matcher, the messages
+  // thread and the journal: every avatar_url that is null (trekkers, ops, and
+  // guides still in review) produced one.
+  const hasSrc = typeof src === "string" && src.trim().length > 0;
 
   // Cached images can finish loading before hydration, so the onLoad event
   // never fires on the client. Reconcile against the actual element state.
   useEffect(() => {
     if (imgRef.current?.complete) setLoaded(true);
   }, []);
+
+  // Without a source, render the placeholder alone: warm wheat and contour
+  // lines, the designed empty state, with the alt text still available to
+  // assistive tech.
+  if (!hasSrc) {
+    return (
+      <div
+        role={alt ? "img" : undefined}
+        aria-label={alt || undefined}
+        className={cn("overflow-hidden placeholder-contour", !cover && "relative", className)}
+        style={{
+          ...(cover ? {} : { aspectRatio: `${width} / ${height}` }),
+          backgroundColor: avgColor,
+        }}
+      />
+    );
+  }
 
   return (
     <div

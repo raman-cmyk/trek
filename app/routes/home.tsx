@@ -59,9 +59,12 @@ export async function loader({ context }: Route.LoaderArgs) {
       client
         .from("public_offerings")
         .select(
-          "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
+          "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
         ),
-      client.from("routes").select("id, slug, name, region"),
+      client
+        .from("routes")
+        .select("id, slug, name, region, typical_days, max_altitude_m, difficulty, sort")
+        .order("sort"),
       client
         .from("public_reviews")
         .select("id, overall, body, published_at, author_name, author_country")
@@ -104,6 +107,27 @@ export async function loader({ context }: Route.LoaderArgs) {
     const r = o.route_id ? routeById.get(o.route_id) : null;
     if (r) (regionsByGuide[o.guide_id] ??= new Set()).add(r.region);
   }
+
+  // Route rows for the catalogue strip. Route pages are the primary SEO
+  // surface, so the homepage links the named routes themselves — not just the
+  // hub — with the one number that makes a route feel staffed rather than
+  // listed: how many guides on Trek actually lead it.
+  const guidesPerRoute: Record<string, Set<string>> = {};
+  for (const o of offerings ?? []) {
+    if (o.route_id) (guidesPerRoute[o.route_id] ??= new Set()).add(o.guide_id);
+  }
+  const routeRows = (routes ?? [])
+    .map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      region: r.region,
+      days: r.typical_days,
+      max_altitude_m: r.max_altitude_m,
+      difficulty: r.difficulty,
+      guides: guidesPerRoute[r.id]?.size ?? 0,
+    }))
+    .sort((a, b) => b.guides - a.guides || a.name.localeCompare(b.name))
+    .slice(0, 8);
 
   const pick = (g: HomeGuide) => g; // rows carry whole guide rows; cards need them
 
@@ -168,6 +192,8 @@ export async function loader({ context }: Route.LoaderArgs) {
     freeRuns,
     pins,
     routes: (routes ?? []).map((r) => ({ slug: r.slug, name: r.name, region: r.region })) as MapRoute[],
+    routeRows,
+    routeTotal: (routes ?? []).length,
     regionCounts,
     ratings,
     langMap,
@@ -199,6 +225,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     freeThisWeekTotal,
     pins,
     routes,
+    routeRows,
+    routeTotal,
     regionCounts,
     ratings,
     langMap,
@@ -356,6 +384,51 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <JournalCard key={j.id} journal={j} showGuide />
             ))}
           </div>
+        </section>
+      )}
+
+      {/* 5b — The routes themselves. Named, with the number that matters:
+          how many guides on Trek lead it. */}
+      {routeRows.length > 0 && (
+        <section className="mx-auto max-w-6xl px-4 py-16">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="label text-muted">If you already know the walk</p>
+              <h2 className="mt-2 font-display text-3xl text-ink">
+                The routes people actually walk
+              </h2>
+            </div>
+            <Link
+              to="/routes"
+              prefetch="intent"
+              className="text-sm text-moss underline underline-offset-4 hover:text-pine"
+            >
+              All <span className="font-mono">{routeTotal}</span> routes →
+            </Link>
+          </div>
+          <ul className="mt-6 divide-y divide-line border-y border-line">
+            {routeRows.map((r: any) => (
+              <li key={r.slug}>
+                <Link
+                  to={`/routes/${r.slug}`}
+                  prefetch="intent"
+                  className="group flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3.5 transition-colors hover:bg-mist"
+                >
+                  <span className="font-display text-xl text-ink group-hover:text-moss">
+                    {r.name}
+                  </span>
+                  <span className="text-caption text-muted">{r.region}</span>
+                  <span className="ml-auto font-mono text-sm text-muted">
+                    {r.days ? `${r.days} d` : ""}
+                    {r.max_altitude_m
+                      ? ` · ${r.max_altitude_m.toLocaleString("en-US")} m`
+                      : ""}
+                    {r.guides ? ` · ${r.guides} guides` : ""}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

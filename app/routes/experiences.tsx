@@ -17,7 +17,7 @@ const CATEGORIES = [
 ] as const;
 
 const OFFERING_COLS =
-  "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents";
+  "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({

@@ -3,8 +3,14 @@ import type { Route } from "./+types/g.journals.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { EntryForm, JournalMetaForm } from "~/components/JournalEditor";
-import { parseEntryForm, uniqueSlug, validateDraft } from "~/lib/journals.server";
-import type { JournalEntry } from "~/lib/journals";
+import {
+  parseEntryForm,
+  saveTags,
+  uniqueSlug,
+  validateDraft,
+  validateForPublish,
+} from "~/lib/journals.server";
+import type { JournalEntry, JournalTag } from "~/lib/journals";
 
 /**
  * A guide editing their own journal. Same editor as ops, minus publish: the
@@ -24,13 +30,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .maybeSingle();
   if (!journal) throw new Response("Not found", { status: 404 });
 
-  const [{ data: entries }, { data: routes }] = await Promise.all([
+  const [{ data: entries }, { data: routes }, { data: tags }] = await Promise.all([
     admin.from("journal_entries").select("*").eq("journal_id", journal.id).order("day_no"),
     admin.from("routes").select("id, name").order("name"),
+    admin.from("journal_tags").select("kind, value").eq("journal_id", journal.id),
   ]);
 
   return data(
-    { journal, entries: (entries ?? []) as JournalEntry[], routes: routes ?? [] },
+    {
+      journal,
+      entries: (entries ?? []) as JournalEntry[],
+      routes: routes ?? [],
+      tags: (tags ?? []) as JournalTag[],
+    },
     { headers },
   );
 }
@@ -73,6 +85,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "submit") {
+    // Same album rules ops publishes against, checked here so the guide finds
+    // out on their own phone rather than three days later from the office.
+    const { data: entries } = await admin
+      .from("journal_entries")
+      .select("day_no, photos")
+      .eq("journal_id", journal.id);
+    const bad = validateForPublish(journal, entries ?? []);
+    if (bad) return data({ error: bad }, { status: 400, headers });
     // No status change (only ops publishes) — this just tells the office it's
     // ready, via the change-request queue they already watch.
     await admin.from("guide_change_requests").insert({
@@ -115,11 +135,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       : journal.slug;
   const { error } = await admin.from("journals").update({ ...patch, slug }).eq("id", journal.id);
   if (error) return data({ error: error.message }, { status: 400, headers });
+  await saveTags(admin, journal.id, form);
   return data({ ok: "Saved." }, { headers });
 }
 
 export default function GuideJournalEdit({ loaderData, actionData }: Route.ComponentProps) {
-  const { journal, entries, routes } = loaderData as any;
+  const { journal, entries, routes, tags } = loaderData as any;
   const nav = useNavigation();
   const nextDay = entries.length ? Math.max(...entries.map((e: any) => e.day_no)) + 1 : 1;
   const live = journal.status === "published";
@@ -158,7 +179,12 @@ export default function GuideJournalEdit({ loaderData, actionData }: Route.Compo
         </div>
       ) : (
         <>
-          <JournalMetaForm journal={journal} routes={routes} busy={nav.state !== "idle"} />
+          <JournalMetaForm
+            journal={journal}
+            routes={routes}
+            tags={tags}
+            busy={nav.state !== "idle"}
+          />
 
           <section className="space-y-4">
             <h2 className="font-display text-xl text-ink">The days ({entries.length})</h2>
