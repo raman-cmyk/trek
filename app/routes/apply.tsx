@@ -58,6 +58,26 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const admin = createAdminClient(env);
 
+  // Abuse guards on an unauthenticated endpoint that creates auth users:
+  // a honeypot field (hidden from humans; bots fill it) and a crude global
+  // throttle on recent applications.
+  if (String(form.get("website") ?? "") !== "") {
+    // Pretend success — don't teach the bot.
+    return data({ ok: true, name: fullName });
+  }
+  const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { count: recent } = await admin
+    .from("guides")
+    .select("user_id", { count: "exact", head: true })
+    .eq("status", "applied")
+    .gte("created_at", tenMinAgo);
+  if ((recent ?? 0) >= 5) {
+    return data(
+      { error: "We're getting a lot of applications right now — try again in a few minutes." },
+      { status: 429 },
+    );
+  }
+
   // 1) Auth user keyed by phone (guides sign in via phone OTP once SMS is live).
   const { data: created, error: authErr } = await admin.auth.admin.createUser({
     phone,
@@ -177,6 +197,15 @@ export default function Apply({ actionData }: Route.ComponentProps) {
         onChange={persist}
         className="mt-6 space-y-4"
       >
+        {/* Honeypot — humans never see it, bots fill it. */}
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="absolute -left-[9999px] h-0 w-0 opacity-0"
+        />
         <Field name="full_name" label="Full name (as on your licence)" required />
         <Field name="phone" label="Phone (with country code, e.g. +9779…)" required />
         <Field name="home_district" label="Home district" />

@@ -290,7 +290,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
 /** The money, huge, on green — the one section no template has. */
 function GiantSplit({ offering }: { offering: PublicOffering }) {
-  const { fmtMinor } = useMoney();
+  const { m } = useMoney();
   const bd = offering.price_breakdown as PriceBreakdown;
   const p = computeExperiencePricing(bd, 2);
   const total = p.perPersonUsdCents;
@@ -301,7 +301,7 @@ function GiantSplit({ offering }: { offering: PublicOffering }) {
       <div className="mx-auto max-w-6xl px-4">
         <p className="label text-paper/60">Where your money goes</p>
         <h2 className="mt-3 max-w-[16ch] font-display text-5xl sm:text-6xl">
-          <span className="wt-heavy">{fmtMinor(total)}</span>{" "}
+          <span className="wt-heavy">{m(total)}</span>{" "}
           <span className="wt-light text-paper/75">to Base Camp. Split, to the cent.</span>
         </h2>
         <p className="mt-3 max-w-[52ch] text-paper/80">
@@ -331,7 +331,7 @@ function GiantSplit({ offering }: { offering: PublicOffering }) {
                 {l.label}
                 {l.key === "trek" && " — ours"}
               </span>
-              <span className="font-mono text-paper">{fmtMinor(l.amountUsdCents)}</span>
+              <span className="font-mono text-paper">{m(l.amountUsdCents)}</span>
             </div>
           ))}
         </div>

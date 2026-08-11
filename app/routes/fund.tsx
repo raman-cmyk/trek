@@ -55,7 +55,7 @@ const ALLOCATION = [
 
 export default function Fund({ loaderData }: Route.ComponentProps) {
   const { collected, trips } = loaderData as any;
-  const { fmtMinor } = useMoney();
+  const { m } = useMoney();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
@@ -71,7 +71,7 @@ export default function Fund({ loaderData }: Route.ComponentProps) {
       {/* Live counter — real bookings, real cents. */}
       <div className="mt-8 rounded-card border border-border bg-card p-6">
         <p className="text-sm text-ink-soft">Collected so far, from {trips} paid booking{trips === 1 ? "" : "s"}</p>
-        <p className="mt-1 font-mono text-4xl text-ink">{fmtMinor(collected)}</p>
+        <p className="mt-1 font-mono text-4xl text-ink">{m(collected)}</p>
         <p className="mt-2 text-xs text-ink-soft">
           Computed live from paid bookings — the same 3% line you see at checkout, added up.
         </p>

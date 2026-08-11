@@ -100,6 +100,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     .from("conversations")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", convo.id);
+  // Tell the other party (SMS for guides, email for trekkers).
+  const otherId = convo.guide_id === user.id ? convo.trekker_id : convo.guide_id;
+  const { data: me } = await admin.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const { notifyNewMessage } = await import("~/lib/notifications.server");
+  await notifyNewMessage(env, admin, {
+    toUserId: otherId,
+    fromName: me?.full_name ?? "Someone",
+    threadPath: `/messages/c/${convo.id}`,
+  });
   return data({ ok: true }, { headers });
 }
 

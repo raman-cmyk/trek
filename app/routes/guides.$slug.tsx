@@ -3,6 +3,7 @@ import type { Route } from "./+types/guides.$slug";
 import { pageMeta, personLd, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
+import { useMoney } from "~/lib/currency-context";
 import { Carousel, type Photo } from "~/components/public/Carousel";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
@@ -139,6 +140,7 @@ const CHECK_LABELS: Record<string, string> = {
 export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   const { guide, photos, languages, offerings, openDays, reviews, receipts, rating, monthAnchor } =
     loaderData;
+  const { m } = useMoney();
   const carousel: Photo[] = (photos.length
     ? photos
     : [{ url: guide.avatar_url ?? "", alt_text: guide.full_name, kind: "headshot" }]
@@ -285,7 +287,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               {guide.day_rate_usd_cents ? "From" : ""}{" "}
               <span className="text-xl font-medium text-ink">
                 {guide.day_rate_usd_cents
-                  ? `$${(guide.day_rate_usd_cents / 100).toFixed(0)}/day`
+                  ? `${m(guide.day_rate_usd_cents)}/day`
                   : ""}
               </span>
             </p>
@@ -306,7 +308,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-border bg-card p-3 lg:hidden">
         <p className="flex-1 text-sm font-medium">
           {guide.day_rate_usd_cents
-            ? `From $${(guide.day_rate_usd_cents / 100).toFixed(0)}/day`
+            ? `From ${m(guide.day_rate_usd_cents)}/day`
             : guide.full_name}
         </p>
         {offerings[0] && (

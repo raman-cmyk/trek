@@ -75,6 +75,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     body_rendered: preDeposit ? rendered : body,
     flagged_reason: flaggedReason, // → ops moderation queue
   });
+  // Tell the other party (SMS for guides, email for trekkers).
+  const otherId = booking.guide_id === user.id ? booking.trekker_id : booking.guide_id;
+  const { data: me } = await admin.from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const { notifyNewMessage } = await import("~/lib/notifications.server");
+  await notifyNewMessage(env, admin, {
+    toUserId: otherId,
+    fromName: me?.full_name ?? "Someone",
+    threadPath: `/messages/${booking.id}`,
+  });
   return data({ ok: true }, { headers });
 }
 

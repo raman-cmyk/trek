@@ -3,6 +3,7 @@ import type { Route } from "./+types/ops.pipeline";
 import { Badge } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+import { createPayoutForBooking } from "~/lib/booking.server";
 
 // Happy-path pipeline columns (docs/01 F1). Cancellations shown separately.
 const COLUMNS = [
@@ -33,10 +34,11 @@ const NEXT: Record<string, string | null> = {
   completed: null,
 };
 
-// Timestamp columns to stamp as a booking advances.
+// Timestamp columns to stamp as a booking advances. NOTE: advancing to
+// `confirmed` does NOT stamp balance_paid_at — confirming a booking is not
+// the same as its balance having been charged (audit finding).
 const STAMP: Record<string, string | undefined> = {
   deposit_paid: "deposit_paid_at",
-  confirmed: "balance_paid_at",
   completed: "completed_confirmed_at",
 };
 
@@ -62,6 +64,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   const stamp = STAMP[next];
   if (stamp) patch[stamp] = new Date().toISOString();
   await admin.from("bookings").update(patch).eq("id", id);
+  // Completion is when the guide gets paid — record the payout ledger row.
+  if (next === "completed") await createPayoutForBooking(admin, id);
   return data({ ok: true }, { headers });
 }
 

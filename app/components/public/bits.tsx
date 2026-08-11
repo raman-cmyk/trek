@@ -116,6 +116,11 @@ export function PriceBreakdown({
   total: number;
 }) {
   const { toMinor, fmtMinor } = useMoney();
+  // The total shown is the total CHARGED (the caller's authoritative figure).
+  // If the visible lines don't sum to it, say so instead of silently lying —
+  // that mismatch is a bug upstream (audit B2), never something to normalise.
+  const rowSumUsd = rows.reduce((s, r) => s + r.usdCents, 0);
+  const mismatch = Math.abs(rowSumUsd - total) > 1;
   return (
     <dl className="space-y-1 text-sm">
       {rows.map((r) => (
@@ -126,8 +131,13 @@ export function PriceBreakdown({
       ))}
       <div className="mt-1 flex justify-between border-t border-line pt-1 font-medium">
         <dt>Total</dt>
-        <dd className="font-mono">{fmtMinor(rows.reduce((s, r) => s + toMinor(r.usdCents), 0))}</dd>
+        <dd className="font-mono">{fmtMinor(toMinor(total))}</dd>
       </div>
+      {mismatch && (
+        <p className="text-xs text-ember">
+          These lines don't add up to the total — please contact us before paying.
+        </p>
+      )}
     </dl>
   );
 }

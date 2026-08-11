@@ -8,6 +8,10 @@ import { fulfillDeposit } from "~/lib/booking.server";
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const stripe = getStripe(env);
+  // MockStripe can't verify signatures — with no real keys this route would
+  // accept any payload and hand out free bookings. Mock checkout self-confirms,
+  // so the webhook simply doesn't exist until real Stripe keys are set.
+  if (stripe.isMock) return new Response("not found", { status: 404 });
   const payload = await request.text();
   const sig = request.headers.get("stripe-signature");
 

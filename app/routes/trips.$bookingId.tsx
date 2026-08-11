@@ -3,14 +3,14 @@ import type { Route } from "./+types/trips.$bookingId";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { getStripe } from "~/lib/stripe.server";
-import { cancelBooking } from "~/lib/booking.server";
+import { cancelBooking, createPayoutForBooking } from "~/lib/booking.server";
 import { uploadDocument } from "~/lib/documents.server";
 import { submitReview, createRecap, addReviewPhoto } from "~/lib/reviews.server";
 import { uploadPublicPhoto } from "~/lib/media.server";
 import { SUBRATINGS } from "~/lib/reviews";
 import { sendEmail } from "~/lib/notify.server";
 import { briefUnlocked, guidePhoneUnlocked, daysUntilStart } from "~/lib/unlocks";
-import { formatUsd } from "~/lib/pricing";
+import { useMoney } from "~/lib/currency-context";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
@@ -124,8 +124,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       .eq("id", b.id);
     // Schedule document deletion 90 days out (retention sweep).
     await admin.from("booking_documents").update({ delete_after: deleteAfter }).eq("booking_id", b.id);
-    // Auto-generate the shareable recap.
+    // Auto-generate the shareable recap + record the guide's payout.
     await createRecap(admin, b.id);
+    await createPayoutForBooking(admin, b.id);
     await sendEmail(env, user.email, "How was your trek?", "Please leave your guide a review.");
     return data({ ok: "Trip marked complete. Please leave a review!" }, { headers });
   }
@@ -165,7 +166,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "cancel") {
-    const outcome = await cancelBooking(admin, getStripe(env), b.id, "trekker");
+    const outcome = await cancelBooking(admin, getStripe(env), b.id, "trekker", env);
     return data({ cancelled: true, refund: outcome.refundToTrekkerUsdCents }, { headers });
   }
   return data({ ok: null }, { headers });
@@ -175,6 +176,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
   const { booking: b, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified } =
     loaderData as any;
   const nav = useNavigation();
+  const { m } = useMoney();
   const cancelled = b.status.startsWith("cancelled");
   const activeIdx = STEPS.findIndex((s) => s[0] === b.status);
   const isTrek = b.offering?.kind === "trek";
@@ -208,7 +210,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
       )}
       {actionData && "cancelled" in actionData && (
         <p className="mt-3 rounded-card bg-amber-50 p-3 text-sm text-amber-800">
-          Cancelled. Refund of {formatUsd((actionData as any).refund)} is on its way.
+          Cancelled. Refund of {m((actionData as any).refund)} is on its way.
         </p>
       )}
 
@@ -218,8 +220,8 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           className="mt-5 block rounded-button bg-primary px-4 py-3 text-center font-medium text-white"
         >
           {b.deposit_usd_cents >= b.total_usd_cents
-            ? `Pay ${formatUsd(b.total_usd_cents)} & confirm`
-            : `Pay ${formatUsd(b.deposit_usd_cents)} deposit`}
+            ? `Pay ${m(b.total_usd_cents)} & confirm`
+            : `Pay ${m(b.deposit_usd_cents)} deposit`}
         </Link>
       )}
 
@@ -409,7 +411,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
             {payments.map((p: any, i: number) => (
               <li key={i} className="flex justify-between">
                 <span className="capitalize text-ink-soft">{p.type}</span>
-                <span>{formatUsd(p.amount_usd_cents)}</span>
+                <span>{m(p.amount_usd_cents)}</span>
               </li>
             ))}
           </ul>
@@ -417,7 +419,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
       )}
 
       {/* Instalment plan — interest-free balance split (v3 §1d) */}
-      {instalments.length > 0 && (
+      {!cancelled && instalments.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-2 font-display text-xl">Payment plan</h2>
           <p className="mb-2 text-sm text-ink-soft">
@@ -435,7 +437,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
                     <span className="ml-2 text-ink">{it.due_date}</span>
                   </span>
                   <span className="flex items-center gap-2">
-                    <span className="font-mono">{formatUsd(it.amount_usd_cents)}</span>
+                    <span className="font-mono">{m(it.amount_usd_cents)}</span>
                     <Badge tone={paid ? "green" : overdue ? "amber" : "neutral"}>
                       {paid ? "paid" : overdue ? "due" : "scheduled"}
                     </Badge>

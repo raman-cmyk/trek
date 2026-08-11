@@ -79,7 +79,7 @@ function seasonLabel(months: number[] | null): string {
 
 export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
   const { cards } = loaderData as any;
-  const { fmtMinor } = useMoney();
+  const { m } = useMoney();
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -114,7 +114,7 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
                 </h2>
                 {r.fromUsdCents != null && (
                   <span className="whitespace-nowrap font-mono text-sm text-ink">
-                    from {fmtMinor(r.fromUsdCents)}
+                    from {m(r.fromUsdCents)}
                   </span>
                 )}
               </div>

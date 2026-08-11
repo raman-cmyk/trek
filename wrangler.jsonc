@@ -6,5 +6,9 @@
   "main": "./workers/app.ts",
   "observability": {
     "enabled": true
+  },
+  // Daily 02:00 UTC — scheduled() fans out to every /api/cron/:job sweep.
+  "triggers": {
+    "crons": ["0 2 * * *"]
   }
 }

@@ -89,7 +89,7 @@ function Chip({ name, value, current, children }: {
 
 export default function Match({ loaderData }: Route.ComponentProps) {
   const { submitted, query, matches } = loaderData as any;
-  const { fmtMinor } = useMoney();
+  const { m } = useMoney();
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -231,7 +231,7 @@ export default function Match({ loaderData }: Route.ComponentProps) {
                         >
                           {bestOffering.title}
                           {bestOffering.fromUsdCents
-                            ? ` — from ${fmtMinor(bestOffering.fromUsdCents)}`
+                            ? ` — from ${m(bestOffering.fromUsdCents)}`
                             : ""}
                         </Link>
                       )}

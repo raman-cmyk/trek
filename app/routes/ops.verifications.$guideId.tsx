@@ -69,12 +69,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       .from("guides")
       .update({ status: "verified", tier })
       .eq("user_id", params.guideId);
+    const { notifyGuideVerification } = await import("~/lib/notifications.server");
+    await notifyGuideVerification(env, admin, params.guideId!, true);
     return data({ ok: "Guide approved and now live." }, { headers });
   } else if (intent === "reject") {
     await admin
       .from("guides")
       .update({ status: "removed" })
       .eq("user_id", params.guideId);
+    const { notifyGuideVerification } = await import("~/lib/notifications.server");
+    await notifyGuideVerification(env, admin, params.guideId!, false);
     return data({ ok: "Guide rejected." }, { headers });
   } else if (intent === "start_review") {
     await admin

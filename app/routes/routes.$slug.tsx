@@ -9,7 +9,7 @@ import {
 } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { getRouteArticle } from "~/lib/content";
-import { formatUsd } from "~/lib/pricing";
+import { useMoney } from "~/lib/currency-context";
 import { SmartImage } from "~/components/SmartImage";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { GuideChip } from "~/components/public/bits";
@@ -101,6 +101,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
 export default function RoutePage({ loaderData }: Route.ComponentProps) {
   const { route, permits, offerings, guides, article, related } = loaderData;
+  const { m } = useMoney();
 
   return (
     <main>
@@ -180,7 +181,7 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
                         {p.lead_time_days}d
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {formatUsd(p.cost_usd_cents)}
+                        {m(p.cost_usd_cents)}
                       </td>
                     </tr>
                   ))}

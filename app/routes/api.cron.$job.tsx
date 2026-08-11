@@ -6,13 +6,15 @@ import { runDocumentRetentionSweep } from "~/lib/documents.server";
 import { releaseStaleReviews } from "~/lib/reviews.server";
 
 /**
- * Cron sweeps (docs/02 §Edge functions). Wire these to Cloudflare Cron Triggers
- * (or Supabase pg_cron) in production, sending `x-cron-secret`. Locally, when
- * CRON_SECRET is unset, they run without the header for testing.
+ * Cron sweeps (docs/02 §Edge functions). Invoked by the worker's scheduled()
+ * handler (Cloudflare Cron Triggers) with `x-cron-secret`. Fails closed:
+ * without a configured CRON_SECRET nothing runs — set it in .dev.vars locally.
  */
 export async function action({ request, params, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  if (env.CRON_SECRET && request.headers.get("x-cron-secret") !== env.CRON_SECRET) {
+  // Fail CLOSED: these endpoints delete documents and charge cards. No secret
+  // configured means no access — never open.
+  if (!env.CRON_SECRET || request.headers.get("x-cron-secret") !== env.CRON_SECRET) {
     return new Response("forbidden", { status: 403 });
   }
   const admin = createAdminClient(env);
@@ -24,7 +26,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       result = await runEnquiryExpirySweep(admin);
       break;
     case "balance-sweep":
-      result = await runBalanceSweep(admin, getStripe(env), today);
+      result = await runBalanceSweep(admin, getStripe(env), today, env);
       break;
     case "document-retention":
       result = await runDocumentRetentionSweep(admin, today);

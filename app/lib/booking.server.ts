@@ -25,6 +25,10 @@ export interface Quote extends PriceBreakdown {
   depositUsdCents: number;
   endDate: string;
   days: number;
+  /** v3 lines that have no legacy column — snapshotted onto the booking so
+   *  the stored lines always sum to the stored total (audit B2). */
+  logisticsUsdCents: number;
+  fundUsdCents: number;
 }
 
 /** Build a quote from an offering + party size + start date (pricing.ts). */
@@ -42,18 +46,22 @@ export async function quote(
   if (!o) throw new Error("offering not found");
 
   let breakdown: PriceBreakdown;
+  let logisticsUsdCents = 0;
+  let fundUsdCents = 0;
   const pb = (o as any).price_breakdown as ExperienceBreakdown | null;
   if (pb?.guide_fee_total_usd_cents) {
     // v3: charge exactly what the page displayed — derive from the breakdown.
     const a = partyAmounts(pb, partySize);
     const guideReceives = a.guideUsdCents;
+    logisticsUsdCents = a.logisticsUsdCents;
+    fundUsdCents = a.fundUsdCents;
     breakdown = {
       guideFeeUsdCents: a.guideUsdCents,
       porterFeeUsdCents: a.portersUsdCents,
       permitFeesUsdCents: a.permitsUsdCents,
       serviceFeeUsdCents: a.trekUsdCents, // the 10% Trek fee is the platform's cut
       permitHandlingUsdCents: 0,
-      totalUsdCents: a.totalUsdCents, // includes logistics + The Fund
+      totalUsdCents: a.totalUsdCents, // guide+porters+permits+logistics+trek+fund
       commissionUsdCents: a.trekUsdCents,
       guideReceivesUsdCents: guideReceives,
       guidePayoutNprPaisa: Math.round(guideReceives * FX_RATE_NPR),
@@ -92,7 +100,7 @@ export async function quote(
       ? computeDeposit(breakdown.totalUsdCents, daysUntil)
       : breakdown.totalUsdCents;
 
-  return { ...breakdown, depositUsdCents, endDate, days: o.days };
+  return { ...breakdown, depositUsdCents, endDate, days: o.days, logisticsUsdCents, fundUsdCents };
 }
 
 /**
@@ -137,6 +145,11 @@ export async function acceptEnquiry(
       fx_rate_npr: FX_RATE_NPR,
       guide_payout_npr_paisa: q.guidePayoutNprPaisa,
       deposit_usd_cents: q.depositUsdCents,
+      logistics_usd_cents: q.logisticsUsdCents,
+      fund_usd_cents: q.fundUsdCents,
+      // Accepted holds expire if the deposit isn't paid (released by the
+      // enquiry-expiry sweep — audit B3).
+      hold_expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
     })
     .select("id")
     .single();
@@ -251,12 +264,21 @@ export async function fulfillDeposit(
   return { applied: true };
 }
 
-/** Cancel a booking, computing the refund per policy (docs/02). */
+/** Cancel a booking, computing the refund per policy (docs/02).
+ *
+ * Idempotent: an already-cancelled booking returns a zero outcome without a
+ * second refund. The refund is split across the actual PaymentIntents (deposit,
+ * balance, instalments), capped at each PI's amount — a single-PI refund larger
+ * than that PI's charge is rejected by real Stripe (audit B1). The booking's
+ * cancelled status is written BEFORE the refund calls so a Stripe failure
+ * can't leave a live booking that already released its calendar. `nonpayment`
+ * marks a platform-initiated auto-cancel (no punitive trekker bands). */
 export async function cancelBooking(
   admin: SupabaseClient,
   stripe: StripeClient,
   bookingId: string,
-  reason: "trekker" | "guide" | "force_majeure",
+  reason: "trekker" | "guide" | "force_majeure" | "nonpayment",
+  env?: Env,
 ) {
   const { data: b } = await admin
     .from("bookings")
@@ -264,6 +286,14 @@ export async function cancelBooking(
     .eq("id", bookingId)
     .single();
   if (!b) throw new Error("booking not found");
+  if (b.status.startsWith("cancelled")) {
+    return computeCancellation({
+      totalPaidUsdCents: 0,
+      guideFeeUsdCents: b.guide_fee_usd_cents,
+      daysUntilStart: 999,
+      reason: reason === "nonpayment" ? "trekker" : reason,
+    });
+  }
 
   // What the trekker has paid so far (sum of non-refund succeeded payments).
   const { data: pays } = await admin
@@ -271,55 +301,112 @@ export async function cancelBooking(
     .select("amount_usd_cents, type, stripe_payment_intent")
     .eq("booking_id", bookingId)
     .eq("status", "succeeded");
-  const paid = (pays ?? [])
-    .filter((p) => p.type !== "refund")
-    .reduce((s, p) => s + p.amount_usd_cents, 0);
-  const depositPi = (pays ?? []).find((p) => p.type === "deposit")?.stripe_payment_intent;
+  const charges = (pays ?? []).filter(
+    (p) => p.type !== "refund" && p.stripe_payment_intent,
+  );
+  const paid = charges.reduce((s, p) => s + p.amount_usd_cents, 0);
 
   const daysUntil = daysBetween(new Date().toISOString().slice(0, 10), b.start_date);
   const outcome = computeCancellation({
     totalPaidUsdCents: paid,
     guideFeeUsdCents: b.guide_fee_usd_cents,
     daysUntilStart: daysUntil,
-    reason,
+    // Platform-initiated non-payment cancels refund like a guide cancel
+    // would be unfair the other way: the trekker broke the deal, but the
+    // platform picked the moment — use force-majeure's 100% base and let the
+    // deposit terms live in copy. Simplest fair rule: treat as trekker band.
+    reason: reason === "nonpayment" ? "trekker" : reason,
   });
 
-  // Refund via Stripe (mock succeeds).
-  if (outcome.refundToTrekkerUsdCents > 0 && depositPi) {
-    const re = await stripe.refund({
-      paymentIntentId: depositPi,
-      amountUsdCents: outcome.refundToTrekkerUsdCents,
-    });
-    await admin.from("payments").insert({
-      booking_id: bookingId,
-      stripe_payment_intent: depositPi,
-      stripe_refund_id: re.id,
-      type: "refund",
-      amount_usd_cents: -outcome.refundToTrekkerUsdCents,
-      status: "succeeded",
-    });
-  }
-
+  // Mark cancelled first (conditionally — beats a racing second cancel), then
+  // stop future instalments, release the calendar, and finally move money.
   const statusMap = {
     trekker: "cancelled_trekker",
     guide: "cancelled_guide",
     force_majeure: "cancelled_force_majeure",
+    nonpayment: "cancelled_trekker",
   } as const;
-  await admin
+  const { data: updated } = await admin
     .from("bookings")
     .update({ status: statusMap[reason], cancellation_reason: reason })
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .not("status", "like", "cancelled%")
+    .select("id");
+  if (!updated || updated.length === 0) return outcome; // lost the race
 
-  // Release the held/booked calendar days.
+  await admin
+    .from("instalments")
+    .update({ status: "cancelled" })
+    .eq("booking_id", bookingId)
+    .eq("status", "scheduled");
+
   await admin
     .from("availability")
     .update({ status: "open", booking_id: null })
     .eq("booking_id", bookingId);
 
+  // Refund PI-by-PI, largest first, capped at each PI's own charge.
+  let remaining = outcome.refundToTrekkerUsdCents;
+  for (const p of charges.sort((a, c) => c.amount_usd_cents - a.amount_usd_cents)) {
+    if (remaining <= 0) break;
+    const amt = Math.min(remaining, p.amount_usd_cents);
+    const re = await stripe.refund({
+      paymentIntentId: p.stripe_payment_intent!,
+      amountUsdCents: amt,
+    });
+    await admin.from("payments").insert({
+      booking_id: bookingId,
+      stripe_payment_intent: p.stripe_payment_intent,
+      stripe_refund_id: re.id,
+      type: "refund",
+      amount_usd_cents: -amt,
+      status: "succeeded",
+    });
+    remaining -= amt;
+  }
+
+  if (env) {
+    const { notifyBookingCancelled } = await import("~/lib/notifications.server");
+    await notifyBookingCancelled(env, admin, bookingId, outcome.refundToTrekkerUsdCents);
+  }
   return outcome;
 }
 
 // ---- Sweeps (called by cron; see routes/api.cron.$job.tsx) ------------------
+
+/**
+ * Record the guide's payout when a booking completes (audit: payouts were only
+ * ever seeded — no code path created them, so earnings/ledgers went stale).
+ * Idempotent per booking; amount is the NPR snapshot fixed at accept time.
+ */
+export async function createPayoutForBooking(admin: SupabaseClient, bookingId: string) {
+  const { data: existing } = await admin
+    .from("payouts")
+    .select("id")
+    .eq("booking_id", bookingId)
+    .maybeSingle();
+  if (existing) return existing.id;
+
+  const { data: b } = await admin
+    .from("bookings")
+    .select("guide_id, guide_payout_npr_paisa, guide:guides(payout_method)")
+    .eq("id", bookingId)
+    .single();
+  if (!b) return null;
+
+  const { data: created } = await admin
+    .from("payouts")
+    .insert({
+      guide_id: b.guide_id,
+      booking_id: bookingId,
+      amount_npr_paisa: b.guide_payout_npr_paisa,
+      method: (b as any).guide?.payout_method ?? "bank",
+      status: "payable",
+    })
+    .select("id")
+    .single();
+  return created?.id ?? null;
+}
 
 /**
  * Missed-check-in sweep (docs/01 F7): active multi-day treks whose most recent
@@ -378,7 +465,29 @@ export async function runEnquiryExpirySweep(admin: SupabaseClient) {
     .lt("expires_at", now)
     .eq("status", "open")
     .select("id");
-  return { expiredEnquiries: expired?.length ?? 0 };
+
+  // Release accepted-but-unpaid holds past their TTL (audit B3): cancel the
+  // pending_deposit booking and re-open its held calendar days.
+  const { data: stale } = await admin
+    .from("bookings")
+    .select("id")
+    .eq("status", "pending_deposit")
+    .lt("hold_expires_at", now);
+  let released = 0;
+  for (const b of stale ?? []) {
+    await admin
+      .from("bookings")
+      .update({ status: "cancelled_trekker", cancellation_reason: "hold_expired" })
+      .eq("id", b.id)
+      .eq("status", "pending_deposit");
+    await admin
+      .from("availability")
+      .update({ status: "open", booking_id: null })
+      .eq("booking_id", b.id)
+      .eq("status", "held");
+    released++;
+  }
+  return { expiredEnquiries: expired?.length ?? 0, releasedHolds: released };
 }
 
 /** Charge balances at T-14 and auto-cancel unpaid at T-10 (docs/02). */
@@ -386,6 +495,7 @@ export async function runBalanceSweep(
   admin: SupabaseClient,
   stripe: StripeClient,
   todayIso: string,
+  env?: Env,
 ) {
   // Bookings that have paid a deposit but not the balance, starting within 14d.
   const { data: due } = await admin
@@ -401,13 +511,13 @@ export async function runBalanceSweep(
     // Instalment bookings pay the balance on their own schedule — never
     // auto-charge the whole balance or cancel them via the 14-day sweep.
     if ((b.instalment_count ?? 1) > 1) {
-      instalmentsCharged += await sweepInstalments(admin, stripe, b, todayIso);
+      instalmentsCharged += await sweepInstalments(admin, stripe, b, todayIso, env);
       continue;
     }
     const daysUntil = daysBetween(todayIso, b.start_date);
     const balance = Math.max(0, b.total_usd_cents - b.deposit_usd_cents);
     if (daysUntil <= 10) {
-      await cancelBooking(admin, stripe, b.id, "trekker");
+      await cancelBooking(admin, stripe, b.id, "nonpayment", env);
       cancelled++;
     } else if (daysUntil <= 14 && balance > 0) {
       const pi = await stripe.createDepositIntent({
@@ -429,6 +539,10 @@ export async function runBalanceSweep(
           .update({ balance_paid_at: new Date().toISOString(), status: "docs_pending" })
           .eq("id", b.id);
         charged++;
+        if (env) {
+          const { notifyBalanceCharged } = await import("~/lib/notifications.server");
+          await notifyBalanceCharged(env, admin, b.id, balance);
+        }
       }
     }
   }
@@ -446,6 +560,7 @@ async function sweepInstalments(
   stripe: StripeClient,
   booking: { id: string; balance_paid_at: string | null },
   todayIso: string,
+  env?: Env,
 ): Promise<number> {
   const { data: rows } = await admin
     .from("instalments")
@@ -475,8 +590,13 @@ async function sweepInstalments(
     await admin
       .from("instalments")
       .update({ status: "paid", paid_at: new Date().toISOString() })
-      .eq("id", it.id);
+      .eq("id", it.id)
+      .eq("status", "scheduled");
     n++;
+    if (env) {
+      const { notifyInstalmentCharged } = await import("~/lib/notifications.server");
+      await notifyInstalmentCharged(env, admin, booking.id, it.amount_usd_cents);
+    }
   }
 
   // If nothing is left scheduled, the balance is fully paid → advance the booking.

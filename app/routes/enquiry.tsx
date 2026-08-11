@@ -28,6 +28,31 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const { createAdminClient } = await import("~/lib/supabase.server");
   const admin = createAdminClient(env);
+
+  // Server-side validation (audit: previously zero — garbage enquiries from
+  // stale/crafted POSTs). Date must exist and be in the future; party must fit
+  // the offering's real bounds; the offering must belong to the guide.
+  const today = new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || startDate <= today) {
+    return data({ error: "Pick a date in the future." }, { status: 400, headers });
+  }
+  const { data: off } = await admin
+    .from("offerings")
+    .select("id, title, guide_id, min_party, max_party")
+    .eq("id", offeringId)
+    .maybeSingle();
+  if (!off || off.guide_id !== guideId) {
+    return data({ error: "That trip isn't available." }, { status: 400, headers });
+  }
+  const minP = off.min_party ?? 1;
+  const maxP = off.max_party ?? 12;
+  if (!Number.isFinite(partySize) || partySize < minP || partySize > maxP) {
+    return data(
+      { error: `Group size must be between ${minP} and ${maxP} for this trip.` },
+      { status: 400, headers },
+    );
+  }
+
   const { data: enq, error } = await admin
     .from("enquiries")
     .insert({
@@ -42,6 +67,15 @@ export async function action({ request, context }: Route.ActionArgs) {
     })
     .select("id")
     .single();
-  if (error || !enq) return data({ error: "Could not send your request." }, { status: 400 });
+  if (error || !enq) return data({ error: "Could not send your request." }, { status: 400, headers });
+
+  // The guide hears about it immediately (SMS — many guides have no email).
+  const { notifyNewEnquiry } = await import("~/lib/notifications.server");
+  await notifyNewEnquiry(env, admin, {
+    guideId,
+    offeringTitle: off.title,
+    startDate,
+    partySize,
+  });
   return data({ ok: true, enquiryId: enq.id }, { headers });
 }

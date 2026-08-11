@@ -23,8 +23,23 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const form = await request.formData();
   const day = String(form.get("day"));
-  const next = String(form.get("next")); // 'open' | 'blocked'
-  // Only toggle days that are open/blocked (never touch held/booked).
+  const next = String(form.get("next"));
+  const today = new Date().toISOString().slice(0, 10);
+  // Server-side guards (the UI disables these, but never trust the form):
+  // only open/blocked are settable, never in the past, and a held/booked day
+  // is a trekker's money — it cannot be flipped from here.
+  if (!["open", "blocked"].includes(next) || !/^\d{4}-\d{2}-\d{2}$/.test(day) || day < today) {
+    return data({ ok: false }, { status: 400, headers });
+  }
+  const { data: existing } = await admin
+    .from("availability")
+    .select("status")
+    .eq("guide_id", user.id)
+    .eq("day", day)
+    .maybeSingle();
+  if (existing && !["open", "blocked"].includes(existing.status)) {
+    return data({ ok: false }, { status: 409, headers });
+  }
   await admin
     .from("availability")
     .upsert(

@@ -28,7 +28,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (decision === "accepted") {
     // Create the booking (pending_deposit), hold the calendar, quote via pricing.
     const { acceptEnquiry } = await import("~/lib/booking.server");
-    await acceptEnquiry(admin, id, user.id);
+    const bookingId = await acceptEnquiry(admin, id, user.id);
+    if (!bookingId) {
+      // Race: expired or already handled — never a silent fake success.
+      return data({ error: "This request has expired or was already handled." }, { status: 409, headers });
+    }
+    // Tell the trekker to come pay the deposit.
+    const { notifyEnquiryAccepted } = await import("~/lib/notifications.server");
+    await notifyEnquiryAccepted(env, admin, bookingId);
   } else {
     await admin
       .from("enquiries")
@@ -40,11 +47,16 @@ export async function action({ request, context }: Route.ActionArgs) {
   return data({ ok: true }, { headers });
 }
 
-export default function GuideEnquiries({ loaderData }: Route.ComponentProps) {
+export default function GuideEnquiries({ loaderData, actionData }: Route.ComponentProps) {
   const enquiries = loaderData.enquiries as any[];
   return (
     <div className="space-y-4">
       <h1 className="font-display text-2xl text-ink">Enquiries</h1>
+      {actionData && "error" in actionData && (actionData as any).error && (
+        <p className="rounded-card bg-ember/10 p-3 text-sm text-ember">
+          {(actionData as any).error}
+        </p>
+      )}
       {enquiries.length === 0 ? (
         <div className="rounded-card border border-border bg-card p-6 text-center text-sm text-ink-soft">
           No new enquiries right now. Most guides get their first within 2 weeks —

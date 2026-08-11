@@ -26,6 +26,17 @@ export default [
     route("insurance", "routes/insurance.tsx"),
     route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
+    // Booking flow + account pages share the public chrome (audit: these had
+    // no header/footer — My Trips was an exit-less page).
+    route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
+    route("trips", "routes/trips._index.tsx"),
+    route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
+    route("messages", "routes/messages._index.tsx"),
+    route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
+    route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),
+    route("recap/:slug", "routes/recap.$slug.tsx"),
+    // 404 catch-all gets the site chrome too.
+    route("*", "routes/$.tsx"),
   ]),
 
   // Guide area (M4 status page; M5 dashboard). Login sits outside the gate.
@@ -67,23 +78,14 @@ export default [
 
   // Booking flow (M6) + My Trips & documents (M7).
   route("enquiry", "routes/enquiry.tsx"),
-  route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
-  route("trips", "routes/trips._index.tsx"),
-  route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
   route("trips/:bookingId/doc/:docId", "routes/trips.$bookingId.doc.$docId.tsx"),
-  route("messages", "routes/messages._index.tsx"),
-  route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
   route("conversations", "routes/conversations.tsx"),
-  route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),
   route("pdf/tims/:bookingId", "routes/pdf.tims.$bookingId.tsx"),
   route("pdf/contract/:bookingId", "routes/pdf.contract.$bookingId.tsx"),
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
 
-  // Public trek recaps (M8) — shareable SEO pages + OG image.
-  route("recap/:slug", "routes/recap.$slug.tsx"),
+  // Recap OG image (binary resource route — outside the layout).
   route("recap/:slug/og", "routes/recap.$slug.og.tsx"),
 
-  // Redirects (301) + 404.
-  route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

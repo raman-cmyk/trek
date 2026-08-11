@@ -76,6 +76,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   if (intent === "issue_tims") {
     const res = await issueTimsCard(admin, params.id!, user.id);
+    if (res.ok) {
+      const { notifyTimsIssued } = await import("~/lib/notifications.server");
+      await notifyTimsIssued(env, admin, params.id!);
+    }
     return data(res.ok ? { ok: true } : { error: res.reason }, { headers });
   }
   return data({ ok: false }, { headers });
