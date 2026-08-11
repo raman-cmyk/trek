@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DayStop } from "./ElevationScrubber";
+import { MAP_INK, MAP_STYLE } from "~/lib/map-style";
 
 /**
  * The route drawn from its own day stops, with a pin per overnight.
@@ -11,19 +12,6 @@ import type { DayStop } from "./ElevationScrubber";
  * `activeDay` is driven by the elevation scrubber above it, so dragging along
  * the profile walks the pin along the map.
  */
-const STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: "raster" as const,
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
-    },
-  },
-  layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
-};
-
 export function RouteMap({
   stops,
   activeDay,
@@ -56,7 +44,7 @@ export function RouteMap({
         const lats = located.map((s) => s.lat!);
         const m = new maplibregl.Map({
           container: el.current,
-          style: STYLE,
+          style: MAP_STYLE as any,
           bounds: [
             [Math.min(...lngs), Math.min(...lats)],
             [Math.max(...lngs), Math.max(...lats)],
@@ -107,14 +95,14 @@ export function RouteMap({
             id: "route-casing",
             type: "line",
             source: "route",
-            paint: { "line-color": "#fbf9f3", "line-width": 6, "line-opacity": 0.9 },
+            paint: { "line-color": MAP_INK.casing, "line-width": 6, "line-opacity": 0.9 },
             layout: { "line-cap": "round", "line-join": "round" },
           });
           m.addLayer({
             id: "route-line",
             type: "line",
             source: "route",
-            paint: { "line-color": "#1b3b2a", "line-width": 2.5 },
+            paint: { "line-color": MAP_INK.line, "line-width": 2.5 },
             layout: { "line-cap": "round", "line-join": "round" },
           });
         };

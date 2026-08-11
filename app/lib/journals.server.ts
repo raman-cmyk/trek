@@ -84,6 +84,7 @@ export function validateForPublish(
     start_date?: string;
     end_date?: string;
     days?: number | null;
+    kind?: "journey" | "post" | "gallery" | null;
   },
   entries: number | { day_no: number; photos?: unknown[] | null }[],
 ): string | null {
@@ -99,11 +100,18 @@ export function validateForPublish(
   }
 
   if (list) {
+    const kind = j.kind ?? "journey";
     const photos = list.reduce((n, e) => n + (e.photos?.length ?? 0), 0);
-    if (photos < MIN_JOURNAL_PHOTOS) {
-      return `A journal is a photo album — add at least ${MIN_JOURNAL_PHOTOS} photos across the days (you have ${photos}).`;
+    // A post is one moment — one photo is a complete post. The album minimum
+    // is a rule about albums.
+    const min = kind === "post" ? 1 : MIN_JOURNAL_PHOTOS;
+    if (photos < min) {
+      return kind === "post"
+        ? "A post needs at least one photo or clip."
+        : `A journal is a photo album — add at least ${min} photos across the days (you have ${photos}).`;
     }
-    const total = tripDays(j);
+    // Only a journey has days to account for.
+    const total = kind === "journey" ? tripDays(j) : 0;
     if (total) {
       const have = new Set(list.map((e) => e.day_no));
       const missing = [];
@@ -200,29 +208,33 @@ export async function saveTags(
 
 /** Parse the day-block form fields the editor posts. */
 export function parseEntryForm(form: FormData) {
-  const photos: { url: string; alt?: string; people?: boolean }[] = [];
+  const media: {
+    url: string;
+    alt?: string;
+    people?: boolean;
+    kind?: "photo" | "video";
+  }[] = [];
   const urls = String(form.get("photo_urls") ?? "")
     .split(/[\n,]/)
     .map((s) => s.trim())
     .filter(Boolean);
   const peopleFlags = form.getAll("photo_people").map(String);
   urls.forEach((url, i) => {
-    photos.push({
+    media.push({
       url,
       alt: String(form.get("title") ?? ""),
       people: peopleFlags.includes(String(i)),
+      // A guide pastes one list of links; we work out which are clips rather
+      // than asking them to sort their own media into two boxes.
+      kind: /\.(mp4|webm|mov)(\?|$)/i.test(url) ? "video" : "photo",
     });
   });
-  const layoutRaw = String(form.get("layout") ?? "full");
   return {
     day_no: Math.max(1, Math.min(99, Number(form.get("day_no")) || 1)),
     title: String(form.get("title") ?? "").trim(),
     body: String(form.get("body") ?? "").trim() || null,
     altitude_m: form.get("altitude_m") ? Number(form.get("altitude_m")) : null,
     is_hard_day: form.get("is_hard_day") === "on",
-    layout: (["full", "two", "three", "portrait", "pano"].includes(layoutRaw)
-      ? layoutRaw
-      : "full") as "full" | "two" | "three" | "portrait" | "pano",
-    photos,
+    photos: media,
   };
 }

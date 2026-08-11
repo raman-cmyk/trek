@@ -315,27 +315,20 @@ export function EntryForm({
         <textarea name="body" rows={4} defaultValue={entry?.body ?? ""} className={input} />
       </label>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className={label}>
-          Altitude that night (m)
-          <input type="number" name="altitude_m" defaultValue={entry?.altitude_m ?? ""} className={input} />
-        </label>
-        <label className={label}>
-          Photo layout
-          <select name="layout" defaultValue={entry?.layout ?? "full"} className={input}>
-            <option value="full">One big photo</option>
-            <option value="two">Two side by side</option>
-            <option value="three">Three in a row</option>
-            <option value="portrait">Tall photo, to the right</option>
-            <option value="pano">Wide panorama</option>
-          </select>
-        </label>
-      </div>
+      <label className={label}>
+        Altitude that night (m)
+        <input
+          type="number"
+          name="altitude_m"
+          defaultValue={entry?.altitude_m ?? ""}
+          className={input + " sm:max-w-xs"}
+        />
+      </label>
 
       <PhotoUpload targetId={areaId} guideId={guideId} />
 
       <label className={label}>
-        Photos on this day — one link per line
+        Photos and video on this day — one link per line
         <textarea
           id={areaId}
           name="photo_urls"

@@ -1,7 +1,13 @@
-import { Form, Link } from "react-router";
+import { useState } from "react";
+import { Form, Link, data } from "react-router";
 import type { Route } from "./+types/journals.$slug";
 import { pageMeta, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
+import { getSessionUser } from "~/lib/auth.server";
+import { createAdminClient } from "~/lib/supabase.server";
+import { Comments, type PublicComment } from "~/components/public/Comments";
+import { MediaGrid } from "~/components/public/MediaGrid";
+import { useLightbox } from "~/components/public/Lightbox";
 import { SmartImage } from "~/components/SmartImage";
 import { JournalCard } from "~/components/public/JournalCard";
 import { ElevationStrip } from "~/components/public/ElevationStrip";
@@ -9,13 +15,13 @@ import { TierBadge } from "~/components/public/bits";
 import { RouteMap } from "~/components/public/RouteMap";
 import {
   JOURNAL_COLS,
+  allMedia,
   elevationPoints,
   journalStatLine,
-  layoutFor,
   sortTags,
   type JournalEntry,
+  type JournalPhoto,
   type JournalTag,
-  type PhotoLayout,
   type PublicJournal,
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
@@ -63,9 +69,11 @@ articleSection: j.route_region ?? undefined,
   ];
 }
 
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
+  // Who is reading — the comment box is a sign-in prompt for everyone else.
+  const { user } = await getSessionUser(request, env);
 
   const { data: journal } = await client
     .from("public_journals")
@@ -118,6 +126,14 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         .limit(1),
     ]);
 
+  const { data: comments } = await client
+    .from("public_journal_comments")
+    .select(
+      "id, parent_id, body, created_at, author_id, author_name, author_avatar_url, author_is_guide, author_guide_slug",
+    )
+    .eq("journal_id", j.id)
+    .order("created_at");
+
   // This guide's other journals first; top up with the same route by others.
   const more = [...((byGuide ?? []) as PublicJournal[])];
   for (const o of (sameRoute ?? []) as PublicJournal[]) {
@@ -132,18 +148,91 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     route: routeRow ?? null,
     more,
     offering: (offerings ?? [])[0] ?? null,
+    comments: (comments ?? []) as PublicComment[],
+    signedIn: !!user,
     canonical: absoluteUrl(env.SITE_URL, `/journals/${params.slug}`),
   };
 }
 
-export default function Journal({ loaderData }: Route.ComponentProps) {
-  const { journal: j, entries, tags, route, more, offering } = loaderData as any;
+/**
+ * Posting a comment. A plain form POST to this page, so it works with
+ * JavaScript off; the insert goes through the admin client after the identity
+ * check because the anon client cannot see a user's own row before RLS.
+ */
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const env = getEnv(context);
+  const form = await request.formData();
+  if (String(form.get("intent")) !== "comment") {
+    return data({ error: "Unknown action." }, { status: 400 });
+  }
+
+  const { user, headers } = await getSessionUser(request, env);
+  if (!user) {
+    return data(
+      { error: "Sign in to comment — it takes a minute and it is free." },
+      { status: 401, headers },
+    );
+  }
+
+  const body = String(form.get("body") ?? "").trim();
+  if (!body) return data({ error: "Write something first." }, { status: 400, headers });
+  if (body.length > 2000) {
+    return data({ error: "That is longer than a comment box allows." }, { status: 400, headers });
+  }
+
+  const admin = createAdminClient(env);
+  const { data: journal } = await admin
+    .from("journals")
+    .select("id")
+    .eq("slug", params.slug)
+    .eq("status", "published")
+    .maybeSingle();
+  if (!journal) return data({ error: "This journal is not live." }, { status: 404, headers });
+
+  const parentRaw = form.get("parent_id");
+  // Only one level of nesting is rendered, so a reply to a reply attaches to
+  // its parent's parent rather than disappearing into a branch nothing draws.
+  let parentId: string | null = parentRaw ? String(parentRaw) : null;
+  if (parentId) {
+    const { data: parent } = await admin
+      .from("journal_comments")
+      .select("id, parent_id, journal_id")
+      .eq("id", parentId)
+      .maybeSingle();
+    if (!parent || parent.journal_id !== journal.id) parentId = null;
+    else if (parent.parent_id) parentId = parent.parent_id;
+  }
+
+  const { error } = await admin.from("journal_comments").insert({
+    journal_id: journal.id,
+    parent_id: parentId,
+    author_id: user.id,
+    body,
+  });
+  if (error) return data({ error: error.message }, { status: 400, headers });
+  return data({ ok: true }, { headers });
+}
+
+export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
+  const { journal: j, entries, tags, route, more, offering, comments, signedIn } =
+    loaderData as any;
   const first = j.guide_name.split(" ")[0];
   const points = elevationPoints(entries);
-  const photoCount = entries.reduce(
-    (n: number, e: JournalEntry) => n + (e.photos?.length ?? 0),
-    0,
-  );
+
+  // One gallery for the whole trek. Each day block knows where its own frames
+  // start in that list, so opening day 9's second photo and pressing → walks
+  // you into day 10 rather than dead-ending at the block boundary.
+  const gallery = allMedia(entries);
+  const lightbox = useLightbox(gallery);
+  const offsets: number[] = [];
+  let running = 0;
+  for (const e of entries as JournalEntry[]) {
+    offsets.push(running);
+    running += e.photos?.length ?? 0;
+  }
+  const photoCount = gallery.length;
+  // A post is one moment, not a trek: no day numerals, no elevation profile.
+  const isPost = j.kind === "post";
 
   return (
     <main className="pb-16">
@@ -243,11 +332,26 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0">
         {entries.map((e: JournalEntry, i: number) => (
-          <DayBlock key={e.id} entry={e} layout={layoutFor(e, i)} />
+          <DayBlock
+            key={e.id}
+            entry={e}
+            showDayNumber={!isPost}
+            onOpen={(k) => lightbox.open(offsets[i] + k)}
+          />
         ))}
 
+        {photoCount > 1 && (
+          <button
+            type="button"
+            onClick={() => lightbox.open(0)}
+            className="mt-10 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink transition-colors hover:border-sage hover:bg-mist"
+          >
+            View all <span className="font-mono">{photoCount}</span> photos as a gallery
+          </button>
+        )}
+
         {/* 5 — Elevation, from what the guide actually recorded. */}
-        {points.length >= 3 && (
+        {!isPost && points.length >= 3 && (
           <section className="mt-14 border-t border-line pt-8">
             <h2 className="label text-muted">How high, and when</h2>
             <ElevationStrip points={points} className="mt-3" />
@@ -279,6 +383,14 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
             )}
           </figure>
         )}
+
+        <Comments
+          comments={comments}
+          signedIn={signedIn}
+          guideFirstName={first}
+          loginNext={`/journals/${j.slug}#comments`}
+          error={(actionData as any)?.error ?? null}
+        />
         </div>
 
         <aside className="hidden lg:block">
@@ -301,7 +413,7 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
               </div>
             ) : null}
 
-            {points.length >= 3 && (
+            {!isPost && points.length >= 3 && (
               <div className="rounded-md border border-line bg-card p-3">
                 <p className="label text-muted">This trek</p>
                 <ElevationStrip points={points} className="mt-1" />
@@ -330,7 +442,10 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
                 </p>
               )}
               <p className="mt-3 font-mono text-caption text-muted">
-                {photoCount} photos · {entries.length} days written up
+                {photoCount} photos
+                {!isPost && ` · ${entries.length} days written up`}
+                {comments.length > 0 &&
+                  ` · ${comments.length} ${comments.length === 1 ? "comment" : "comments"}`}
               </p>
             </div>
           </div>
@@ -408,46 +523,46 @@ export default function Journal({ loaderData }: Route.ComponentProps) {
           </div>
         </section>
       )}
+      {lightbox.node}
     </main>
   );
 }
 
 /**
- * One day. The numeral lives in the left margin as a big mono figure; the
- * photo arrangement changes block to block so the page never settles into a
- * repeating grid.
+ * One day.
+ *
+ * The numeral sits in the left margin as a big mono figure and the frames sit
+ * under the words, always — the old version rotated five silhouettes down the
+ * page and floated a portrait into the text, which read as noise rather than
+ * as rhythm. Variety now lives in the photographs, not in the furniture around
+ * them, and every frame opens the viewer.
  */
-function DayBlock({ entry, layout }: { entry: JournalEntry; layout: PhotoLayout }) {
-  const photos = entry.photos ?? [];
+function DayBlock({
+  entry,
+  showDayNumber,
+  onOpen,
+}: {
+  entry: JournalEntry;
+  showDayNumber: boolean;
+  onOpen: (indexInBlock: number) => void;
+}) {
+  const media = (entry.photos ?? []) as JournalPhoto[];
   return (
     <section
       className={cn(
-        "mt-12 scroll-mt-20 sm:grid sm:grid-cols-[4.5rem_1fr] sm:gap-6",
-        entry.is_hard_day && "sm:gap-6",
+        "mt-12 scroll-mt-24",
+        showDayNumber && "sm:grid sm:grid-cols-[4.5rem_1fr] sm:gap-6",
       )}
       id={`day-${entry.day_no}`}
     >
-      <p className="font-mono text-4xl leading-none text-line sm:text-right sm:text-5xl">
-        {entry.day_no}
-      </p>
+      {showDayNumber && (
+        <p className="font-mono text-4xl leading-none text-line sm:text-right sm:text-5xl">
+          {entry.day_no}
+        </p>
+      )}
 
       <div className={cn(entry.is_hard_day && "border-l-2 border-ember/50 pl-4 sm:pl-5")}>
-        {entry.is_hard_day && (
-          <p className="mb-1 label text-ember">The hard day</p>
-        )}
-
-        {/* Portrait: the photo is floated so the day's text runs alongside it
-            instead of leaving half the row empty. It comes first in the source
-            so the float has text to wrap. */}
-        {layout === "portrait" && photos[0] && (
-          <SmartImage
-            src={photos[0].url}
-            alt={photos[0].alt ?? entry.title}
-            width={520}
-            height={700}
-            className="mb-3 aspect-[3/4] w-40 rounded-sm sm:float-right sm:ml-6 sm:mb-2 sm:w-56"
-          />
-        )}
+        {entry.is_hard_day && <p className="mb-1 label text-ember">The hard day</p>}
 
         <h2 className="mt-2 font-display text-2xl leading-snug text-ink sm:mt-0">
           {entry.title}
@@ -458,87 +573,13 @@ function DayBlock({ entry, layout }: { entry: JournalEntry; layout: PhotoLayout 
           </p>
         )}
         {entry.body && (
-          <p
-            className={cn(
-              "mt-3 whitespace-pre-line leading-relaxed text-ink",
-              // A float already narrows the column; a max-width on top of it
-              // would leave a second gutter.
-              layout !== "portrait" && "max-w-[62ch]",
-            )}
-          >
+          <p className="mt-3 max-w-[62ch] whitespace-pre-line leading-relaxed text-ink">
             {entry.body}
           </p>
         )}
 
-        {layout === "portrait" ? (
-          // Anything beyond the floated one goes in a normal row underneath.
-          photos.length > 1 && (
-            <div className="clear-both grid gap-2 pt-5 sm:gap-3" style={cols(photos.length - 1)}>
-              {photos.slice(1).map((p, i) => (
-                <SmartImage
-                  key={p.url + i}
-                  src={p.url}
-                  alt={p.alt ?? entry.title}
-                  width={640}
-                  height={800}
-                  className="aspect-[4/5] w-full rounded-sm"
-                />
-              ))}
-            </div>
-          )
-        ) : layout === "three" ? (
-          // One wide frame, then the rest sharing a row evenly — the column
-          // count comes from the photo count, so a block never ends in a hole.
-          <div className="mt-5 space-y-2 sm:space-y-3">
-            <SmartImage
-              src={photos[0].url}
-              alt={photos[0].alt ?? entry.title}
-              width={1200}
-              height={675}
-              className="aspect-[16/9] w-full rounded-sm"
-            />
-            {photos.length > 1 && (
-              <div className="grid gap-2 sm:gap-3" style={cols(photos.length - 1)}>
-                {photos.slice(1).map((p, i) => (
-                  <SmartImage
-                    key={p.url + i}
-                    src={p.url}
-                    alt={p.alt ?? entry.title}
-                    width={640}
-                    height={800}
-                    className="aspect-[4/5] w-full rounded-sm"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          photos.length > 0 && (
-            <div className={cn("mt-5", layout === "two" && "grid grid-cols-2 gap-2 sm:gap-3")}>
-              {photos.map((p, i) => (
-                <SmartImage
-                  key={p.url + i}
-                  src={p.url}
-                  alt={p.alt ?? entry.title}
-                  width={1000}
-                  height={layout === "pano" ? 420 : 660}
-                  className={cn(
-                    "w-full rounded-sm",
-                    layout === "full" && "aspect-[3/2]",
-                    layout === "pano" && "aspect-[21/9]",
-                    layout === "two" && "aspect-square",
-                  )}
-                />
-              ))}
-            </div>
-          )
-        )}
+        <MediaGrid media={media} alt={entry.title} onOpen={onOpen} />
       </div>
     </section>
   );
-}
-
-/** Equal columns for n photos, capped so a phone never gets four in a row. */
-function cols(n: number): React.CSSProperties {
-  return { gridTemplateColumns: `repeat(${Math.min(Math.max(n, 1), 3)}, minmax(0, 1fr))` };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MIN_JOURNAL_PHOTOS, validateForPublish } from "./journals.server";
-import { layoutFor, seasonOf, sortTags, type JournalEntry } from "./journals";
+import { allMedia, isVideo, seasonOf, sortTags } from "./journals";
 
 const ok = {
   cover_photo_url: "https://x/cover.jpg",
@@ -61,34 +61,23 @@ describe("validateForPublish", () => {
   });
 });
 
-describe("layoutFor", () => {
-  const entry = (n: number, layout = "full"): JournalEntry =>
-    ({
-      id: String(n),
-      day_no: n,
-      title: "",
-      body: null,
-      altitude_m: null,
-      is_hard_day: false,
-      layout,
-      photos: Array.from({ length: n }, () => ({ url: "x.jpg" })),
-    }) as JournalEntry;
-
-  it("never repeats a shape on consecutive single-photo days", () => {
-    const shapes = [0, 1, 2, 3].map((i) => layoutFor(entry(1), i));
-    for (let i = 1; i < shapes.length; i++) {
-      expect(shapes[i]).not.toBe(shapes[i - 1]);
-    }
+describe("media", () => {
+  it("reads a clip by its extension when nothing said so", () => {
+    expect(isVideo({ url: "/x/pass.MP4" })).toBe(true);
+    expect(isVideo({ url: "/x/pass.jpg" })).toBe(false);
+    expect(isVideo({ url: "/x/clip.jpg", kind: "video" })).toBe(true);
+    expect(isVideo({ url: "/x/a.webm?v=2" })).toBe(true);
   });
 
-  it("uses the photo count when there is more than one", () => {
-    expect(layoutFor(entry(2), 0)).toBe("two");
-    expect(layoutFor(entry(3), 0)).toBe("three");
-    expect(layoutFor(entry(5), 1)).toBe("three");
-  });
-
-  it("lets the guide's own choice win", () => {
-    expect(layoutFor(entry(1, "pano"), 0)).toBe("pano");
+  it("flattens every frame into one gallery in trek order", () => {
+    const gallery = allMedia([
+      { day_no: 2, title: "Jagat", photos: [{ url: "b.jpg" }, { url: "c.jpg" }] },
+      { day_no: 1, title: "Machha Khola", photos: [{ url: "a.jpg" }] },
+      { day_no: 3, title: "Deng", photos: null },
+    ]);
+    expect(gallery.map((m) => m.url)).toEqual(["a.jpg", "b.jpg", "c.jpg"]);
+    expect(gallery[1].day).toBe(2);
+    expect(gallery[1].dayTitle).toBe("Jagat");
   });
 });
 

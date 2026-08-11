@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { DISTRICT_CENTRES, NEPAL_BOUNDS, ROUTE_LINES } from "~/lib/geo";
+import { MAP_STYLE } from "~/lib/map-style";
 
 export interface MapPin {
   district: string;
@@ -26,18 +27,6 @@ export interface MapRoute {
  * Tiles are OpenStreetMap raster (docs/02: MapLibre GL + OSM). Swapping in
  * Baato when the founder has a key is a one-line change to STYLE.
  */
-const STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: "raster" as const,
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
-    },
-  },
-  layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
-};
 
 export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] }) {
   const [view, setView] = useState<"map" | "grid">("map");
@@ -59,7 +48,7 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
 
         const m = new maplibregl.Map({
           container: el.current,
-          style: STYLE,
+          style: MAP_STYLE as any,
           bounds: NEPAL_BOUNDS,
           fitBoundsOptions: { padding: 28 },
           attributionControl: { compact: true },

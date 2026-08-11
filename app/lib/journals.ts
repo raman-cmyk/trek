@@ -12,6 +12,27 @@ export interface JournalPhoto {
   alt?: string;
   /** Is a client recognisable? Drives the consent filter in public_journal_entries. */
   people?: boolean;
+  /** Absent means photo — every row written before video existed is one. */
+  kind?: "photo" | "video";
+  /** Video only: the still shown before it plays. */
+  poster?: string;
+  /** A caption the guide wrote for this one frame, shown in the viewer. */
+  caption?: string;
+}
+
+export function isVideo(m: JournalPhoto): boolean {
+  return m.kind === "video" || /\.(mp4|webm|mov)(\?|$)/i.test(m.url);
+}
+
+/** Every frame in a journal, in trek order — the gallery's backing list. */
+export function allMedia(
+  entries: { day_no: number; title: string; photos: JournalPhoto[] | null }[],
+): (JournalPhoto & { day: number; dayTitle: string })[] {
+  return [...entries]
+    .sort((a, b) => a.day_no - b.day_no)
+    .flatMap((e) =>
+      (e.photos ?? []).map((p) => ({ ...p, day: e.day_no, dayTitle: e.title })),
+    );
 }
 
 export interface JournalEntry {
@@ -21,12 +42,13 @@ export interface JournalEntry {
   body: string | null;
   altitude_m: number | null;
   is_hard_day: boolean;
-  layout: "full" | "two" | "portrait";
   photos: JournalPhoto[];
 }
 
 export interface PublicJournal {
   id: string;
+  kind?: "journey" | "post" | "gallery";
+  comment_count?: number;
   slug: string;
   title: string;
   start_date: string;
@@ -56,7 +78,7 @@ export interface PublicJournal {
 }
 
 export const JOURNAL_COLS =
-  "id, slug, title, start_date, end_date, days, max_altitude_m, distance_km, pass_crossed, weather_note, cover_photo_url, guide_note, client_note, group_display, client_note_author, published_at, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_only_with_me, guide_district, route_id, route_slug, route_name, route_region";
+  "id, slug, title, start_date, end_date, days, max_altitude_m, distance_km, pass_crossed, weather_note, cover_photo_url, guide_note, client_note, group_display, client_note_author, published_at, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_only_with_me, guide_district, route_id, route_slug, route_name, route_region, kind, comment_count";
 
 /**
  * The one mono line under the cover:
@@ -99,24 +121,6 @@ export function firstSentence(text: string | null, max = 130): string {
   const stop = t.search(/[.!?](\s|$)/);
   const s = stop > 0 ? t.slice(0, stop + 1) : t;
   return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
-}
-
-/**
- * Photo layouts rotate down the page so no two adjacent day blocks share a
- * grid shape (Not-AI doc: never repeat one grid down a page). The guide's own
- * choice wins; this only fills in when a block was left on the default.
- */
-export type PhotoLayout = "full" | "two" | "three" | "portrait" | "pano";
-
-export function layoutFor(entry: JournalEntry, index: number): PhotoLayout {
-  const n = entry.photos.length;
-  if (n === 0) return "full";
-  if (n >= 3) return "three";
-  if (n === 2) return "two";
-  // One photo: alternate full-bleed, tall-with-text, and panorama so the page
-  // never settles into a rhythm. Index-based, so it is stable across renders.
-  const cycle: PhotoLayout[] = ["full", "portrait", "pano"];
-  return entry.layout !== "full" ? (entry.layout as PhotoLayout) : cycle[index % cycle.length];
 }
 
 /**
