@@ -786,3 +786,51 @@ green throughout. Live: https://trek.raman-7d9.workers.dev
 real Stripe keys (payments are mock; off-session charging needs saved
 payment methods — TODO noted in booking.server), and a real ops phone
 number for the SOS card (currently a 555 placeholder).
+
+---
+
+## Session — search, dates, and real supply (2026-08-11)
+
+Six things the founder called out after living with the site for an hour.
+
+**Search + a date filter** — the primitive that was missing. One search bar
+on both browse lanes: free text plus a date range. The text match unions
+three sources, because nothing on a guide's row says "Annapurna" — that
+lives on the routes they lead. Dates read the availability table: /guides
+asks for one open day in your window, /experiences asks for a run long
+enough for the whole trip, so a 14-day trek needs 14 consecutive free days.
+
+**Gender as a filter** (migration 0029, self-declared, optional). It exists
+for exactly one reason: solo women travellers ask for a woman guide
+constantly and we could not answer. "A female guide free in October for
+Annapurna" now returns 6 of 48.
+
+**Counts are dynamic.** "48 verified guides, and more joining every week"
+unfiltered; "6 of 48" when narrowed. No count is baked into a string.
+
+**The commission split came off the browse cards.** A trekker choosing a
+person does not need the percentage; /transparency still carries it in full.
+
+**A key on the availability calendar** — built from the same class function
+the grid uses, so the swatches can't drift from the days.
+
+**Money rounded on cards, exact in breakdowns.** Converted cents are an FX
+artefact; a grid of "€565.03" is noise. New `mr()` for cards, `m()`
+everywhere the cents are the point.
+
+**36 more guides** — 12 → 48, across 24 districts, 13 women, each with a
+portrait and a trek. `seed_guides_cohort.sql` re-runs the generic seed
+passes idempotently, so it applies standalone to cloud as well as via
+`db reset`.
+
+Also fixed a seed bug that migration 0028 had turned fatal: every seeded
+payment intent was named from the first 8 characters of a booking uuid,
+which are identical across all of them, so `db reset` failed on the new
+unique index.
+
+94 tests green. Migration 0029 + cohort applied to cloud and local.
+Live: https://trek.raman-7d9.workers.dev
+
+**🙋 Founder still needed:** real domain + Resend key (email is stubbed),
+real Stripe keys (payments are mock; off-session charging needs saved
+payment methods), and a real ops phone number for the SOS card.
