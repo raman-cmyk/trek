@@ -1,5 +1,6 @@
 import { Form, data, useNavigation } from "react-router";
 import type { Route } from "./+types/g.bookings";
+import { fmtDate, fmtDateRange } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { submitReview } from "~/lib/reviews.server";
@@ -92,8 +93,8 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                 <p className="text-sm text-ink-soft">
                   {b.trekker?.full_name}{b.trekker?.country_code ? ` · ${b.trekker.country_code}` : ""} · {b.party_size}p
                 </p>
-                <p className="text-sm text-ink-soft">{b.start_date} → {b.end_date}</p>
-                <div className="mt-2 flex gap-4">
+                <p className="text-sm text-ink-soft">{fmtDateRange(b.start_date, b.end_date)}</p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {b.trekker?.phone && b.status !== "deposit_paid" && (
                     <a href={`tel:${b.trekker.phone}`} className="text-sm font-medium text-primary">
                       Call {b.trekker.full_name.split(" ")[0]}
@@ -101,6 +102,14 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   )}
                   <a href={`/messages/${b.id}`} className="text-sm font-medium text-primary">
                     Message
+                  </a>
+                  {/* The guide signs the contract and is asked for the TIMS card
+                      at checkpoints — both were ops/trekker-only links before. */}
+                  <a href={`/pdf/contract/${b.id}`} target="_blank" rel="noreferrer" className="text-sm text-ink-soft hover:text-primary">
+                    Agreement PDF
+                  </a>
+                  <a href={`/pdf/tims/${b.id}`} target="_blank" rel="noreferrer" className="text-sm text-ink-soft hover:text-primary">
+                    TIMS card
                   </a>
                 </div>
               </li>
@@ -119,7 +128,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   <p className="font-medium text-ink">{b.offering?.title}</p>
                   <Badge tone="green">completed</Badge>
                 </div>
-                <p className="text-sm text-ink-soft">{b.trekker?.full_name} · {b.start_date}</p>
+                <p className="text-sm text-ink-soft">{b.trekker?.full_name} · {fmtDate(b.start_date)}</p>
                 {b.reviewed ? (
                   <p className="mt-2 text-xs text-ink-soft">You reviewed this trekker ✓</p>
                 ) : (
@@ -133,7 +142,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                           {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n} ★</option>)}
                         </select>
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         {["fitness_honesty", "punctuality", "respect"].map((k) => (
                           <label key={k} className="text-xs text-ink-soft">
                             {k.replace(/_/g, " ")}

@@ -45,9 +45,15 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ ok: "Saved." }, { headers });
   }
 
-  // Change request for bio/photos — these are ops-edited to keep quality.
+  // Change request for bio/photos — ops-edited to keep quality. Persisted to
+  // an ops queue (it used to be discarded silently).
+  const note = String(form.get("note") ?? "").trim();
+  if (!note) {
+    return data({ error: "Tell us what you'd like changed." }, { status: 400, headers });
+  }
+  await admin.from("guide_change_requests").insert({ guide_id: user.id, note });
   return data(
-    { ok: "Thanks — we’ll pass your request to the team." },
+    { ok: "Thanks — our team will action this and reply." },
     { headers },
   );
 }

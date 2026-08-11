@@ -4,6 +4,8 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { cn } from "~/lib/cn";
 import { CheckinButton } from "~/components/guide/CheckinButton";
+import { formatNpr } from "~/lib/pricing";
+import { fmtDate } from "~/lib/format";
 
 const CHECK_LABELS: Record<string, string> = {
   licence: "Trekking licence",
@@ -72,8 +74,35 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }
   }
 
+  // Treks where this guide is the named backup — a promise Trek makes to
+  // trekkers that the guide could never see before (audit).
+  const { data: backupFor } = await admin
+    .from("offerings")
+    .select("id, slug, title, guide:guides!offerings_guide_id_fkey(slug, users(full_name))")
+    .eq("backup_guide_id", user.id)
+    .eq("status", "live")
+    .limit(10);
+
+  // Money owed but not yet paid out.
+  const { data: duePayouts } = await admin
+    .from("payouts")
+    .select("amount_npr_paisa, status")
+    .eq("guide_id", user.id)
+    .eq("status", "payable");
+  const payableNprPaisa = (duePayouts ?? []).reduce((s, p) => s + p.amount_npr_paisa, 0);
+
   return data(
-    { name: profile.full_name, guide, active, nextBooking, enquiries, checkedInToday, today },
+    {
+      name: profile.full_name,
+      guide,
+      active,
+      nextBooking,
+      enquiries,
+      checkedInToday,
+      today,
+      backupFor: backupFor ?? [],
+      payableNprPaisa,
+    },
     { headers },
   );
 }
@@ -112,7 +141,7 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, guide, active, nextBooking, enquiries, checkedInToday, today } =
+  const { name, guide, active, nextBooking, enquiries, checkedInToday, today, backupFor, payableNprPaisa } =
     loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
@@ -160,8 +189,37 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           <p className="text-xs text-ink-soft">Next trip</p>
           <p className="font-medium text-ink">{nextBooking.offering?.title}</p>
           <p className="text-sm text-ink-soft">
-            {nextBooking.trekker?.full_name} · {nextBooking.start_date}
+            {nextBooking.trekker?.full_name} · {fmtDate(nextBooking.start_date)}
           </p>
+        </section>
+      )}
+
+      {payableNprPaisa > 0 && (
+        <Link to="/g/earnings" className="block rounded-card border border-moss/40 bg-mist p-4">
+          <p className="text-xs text-ink-soft">Owed to you</p>
+          <p className="mt-0.5 font-mono text-xl text-ink">{formatNpr(payableNprPaisa)}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">Paid within 7 days of each trek ending.</p>
+        </Link>
+      )}
+
+      {backupFor.length > 0 && (
+        <section className="rounded-card border border-border bg-card p-4">
+          <p className="text-sm font-medium text-ink">
+            You're the backup guide on {backupFor.length} trek{backupFor.length === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            If the lead guide can't go, you step in. Keep these dates in mind.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {backupFor.map((o: any) => (
+              <li key={o.id} className="flex justify-between gap-2">
+                <span className="truncate text-ink">{o.title}</span>
+                <span className="shrink-0 text-ink-soft">
+                  for {o.guide?.users?.full_name?.split(" ")[0] ?? "a guide"}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

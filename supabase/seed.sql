@@ -163,12 +163,12 @@ insert into public.offering_photos (offering_id, url, alt_text, source, approved
 insert into public.availability (guide_id, day, status)
 select g.user_id, d::date, 'open'
 from public.guides g,
-     generate_series(current_date, current_date + 120, interval '1 day') d
+     generate_series(current_date, current_date + 270, interval '1 day') d
 on conflict do nothing;
 
 -- Block a scattered handful of days per guide so calendars look real.
 update public.availability set status = 'blocked'
-where (extract(day from day)::int % 17) = 0;
+where (abs(hashtext(guide_id::text || day::text)) % 11) = 0;
 
 -- ============ COMPLETED BOOKINGS + PUBLISHED REVIEWS ============
 -- Ten completed bookings back ten released trekker→guide reviews.
@@ -408,3 +408,39 @@ update public.recaps rc set photo_urls = (
   select array_remove(array[o.cover_photo_url, '/img/hero.jpg'], null)
   from public.bookings b join public.offerings o on o.id = b.offering_id
   where b.id = rc.booking_id);
+update auth.users u
+set encrypted_password = extensions.crypt('TrekDemo2026', extensions.gen_salt('bf')),
+    email_confirmed_at = coalesce(u.email_confirmed_at, now())
+from public.users pu
+where pu.id = u.id and pu.role = 'guide';
+
+-- ============ Seed realism fixes (audit P3) ============
+-- 1) Seeded bookings actually hold their calendar days (a guide on a trek must
+--    not appear free on their own profile / the matcher).
+update public.availability a
+set status = case when b.status in ('pending_deposit') then 'held' else 'booked' end,
+    booking_id = b.id
+from public.bookings b
+where a.guide_id = b.guide_id
+  and a.day between b.start_date and b.end_date
+  and b.status not like 'cancelled%';
+
+-- 2) Booking …013 was docs_pending with no balance_paid_at — a state the app
+--    can't produce. Settle it.
+update public.bookings
+set balance_paid_at = now() - interval '3 days'
+where status in ('docs_pending','confirmed','active','completed') and balance_paid_at is null;
+
+-- 3) Payment rows so cancellations/refunds and the payments list are real.
+insert into public.payments (booking_id, stripe_payment_intent, type, amount_usd_cents, status)
+select b.id, 'pi_seed_' || substr(b.id::text, 1, 8), 'deposit', b.deposit_usd_cents, 'succeeded'
+from public.bookings b
+where b.deposit_paid_at is not null
+  and not exists (select 1 from public.payments p where p.booking_id = b.id and p.type = 'deposit');
+
+insert into public.payments (booking_id, stripe_payment_intent, type, amount_usd_cents, status)
+select b.id, 'pi_seedbal_' || substr(b.id::text, 1, 8), 'balance',
+       b.total_usd_cents - b.deposit_usd_cents, 'succeeded'
+from public.bookings b
+where b.balance_paid_at is not null and b.total_usd_cents > b.deposit_usd_cents
+  and not exists (select 1 from public.payments p where p.booking_id = b.id and p.type = 'balance');

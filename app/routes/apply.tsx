@@ -9,7 +9,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
     title: "Become a guide on Trek",
     description:
-      "Apply to lead treks and experiences on Trek. Verified guides pick their own rates and keep 85% of the guide fee.",
+      "Apply to lead treks and experiences on Trek. Verified guides set their own rate and keep their whole fee — Trek's 10% is added on top and paid by the trekker.",
     canonical: d?.canonical ?? "",
   });
 }
@@ -41,6 +41,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const fullName = String(form.get("full_name") ?? "").trim();
   const phone = String(form.get("phone") ?? "").trim();
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const password = String(form.get("password") ?? "");
   const district = String(form.get("home_district") ?? "").trim();
   const licenceNo = String(form.get("licence_no") ?? "").trim();
   const licenceExpiry = String(form.get("licence_expiry") ?? "").trim() || null;
@@ -54,6 +56,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (!fullName || !phone) {
     return data({ error: "Name and phone are required." }, { status: 400 });
+  }
+  if (!/.+@.+\..+/.test(email)) {
+    return data({ error: "Enter an email you can sign in with." }, { status: 400 });
+  }
+  if (password.length < 8) {
+    return data({ error: "Choose a password of at least 8 characters." }, { status: 400 });
   }
 
   const admin = createAdminClient(env);
@@ -78,16 +86,20 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
-  // 1) Auth user keyed by phone (guides sign in via phone OTP once SMS is live).
+  // 1) Auth user with a credential the guide can actually sign in with
+  // (email + password, same as trekkers). Phone is stored for SMS notices.
   const { data: created, error: authErr } = await admin.auth.admin.createUser({
+    email,
+    password,
     phone,
+    email_confirm: true,
     phone_confirm: false,
     user_metadata: { full_name: fullName, applied_as: "guide" },
   });
   if (authErr || !created.user) {
-    const msg = /already/i.test(authErr?.message ?? "")
-      ? "A guide with that phone number has already applied."
-      : "Couldn’t start your application. Check your phone number.";
+    const msg = /already|registered/i.test(authErr?.message ?? "")
+      ? "An account with that email or phone already exists."
+      : "Couldn’t start your application. Check your details.";
     return data({ error: msg }, { status: 400 });
   }
   const userId = created.user.id;
@@ -97,6 +109,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     id: userId,
     role: "guide",
     full_name: fullName,
+    email,
     phone,
   });
 
@@ -164,7 +177,10 @@ export default function Apply({ actionData }: Route.ComponentProps) {
     if (!formRef.current) return;
     const fd = new FormData(formRef.current);
     const obj: Record<string, string> = {};
-    fd.forEach((v, k) => (obj[k] = String(v)));
+    // Never persist the password to localStorage.
+    fd.forEach((v, k) => {
+      if (k !== "password") obj[k] = String(v);
+    });
     localStorage.setItem(KEY, JSON.stringify(obj));
     setSaved(true);
   }
@@ -176,8 +192,8 @@ export default function Apply({ actionData }: Route.ComponentProps) {
         <h1 className="font-display text-3xl text-ink">Application received</h1>
         <p className="mt-3 text-ink-soft">
           Thanks, {actionData.name}. Our team in Kathmandu will review your
-          licence and references. We’ll text you when you’re verified — then you
-          can sign in with your phone number.
+          licence and references. We’ll text you when you’re verified — then
+          sign in with the email and password you just set.
         </p>
       </main>
     );
@@ -187,8 +203,9 @@ export default function Apply({ actionData }: Route.ComponentProps) {
     <main className="mx-auto max-w-lg px-4 py-10">
       <h1 className="font-display text-3xl text-ink">Become a guide</h1>
       <p className="mt-1 text-ink-soft">
-        Lead your own treks and experiences. You set your rate and keep 85% of
-        the guide fee. We verify every guide before they go live.
+        Lead your own treks and experiences. You set your rate and keep it in
+        full — our 10% is added on top and paid by the trekker. We verify every
+        guide before they go live.
       </p>
 
       <Form
@@ -208,6 +225,8 @@ export default function Apply({ actionData }: Route.ComponentProps) {
         />
         <Field name="full_name" label="Full name (as on your licence)" required />
         <Field name="phone" label="Phone (with country code, e.g. +9779…)" required />
+        <Field name="email" label="Email (you'll sign in with this)" required />
+        <Field name="password" label="Choose a password (8+ characters)" type="password" required />
         <Field name="home_district" label="Home district" />
         <div className="grid grid-cols-2 gap-4">
           <Field name="licence_no" label="Trekking licence no." />

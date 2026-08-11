@@ -3,6 +3,7 @@ import type { Route } from "./+types/g";
 import { cn } from "~/lib/cn";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
+import { countUnread } from "~/lib/unread.server";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -15,11 +16,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .eq("guide_id", user.id)
       .eq("status", "open"),
   ]);
+  const { unreadTotal } = await countUnread(admin, user.id);
   return data(
     {
       name: profile.full_name,
       status: guide?.status ?? "applied",
       enquiryCount: enquiryCount ?? 0,
+      unreadTotal,
     },
     { headers },
   );
@@ -32,16 +35,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   return redirect("/g/login", { headers });
 }
 
+// Five tabs is the 360px ceiling — Earnings lives as a quick link on Home.
 const TABS = [
   { to: "/g", label: "Home", end: true, badge: 0 },
-  { to: "/g/enquiries", label: "Enquiries", badge: "enquiryCount" as const },
+  { to: "/g/enquiries", label: "Requests", badge: "enquiryCount" as const },
+  { to: "/messages", label: "Messages", badge: "unreadTotal" as const },
   { to: "/g/bookings", label: "Trips", badge: 0 },
   { to: "/g/calendar", label: "Calendar", badge: 0 },
-  { to: "/g/earnings", label: "Earnings", badge: 0 },
 ];
 
 export default function GuideLayout({ loaderData }: Route.ComponentProps) {
-  const { status, enquiryCount } = loaderData;
+  const { status, enquiryCount, unreadTotal } = loaderData;
   const verified = status === "verified";
 
   return (
@@ -60,7 +64,12 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
       {verified && (
         <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-border bg-card">
           {TABS.map((t) => {
-            const badge = t.badge === "enquiryCount" ? enquiryCount : 0;
+            const badge =
+              t.badge === "enquiryCount"
+                ? enquiryCount
+                : t.badge === "unreadTotal"
+                  ? unreadTotal
+                  : 0;
             return (
               <NavLink
                 key={t.to}
@@ -76,7 +85,7 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
               >
                 {t.label}
                 {badge > 0 && (
-                  <span className="absolute right-1/4 top-1 rounded-full bg-primary px-1.5 text-[10px] text-white">
+                  <span className="absolute right-2 top-1 rounded-full bg-primary px-1.5 text-[10px] leading-4 text-white">
                     {badge}
                   </span>
                 )}

@@ -7,7 +7,7 @@ import { SmartImage } from "~/components/SmartImage";
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { admin, headers } = await requireOps(request, env);
-  const [{ data: flagged }, { data: photos }] = await Promise.all([
+  const [{ data: flagged }, { data: photos }, { data: changeRequests }] = await Promise.all([
     admin
       .from("messages")
       .select("id, body, flagged_reason, created_at, sender:users(full_name)")
@@ -18,8 +18,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .select("id, url, alt_text, credit_name, offering:offerings(title)")
       .eq("approved", false)
       .eq("source", "trekker"),
+    admin
+      .from("guide_change_requests")
+      .select("id, note, created_at, guide:guides(slug, users(full_name))")
+      .eq("status", "open")
+      .order("created_at", { ascending: false }),
   ]);
-  return data({ flagged: flagged ?? [], photos: photos ?? [] }, { headers });
+  return data(
+    { flagged: flagged ?? [], photos: photos ?? [], changeRequests: changeRequests ?? [] },
+    { headers },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -34,15 +42,47 @@ export async function action({ request, context }: Route.ActionArgs) {
     await admin.from("offering_photos").update({ approved: true }).eq("id", String(form.get("id")));
   } else if (intent === "reject_photo") {
     await admin.from("offering_photos").delete().eq("id", String(form.get("id")));
+  } else if (intent === "done_change_request") {
+    await admin
+      .from("guide_change_requests")
+      .update({ status: "done", handled_at: new Date().toISOString() })
+      .eq("id", String(form.get("id")));
   }
   return data({ ok: true }, { headers });
 }
 
 export default function OpsModeration({ loaderData }: Route.ComponentProps) {
-  const { flagged, photos } = loaderData as any;
+  const { flagged, photos, changeRequests } = loaderData as any;
   return (
     <div className="space-y-6">
       <h1 className="font-display text-2xl">Moderation</h1>
+
+      <Panel title={`Guide change requests (${changeRequests.length})`}>
+        {changeRequests.length === 0 ? (
+          <EmptyRow>No open requests.</EmptyRow>
+        ) : (
+          <ul className="divide-y divide-border">
+            {changeRequests.map((r: any) => (
+              <li key={r.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {r.guide?.users?.full_name ?? "Guide"}{" "}
+                    <a href={`/guides/${r.guide?.slug ?? ""}`} className="text-primary">
+                      (profile)
+                    </a>
+                  </p>
+                  <p className="mt-0.5 whitespace-pre-line text-sm text-ink-soft">{r.note}</p>
+                </div>
+                <Form method="post" className="shrink-0">
+                  <input type="hidden" name="intent" value="done_change_request" />
+                  <input type="hidden" name="id" value={r.id} />
+                  <button className="text-sm text-primary hover:underline">Mark done</button>
+                </Form>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
 
       <Panel title={`Flagged messages (${flagged.length})`}>
         {flagged.length === 0 ? (

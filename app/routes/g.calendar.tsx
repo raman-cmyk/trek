@@ -15,7 +15,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     .gte("day", today)
     .order("day");
   const anchor = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}-01`;
-  return data({ rows: rows ?? [], anchor }, { headers });
+  return data({ rows: rows ?? [], anchor, todayIso: today }, { headers });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -50,7 +50,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
-  const { rows, anchor } = loaderData as { rows: any[]; anchor: string };
+  const { rows, anchor, todayIso } = loaderData as { rows: any[]; anchor: string; todayIso: string };
   const fetcher = useFetcher();
   const map = new Map<string, string>(rows.map((r) => [r.day, r.status]));
 
@@ -92,7 +92,9 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
               {Array.from({ length: days }).map((_, i) => {
                 const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
                 const st = map.get(iso) ?? "open";
-                const locked = st === "held" || st === "booked";
+                const past = iso < todayIso;
+                const locked = st === "held" || st === "booked" || past;
+                const booked = st === "held" || st === "booked";
                 const blocked = st === "blocked";
                 return (
                   <fetcher.Form method="post" key={iso}>
@@ -103,11 +105,14 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
                       disabled={locked}
                       className={cn(
                         "w-full rounded py-2",
-                        locked
-                          ? "bg-ink-soft/20 text-ink-soft"
-                          : blocked
-                            ? "bg-ink-soft/15 text-ink-soft line-through"
-                            : "bg-accent/10 font-medium text-accent",
+                        booked
+                          // Booked/held days are money — distinct from blocked.
+                          ? "bg-primary/20 font-medium text-primary"
+                          : past
+                            ? "bg-transparent text-ink-soft/40"
+                            : blocked
+                              ? "bg-ink-soft/15 text-ink-soft line-through"
+                              : "bg-accent/10 font-medium text-accent",
                       )}
                     >
                       {i + 1}
@@ -120,7 +125,9 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
         );
       })}
       <p className="text-xs text-ink-soft">
-        Green = open · greyed = blocked · locked days have a booking.
+        Green = open for bookings · struck through = you blocked it ·{" "}
+        <span className="text-primary">highlighted</span> = a trekker booked you (can't be changed
+        here) · faded = past.
       </p>
     </div>
   );
