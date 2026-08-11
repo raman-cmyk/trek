@@ -122,7 +122,7 @@ export default function Recap({ loaderData: d }: Route.ComponentProps) {
         </Link>
       </p>
       <p className="mt-2 text-center text-xs text-ink-soft">
-        Pick your guide, not your agency.
+        Know who’s walking with you.
       </p>
     </main>
   );

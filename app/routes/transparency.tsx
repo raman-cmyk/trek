@@ -9,7 +9,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Transparent pricing — every line, printed",
     description:
-      "Trek shows every line of what you pay: the guide's fee (all of it goes to them), permits at cost, teahouse and logistics, our 10% fee, and 3% to The Fund. No hidden markup, no mystery total.",
+      "Trek shows every line of what you pay: the guide's fee (all of it goes to them), permits at cost, teahouse and logistics, our 10% fee, and 3% to The Fund. Every rupee, itemised.",
     canonical: (data as any)?.canonical ?? "",
   });
 }
@@ -117,7 +117,7 @@ export default function Transparency({ loaderData }: Route.ComponentProps) {
         <Item title="What changes the price">
           Group size (the guide fee splits), teahouse standard, and whether you
           take a porter. The booking page lets you move all three and watch the
-          number change — that's the whole package, no mystery total.
+          number change — that's the whole package, itemised.
         </Item>
       </div>
 

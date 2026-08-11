@@ -122,7 +122,7 @@ export function Footer({
                 Trek<span className="text-moss">.</span>
               </p>
               <p className="mt-2 max-w-[30ch] text-sm text-sage">
-                Pick your guide, not your agency.
+                Know who&rsquo;s walking with you.
               </p>
               <dl className="mt-5 space-y-1.5 text-sm">
                 <Stat n={data?.guideCount} label="verified guides" />

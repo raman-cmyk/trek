@@ -10,7 +10,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Guide on Trek — your name, your rate, your clients",
     description:
-      "Trek puts your face on the product, not an agency's logo. Set your own day rate, keep your whole fee, get paid in NPR within 7 days, and build a review record that belongs to you.",
+      "Trek puts your face on the product. Set your own day rate, keep your whole fee, get paid in NPR within 7 days, and build a review record that belongs to you.",
     canonical: (data as any)?.canonical ?? "",
   });
 }
@@ -22,7 +22,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 const PROPS = [
   {
     title: "Your name on the trek",
-    body: "Trekkers book Pemba, not \"Package A\". Your photo, your voice, your reviews — a reputation that compounds and belongs to you, not an agency.",
+    body: "Trekkers book Pemba. Your photo, your voice, your reviews — a reputation that compounds and belongs to you.",
   },
   {
     title: "You set the rate — and keep it",

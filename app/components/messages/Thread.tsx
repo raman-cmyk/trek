@@ -385,7 +385,7 @@ function EmptyThread({
       <p className="mt-6 text-sm text-muted">
         {isGuide
           ? `${first} hasn't written yet. Say hello — you answer faster than most, and it shows on your profile.`
-          : `Messaging is free and ${first} answers himself. Not sure where to start?`}
+          : `Say hello — ask about the route, your dates, how fit you need to be, anything. ${first} answers himself, and it is free.`}
       </p>
 
       {!isGuide && (

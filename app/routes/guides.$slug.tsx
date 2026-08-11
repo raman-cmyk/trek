@@ -561,10 +561,12 @@ function JournalWall({
     // Absence turned into an invitation (brief §2.1).
     return (
       <div className="rounded-md border border-dashed border-line bg-card p-8 text-center">
-        <h2 className="font-display text-2xl text-ink">No journals yet.</h2>
+        <h2 className="font-display text-2xl text-ink">
+          The next journal isn&rsquo;t written yet.
+        </h2>
         <p className="mx-auto mt-2 max-w-[46ch] text-muted">
-          {first} joined Trek recently. His first journal gets written on his first
-          trek — you could be in it.
+          Book {first} this season and you&rsquo;ll be in it — every trek ends
+          with photos and his own account of the days.
         </p>
         <Form method="post" action="/conversations" className="mt-4">
           <input type="hidden" name="guide_id" value={guideId} />

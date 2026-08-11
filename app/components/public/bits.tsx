@@ -36,7 +36,9 @@ export function Stars({
   count?: number;
 }) {
   if (!value) {
-    return <span className="text-caption text-muted">New guide</span>;
+    // "New guide" on its own reads as unproven. Say what is true and what it
+    // invites instead — the same absence, turned the right way round.
+    return <span className="text-caption text-muted">Be the first</span>;
   }
   return (
     <span className="inline-flex items-center gap-1 text-sm">

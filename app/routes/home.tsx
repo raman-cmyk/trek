@@ -29,7 +29,7 @@ import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
-    title: "Trek — pick your guide, not your agency",
+    title: "Trek \u2014 know who\u2019s walking with you",
     description: copy.brand.tagline,
     canonical: data?.canonical ?? "",
   });
@@ -287,12 +287,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/45 to-black/40 sm:via-black/15 sm:to-transparent" />
         <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-24">
           <h1 className="display-hero max-w-[13ch] font-display text-[12vw] text-white [text-shadow:0_2px_24px_rgb(0_0_0/0.5)] sm:text-6xl lg:text-7xl">
-            <span className="wt-heavy">Pick your guide,</span>{" "}
-            <span className="wt-light text-white/90">not your agency.</span>
+            <span className="wt-heavy">Know who&rsquo;s</span>{" "}
+            <span className="wt-light text-white/90">walking with you.</span>
           </h1>
-          <p className="mt-4 max-w-[46ch] text-lg text-white/85">
-            {stats.guides} verified Nepali guides, each with their own trips. Search
-            what you want to walk — you'll meet the person before you pay.
+          <p className="mt-4 max-w-[50ch] text-lg text-white/85">
+            Choose your guide first — see their treks, hear their voice, message
+            them free. When it feels right, book. That&rsquo;s the whole thing.
           </p>
           <div className="mt-7">
             <HeroSearch today={today} regions={suggestions} />
@@ -345,7 +345,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {freeThisWeek.length > 0 && (
         <Row
           eyebrow="Available now"
-          label="Free this week"
+          label="Who's free for your dates"
           blurb={`${freeThisWeekTotal} guides with open days between now and ${fmtDateShort(
             weekEnd,
           )}.`}
@@ -387,7 +387,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <div>
               <p className="label text-muted">Proof of life</p>
               <h2 className="mt-2 max-w-[16ch] font-display text-3xl text-ink sm:text-4xl">
-                <span className="wt-heavy">Latest from the trail.</span>
+                <span className="wt-heavy">Treks, as they happened.</span>
               </h2>
             </div>
             <Link
@@ -540,9 +540,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <section className="mx-auto max-w-6xl px-4 py-14">
         <div className="flex flex-col gap-0 border-y border-line sm:flex-row">
           {[
-            ["/trust", "Verification receipts", "every check, dated, public"],
-            ["/transparency", "The whole price", "guide fee, permits, our cut — printed"],
-            ["/fund", "The Fund", "3% of every trek, spent on the trail"],
+            [
+              "/trust",
+              "Every guide checked, dated, signed off",
+              "Licence, first aid, references. You can read the receipts.",
+            ],
+            [
+              "/transparency",
+              "Every rupee, itemised",
+              "Guide, permits, porters, fund — you see the whole split before you pay.",
+            ],
+            [
+              "/safety",
+              "If you ever need a helicopter",
+              "We earn nothing from it.",
+            ],
           ].map(([to, t, b], i) => (
             <Link
               key={t}
@@ -608,7 +620,7 @@ function Row({
           prefetch="intent"
           className="text-sm font-medium text-moss hover:underline"
         >
-          {count != null && count > guides.length ? `All ${count} →` : "See all →"}
+          {count != null && count > guides.length ? `All ${count} →` : "See everyone →"}
         </Link>
       </div>
       <p className="mt-0.5 text-sm text-muted">{blurb}</p>
@@ -712,7 +724,7 @@ function ExperienceBrowser({ experiences }: { experiences: any[] }) {
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
           <p className="label text-muted">Not just treks</p>
-          <h2 className="mt-2 font-display text-3xl text-ink">Things you can book</h2>
+          <h2 className="mt-2 font-display text-3xl text-ink">Where do you want to go?</h2>
         </div>
         <Link
           to="/experiences"
@@ -838,7 +850,7 @@ function GuideCall({ count }: { count: number }) {
           <div>
             <p className="label text-muted">For guides</p>
             <h2 className="mt-2 max-w-[20ch] font-display text-3xl leading-[1.05] text-ink sm:text-4xl">
-              Your name on the work, not an agency&rsquo;s.
+              Your name on the work.
             </h2>
             <p className="mt-4 max-w-[52ch] text-body-l text-ink">
               You set your day rate and keep all of it. Trek adds{" "}
@@ -905,8 +917,8 @@ function GiantSplit({ offering }: { offering: PublicOffering }) {
           <span className="wt-light text-paper/75">to Base Camp. Split, to the cent.</span>
         </h2>
         <p className="mt-3 max-w-[52ch] text-paper/80">
-          {offering.title}, two of you, real numbers from the live listing. No package
-          totals, no mystery margin — this is the whole point of Trek.
+          {offering.title}, two of you, straight off the live listing. Every
+          rupee itemised: what the guide keeps, what the permits cost, what we take.
         </p>
 
         <div className="mt-10 flex h-16 w-full overflow-hidden">

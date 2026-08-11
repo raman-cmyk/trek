@@ -19,7 +19,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Find your trekking guide in Nepal",
     description:
-      "Search verified, licensed trekking guides in Nepal by name, region, language and the dates you're free. Pick the human you'll trek with, not an agency.",
+      "Search verified, licensed trekking guides in Nepal by name, region, language and the dates you're free. Pick the person you'll walk with.",
     canonical: data?.canonical ?? "",
   });
 }
@@ -265,10 +265,12 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
 
       {guides.length === 0 ? (
         <div className="mt-10">
-          <p className="font-display text-xl text-ink">Nobody matches all of that.</p>
+          <p className="font-display text-xl text-ink">
+            No one&rsquo;s free those exact days.
+          </p>
           <p className="mt-1 max-w-[52ch] text-muted">
-            Try dropping the dates, or widening the region — most guides work across
-            more than one.
+            Try the week either side, or widen the region — most guides work
+            across more than one.
           </p>
           <Link
             to="/guides"

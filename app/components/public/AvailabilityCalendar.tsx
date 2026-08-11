@@ -39,7 +39,7 @@ export function AvailabilityCalendar({
           <span aria-hidden="true" className={cn(dayCls(false), "w-7 text-center text-xs")}>
             12
           </span>
-          Already booked, or the guide has blocked it
+          Already booked, or kept free
         </li>
       </ul>
 

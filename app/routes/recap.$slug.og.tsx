@@ -39,7 +39,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
         <div style="display:flex;font-size:40px;margin-top:24px;opacity:0.95;">${meta}</div>
         <div style="display:flex;font-size:40px;margin-top:8px;opacity:0.95;">Guided by ${guide}</div>
       </div>
-      <div style="display:flex;font-size:30px;opacity:0.8;">Pick your guide, not your agency.</div>
+      <div style="display:flex;font-size:30px;opacity:0.8;">Know who’s walking with you.</div>
     </div>`;
 
   return new ImageResponse(html, {

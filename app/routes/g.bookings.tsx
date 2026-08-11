@@ -153,7 +153,9 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                         ))}
                       </div>
                       <textarea name="body" rows={2} placeholder="A note about this trekker" className="w-full rounded-button border border-border px-2 py-1 text-sm" />
-                      <Button type="submit" size="sm" loading={nav.state !== "idle"}>Submit</Button>
+                      <Button type="submit" size="sm" loading={nav.state !== "idle"}>
+                        Leave the review
+                      </Button>
                     </Form>
                   </details>
                 )}
