@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, redirect, useFetcher } from "react-router";
+import { Form, Link, redirect, useFetcher } from "react-router";
 import type { Route } from "./+types/signup";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
@@ -20,13 +20,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const next = safeNext(new URL(request.url).searchParams.get("next"));
   const { user } = await getSessionUser(request, env);
-  if (!user) return { next };
-  // Role-aware for the same reason as /login: sending a signed-in guide to a
-  // trekker page just bounces them again.
+  if (!user) return { next, signedInAs: null };
+  // Do NOT silently redirect an already-signed-in visitor away from signup.
+  // Bouncing them to /ops or /g is indistinguishable from the page being
+  // broken — you click "Sign up", something else appears, and there is no
+  // explanation. Creating an account is a deliberate act, so show the form
+  // and say what is in the way.
   const profile = await getProfile(env, user.id);
-  if (profile?.role === "guide") throw redirect("/g");
-  if (profile?.role === "ops") throw redirect("/ops");
-  throw redirect(next);
+  return {
+    next,
+    signedInAs: {
+      name: profile?.full_name ?? user.email ?? "someone",
+      role: profile?.role ?? "trekker",
+    },
+  };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -51,8 +58,22 @@ export async function action({ request, context }: Route.ActionArgs) {
     const fullName = `${form.get("first") ?? ""} ${form.get("last") ?? ""}`.trim();
     await ensureTrekkerProfile(env, res.user, fullName || undefined, String(form.get("country") ?? ""));
   }
-  // Auto-confirm returns a session on signUp; if not, establish one now.
-  if (!res.session) await supabase.auth.signInWithPassword({ email, password });
+  // Auto-confirm returns a session on signUp; if not, establish one now — and
+  // check that it worked. Redirecting on a failed sign-in used to hand back a
+  // logged-out page with no error, which reads as "signup is broken" when what
+  // actually happened is the project requires email confirmation.
+  if (!res.session) {
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      return Response.json(
+        {
+          error:
+            "Account created, but we couldn't sign you in — check your email for a confirmation link, then sign in.",
+        },
+        { status: 400 },
+      );
+    }
+  }
   return redirect(safeNext(String(form.get("next") ?? "")), { headers });
 }
 
@@ -80,6 +101,7 @@ type Values = { first: string; last: string; country: string; email: string; pas
 
 export default function Signup({ loaderData }: Route.ComponentProps) {
   const next = loaderData?.next ?? "/guides";
+  const signedInAs = (loaderData as any)?.signedInAs ?? null;
   const fetcher = useFetcher<{ error?: string }>();
   const [step, setStep] = useState(0);
   const [v, setV] = useState<Values>({ first: "", last: "", country: "", email: "", password: "" });
@@ -132,6 +154,27 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="relative flex min-h-screen flex-col bg-paper">
+      {/* Already signed in? Say so instead of redirecting them somewhere else,
+          which is indistinguishable from the page being broken. */}
+      {signedInAs && (
+        <div className="border-b border-line bg-mist px-5 py-3 text-sm text-ink">
+          You're already signed in as <strong>{signedInAs.name}</strong> (
+          {signedInAs.role}).{" "}
+          <Link
+            to={signedInAs.role === "guide" ? "/g" : signedInAs.role === "ops" ? "/ops" : "/trips"}
+            className="underline underline-offset-2 hover:text-moss"
+          >
+            Go to your account
+          </Link>
+          , or{" "}
+          <Form method="post" action="/logout" className="inline">
+            <button className="underline underline-offset-2 hover:text-moss">
+              sign out
+            </button>
+          </Form>{" "}
+          to make a new one.
+        </div>
+      )}
       <div className="h-1 w-full bg-mist">
         <div
           className="h-full bg-moss transition-[width] duration-base ease-out-soft"
