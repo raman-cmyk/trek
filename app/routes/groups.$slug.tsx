@@ -15,6 +15,7 @@ import {
 } from "~/lib/groups";
 import { joinGroup, recomputeShares, systemLine } from "~/lib/groups.server";
 import { cn } from "~/lib/cn";
+import { TrustPanel } from "~/components/public/TrustPanel";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -781,7 +782,23 @@ function JoinInvite({
         </p>
       )}
 
-      <Form method="post" className="mt-6">
+      <TrustPanel
+        className="mt-6"
+        title="Before you join"
+        items={[
+          { label: "Joining costs nothing and books nothing." },
+          {
+            label: "You see every share and who has paid theirs.",
+            note: "The split is worked out from the real trip price, not typed in by anyone.",
+          },
+          {
+            label: "The trip only goes to the guide once everyone is in.",
+            note: "Until then it is a plan, and you can leave it.",
+          },
+        ]}
+      />
+
+      <Form method="post" className="mt-5">
         <input type="hidden" name="intent" value="join" />
         <button
           disabled={busy}

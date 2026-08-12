@@ -6,6 +6,7 @@ import { PriceBreakdown } from "./bits";
 import { computePricing } from "~/lib/pricing";
 import { computeExperiencePricing, type PriceBreakdown as PB } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
+import { TrustPanel } from "~/components/public/TrustPanel";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -179,9 +180,25 @@ function ConfigBody({
           </Button>
         </fetcher.Form>
       )}
-      <p className="text-center text-xs text-ink-soft">
-        Free cancellation until 30 days before
-      </p>
+      {/* Sending dates is the first irreversible-feeling step, and until now
+          the page said nothing about what it costs or commits you to. It
+          costs nothing and commits you to nothing, which is worth saying at
+          the exact moment somebody hesitates. */}
+      <TrustPanel
+        className="mt-3"
+        title="What happens when you send this"
+        items={[
+          {
+            label: `${o.guide_first_name} reads it and replies within 24 hours.`,
+            note: "You talk first. Your card is not asked for until you both agree.",
+          },
+          {
+            label: "Your dates are held while they answer.",
+            note: "Nobody else can book those days out from under you.",
+          },
+          { label: "Cancel free until 30 days before you leave." },
+        ]}
+      />
     </div>
   );
 }

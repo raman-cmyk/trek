@@ -7,6 +7,7 @@ import { SmartImage } from "~/components/SmartImage";
 import { useLightbox } from "~/components/public/Lightbox";
 import { useMoney } from "~/lib/currency-context";
 import { eventDates, placesLeft } from "~/lib/events";
+import { TrustPanel } from "~/components/public/TrustPanel";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   const e = (d as any)?.event;
@@ -311,6 +312,40 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
               </Form>
             )}
           </div>
+
+          {/* A trip proposed by a member of the public is the least familiar
+              thing on the site, so it needs the most explicit answer to "who
+              is actually accountable here". */}
+          <TrustPanel
+            tone="card"
+            title="Who is accountable"
+            items={[
+              {
+                label: e.guide_name
+                  ? `${e.guide_name} leads it — a licensed guide we checked ourselves.`
+                  : "A licensed guide we checked ourselves leads it.",
+                note: "Licence, first aid and references, dated and on their profile.",
+              },
+              {
+                label: "Trek handles the permits and the money.",
+                note: `${e.organiser_name} put the trip together; the booking runs through us like any other.`,
+              },
+              {
+                label: "Putting your name down is free.",
+                note: "The organiser confirms the group before anyone is asked to pay.",
+              },
+              {
+                label: (
+                  <>
+                    Capped at <span className="font-mono">{e.max_people}</span>. The cap is the
+                    promise.
+                  </>
+                ),
+              },
+            ]}
+            href="/trust"
+            hrefLabel="How we check a guide"
+          />
 
           <div className="rounded-md border border-line bg-card p-4">
             <p className="label text-muted">Organised by</p>

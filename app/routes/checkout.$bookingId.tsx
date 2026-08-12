@@ -11,13 +11,14 @@ import { computeDeposit } from "~/lib/pricing";
 import { useMoney } from "~/lib/currency-context";
 import { instalmentSchedule, maxInstalments } from "~/lib/instalments";
 import { fmtDateShort as fmtDate } from "~/lib/format";
+import { TrustPanel } from "~/components/public/TrustPanel";
 
 export function meta() {
   return [{ title: "Pay your deposit" }, { name: "robots", content: "noindex" }];
 }
 
 const BOOKING_COLS =
-  "id, status, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents, permit_handling_usd_cents, logistics_usd_cents, fund_usd_cents, start_date, offering:offerings(title, kind)";
+  "id, status, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents, permit_handling_usd_cents, logistics_usd_cents, fund_usd_cents, start_date, offering:offerings(title, kind), guide:guides(slug, tier, users(full_name))";
 
 function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -132,6 +133,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
 export default function Checkout({ loaderData, actionData }: Route.ComponentProps) {
   const { booking: b, paymentIntentId, isMock, balance, today, maxN } = loaderData as any;
+  const guideName = (b.guide?.users?.full_name ?? "").split(" ")[0] || null;
   const nav = useNavigation();
   const { m } = useMoney();
   const [count, setCount] = useState(1);
@@ -210,6 +212,51 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
           </ul>
         </div>
       )}
+
+      {/* The money moment. Everything here is a date or a number already on
+          this booking — the panel exists because "what actually happens to
+          this money" was the one question the page never answered. */}
+      <TrustPanel
+        className="mt-6"
+        title="What happens to this money"
+        items={[
+          {
+            label: (
+              <>
+                <span className="font-mono">{m(b.deposit_usd_cents)}</span> now,{" "}
+                <span className="font-mono">{m(balance)}</span> before you leave.
+              </>
+            ),
+            note: "Trek holds it until the trek starts. Nothing goes to anyone before that.",
+          },
+          {
+            label: guideName
+              ? `${guideName} is paid in full for their own fee.`
+              : "Your guide is paid in full for their own fee.",
+            note: "Our 10% is added on top and printed on the line above — it does not come out of theirs.",
+          },
+          inFreeWindow
+            ? {
+                label: (
+                  <>
+                    Cancel free until{" "}
+                    <span className="font-mono">{fmtDate(freeCancelUntil)}</span>.
+                  </>
+                ),
+                note: "Everything back except the card fee.",
+              }
+            : {
+                label: "Inside 30 days, part of the deposit is refundable.",
+                note: "The exact figure is on your trip page before you confirm.",
+              },
+          {
+            label: "If you ever need a helicopter, we earn nothing from it.",
+            note: "The rescue is arranged at cost. Our incentive and yours point the same way.",
+          },
+        ]}
+        href="/transparency"
+        hrefLabel="Every line of what you pay"
+      />
 
       <Form method="post" className="mt-6">
         <input type="hidden" name="payment_intent_id" value={paymentIntentId} />
