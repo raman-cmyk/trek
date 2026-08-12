@@ -50,16 +50,92 @@ export function journalSlug(title: string, startDate: string): string {
  */
 export function validateDraft(d: Partial<JournalDraft>): string | null {
   if (!d.title?.trim()) return "Give the trek a title.";
-  if (!d.start_date || !d.end_date) return "Add the start and end dates.";
-  if (d.end_date < d.start_date) return "The end date is before the start date.";
+  if (!d.start_date) return "Add the day you set off.";
   if (!d.booking_id && !d.pre_platform) {
     return "Pick the booking this trek was, or mark it as a trek from before Trek.";
   }
-  const days = Math.round(
-    (Date.parse(d.end_date) - Date.parse(d.start_date)) / 86400000,
-  ) + 1;
-  if (days > 60) return "That is more than 60 days — check the dates.";
   return null;
+}
+
+/**
+ * The last day of the trek, counted from the days that were written up.
+ *
+ * A guide is only ever asked when they set off. They know that without
+ * thinking; the finish date they had to work out by counting on their fingers,
+ * and it is already implied by the days they are about to write — Day 14 of a
+ * trek that started on the 3rd ended on the 16th, and no other answer is
+ * possible. Asking was making them do arithmetic to tell us something we could
+ * derive.
+ *
+ * Returns the start date when there are no days yet, so a journal is always a
+ * valid one-day span rather than a null the rest of the app has to guard.
+ */
+export function deriveEndDate(startDate: string, lastDayNo: number): string {
+  const days = Math.max(1, Math.min(Number.isFinite(lastDayNo) ? lastDayNo : 1, MAX_TREK_DAYS));
+  const d = new Date(`${startDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return startDate;
+  d.setUTCDate(d.getUTCDate() + days - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** A mistyped day number should not turn a two-week trek into a two-year one. */
+export const MAX_TREK_DAYS = 60;
+
+/**
+ * Settle a journal's dates. Called after every entry save and delete, and
+ * after the trek's own details are saved.
+ *
+ * Two cases, and the difference matters:
+ *
+ * · **The trek was booked here.** Both dates come from the booking and no
+ *   date is asked for at all — we already know when they walked, from the
+ *   record the guide was paid against. This also keeps the publish gate
+ *   honest: it refuses a journal that skips days, and to notice that only ten
+ *   days were written of a fourteen-day trek it needs a length that does not
+ *   come from the days themselves. Derived from the entries that check would
+ *   be circular — the last day written would define the length, so nothing
+ *   could ever be missing.
+ *
+ * · **A trek from before Trek.** No booking, so the guide gives the day they
+ *   set off and the finish is counted from the days they write up. The gate
+ *   falls back to "no gaps in what you wrote", which is all that is knowable.
+ *
+ * Returns what it stored, so a caller can show it back.
+ */
+export async function syncJournalDates(
+  admin: { from: (t: string) => any },
+  journalId: string,
+  startDateWhenNoBooking: string,
+): Promise<{ start_date: string; end_date: string }> {
+  const [{ data: journal }, { data: last }] = await Promise.all([
+    admin.from("journals").select("booking_id").eq("id", journalId).maybeSingle(),
+    admin
+      .from("journal_entries")
+      .select("day_no")
+      .eq("journal_id", journalId)
+      .order("day_no", { ascending: false })
+      .limit(1),
+  ]);
+
+  if (journal?.booking_id) {
+    const { data: booking } = await admin
+      .from("bookings")
+      .select("start_date, end_date")
+      .eq("id", journal.booking_id)
+      .maybeSingle();
+    if (booking?.start_date && booking?.end_date) {
+      const dates = { start_date: booking.start_date, end_date: booking.end_date };
+      await admin.from("journals").update(dates).eq("id", journalId);
+      return dates;
+    }
+  }
+
+  const dates = {
+    start_date: startDateWhenNoBooking,
+    end_date: deriveEndDate(startDateWhenNoBooking, (last ?? [])[0]?.day_no ?? 1),
+  };
+  await admin.from("journals").update(dates).eq("id", journalId);
+  return dates;
 }
 
 /** A journal is a photo album, not an illustrated caption. */

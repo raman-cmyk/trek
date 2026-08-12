@@ -55,7 +55,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     guide_id: String(form.get("guide_id") ?? ""),
     title: String(form.get("title") ?? "").trim(),
     start_date: String(form.get("start_date") ?? ""),
-    end_date: String(form.get("end_date") ?? ""),
+    // A new journal has no days yet, so it starts as a one-day span and grows
+    // as the guide writes it up (syncEndDate, on every entry save).
+    end_date: String(form.get("start_date") ?? ""),
     pre_platform: true, // ops-created journals start as verified-by-us
   };
   if (!draft.guide_id) return data({ error: "Pick a guide." }, { status: 400, headers });
@@ -105,12 +107,8 @@ export default function OpsJournals({ loaderData, actionData }: Route.ComponentP
           <input name="title" className={cls} required placeholder="Manaslu in late October…" />
         </label>
         <label className="sm:col-span-2">
-          <span className="text-sm text-ink-soft">Started</span>
+          <span className="text-sm text-ink-soft">The day they set off</span>
           <input type="date" name="start_date" className={cls} required />
-        </label>
-        <label className="sm:col-span-2">
-          <span className="text-sm text-ink-soft">Finished</span>
-          <input type="date" name="end_date" className={cls} required />
         </label>
         <div className="flex items-end">
           <Button type="submit" size="sm" loading={nav.state !== "idle"}>

@@ -7,6 +7,7 @@ import {
   journalableBookings,
   parseEntryForm,
   saveTags,
+  syncJournalDates,
   uniqueSlug,
   validateDraft,
   validateForPublish,
@@ -69,11 +70,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       ? await admin.from("journal_entries").update(row).eq("id", String(entryId))
       : await admin.from("journal_entries").insert(row);
     if (error) return data({ error: error.message }, { status: 400, headers });
+    await syncJournalDates(admin, journal.id, journal.start_date);
     return data({ ok: "Day saved." }, { headers });
   }
 
   if (intent === "delete_entry") {
     await admin.from("journal_entries").delete().eq("id", String(form.get("entry_id")));
+    await syncJournalDates(admin, journal.id, journal.start_date);
     return data({ ok: "Day removed." }, { headers });
   }
 
@@ -106,8 +109,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   };
   const patch = {
     title: String(form.get("title") ?? "").trim(),
-    start_date: String(form.get("start_date") ?? ""),
-    end_date: String(form.get("end_date") ?? ""),
+    // A booked trek's dates belong to the booking — the form does not
+    // offer them, so nothing here can move them.
+    start_date: journal.booking_id
+      ? journal.start_date
+      : String(form.get("start_date") ?? ""),
     route_id: str("route_id"),
     booking_id: str("booking_id"),
     pre_platform: form.get("pre_platform") === "on",
@@ -139,6 +145,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     .update({ ...patch, slug })
     .eq("id", journal.id);
   if (error) return data({ error: error.message }, { status: 400, headers });
+  // Moving the start date moves the finish date with it.
+  await syncJournalDates(admin, journal.id, patch.start_date);
   await saveTags(admin, journal.id, form);
   return data({ ok: "Saved." }, { headers });
 }

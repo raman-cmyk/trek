@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MIN_JOURNAL_PHOTOS, parseMedia, validateForPublish } from "./journals.server";
+import {
+  MAX_TREK_DAYS,
+  MIN_JOURNAL_PHOTOS,
+  deriveEndDate,
+  parseMedia,
+  validateDraft,
+  validateForPublish,
+} from "./journals.server";
 import { allMedia, isVideo, seasonOf, sortTags } from "./journals";
 
 const ok = {
@@ -156,5 +163,60 @@ describe("parseMedia", () => {
 
   it("returns nothing when there is nothing", () => {
     expect(parseMedia(fd([]))).toEqual([]);
+  });
+});
+
+describe("deriveEndDate — the finish date nobody has to type", () => {
+  it("counts the last day inclusive: day 1 of a trek that started on the 12th is the 12th", () => {
+    expect(deriveEndDate("2025-10-12", 1)).toBe("2025-10-12");
+  });
+
+  it("a 14-day trek from the 12th finishes on the 25th", () => {
+    expect(deriveEndDate("2025-10-12", 14)).toBe("2025-10-25");
+  });
+
+  it("crosses a month boundary", () => {
+    expect(deriveEndDate("2025-09-28", 7)).toBe("2025-10-04");
+  });
+
+  it("crosses a year boundary", () => {
+    expect(deriveEndDate("2025-12-28", 8)).toBe("2026-01-04");
+  });
+
+  it("handles a leap day", () => {
+    expect(deriveEndDate("2024-02-27", 4)).toBe("2024-03-01");
+  });
+
+  it("clamps a mistyped day number rather than inventing a two-year trek", () => {
+    expect(deriveEndDate("2025-10-12", 900)).toBe(deriveEndDate("2025-10-12", MAX_TREK_DAYS));
+  });
+
+  it("treats a missing or nonsense day count as day one", () => {
+    expect(deriveEndDate("2025-10-12", 0)).toBe("2025-10-12");
+    expect(deriveEndDate("2025-10-12", NaN)).toBe("2025-10-12");
+  });
+
+  it("gives back the start date when the start date is unparseable", () => {
+    expect(deriveEndDate("not-a-date", 5)).toBe("not-a-date");
+  });
+});
+
+describe("validateDraft no longer asks for a finish date", () => {
+  const draft = { title: "Manaslu in late October", start_date: "2025-10-12", pre_platform: true };
+
+  it("accepts a draft with only a start date", () => {
+    expect(validateDraft(draft)).toBeNull();
+  });
+
+  it("still insists on the day they set off", () => {
+    expect(validateDraft({ ...draft, start_date: "" })).toMatch(/set off/i);
+  });
+
+  it("still insists on a title", () => {
+    expect(validateDraft({ ...draft, title: " " })).toMatch(/title/i);
+  });
+
+  it("still insists the trek is tied to a booking or marked pre-platform", () => {
+    expect(validateDraft({ ...draft, pre_platform: false })).toMatch(/booking/i);
   });
 });

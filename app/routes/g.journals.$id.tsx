@@ -6,6 +6,7 @@ import { EntryForm, JournalMetaForm } from "~/components/JournalEditor";
 import {
   parseEntryForm,
   saveTags,
+  syncJournalDates,
   uniqueSlug,
   validateDraft,
   validateForPublish,
@@ -76,11 +77,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       ? await admin.from("journal_entries").update(row).eq("id", String(entryId))
       : await admin.from("journal_entries").insert(row);
     if (error) return data({ error: error.message }, { status: 400, headers });
+    // The finish date is a consequence of the days — kept in step here rather
+    // than asked for on a form.
+    await syncJournalDates(admin, journal.id, journal.start_date);
     return data({ ok: "Day saved." }, { headers });
   }
 
   if (intent === "delete_entry") {
     await admin.from("journal_entries").delete().eq("id", String(form.get("entry_id")));
+    await syncJournalDates(admin, journal.id, journal.start_date);
     return data({ ok: "Day removed." }, { headers });
   }
 
@@ -106,8 +111,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const str = (k: string) => String(form.get(k) ?? "").trim() || null;
   const patch = {
     title: String(form.get("title") ?? "").trim(),
-    start_date: String(form.get("start_date") ?? ""),
-    end_date: String(form.get("end_date") ?? ""),
+    // A booked trek's dates belong to the booking — the form does not
+    // offer them, so nothing here can move them.
+    start_date: journal.booking_id
+      ? journal.start_date
+      : String(form.get("start_date") ?? ""),
     route_id: str("route_id"),
     group_label: str("group_label"),
     group_anon: str("group_anon"),
@@ -135,6 +143,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       : journal.slug;
   const { error } = await admin.from("journals").update({ ...patch, slug }).eq("id", journal.id);
   if (error) return data({ error: error.message }, { status: 400, headers });
+  // Moving the start date moves the finish date with it.
+  await syncJournalDates(admin, journal.id, patch.start_date);
   await saveTags(admin, journal.id, form);
   return data({ ok: "Saved." }, { headers });
 }

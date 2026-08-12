@@ -70,24 +70,40 @@ insert into public.journals (
   max_altitude_m, distance_km, pass_crossed, weather_note, cover_photo_url,
   guide_note, client_note, client_note_author,
   client_names_ok, client_photos_ok, status, published_at)
+-- The booking, once, so the dates below can be taken from it. A journal that
+-- hangs off a booking takes that booking's dates: the app derives them the
+-- same way (syncJournalDates), so a seed that kept its own hardcoded pair
+-- would silently move the first time anybody saved the journal.
+with picked as (
+  select
+    s.*,
+    g.user_id as guide_user_id,
+    r.id as route_id,
+    (select b.id from public.bookings b
+      where b.guide_id = g.user_id and b.status = 'completed'
+        and not exists (select 1 from public.journals j2 where j2.booking_id = b.id)
+      order by b.start_date limit 1) as booking_id
+  from _seed_journals s
+  join public.guides g on g.slug = s.guide_slug
+  left join public.routes r on r.slug = s.route_slug
+)
 select
-  s.key || '-' || to_char(s.start_date, 'YYYY-MM'),
-  g.user_id,
-  r.id,
-  (select b.id from public.bookings b
-    where b.guide_id = g.user_id and b.status = 'completed'
-      and not exists (select 1 from public.journals j2 where j2.booking_id = b.id)
-    order by b.start_date limit 1),
-  (select count(*) from public.bookings b
-    where b.guide_id = g.user_id and b.status = 'completed') = 0,
+  p.key || '-' || to_char(coalesce(b.start_date, p.start_date), 'YYYY-MM'),
+  p.guide_user_id,
+  p.route_id,
+  p.booking_id,
+  p.booking_id is null,
   'Demo seed — verified pre-platform trek',
-  s.title, s.start_date, s.end_date, s.group_label, s.group_anon,
-  s.max_altitude_m, s.distance_km, s.pass_crossed, s.weather_note, s.cover,
-  s.guide_note, s.client_note, s.client_note_author,
-  s.names_ok, s.photos_ok, 'published', s.end_date + interval '3 days'
-from _seed_journals s
-join public.guides g on g.slug = s.guide_slug
-left join public.routes r on r.slug = s.route_slug
+  p.title,
+  coalesce(b.start_date, p.start_date),
+  coalesce(b.end_date, p.end_date),
+  p.group_label, p.group_anon,
+  p.max_altitude_m, p.distance_km, p.pass_crossed, p.weather_note, p.cover,
+  p.guide_note, p.client_note, p.client_note_author,
+  p.names_ok, p.photos_ok, 'published',
+  coalesce(b.end_date, p.end_date) + interval '3 days'
+from picked p
+left join public.bookings b on b.id = p.booking_id
 on conflict (slug) do nothing;
 
 -- ---- day blocks -------------------------------------------------------------
@@ -147,7 +163,10 @@ insert into public.journal_entries (journal_id, day_no, title, body, altitude_m,
 select j.id, e.day_no, e.title, e.body, e.altitude_m, e.hard, e.layout, e.photos
 from _seed_entries e
 join _seed_journals s on s.key = e.jkey
-join public.journals j on j.slug = s.key || '-' || to_char(s.start_date, 'YYYY-MM')
+-- Matched on title, not on a slug rebuilt from the seed's own dates: a
+-- journal attached to a booking takes that booking's dates, so the slug is
+-- not knowable from _seed_journals. Titles are unique in the seed.
+join public.journals j on j.title = s.title
 on conflict (journal_id, day_no) do nothing;
 
 drop table _seed_entries;

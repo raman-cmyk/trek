@@ -6,6 +6,7 @@ import { cn } from "~/lib/cn";
 import {
   TAG_KIND_ORDER,
   TAG_VOCAB,
+  journalDateRange,
   type JournalEntry,
   type JournalTag,
 } from "~/lib/journals";
@@ -60,16 +61,41 @@ export function JournalMetaForm({
         />
       </label>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* Nobody types a finish date. If the trek was booked here we know both
+          dates already and ask for neither; if it is a trek from before Trek,
+          we ask when they set off and count the finish from the days they
+          write up. Asking for the end date was making a guide do arithmetic to
+          tell us something we could work out. */}
+      {journal?.booking_id ? (
+        <div>
+          <p className={label}>When you walked it</p>
+          <p className="mt-1 text-base text-ink">
+            {journal.start_date && journal.end_date
+              ? journalDateRange(journal.start_date, journal.end_date)
+              : "—"}
+          </p>
+          <p className="mt-0.5 text-caption text-muted">
+            From the booking. Message the office if this is wrong.
+          </p>
+        </div>
+      ) : (
         <label className={label}>
-          Started
-          <input type="date" name="start_date" defaultValue={journal?.start_date ?? ""} className={input} required />
+          The day you set off
+          <input
+            type="date"
+            name="start_date"
+            defaultValue={journal?.start_date ?? ""}
+            className={input + " sm:max-w-xs"}
+            required
+          />
+          {journal?.end_date && journal.end_date !== journal.start_date && (
+            <span className="mt-1 block text-caption text-muted">
+              {journalDateRange(journal.start_date, journal.end_date)} — counted
+              from the days below.
+            </span>
+          )}
         </label>
-        <label className={label}>
-          Finished
-          <input type="date" name="end_date" defaultValue={journal?.end_date ?? ""} className={input} required />
-        </label>
-      </div>
+      )}
 
       {/* Required. The route is the spine: it is how this journal reaches the
           route page, the guide's trek count, and /journals?route=… */}
