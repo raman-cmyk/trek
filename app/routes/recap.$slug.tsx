@@ -3,6 +3,7 @@ import type { Route } from "./+types/recap.$slug";
 import { fmtDateRange, fmtMetres } from "~/lib/format";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
+import { firstName } from "~/lib/names";
 import { SmartImage } from "~/components/SmartImage";
 import { GuideChip } from "~/components/public/bits";
 
@@ -34,7 +35,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   return {
     slug: recap.slug,
     title: b?.offering?.title ?? "A Himalayan trek",
-    guideName: b?.guide?.users?.full_name ?? "your guide",
+    guideName: firstName(b?.guide?.users?.full_name) || "your guide",
     guideSlug: b?.guide?.slug ?? "",
     guideAvatar: b?.guide?.users?.avatar_url ?? null,
     guideTier: b?.guide?.tier ?? 1,

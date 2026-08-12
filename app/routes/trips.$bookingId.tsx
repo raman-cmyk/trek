@@ -17,6 +17,7 @@ import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 
 const STEPS = [
   ["pending_deposit", "Deposit due"],
@@ -215,7 +216,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
       </Link>
       <h1 className="mt-2 font-display text-2xl text-ink">{b.offering?.title}</h1>
       <p className="text-ink-soft">
-        with {b.guide?.users?.full_name} · {fmtDateRange(b.start_date, b.end_date)} ·{" "}
+        with {firstName(b.guide?.users?.full_name)} · {fmtDateRange(b.start_date, b.end_date)} ·{" "}
         {b.party_size}p
       </p>
       {!cancelled && (

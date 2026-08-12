@@ -6,6 +6,7 @@ import { cn } from "~/lib/cn";
 import { CheckinButton } from "~/components/guide/CheckinButton";
 import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
+import { firstName } from "~/lib/names";
 
 const CHECK_LABELS: Record<string, string> = {
   licence: "Trekking licence",
@@ -305,7 +306,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           <p className="text-xs text-ink-soft">Next trip</p>
           <p className="font-medium text-ink">{nextBooking.offering?.title}</p>
           <p className="text-sm text-ink-soft">
-            {nextBooking.trekker?.full_name} · {fmtDate(nextBooking.start_date)}
+            {firstName(nextBooking.trekker?.full_name)} · {fmtDate(nextBooking.start_date)}
           </p>
         </section>
       )}

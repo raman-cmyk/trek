@@ -4,6 +4,7 @@ import { fmtDate, fmtDateRange } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { submitReview } from "~/lib/reviews.server";
+import { firstName } from "~/lib/names";
 import { Badge } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
 
@@ -91,7 +92,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   <Badge tone={STATUS_TONE[b.status] ?? "neutral"}>{b.status.replace(/_/g, " ")}</Badge>
                 </div>
                 <p className="text-sm text-ink-soft">
-                  {b.trekker?.full_name}{b.trekker?.country_code ? ` · ${b.trekker.country_code}` : ""} · {b.party_size}p
+                  {firstName(b.trekker?.full_name)}{b.trekker?.country_code ? ` · ${b.trekker.country_code}` : ""} · {b.party_size}p
                 </p>
                 <p className="text-sm text-ink-soft">{fmtDateRange(b.start_date, b.end_date)}</p>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
@@ -128,7 +129,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   <p className="font-medium text-ink">{b.offering?.title}</p>
                   <Badge tone="green">completed</Badge>
                 </div>
-                <p className="text-sm text-ink-soft">{b.trekker?.full_name} · {fmtDate(b.start_date)}</p>
+                <p className="text-sm text-ink-soft">{firstName(b.trekker?.full_name)} · {fmtDate(b.start_date)}</p>
                 {b.reviewed ? (
                   <p className="mt-2 text-xs text-ink-soft">You reviewed this trekker ✓</p>
                 ) : (

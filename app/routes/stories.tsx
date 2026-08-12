@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import type { Route } from "./+types/stories";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
+import { firstName } from "~/lib/names";
 import { SmartImage } from "~/components/SmartImage";
 import { TierBadge } from "~/components/public/bits";
 
@@ -34,7 +35,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     altitude: r.stats?.max_altitude_m ?? null,
     title: r.booking?.offering?.title ?? "A Himalayan trek",
     when: r.booking?.start_date ?? null,
-    guideName: r.booking?.guide?.users?.full_name ?? null,
+    guideName: firstName(r.booking?.guide?.users?.full_name) || null,
     guideAvatar: r.booking?.guide?.users?.avatar_url ?? null,
     guideSlug: r.booking?.guide?.slug ?? null,
     guideTier: r.booking?.guide?.tier ?? 1,

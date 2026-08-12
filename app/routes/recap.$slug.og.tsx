@@ -2,6 +2,7 @@ import type { Route } from "./+types/recap.$slug.og";
 import { ImageResponse } from "workers-og";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { OG_FONT_B64 } from "~/lib/og-font";
+import { firstName } from "~/lib/names";
 
 function fontData(): ArrayBuffer {
   const bin = atob(OG_FONT_B64);
@@ -22,7 +23,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     .maybeSingle();
 
   const title = (recap as any)?.booking?.offering?.title ?? "A Himalayan trek";
-  const guide = (recap as any)?.booking?.guide?.users?.full_name ?? "a Trek guide";
+  const guide = firstName((recap as any)?.booking?.guide?.users?.full_name) || "a Trek guide";
   const stats = (recap as any)?.stats ?? {};
   const meta = [
     stats.days ? `${stats.days} days` : null,

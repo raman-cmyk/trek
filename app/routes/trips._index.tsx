@@ -3,6 +3,7 @@ import type { Route } from "./+types/trips._index";
 import { fmtDateRange, statusLabel } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
+import { firstName } from "~/lib/names";
 import { SmartImage } from "~/components/SmartImage";
 import { Badge } from "~/components/ops/ui";
 
@@ -71,7 +72,7 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
                     </Badge>
                   </div>
                   <p className="text-sm text-ink-soft">
-                    {b.guide?.users?.full_name}
+                    {firstName(b.guide?.users?.full_name)}
                   </p>
                   <p className="text-sm text-ink-soft">
                     {fmtDateRange(b.start_date, b.end_date)}

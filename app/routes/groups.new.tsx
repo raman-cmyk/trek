@@ -7,6 +7,7 @@ import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { createGroup } from "~/lib/groups.server";
 import { useMoney } from "~/lib/currency-context";
 import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { firstName } from "~/lib/names";
 
 export function meta() {
   return pageMeta({
@@ -98,7 +99,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   try {
     const group = await createGroup(admin, {
       organiserId: user.id,
-      organiserName: profile?.full_name ?? "The organiser",
+      organiserName: firstName(profile?.full_name) || "The organiser",
       name,
       offeringId,
       guideId,
@@ -202,7 +203,7 @@ export default function NewGroup({ loaderData, actionData }: Route.ComponentProp
               <option value="">— pick a guide —</option>
               {guides.map((g: any) => (
                 <option key={g.user_id} value={g.user_id}>
-                  {g.full_name}
+                  {firstName(g.full_name)}
                   {g.home_district ? ` · ${g.home_district}` : ""}
                   {g.day_rate_usd_cents ? ` · ${mr(g.day_rate_usd_cents)}/day` : ""}
                 </option>

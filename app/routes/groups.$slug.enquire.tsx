@@ -5,6 +5,7 @@ import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { activeMembers, blockedFromBooking, type GroupMember, type TripGroup } from "~/lib/groups";
 import { systemLine } from "~/lib/groups.server";
 import { ENQUIRY_TTL_HOURS } from "~/lib/config";
+import { firstName } from "~/lib/names";
 
 /**
  * A ready group asks the guide to hold the dates.
@@ -103,7 +104,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     admin,
     group.id,
     user.id,
-    `${profile?.full_name ?? "The organiser"} asked the guide to hold ${group.start_date} for ${party}.`,
+    `${firstName(profile?.full_name) || "The organiser"} asked the guide to hold ${group.start_date} for ${party}.`,
   );
 
   const { notifyNewEnquiry } = await import("~/lib/notifications.server");

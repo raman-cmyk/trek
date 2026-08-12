@@ -208,3 +208,21 @@ What the flow does imply: the write-up happens in one long sitting, not in
 fourteen two-minute sessions on a ridge. The editor should be built for
 somebody working down a list of days at a desk — which is a much easier
 target than the one we were designing against.
+
+## First names only, everywhere in the app (2026-08-12)
+
+Founder's rule: no guide's and no trekker's family name appears in the app,
+ever. In Nepal a surname is an ethnicity — Sherpa, Tamang, Gurung, Thapa —
+and a marketplace that prints it on every card invites people to choose a
+guide by caste. A trekker's surname is simply nobody's business.
+
+Enforced in the public views (migration 0042), so a public surface cannot
+leak a surname even by accident; signed-in surfaces that read base tables
+use firstName() from app/lib/names.ts.
+
+Deliberate exceptions, because they are legal documents rather than UI: the
+ops console, contracts, TIMS cards and permit applications keep full legal
+names. Guide profile URLs keep their existing slugs (changing them would
+break every link and ranking the pages have). Person JSON-LD now carries the
+first name only — accepted cost: "Pemba Sherpa" as a search phrase will not
+match the structured data, but the rule outranks the ranking.

@@ -15,6 +15,7 @@ import {
 } from "~/lib/groups";
 import { joinGroup, recomputeShares, systemLine } from "~/lib/groups.server";
 import { cn } from "~/lib/cn";
+import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
@@ -132,7 +133,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!group) throw new Response("Not found", { status: 404 });
 
   const profile = await getProfile(env, user.id);
-  const myName = profile?.full_name ?? "Someone";
+  const myName = firstName(profile?.full_name) || "Someone";
   const isOrganiser = group.organiser_id === user.id;
 
   const { data: memberRows } = await admin
@@ -320,7 +321,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               <>
                 Trek not picked — going with{" "}
                 <Link to={`/guides/${guide.slug}`} className="text-moss underline underline-offset-4">
-                  {guide.full_name}
+                  {firstName(guide.full_name)}
                 </Link>
               </>
             ) : (
@@ -613,13 +614,13 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               <Link to={`/guides/${guide.slug}`} className="flex items-center gap-3">
                 <SmartImage
                   src={guide.avatar_url ?? ""}
-                  alt={guide.full_name}
+                  alt={firstName(guide.full_name)}
                   width={56}
                   height={56}
                   className="h-12 w-12 rounded-full"
                 />
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-ink">{guide.full_name}</span>
+                  <span className="block truncate font-medium text-ink">{firstName(guide.full_name)}</span>
                   <span className="block font-mono text-caption text-muted">
                     {guide.home_district}
                   </span>
@@ -761,7 +762,7 @@ function JoinInvite({
           </>
         ) : guide ? (
           <>
-            Going with {guide.full_name}
+            Going with {firstName(guide.full_name)}
             {guide.home_district && ` of ${guide.home_district}`}
             {group.start_date && `, from ${group.start_date}`} — the trek is
             still being decided.

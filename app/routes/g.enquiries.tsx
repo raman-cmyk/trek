@@ -2,6 +2,7 @@ import { Form, data } from "react-router";
 import type { Route } from "./+types/g.enquiries";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
+import { firstName } from "~/lib/names";
 import { Button } from "~/components/Button";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -68,7 +69,7 @@ export default function GuideEnquiries({ loaderData, actionData }: Route.Compone
             <li key={e.id} className="rounded-card border border-border bg-card p-4">
               <div className="flex items-center justify-between">
                 <p className="font-medium text-ink">
-                  {e.trekker?.full_name}
+                  {firstName(e.trekker?.full_name)}
                   {e.trekker?.country_code ? ` · ${e.trekker.country_code}` : ""}
                 </p>
                 <span className="text-xs text-ink-soft">{e.party_size}p</span>
