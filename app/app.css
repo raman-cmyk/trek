@@ -205,6 +205,25 @@ h3,
   font-feature-settings: "tnum" 1;
 }
 
+/* Digits sit too far apart. JetBrains Mono gives every glyph the same advance
+   width, which is the point for a column of prices — but a figure read inline
+   ("48 people", "5,644 m") comes out looking spaced-out next to the body text
+   around it. Pulled in so a number reads as one word.
+
+   Numbers only: this rides on `font-mono`, which by house rule is applied to
+   numeric spans and nothing else.
+
+   Inside `@layer utilities` and behind `:where()` on purpose — zero
+   specificity, so the few places that set tracking deliberately (the footer's
+   uppercase region labels, the TIMS card number) still win. An unlayered rule
+   here would beat every `tracking-*` utility in the codebase no matter how
+   specific, which is the cascade trap this file has already been bitten by. */
+@layer utilities {
+  :where(.font-mono) {
+    letter-spacing: -0.03em;
+  }
+}
+
 /* Named type styles (§3). `title` for card headings, `label` for the only
    uppercase in the system — eyebrows and category tags. */
 .title {
