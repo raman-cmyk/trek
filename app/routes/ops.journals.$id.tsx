@@ -203,7 +203,13 @@ export default function OpsJournalEdit({ loaderData, actionData }: Route.Compone
         {entries.map((e: JournalEntry) => (
           <EntryForm key={e.id} entry={e} nextDay={nextDay} guideId={journal.guide_id} />
         ))}
-        <EntryForm nextDay={nextDay} guideId={journal.guide_id} />
+        {/* Keyed on the day count — a successful add hands back a clean block
+            numbered for the next day. */}
+        <EntryForm
+          key={`new-${entries.length}`}
+          nextDay={nextDay}
+          guideId={journal.guide_id}
+        />
       </section>
     </div>
   );

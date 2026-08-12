@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Form } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Form, useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { MediaPicker } from "~/components/MediaPicker";
+import { cn } from "~/lib/cn";
 import {
   TAG_KIND_ORDER,
   TAG_VOCAB,
@@ -12,9 +13,13 @@ import {
 /**
  * The journal editor, shared by /ops/journals/:id and /g/journals/:id.
  *
- * Built for a guide on a cheap Android on 3G: plain inputs, one thing per
- * screen-width, no drag-and-drop, no rich text. Every field is a normal form
- * POST so a dropped connection loses one block, not the whole trek.
+ * Built for a guide on a cheap Android: plain inputs, one thing per
+ * screen-width, no drag-and-drop, no rich text. Each block posts on its own,
+ * so a dropped connection loses one day rather than the whole trek.
+ *
+ * The days save in place (see EntryForm); the trek's own details still submit
+ * as a navigation, because saving those is a once-per-trek act at the top of
+ * the page, where a reload costs nothing.
  */
 
 const input =
@@ -281,6 +286,18 @@ export function JournalMetaForm({
   );
 }
 
+/**
+ * One day of the trek.
+ *
+ * Saves in place rather than navigating. A guide writes the whole trek up in
+ * one sitting once they are back on wifi (see DECISIONS, 2026-08-12), so a
+ * fourteen-day journal meant fourteen full page loads, each one throwing them
+ * back to the top of the page to scroll down and find their place again. The
+ * work was never at risk — the reload was just tedious fourteen times over.
+ *
+ * Errors land here, on the day they belong to, instead of in a banner at the
+ * top of a page you have already scrolled away from.
+ */
 export function EntryForm({
   entry,
   nextDay,
@@ -291,8 +308,24 @@ export function EntryForm({
   guideId?: string;
 }) {
   const areaId = `photos-${entry?.id ?? "new"}`;
+  const fetcher = useFetcher<{ ok?: string; error?: string }>();
+  const busy = fetcher.state !== "idle";
+  const error = fetcher.data?.error;
+
+  // "Saved" that goes away on its own. Fourteen day-blocks each holding a
+  // permanent tick reads as a checklist nagging to be finished, not as calm.
+  const [justSaved, setJustSaved] = useState(false);
+  const seen = useRef<unknown>(null);
+  useEffect(() => {
+    if (!fetcher.data || fetcher.data === seen.current || !fetcher.data.ok) return;
+    seen.current = fetcher.data;
+    setJustSaved(true);
+    const t = setTimeout(() => setJustSaved(false), 2500);
+    return () => clearTimeout(t);
+  }, [fetcher.data]);
+
   return (
-    <Form method="post" className="space-y-3 rounded-md border border-line bg-card p-4">
+    <fetcher.Form method="post" className="space-y-3 rounded-md border border-line bg-card p-4">
       <input type="hidden" name="intent" value="entry" />
       {entry && <input type="hidden" name="entry_id" value={entry.id} />}
 
@@ -358,21 +391,37 @@ export function EntryForm({
         </span>
       </label>
 
-      <div className="flex gap-3">
-        <Button type="submit" size="sm">
-          {entry ? "Save day" : "Add day"}
+      {error && (
+        <p className="rounded bg-ember/10 px-3 py-2 text-sm text-ember" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <Button type="submit" size="sm" disabled={busy}>
+          {busy ? "Saving…" : entry ? "Save day" : "Add day"}
         </Button>
         {entry && (
           <button
             name="intent"
             value="delete_entry"
-            className="rounded border border-line px-3 py-2 text-sm text-ember hover:bg-mist"
+            disabled={busy}
+            className="rounded border border-line px-3 py-2 text-sm text-ember hover:bg-mist disabled:opacity-50"
           >
             Delete
           </button>
         )}
+        <span
+          aria-live="polite"
+          className={cn(
+            "text-sm text-moss transition-opacity duration-slow",
+            justSaved ? "opacity-100" : "opacity-0",
+          )}
+        >
+          Saved
+        </span>
       </div>
-    </Form>
+    </fetcher.Form>
   );
 }
 

@@ -200,7 +200,14 @@ export default function GuideJournalEdit({ loaderData, actionData }: Route.Compo
             {entries.map((e: JournalEntry) => (
               <EntryForm key={e.id} entry={e} nextDay={nextDay} guideId={journal.guide_id} />
             ))}
-            <EntryForm nextDay={nextDay} guideId={journal.guide_id} />
+            {/* Keyed on the day count so a successful "Add day" hands back a
+                clean block numbered for the next one, rather than the one just
+                saved sitting there looking unsaved. */}
+            <EntryForm
+              key={`new-${entries.length}`}
+              nextDay={nextDay}
+              guideId={journal.guide_id}
+            />
           </section>
 
           <form method="post" className="rounded-md border border-line bg-card p-4">
