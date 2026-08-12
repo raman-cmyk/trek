@@ -89,6 +89,8 @@ export default [
   route("ops/login", "routes/ops.login.tsx"),
   layout("routes/ops.tsx", [
     route("ops", "routes/ops._index.tsx"),
+    route("ops/data", "routes/ops.data.tsx"),
+    route("ops/search", "routes/ops.search.tsx"),
     route("ops/verifications", "routes/ops.verifications.tsx"),
     route("ops/verifications/:guideId", "routes/ops.verifications.$guideId.tsx"),
     route("ops/pipeline", "routes/ops.pipeline.tsx"),
