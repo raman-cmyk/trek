@@ -59,6 +59,7 @@ export default [
     route("g/calendar", "routes/g.calendar.tsx"),
     route("g/earnings", "routes/g.earnings.tsx"),
     route("g/profile", "routes/g.profile.tsx"),
+    route("g/questions", "routes/g.questions.tsx"),
     route("g/journals", "routes/g.journals.tsx"),
     route("g/journals/:id", "routes/g.journals.$id.tsx"),
   ]),

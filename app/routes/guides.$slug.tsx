@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { Form, Link } from "react-router";
 import type { Route } from "./+types/guides.$slug";
-import { pageMeta, personLd, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
+import { pageMeta, personLd, breadcrumbLd, faqLd, jsonLd, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
+import { getProfile, getSessionUser } from "~/lib/auth.server";
+import { QuestionWall } from "~/components/public/QuestionWall";
+import { validateQuestion, type PublicQuestion } from "~/lib/questions";
+import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
 import { tierChecks } from "~/lib/tiers";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
@@ -50,10 +54,38 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         { name: g.full_name, url: data.canonical },
       ]),
     ),
+    // The ask-me-anything wall as FAQPage. This is the point of the wall as
+    // much as the reading is: a real question, answered in a named guide's
+    // own words, is the shape an assistant quotes when somebody asks it the
+    // same thing. Duplicate questions are dropped — the same question twice
+    // is a structured-data error.
+    ...(data.questions?.length
+      ? [
+          jsonLd(
+            faqLd(
+              dedupeQuestions(data.questions).map((q: PublicQuestion) => ({
+                q: q.body,
+                a: q.answer,
+              })),
+            ),
+          ),
+        ]
+      : []),
   ];
 }
 
-export async function loader({ params, context }: Route.LoaderArgs) {
+/** First answer wins; a FAQPage may not carry the same question twice. */
+function dedupeQuestions(qs: PublicQuestion[]): PublicQuestion[] {
+  const seen = new Set<string>();
+  return qs.filter((q) => {
+    const k = q.body.trim().toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
 
@@ -203,6 +235,28 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   const ratings = await guideRatings(client, [guide.user_id]);
 
+  // The ask-me-anything wall. Answered questions only — the view enforces it,
+  // so nothing pending can leak onto a public page through this loader.
+  const { data: questions } = await client
+    .from("public_guide_questions")
+    .select("*")
+    .eq("guide_id", guide.user_id);
+
+  // Who is reading. A guide looking at their own profile gets no ask box, and
+  // a signed-in reader gets their name filled in.
+  let reader: { name: string | null; isThisGuide: boolean } = {
+    name: null,
+    isThisGuide: false,
+  };
+  const { user } = await getSessionUser(request, env);
+  if (user) {
+    const profile = await getProfile(env, user.id);
+    reader = {
+      name: (profile?.full_name ?? "").split(" ")[0] || null,
+      isThisGuide: user.id === guide.user_id,
+    };
+  }
+
   // Does this guide put porters on the hill? If so the pledge shows, full
   // stop — it used to be tied to tier, which is why it appeared on some
   // profiles and not others for no reason a trekker could see.
@@ -224,12 +278,84 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     reviews: reviews ?? [],
     receipts: receipts ?? [],
     rating: ratings[guide.user_id] ?? null,
+    questions: (questions ?? []) as PublicQuestion[],
+    reader,
     repeatClients,
     usesPorters,
     maxAltitude,
     monthAnchor,
     canonical: absoluteUrl(env.SITE_URL, `/guides/${params.slug}`),
   };
+}
+
+/**
+ * Somebody asked the guide a question.
+ *
+ * Written with the service role rather than through the reader's own session:
+ * a signed-out visitor must be able to ask (that is most of the traffic this
+ * is for), and the row it writes is `pending`, which no public read can see.
+ * The RLS insert policy still covers the signed-in path — this is the
+ * additional door, not a replacement for it.
+ *
+ * Two cheap gates instead of a captcha: a honeypot field no human sees, and
+ * one question per email per guide per hour.
+ */
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const env = getEnv(context);
+  const form = await request.formData();
+  if (String(form.get("intent")) !== "ask") return { error: "Unknown action." };
+
+  // A bot fills every field on the page. A person cannot see this one.
+  if (String(form.get("website") ?? "").trim()) {
+    return { ok: "Thanks — that is with the guide." };
+  }
+
+  const name = String(form.get("name") ?? "").trim();
+  const body = String(form.get("body") ?? "").trim();
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const bad = validateQuestion({ name, body });
+  if (bad) return { error: bad };
+  if (!email.includes("@")) return { error: "Add an email so we can tell you the answer." };
+
+  const admin = createAdminClient(env);
+  const { data: guide } = await admin
+    .from("guides")
+    .select("user_id, status")
+    .eq("slug", params.slug)
+    .maybeSingle();
+  if (!guide || guide.status !== "verified") {
+    return { error: "That guide is not taking questions." };
+  }
+
+  const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  const { count } = await admin
+    .from("guide_questions")
+    .select("id", { count: "exact", head: true })
+    .eq("guide_id", guide.user_id)
+    .eq("asker_email", email)
+    .gte("created_at", hourAgo);
+  if ((count ?? 0) >= 1) {
+    return {
+      error: "You already asked this guide something in the last hour — give him a chance to answer that one first.",
+    };
+  }
+
+  const { user } = await getSessionUser(request, env);
+  const { error } = await admin.from("guide_questions").insert({
+    guide_id: guide.user_id,
+    asker_id: user?.id ?? null,
+    asker_name: name,
+    asker_email: email,
+    body,
+  });
+  if (error) return { error: "That did not send. Try again." };
+
+  await notifyGuideOfQuestion(env, admin, {
+    guideId: guide.user_id,
+    askerName: name,
+    body,
+  });
+  return { ok: "Asked. It goes on this page once he answers." };
 }
 
 const CHECK_LABELS: Record<string, string> = {
@@ -257,6 +383,8 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     reviews,
     receipts,
     rating,
+    questions,
+    reader,
     repeatClients,
     usesPorters,
     maxAltitude,
@@ -446,7 +574,21 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
           )}
         </section>
 
-        {/* ── 6. Verification receipts, collapsed ───────────────────────── */}
+        {/* ── 6. Ask me anything ────────────────────────────────────────
+             Placed after the reviews on purpose: reviews tell a reader what
+             happened to other people, and the question they have next is
+             about themselves. This is where they get to ask it. */}
+        <div className="mt-14">
+          <QuestionWall
+            guideName={guide.full_name}
+            guideFirstName={first}
+            questions={questions}
+            canAsk={!reader.isThisGuide}
+            askerName={reader.name}
+          />
+        </div>
+
+        {/* ── 7. Verification receipts, collapsed ───────────────────────── */}
         <section className="mt-10">
           <details className="group rounded-md border border-line bg-card p-4">
             <summary className="cursor-pointer font-medium text-ink">

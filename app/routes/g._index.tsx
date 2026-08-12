@@ -34,6 +34,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   let active: any = null;
   let nextBooking: any = null;
   let enquiries = 0;
+  let unansweredQuestions = 0;
   let checkedInToday = false;
 
   if (guide?.status === "verified") {
@@ -63,6 +64,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     active = act;
     nextBooking = next;
     enquiries = count ?? 0;
+    // People waiting on a public answer. Surfaced on Home rather than as a
+    // sixth tab — five is the 360px ceiling for the bar.
+    const { count: qCount } = await admin
+      .from("guide_questions")
+      .select("id", { count: "exact", head: true })
+      .eq("guide_id", user.id)
+      .eq("status", "pending");
+    unansweredQuestions = qCount ?? 0;
     if (active) {
       const { data: ci } = await admin
         .from("checkins")
@@ -169,6 +178,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       active,
       nextBooking,
       enquiries,
+      unansweredQuestions,
       checkedInToday,
       today,
       backupFor: backupFor ?? [],
@@ -212,7 +222,7 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, setup, guide, active, nextBooking, enquiries, checkedInToday, today, backupFor, payableNprPaisa } =
+  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, checkedInToday, today, backupFor, payableNprPaisa } =
     loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
@@ -308,6 +318,23 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         </Link>
         {/* Journals are how a guide wins the next booking, so they sit with
             the money links, not buried in profile settings. */}
+        <Link
+          to="/g/questions"
+          className={cn(
+            "col-span-2 flex items-center justify-between rounded-card border p-4 text-sm font-medium",
+            unansweredQuestions > 0
+              ? "border-moss/50 bg-mist text-ink"
+              : "border-border bg-card text-ink",
+          )}
+        >
+          <span>
+            {unansweredQuestions > 0
+              ? `${unansweredQuestions} ${unansweredQuestions === 1 ? "person is" : "people are"} waiting on an answer`
+              : "Questions people asked you"}
+          </span>
+          <span className="text-primary">→</span>
+        </Link>
+
         <Link
           to="/g/journals"
           className="col-span-2 rounded-card border border-moss/40 bg-mist p-4 text-sm font-medium"

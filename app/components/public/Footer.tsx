@@ -242,13 +242,18 @@ function ElevationEdge({ route }: { route: FooterRoute }) {
   // mountain profile is angular; the smoothing is a 6px fillet, no more.
   const pts = stops.map((s, i) => [x(i), y(s.altitude_m)] as const);
   const R = 10;
-  let d = `M0,${H} L0,${pts[0][1].toFixed(1)}`;
+  // The ridge line on its own, then the closed shape built from it. Built this
+  // way round because the crest is drawn twice — once filled, once as the snow
+  // line — and deriving the second by string-surgery on the first produced
+  // "ML0,126" (an M with no coordinates), which the browser rejected outright.
+  // The snow line has been silently missing since the footer shipped.
+  let crest = `M0,${pts[0][1].toFixed(1)}`;
   for (let i = 0; i < pts.length; i++) {
     const [px, py] = pts[i];
     const prev = pts[i - 1];
     const next = pts[i + 1];
     if (!prev) {
-      d += ` L${px.toFixed(1)},${py.toFixed(1)}`;
+      crest += ` L${px.toFixed(1)},${py.toFixed(1)}`;
       continue;
     }
     // Stop short of the vertex, curve through it, carry on to the next.
@@ -256,18 +261,19 @@ function ElevationEdge({ route }: { route: FooterRoute }) {
     const t = Math.min(R / inLen, 0.5);
     const ax = px + (prev[0] - px) * t;
     const ay = py + (prev[1] - py) * t;
-    d += ` L${ax.toFixed(1)},${ay.toFixed(1)}`;
+    crest += ` L${ax.toFixed(1)},${ay.toFixed(1)}`;
     if (next) {
       const outLen = Math.hypot(next[0] - px, next[1] - py) || 1;
       const u = Math.min(R / outLen, 0.5);
       const bx = px + (next[0] - px) * u;
       const by = py + (next[1] - py) * u;
-      d += ` Q${px.toFixed(1)},${py.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)}`;
+      crest += ` Q${px.toFixed(1)},${py.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)}`;
     } else {
-      d += ` L${px.toFixed(1)},${py.toFixed(1)}`;
+      crest += ` L${px.toFixed(1)},${py.toFixed(1)}`;
     }
   }
-  d += ` L${W},${H} Z`;
+  // Down to the baseline and closed, so the shape can be filled.
+  const d = `M0,${H} ${crest.replace(/^M/, "L")} L${W},${H} Z`;
 
   const peak = stops.reduce((a, b) => (b.altitude_m > a.altitude_m ? b : a), stops[0]);
   const peakX = x(stops.indexOf(peak));
@@ -285,7 +291,7 @@ function ElevationEdge({ route }: { route: FooterRoute }) {
         {/* A hairline along the crest — the snow line, and it stops the fill
             reading as a flat silhouette. */}
         <path
-          d={d.replace(`M0,${H} `, "M").replace(` L${W},${H} Z`, "")}
+          d={crest}
           fill="none"
           stroke="var(--color-fern)"
           strokeWidth="2"

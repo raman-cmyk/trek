@@ -180,3 +180,61 @@ export async function notifyGuideVerification(
       : "Trek: we couldn't verify your application yet. Sign in to see what's missing.",
   );
 }
+
+/**
+ * A trekker asked a public question. The guide is the only one who can turn
+ * it into a page, so this is the one that has to land.
+ *
+ * SMS, like every other guide-facing notification — many have no email, and
+ * this needs to reach a phone between treks rather than an inbox nobody
+ * opens.
+ */
+export async function notifyGuideOfQuestion(
+  env: Env,
+  admin: SupabaseClient,
+  args: { guideId: string; askerName: string; body: string },
+) {
+  const { data: g } = await admin
+    .from("users")
+    .select("phone")
+    .eq("id", args.guideId)
+    .maybeSingle();
+  const snippet = args.body.length > 70 ? `${args.body.slice(0, 67)}…` : args.body;
+  await sendGuideSms(
+    env,
+    g?.phone,
+    `Trek: ${args.askerName} asked you "${snippet}" — answer it and it goes on your profile.`,
+  );
+}
+
+/** The answer is live; tell the person who asked. */
+export async function notifyQuestionAnswered(
+  env: Env,
+  admin: SupabaseClient,
+  questionId: string,
+) {
+  const { data: q } = await admin
+    .from("guide_questions")
+    .select("asker_email, asker_name, body, answer, guide:guides!guide_questions_guide_id_fkey(slug, users(full_name))")
+    .eq("id", questionId)
+    .maybeSingle();
+  if (!q?.asker_email) return;
+  const guideName = ((q as any).guide?.users?.full_name ?? "Your guide") as string;
+  const slug = ((q as any).guide?.slug ?? "") as string;
+  await sendEmail(
+    env,
+    q.asker_email,
+    `${guideName} answered your question`,
+    [
+      `${q.asker_name},`,
+      "",
+      `You asked ${guideName}:`,
+      `  ${q.body}`,
+      "",
+      "He said:",
+      `  ${q.answer}`,
+      "",
+      `It is on his profile now: ${env.SITE_URL ?? ""}/guides/${slug}#ask`,
+    ].join("\n"),
+  );
+}
