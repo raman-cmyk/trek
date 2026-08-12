@@ -28,3 +28,26 @@ export async function guideRatings(
   }
   return out;
 }
+
+/**
+ * One rating for a whole route — every published review left on any offering
+ * that runs it.
+ *
+ * A route page has no reviews of its own (nobody reviews Manaslu, they review
+ * Pemba's Manaslu), so without this the route's structured data has no rating
+ * at all and an agent comparing routes has nothing to compare on.
+ */
+export async function offeringsRating(
+  client: SupabaseClient,
+  offeringIds: string[],
+): Promise<Rating | null> {
+  if (offeringIds.length === 0) return null;
+  const { data } = await client
+    .from("public_reviews")
+    .select("overall")
+    .in("offering_id", offeringIds);
+  const rows = (data ?? []) as Array<{ overall: number }>;
+  if (rows.length === 0) return null;
+  const sum = rows.reduce((a, r) => a + r.overall, 0);
+  return { value: Math.round((sum / rows.length) * 10) / 10, count: rows.length };
+}

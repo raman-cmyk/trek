@@ -19,7 +19,12 @@ import { JournalCard } from "~/components/public/JournalCard";
 import { ElevationScrubber, type DayStop } from "~/components/public/ElevationScrubber";
 import { RouteMap } from "~/components/public/RouteMap";
 import { ExperienceSplit } from "~/components/Split";
-import { partyAmounts, type PriceBreakdown } from "~/lib/experience-pricing";
+import {
+  partyAmounts,
+  fromPerPersonUsdCents,
+  type PriceBreakdown,
+} from "~/lib/experience-pricing";
+import { offeringsRating } from "~/lib/ratings.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 
@@ -45,6 +50,17 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         url: data.canonical,
         description: r.summary ?? r.name,
         image: r.hero_photo_url,
+        days: r.typical_days,
+        maxAltitudeM: r.max_altitude_m,
+        region: r.region,
+        fromUsdCents: data.fromUsdCents,
+        rating: data.rating,
+        stops: (r.day_stops ?? []).map((s: any) => ({
+          day: s.day,
+          place: s.place,
+          altitude_m: s.altitude_m,
+        })),
+        origin,
       }),
     ),
     jsonLd(
@@ -122,6 +138,22 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     }))
     .sort((a, b) => b.treks - a.treks);
 
+  // Nobody reviews a route, they review a guide's version of it — so the
+  // route's rating is every review left on the offerings that run it. Without
+  // this the route page is the only page type with no rating in its graph.
+  const rating = await offeringsRating(
+    client,
+    ((offerings ?? []) as any[]).map((o) => o.id),
+  );
+  const fromUsdCents = ((offerings ?? []) as PublicOffering[])
+    .map((o) =>
+      o.price_breakdown
+        ? fromPerPersonUsdCents(o.price_breakdown as PriceBreakdown, o.max_party)
+        : null,
+    )
+    .filter((n): n is number => n != null)
+    .sort((a, b) => a - b)[0] ?? null;
+
   const article = getRouteArticle(params.slug);
   let related: Array<{ slug: string; name: string; region: string; typical_days: number }> = [];
   const { data: rel } = await client
@@ -140,6 +172,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     guides,
     article,
     related,
+    rating,
+    fromUsdCents,
     canonical: absoluteUrl(env.SITE_URL, `/routes/${params.slug}`),
   };
 }

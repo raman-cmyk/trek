@@ -6,11 +6,12 @@ import { absoluteUrl } from "~/lib/seo";
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
-  const [{ data: guides }, { data: offerings }, { data: routes }] =
+  const [{ data: guides }, { data: offerings }, { data: routes }, { data: events }] =
     await Promise.all([
       client.from("public_guides").select("slug"),
       client.from("public_offerings").select("slug, kind"),
       client.from("routes").select("slug"),
+      client.from("public_events").select("slug"),
     ]);
   // Journals are the freshness engine — new dated writing on every route.
   const { data: journals } = await client
@@ -37,12 +38,14 @@ export async function loader({ context }: Route.LoaderArgs) {
     "/hosts",
     "/stories",
     "/journals",
+    "/events",
     "/safety",
     ...(guides ?? []).map((g) => `/guides/${g.slug}`),
     ...(offerings ?? []).map(
       (o) => `/${o.kind === "trek" ? "treks" : "experiences"}/${o.slug}`,
     ),
     ...(routes ?? []).map((r) => `/routes/${r.slug}`),
+    ...(events ?? []).map((e) => `/events/${e.slug}`),
     ...(recaps ?? []).map((r) => `/recap/${r.slug}`),
     ...(journals ?? []).map((j) => `/journals/${j.slug}`),
   ];

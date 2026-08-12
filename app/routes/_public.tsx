@@ -1,4 +1,5 @@
 import { Outlet } from "react-router";
+import { organizationLd } from "~/lib/seo";
 import type { Route } from "./+types/_public";
 import { Header } from "~/components/public/Header";
 import { Footer } from "~/components/public/Footer";
@@ -44,6 +45,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }
   }
   return {
+    origin: new URL(request.url).origin,
     routes: routes ?? [],
     footer: {
       faces: (faces ?? []).map((g) => ({
@@ -62,6 +64,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 export default function PublicLayout({ loaderData }: Route.ComponentProps) {
   return (
     <div className="flex min-h-screen flex-col">
+      {/* The publisher node, once for the whole public site — an agent
+          resolving "who is Trek" follows the @id from any page.
+
+          Rendered here rather than from this layout's `meta` export: a child
+          route's meta replaces its parent's wholesale, so every page that
+          exports its own meta (which is all of them) silently dropped it. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(organizationLd(loaderData.origin)),
+        }}
+      />
       <Header account={loaderData.account} />
       <div className="flex-1">
         <Outlet />

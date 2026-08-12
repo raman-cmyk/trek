@@ -79,6 +79,7 @@ export default [
   // SEO resource routes.
   route("sitemap.xml", "routes/sitemap.xml.tsx"),
   route("robots.txt", "routes/robots.txt.tsx"),
+  route("llms.txt", "routes/llms.txt.tsx"),
 
   // Dev scratch page for the M0 motion/feel primitives.
   route("_dev/primitives", "routes/_dev.primitives.tsx"),

@@ -39,6 +39,9 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         district: g.home_district,
         bio: g.bio,
         rating: data.rating,
+        languages: (data.languages ?? []).map((l: any) => l.language),
+        routes: (data.routeChips ?? []).map((r: any) => r.name),
+        dayRateUsd: g.day_rate_usd_cents ? g.day_rate_usd_cents / 100 : null,
       }),
     ),
     jsonLd(
