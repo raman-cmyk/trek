@@ -36,6 +36,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   let enquiries = 0;
   let unansweredQuestions = 0;
   let checkedInToday = false;
+  let work: { openDays: number; unrepliedReviews: number; responseMins: number | null } | null =
+    null;
 
   if (guide?.status === "verified") {
     const [{ data: act }, { data: next }, { count }] = await Promise.all([
@@ -72,6 +74,36 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .eq("guide_id", user.id)
       .eq("status", "pending");
     unansweredQuestions = qCount ?? 0;
+
+    // The levers that decide whether the next booking comes. Each is a real
+    // number the guide can move today, not a score.
+    const in90 = new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10);
+    const [{ count: openDays }, { count: unreplied }, { data: gRow }] = await Promise.all([
+      admin
+        .from("availability")
+        .select("day", { count: "exact", head: true })
+        .eq("guide_id", user.id)
+        .eq("status", "open")
+        .gte("day", today)
+        .lte("day", in90),
+      admin
+        .from("reviews")
+        .select("id", { count: "exact", head: true })
+        .eq("subject_id", user.id)
+        .eq("direction", "trekker_to_guide")
+        .not("published_at", "is", null)
+        .is("guide_reply", null),
+      admin
+        .from("guides")
+        .select("median_response_mins")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+    work = {
+      openDays: openDays ?? 0,
+      unrepliedReviews: unreplied ?? 0,
+      responseMins: gRow?.median_response_mins ?? null,
+    };
     if (active) {
       const { data: ci } = await admin
         .from("checkins")
@@ -179,6 +211,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       nextBooking,
       enquiries,
       unansweredQuestions,
+      work,
       checkedInToday,
       today,
       backupFor: backupFor ?? [],
@@ -222,7 +255,7 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, checkedInToday, today, backupFor, payableNprPaisa } =
+  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, work, checkedInToday, today, backupFor, payableNprPaisa } =
     loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
@@ -314,7 +347,10 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           Block dates →
         </Link>
         <Link to="/g/earnings" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
-          Earnings →
+          Your money →
+        </Link>
+        <Link to="/g/reviews" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+          Reviews →
         </Link>
         {/* Journals are how a guide wins the next booking, so they sit with
             the money links, not buried in profile settings. */}
@@ -345,6 +381,66 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           </span>
         </Link>
       </div>
+      {/* ── How the next booking comes ─────────────────────────────────
+           Not a score, not a percentage: three real numbers, each with the
+           thing to do about it. The calendar one matters most — a guide with
+           no open days is invisible in every dated search, and nothing on
+           this phone told him that. */}
+      {work && (
+        <section className="rounded-card border border-border bg-card p-4">
+          <p className="text-sm font-medium text-ink">Get more work</p>
+          <ul className="mt-3 space-y-2.5 text-sm">
+            <li>
+              {work.openDays === 0 ? (
+                <Link to="/g/calendar" className="flex items-start gap-2 text-ink">
+                  <Dot tone="ember" />
+                  <span>
+                    <span className="font-medium text-ember">Your calendar has no open days.</span>{" "}
+                    People searching with dates cannot find you at all.{" "}
+                    <span className="text-primary underline">Open days →</span>
+                  </span>
+                </Link>
+              ) : (
+                <Link to="/g/calendar" className="flex items-start gap-2 text-ink">
+                  <Dot tone={work.openDays < 20 ? "amber" : "moss"} />
+                  <span>
+                    <span className="font-mono">{work.openDays}</span> open days in the
+                    next 3 months. More open days, more searches you appear in.
+                  </span>
+                </Link>
+              )}
+            </li>
+            {work.responseMins != null && (
+              <li className="flex items-start gap-2">
+                <Dot tone={work.responseMins <= 120 ? "moss" : "amber"} />
+                <span>
+                  Trekkers see &ldquo;usually responds in ~
+                  <span className="font-mono">
+                    {work.responseMins >= 60
+                      ? `${Math.round(work.responseMins / 60)} h`
+                      : `${work.responseMins} min`}
+                  </span>
+                  &rdquo;. Fast answers win bookings from slow ones.
+                </span>
+              </li>
+            )}
+            {work.unrepliedReviews > 0 && (
+              <li>
+                <Link to="/g/reviews" className="flex items-start gap-2 text-ink">
+                  <Dot tone="amber" />
+                  <span>
+                    <span className="font-mono">{work.unrepliedReviews}</span>{" "}
+                    {work.unrepliedReviews === 1 ? "review has" : "reviews have"} no reply.
+                    A thank-you under each shows you read them.{" "}
+                    <span className="text-primary underline">Reply →</span>
+                  </span>
+                </Link>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
+
       <Link to="/g/profile" className="block text-center text-sm text-primary">
         View my profile
       </Link>
@@ -522,4 +618,10 @@ function SetupChecklist({
       </Link>
     </section>
   );
+}
+
+function Dot({ tone }: { tone: "moss" | "amber" | "ember" }) {
+  const c =
+    tone === "moss" ? "bg-moss" : tone === "amber" ? "bg-amber-500" : "bg-ember";
+  return <span aria-hidden className={"mt-1.5 h-2 w-2 shrink-0 rounded-full " + c} />;
 }

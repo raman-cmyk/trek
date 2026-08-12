@@ -160,12 +160,18 @@ export function ReviewBlock({
   overall,
   body,
   date,
+  reply,
+  replyName,
 }: {
   authorName: string;
   country?: string | null;
   overall: number;
   body?: string | null;
   date?: string | null;
+  /** The guide's answer, in their own words. */
+  reply?: string | null;
+  /** Who is replying — first name is enough. */
+  replyName?: string | null;
 }) {
   return (
     <figure className="space-y-1">
@@ -178,6 +184,14 @@ export function ReviewBlock({
         </figcaption>
       </div>
       {body && <blockquote className="text-ink">{body}</blockquote>}
+      {/* The reply, indented under the review it answers. A guide who writes
+          back — to the five stars and to the four — is a person, visibly. */}
+      {reply && (
+        <div className="ml-3 border-l-2 border-sage pl-3 pt-1">
+          <p className="text-sm text-ink">{reply}</p>
+          {replyName && <p className="mt-0.5 text-caption text-muted">— {replyName}</p>}
+        </div>
+      )}
     </figure>
   );
 }

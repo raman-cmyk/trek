@@ -130,7 +130,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .order("day"),
     client
       .from("public_reviews")
-      .select("id, overall, body, published_at, author_name, author_country")
+      .select("id, overall, body, published_at, author_name, author_country, guide_reply")
       .eq("guide_id", guide.user_id)
       .order("published_at", { ascending: false }),
     client
@@ -562,6 +562,8 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   overall={r.overall}
                   body={r.body}
                   date={r.published_at}
+                  reply={r.guide_reply}
+                  replyName={first}
                 />
               ))}
             </div>
