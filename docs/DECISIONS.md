@@ -193,3 +193,18 @@ in the bundle means the homepage map renders without a round trip.
 Real GPX tracks — actual trekked lines pulled off recaps — are a different
 thing and would belong in the database. Basemap is OpenStreetMap raster;
 swapping in Baato when the founder has a key is one line in `GuideMap.tsx`.
+
+## Journals are written after the trek, not during it (2026-08-12)
+
+Founder: guides cannot edit while they are on the trail — they write the trek
+up once they are back and on wifi.
+
+So the journal editor assumes a connected browser. No offline drafts, no
+service-worker queue, no sync-conflict resolution, no autosave against a lost
+signal. That is a large amount of work this product does not need, and the
+"Save day" button flagged as missing autosave is not a gap.
+
+What the flow does imply: the write-up happens in one long sitting, not in
+fourteen two-minute sessions on a ridge. The editor should be built for
+somebody working down a list of days at a desk — which is a much easier
+target than the one we were designing against.
