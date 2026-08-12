@@ -45,30 +45,22 @@ export function HeroSearch({
           </datalist>
         </div>
 
+        {/* One date, not two. Somebody at the top of the homepage knows
+            roughly when they are setting off; they do not yet know how long
+            the trek is, because that is what the trek decides. Asking for a
+            return date made them invent one — and two bare dd/mm/yyyy fields
+            side by side was the busiest thing in the hero. */}
         <div className={`${cell} sm:flex-1`}>
           <label className={label} htmlFor="hero-from">
-            When
+            Setting off
           </label>
-          <div className="flex items-center gap-1">
-            <input
-              id="hero-from"
-              type="date"
-              name="from"
-              min={today}
-              aria-label="First day"
-              className={`${field} font-mono text-sm`}
-            />
-            <span aria-hidden="true" className="text-muted">
-              –
-            </span>
-            <input
-              type="date"
-              name="to"
-              min={today}
-              aria-label="Last day"
-              className={`${field} font-mono text-sm`}
-            />
-          </div>
+          <input
+            id="hero-from"
+            type="date"
+            name="from"
+            min={today}
+            className={`${field} font-mono text-sm`}
+          />
         </div>
 
         <div className={`${cell} sm:w-36`}>

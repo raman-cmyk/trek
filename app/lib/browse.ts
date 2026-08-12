@@ -18,6 +18,20 @@ export function daysInRange(r: DateRange): number {
   return Math.round((Date.parse(r.to) - Date.parse(r.from)) / 86400000) + 1;
 }
 
+/**
+ * How far past a departure date to look when nobody gave an end date.
+ *
+ * Somebody who says "I set off on the 12th of October" has not said they are
+ * leaving on the 13th — they have said roughly when, and the trek is however
+ * long the trek is. Treating a lone date as a one-day window asked the
+ * calendar "who is free for exactly one day", which finds a guide with a
+ * single gap between two treks and misses everybody actually free to walk.
+ *
+ * A month covers the longest route in the catalogue with room to spare, and
+ * the run-length check downstream is what turns the window into an answer.
+ */
+export const DEPARTURE_WINDOW_DAYS = 30;
+
 /** Parse ?from=&to= into a sane, bounded range. Returns null if unusable. */
 export function parseRange(
   fromRaw: string | null,
@@ -27,8 +41,10 @@ export function parseRange(
   const iso = /^\d{4}-\d{2}-\d{2}$/;
   if (!fromRaw || !iso.test(fromRaw)) return null;
   const from = fromRaw < today ? today : fromRaw;
-  let to = toRaw && iso.test(toRaw) ? toRaw : from;
-  if (to < from) to = from;
+  let to =
+    toRaw && iso.test(toRaw) ? toRaw : addDays(from, DEPARTURE_WINDOW_DAYS);
+  // A backwards end date is a typo, not a request for a one-day trek.
+  if (to < from) to = addDays(from, DEPARTURE_WINDOW_DAYS);
   // A year is as far ahead as any guide's calendar goes; without a cap a
   // pasted "2099-01-01" would pull an unbounded availability scan.
   const cap = addDays(from, 365);

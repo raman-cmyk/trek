@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addDays, daysInRange, escapeLike, guideMatchesText, parseRange } from "./browse";
+import {
+  DEPARTURE_WINDOW_DAYS,
+  addDays,
+  daysInRange,
+  escapeLike,
+  guideMatchesText,
+  parseRange,
+} from "./browse";
 
 const TODAY = "2026-08-11";
 
@@ -13,12 +20,31 @@ describe("parseRange", () => {
     expect(parseRange("2020-01-01", "2026-10-01", TODAY)?.from).toBe(TODAY);
   });
 
-  it("treats a missing or backwards end as a single day", () => {
+  it("reads a lone departure date as a window, not as a one-day trek", () => {
+    // The hero asks only when you set off. A one-day window would have asked
+    // the calendar who is free for exactly one day.
     expect(parseRange("2026-10-01", null, TODAY)).toEqual({
       from: "2026-10-01",
-      to: "2026-10-01",
+      to: addDays("2026-10-01", DEPARTURE_WINDOW_DAYS),
     });
-    expect(parseRange("2026-10-05", "2026-10-01", TODAY)?.to).toBe("2026-10-05");
+  });
+
+  it("treats a backwards end date as a typo, not a request", () => {
+    expect(parseRange("2026-10-05", "2026-10-01", TODAY)?.to).toBe(
+      addDays("2026-10-05", DEPARTURE_WINDOW_DAYS),
+    );
+  });
+
+  it("still honours a real range when both dates are given", () => {
+    expect(parseRange("2026-10-01", "2026-10-15", TODAY)).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-15",
+    });
+  });
+
+  it("a lone departure date leaves room for the longest route", () => {
+    const r = parseRange("2026-10-01", null, TODAY)!;
+    expect(daysInRange(r)).toBeGreaterThanOrEqual(21);
   });
 
   it("caps the window at a year so a pasted date can't scan the table", () => {

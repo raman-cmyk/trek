@@ -24,19 +24,41 @@ export async function openRunsByGuide(
   guideIds?: string[],
 ): Promise<Record<string, number>> {
   if (guideIds && guideIds.length === 0) return {};
-  let q = client
-    .from("availability")
-    .select("guide_id, day")
-    .eq("status", "open")
-    .gte("day", range.from)
-    .lte("day", range.to);
-  if (guideIds?.length) q = q.in("guide_id", guideIds);
-  // Worst case is a 365-day window across every guide; the page size is
-  // generous because the rows are two small columns.
-  const { data } = await q.limit(100_000);
+  // Paged, because PostgREST refuses to return more than `db.max_rows` (1,000)
+  // however large a limit is asked for — and it says so nowhere in the
+  // response. A single `.limit(100_000)` therefore came back quietly truncated
+  // for any window wider than about three weeks across the full roster: each
+  // guide got a partial, gap-riddled set of days, every longest-run collapsed
+  // below the length of the trek, and the page rendered "nothing available"
+  // for dates that were completely free. Forty-eight guides over thirty days
+  // is 1,338 rows — just past the edge, which is why it looked fine in
+  // testing.
+  const PAGE = 900;
+  const rows: Array<{ guide_id: string; day: string }> = [];
+  for (let offset = 0; ; offset += PAGE) {
+    let q = client
+      .from("availability")
+      .select("guide_id, day")
+      .eq("status", "open")
+      .gte("day", range.from)
+      .lte("day", range.to)
+      // Ordered so the pages are stable; without it the same row can appear
+      // on two pages and another never appear at all.
+      .order("guide_id")
+      .order("day")
+      .range(offset, offset + PAGE - 1);
+    if (guideIds?.length) q = q.in("guide_id", guideIds);
+    const { data } = await q;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+    // A year across every guide is the ceiling parseRange allows; this stops a
+    // pathological case turning into an unbounded loop.
+    if (rows.length >= 200_000) break;
+  }
 
   const byGuide: Record<string, string[]> = {};
-  for (const row of data ?? []) (byGuide[row.guide_id] ??= []).push(row.day);
+  for (const row of rows) (byGuide[row.guide_id] ??= []).push(row.day);
 
   const runs: Record<string, number> = {};
   for (const [id, days] of Object.entries(byGuide)) {
