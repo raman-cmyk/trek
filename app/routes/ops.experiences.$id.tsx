@@ -1,0 +1,96 @@
+import { Link, data, useNavigation } from "react-router";
+import type { Route } from "./+types/ops.experiences.$id";
+import { getEnv, requireOps } from "~/lib/supabase.server";
+import { ExperienceForm } from "~/components/ExperienceForm";
+import { parseExperienceForm } from "~/lib/offerings.server";
+import { Badge } from "~/components/ops/ui";
+import { firstName } from "~/lib/names";
+
+/**
+ * The office edits any experience — same form the guide fills, full
+ * authority. "In the admin we should be able to edit and fix any experience
+ * that is there."
+ */
+export async function loader({ request, params, context }: Route.LoaderArgs) {
+  const env = getEnv(context);
+  const { admin, headers } = await requireOps(request, env);
+  const [{ data: offering }, { data: routes }] = await Promise.all([
+    admin
+      .from("offerings")
+      .select("*, guide:guides!offerings_guide_id_fkey(slug, users(full_name))")
+      .eq("id", params.id)
+      .maybeSingle(),
+    admin.from("routes").select("id, name").order("name"),
+  ]);
+  if (!offering) throw new Response("Not found", { status: 404 });
+  return data({ offering, routes: routes ?? [] }, { headers });
+}
+
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const env = getEnv(context);
+  const { admin, headers } = await requireOps(request, env);
+  const form = await request.formData();
+  const intent = String(form.get("intent") ?? "save");
+
+  if (["approve", "pause", "unpause"].includes(intent)) {
+    const next = intent === "pause" ? "paused" : "live";
+    await admin.from("offerings").update({ status: next }).eq("id", params.id);
+    return data({ ok: next === "live" ? "Live." : "Paused." }, { headers });
+  }
+
+  const { patch, error } = parseExperienceForm(form);
+  if (!patch) return data({ error }, { status: 400, headers });
+  const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", params.id);
+  if (dbErr) return data({ error: dbErr.message }, { status: 400, headers });
+  return data({ ok: "Saved." }, { headers });
+}
+
+export default function OpsExperienceEdit({ loaderData, actionData }: Route.ComponentProps) {
+  const { offering, routes } = loaderData as any;
+  const nav = useNavigation();
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div>
+        <Link to="/ops/experiences" className="text-sm text-primary hover:underline">
+          ← All experiences
+        </Link>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h1 className="font-display text-2xl text-ink">{offering.title}</h1>
+          <Badge tone={offering.status === "live" ? "green" : offering.status === "pending" ? "amber" : "neutral"}>
+            {offering.status}
+          </Badge>
+        </div>
+        <p className="mt-0.5 text-sm text-ink-soft">
+          by {firstName(offering.guide?.users?.full_name)} ·{" "}
+          <Link to={`/guides/${offering.guide?.slug}`} className="text-primary hover:underline">
+            public page →
+          </Link>
+        </p>
+      </div>
+
+      {actionData && "ok" in actionData && (
+        <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{(actionData as any).ok}</p>
+      )}
+      {actionData && "error" in actionData && (actionData as any).error && (
+        <p className="rounded bg-ember/10 px-3 py-2 text-sm text-ember">{(actionData as any).error}</p>
+      )}
+
+      {offering.status === "pending" && (
+        <form method="post">
+          <input type="hidden" name="intent" value="approve" />
+          <button className="rounded bg-moss px-5 py-2.5 text-sm font-medium text-white hover:bg-pine">
+            Approve — put it live
+          </button>
+        </form>
+      )}
+
+      <ExperienceForm
+        values={offering}
+        routes={routes}
+        guideId={offering.guide_id}
+        submitLabel="Save changes"
+        busy={nav.state !== "idle"}
+      />
+    </div>
+  );
+}

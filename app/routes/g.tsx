@@ -51,8 +51,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 const TABS = [
   { to: "/g", label: "Home", end: true, badge: 0, icon: IconHome },
   { to: "/g/enquiries", label: "Requests", badge: "enquiryCount" as const, icon: IconInbox },
-  { to: "/messages", label: "Messages", badge: "unreadTotal" as const, icon: IconChat },
-  { to: "/g/bookings", label: "Trips", badge: 0, icon: IconBoot },
+  { to: "/g/messages", label: "Messages", badge: "unreadTotal" as const, icon: IconChat },
+  { to: "/g/experiences", label: "Experiences", badge: 0, icon: IconBoot },
   { to: "/g/calendar", label: "Calendar", badge: 0, icon: IconCalendar },
 ];
 

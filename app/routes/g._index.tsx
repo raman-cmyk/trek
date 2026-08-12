@@ -279,16 +279,14 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       <SetupChecklist steps={setup} />
 
       {active ? (
-        <section className="space-y-2">
-          <p className="text-sm text-ink-soft">
-            You’re on the trail: {active.offering?.title}
-          </p>
-          <CheckinButton
-            bookingId={active.id}
-            dayNumber={dayNum}
-            alreadyToday={checkedInToday}
-          />
-        </section>
+        <Link
+          to="/g/active"
+          className="block rounded-card border border-moss/50 bg-mist p-4"
+        >
+          <p className="text-xs text-ink-soft">On the trail — day {dayNum}</p>
+          <p className="mt-0.5 font-medium text-ink">{active.offering?.title}</p>
+          <p className="mt-1 text-sm text-primary">Open the trek →</p>
+        </Link>
       ) : (
         <section className="grid grid-cols-2 gap-3">
           <Tile to="/g/enquiries" label="Open enquiries" value={enquiries} highlight={enquiries > 0} />
@@ -341,8 +339,14 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Link to="/messages" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
-          Messages →
+        <Link to="/g/experiences" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+          Your experiences →
+        </Link>
+        <Link to="/g/journals" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+          Your journeys →
+        </Link>
+        <Link to="/g/bookings" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+          Booked trips →
         </Link>
         <Link to="/g/calendar" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
           Block dates →
@@ -440,6 +444,14 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
             )}
           </ul>
         </section>
+      )}
+
+      {active && !checkedInToday && (
+        <CheckinButton
+          bookingId={active.id}
+          dayNumber={dayNum}
+          alreadyToday={checkedInToday}
+        />
       )}
 
       <Link to="/g/profile" className="block text-center text-sm text-primary">

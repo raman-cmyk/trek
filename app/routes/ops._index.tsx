@@ -33,6 +33,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     readyJournals,
     staleQuestions,
     holds,
+    pendingOfferings,
     active,
     departing,
     paidThisMonth,
@@ -76,6 +77,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .eq("status", "pending_deposit"),
+    admin
+      .from("offerings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
     // On the trail right now.
     admin
       .from("bookings")
@@ -144,6 +149,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       label: "Payouts to send",
       count: (payable.data ?? []).length,
       why: `${formatNpr(payableNpr)} owed to guides for completed treks.`,
+    },
+    {
+      to: "/ops/experiences",
+      label: "Experiences to approve",
+      count: pendingOfferings.count ?? 0,
+      why: "A guide listed a trip; it sells the moment you approve it.",
     },
     {
       to: "/ops/events",

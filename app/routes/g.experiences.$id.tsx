@@ -1,0 +1,123 @@
+import { Link, data, useNavigation } from "react-router";
+import type { Route } from "./+types/g.experiences.$id";
+import { getEnv } from "~/lib/supabase.server";
+import { requireUser } from "~/lib/auth.server";
+import { ExperienceForm } from "~/components/ExperienceForm";
+import { parseExperienceForm } from "~/lib/offerings.server";
+import { Badge } from "~/components/ops/ui";
+
+/**
+ * A guide edits an experience he already listed.
+ *
+ * Rules by status:
+ *   draft / pending — edit freely; it has never been public.
+ *   live            — edits apply at once (his trip, his price), and the
+ *                     office is notified through the change queue so a bad
+ *                     edit is caught the same day rather than never.
+ *   paused          — a guide can pause a live trip (monsoon, injury) and
+ *                     put it back live himself; it was already approved.
+ */
+export async function loader({ request, params, context }: Route.LoaderArgs) {
+  const env = getEnv(context);
+  const { user, admin, headers } = await requireUser(request, env, "guide");
+  const [{ data: offering }, { data: routes }] = await Promise.all([
+    admin.from("offerings").select("*").eq("id", params.id).eq("guide_id", user.id).maybeSingle(),
+    admin.from("routes").select("id, name").order("name"),
+  ]);
+  if (!offering) throw new Response("Not found", { status: 404 });
+  return data({ offering, routes: routes ?? [], guideId: user.id }, { headers });
+}
+
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const env = getEnv(context);
+  const { user, admin, headers } = await requireUser(request, env, "guide");
+  const form = await request.formData();
+  const intent = String(form.get("intent") ?? "save");
+
+  const { data: offering } = await admin
+    .from("offerings")
+    .select("id, status, title")
+    .eq("id", params.id)
+    .eq("guide_id", user.id)
+    .maybeSingle();
+  if (!offering) throw new Response("Not found", { status: 404 });
+
+  if (intent === "pause" || intent === "unpause") {
+    if (!["live", "paused"].includes(offering.status)) {
+      return data({ error: "Only a live experience can be paused." }, { status: 400, headers });
+    }
+    await admin
+      .from("offerings")
+      .update({ status: intent === "pause" ? "paused" : "live" })
+      .eq("id", offering.id);
+    return data(
+      { ok: intent === "pause" ? "Paused — hidden from the site until you turn it back on." : "Live again." },
+      { headers },
+    );
+  }
+
+  const { patch, error } = parseExperienceForm(form);
+  if (!patch) return data({ error }, { status: 400, headers });
+
+  const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", offering.id);
+  if (dbErr) return data({ error: "That did not save. Try again." }, { status: 400, headers });
+
+  if (offering.status === "live") {
+    await admin.from("guide_change_requests").insert({
+      guide_id: user.id,
+      note: `Live experience edited: ${patch.title}`,
+    });
+  }
+  return data({ ok: "Saved." }, { headers });
+}
+
+export default function EditExperience({ loaderData, actionData }: Route.ComponentProps) {
+  const { offering, routes, guideId } = loaderData as any;
+  const nav = useNavigation();
+  return (
+    <div className="space-y-5">
+      <div>
+        <Link to="/g/experiences" className="text-sm text-primary hover:underline">
+          ← Your experiences
+        </Link>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h1 className="font-display text-2xl text-ink">{offering.title}</h1>
+          <Badge tone={offering.status === "live" ? "green" : offering.status === "pending" ? "amber" : "neutral"}>
+            {offering.status}
+          </Badge>
+        </div>
+        {offering.status === "pending" && (
+          <p className="mt-1 text-sm text-ink-soft">
+            With the office — you can keep editing while they look.
+          </p>
+        )}
+      </div>
+
+      {actionData && "ok" in actionData && (
+        <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{(actionData as any).ok}</p>
+      )}
+      {actionData && "error" in actionData && (actionData as any).error && (
+        <p className="rounded bg-ember/10 px-3 py-2 text-sm text-ember">{(actionData as any).error}</p>
+      )}
+
+      <ExperienceForm
+        values={offering}
+        routes={routes}
+        guideId={guideId}
+        submitLabel="Save changes"
+        busy={nav.state !== "idle"}
+      />
+
+      {["live", "paused"].includes(offering.status) && (
+        <form method="post" className="border-t border-line pt-4">
+          <input type="hidden" name="intent" value={offering.status === "live" ? "pause" : "unpause"} />
+          <button className="text-sm text-muted underline underline-offset-4 hover:text-ink">
+            {offering.status === "live"
+              ? "Pause it — hide from the site for now"
+              : "Put it back live"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
