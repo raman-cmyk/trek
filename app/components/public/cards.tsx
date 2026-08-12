@@ -87,26 +87,45 @@ export function GuideCard({
           <TierBadge tier={guide.tier} static />
         </div>
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3">
-        <p className="title font-medium text-ink">{guide.full_name}</p>
-        {guide.home_district && (
-          <p className="text-caption text-muted">{guide.home_district}</p>
+      <div className="flex flex-1 flex-col p-3.5">
+        {/* Her words lead — bold, no quotation marks, the way she said it.
+            The name follows big, because by then you want to know whose
+            promise that was. */}
+        {(guide.only_with_me ?? guide.hook_line) && (
+          <p className="line-clamp-3 font-display text-[17px] leading-snug text-ink">
+            {guide.only_with_me ?? guide.hook_line}
+          </p>
         )}
-        {/* The promise leads. The hook_line is a description of the guide;
-            this is the guide talking, so it outranks it — and when a guide
-            hasn't written one yet, the description still carries the card. */}
-        {guide.only_with_me ? (
-          <OnlyWithMe line={guide.only_with_me} />
-        ) : (
-          guide.hook_line && (
-            <p className="line-clamp-2 text-sm text-ink">{guide.hook_line}</p>
-          )
+        {/* One line at card widths that fit it; stacked on the narrow
+            two-up mobile grid, where a 2xl name beside a district truncated
+            to a single letter. */}
+        <div className="mt-2.5 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
+          <p className="truncate font-display text-xl text-ink sm:text-2xl">
+            {guide.full_name}
+          </p>
+          {guide.home_district && (
+            <p className="flex shrink-0 items-center gap-1 text-sm text-muted">
+              <PinMark />
+              {guide.home_district}
+            </p>
+          )}
+        </div>
+        {rating && rating.count > 0 && (
+          <div className="mt-1.5">
+            <Stars value={rating.value} count={rating.count} />
+          </div>
         )}
         {/* Bottom row pinned so every card in a row is equal height (§8). */}
-        <div className="mt-auto flex items-center justify-between pt-1.5">
-          <Stars value={rating?.value ?? 0} count={rating?.count} />
+        <div className="mt-auto flex items-baseline justify-between gap-2 pt-2">
+          {rating && rating.count > 0 ? (
+            <span className="truncate text-sm text-muted">
+              {languages && languages.length > 0 ? languages.slice(0, 3).join(", ") : ""}
+            </span>
+          ) : (
+            <span className="text-sm text-muted">Be the first</span>
+          )}
           {guide.day_rate_usd_cents && (
-            <span className="text-sm text-muted">
+            <span className="shrink-0 text-sm text-muted">
               <span className="font-mono font-medium text-ink">
                 {mr(guide.day_rate_usd_cents)}
               </span>
@@ -114,12 +133,6 @@ export function GuideCard({
             </span>
           )}
         </div>
-        {languages && languages.length > 0 && (
-          <p className="truncate text-caption text-muted">
-            {languages.join(" · ")}
-          </p>
-        )}
-        <ResponseChip mins={guide.median_response_mins} />
       </div>
     </Link>
   );
@@ -203,5 +216,18 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** The little red pin beside a district — the one warm mark on the card. */
+function PinMark() {
+  return (
+    <svg width="12" height="14" viewBox="0 0 12 14" fill="none" aria-hidden="true" className="shrink-0">
+      <path
+        d="M6 13.2S11 8.3 11 5.1A5 5 0 0 0 1 5.1C1 8.3 6 13.2 6 13.2z"
+        fill="var(--color-ember)"
+      />
+      <circle cx="6" cy="5" r="1.7" fill="var(--color-paper)" />
+    </svg>
   );
 }
