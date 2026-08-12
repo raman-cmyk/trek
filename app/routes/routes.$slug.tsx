@@ -27,6 +27,8 @@ import {
 import { offeringsRating } from "~/lib/ratings.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
+import { CLIMB_ROUTES } from "~/lib/climb";
+import { ClimbRoute } from "~/components/public/ClimbRoute";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -179,6 +181,28 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 }
 
 export default function RoutePage({ loaderData }: Route.ComponentProps) {
+  // Langtang gets the page that climbs (see ClimbRoute). Other routes keep
+  // the standard layout until this one is genuinely great — rolling it out
+  // is configuration in CLIMB_ROUTES, not a rewrite. Dispatched from a
+  // wrapper so neither branch calls the other's hooks.
+  const d = loaderData as any;
+  const climb = CLIMB_ROUTES[d.route.slug];
+  if (climb) {
+    return (
+      <ClimbRoute
+        cfg={climb}
+        route={d.route}
+        permits={d.permits}
+        offerings={d.offerings}
+        journals={d.journals}
+        guides={d.guides}
+      />
+    );
+  }
+  return <StandardRoutePage loaderData={loaderData} />;
+}
+
+function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
   const { route, permits, offerings, journals, guides, article, related } = loaderData as any;
   const { m } = useMoney();
   const [activeDay, setActiveDay] = useState<number | null>(null);
