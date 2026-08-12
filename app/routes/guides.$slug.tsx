@@ -19,6 +19,7 @@ import { SmartImage } from "~/components/SmartImage";
 import { JOURNAL_COLS, journalMonth, type PublicJournal } from "~/lib/journals";
 import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
+import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -392,263 +393,427 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   } = loaderData as any;
   const { m, mr } = useMoney();
   const first = guide.full_name.split(" ")[0];
+  const pn = pronounsFor(guide.gender);
   const portrait =
     photos.find((p: any) => p.kind === "headshot")?.url ?? guide.avatar_url ?? "";
   const checks = tierChecks(guide.tier);
 
+  // What this guide actually has. The template scales to it: a guide with one
+  // trek and no history gets a tight, single-focus page, not twelve headings
+  // with apologies under most of them.
+  const brandNew = journals.length === 0 && reviews.length === 0 && questions.length === 0;
+  const treksLed = Math.max(guide.treks_completed_platform ?? 0, journals.length);
+  // Receipts keyed by check, for the fact rows.
+  const receiptBy: Record<string, any> = {};
+  for (const r of receipts) receiptBy[r.check_type] = r;
+  const quote = guide.only_with_me ?? guide.hook_line;
+
+  // The rail's availability summary: the next stretch of ≥3 open days, and
+  // how much of the next three months is open at all.
+  const nextWindow = firstRun(openDays, 3);
+  const in90 = new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10);
+  const openIn90 = openDays.filter((d: string) => d <= in90).length;
+
+  const messageForm = (label: string, cls: string) => (
+    <Form method="post" action="/conversations">
+      <input type="hidden" name="guide_id" value={guide.user_id} />
+      <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
+      <button className={cls}>{label}</button>
+    </Form>
+  );
+
   return (
     <main className="pb-28">
-      {/* ── 1. HEADER ─────────────────────────────────────────────────────
-          Two columns, no floating price card, no empty right rail. The only
-          primary button is Message: talking is free and it is what we want
-          to happen. Price lives in the stat band and the sticky bar. */}
-      <div className="mx-auto max-w-5xl px-4 pt-6">
-        <div className="grid gap-6 sm:grid-cols-[minmax(0,300px)_1fr] sm:gap-8">
-          <SmartImage
-            src={portrait}
-            alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
-            width={600}
-            height={750}
-            eager
-            className="aspect-[4/5] w-full rounded-md"
-          />
+      {/* ── 1. HEADER — her words are the hero, her name is the byline ────
+          The quote is the most persuasive thing on the page: it is one
+          specific promise, in the guide's own voice, that no agency template
+          could produce. So it gets the display size, and the name — which a
+          reader can get from any of 48 profiles — steps down to a byline. */}
+      <div className="mx-auto max-w-6xl px-4 pt-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <header>
+            {quote ? (
+              <>
+                <p className="max-w-[24ch] font-display text-[28px] leading-[1.15] text-ink sm:text-4xl">
+                  &ldquo;{quote}&rdquo;
+                </p>
+                <p className="mt-2 text-sm text-muted">
+                  — {first}&rsquo;s words, printed as written
+                </p>
+              </>
+            ) : (
+              <p className="max-w-[24ch] font-display text-[28px] leading-[1.15] text-ink sm:text-4xl">
+                A licensed guide from {guide.home_district ?? "Nepal"}.
+              </p>
+            )}
 
-          <header className="flex flex-col justify-center">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="font-display text-3xl text-ink sm:text-4xl">{guide.full_name}</h1>
-              <TierBadge tier={guide.tier} />
+            {/* ── The trust card: the Superhost moment. Portrait, name, and
+                 the numbers that prove {first} is real — large, mono, in one
+                 bordered card instead of scattered small beneath a header. */}
+            <div className="mt-6 rounded-md border border-line bg-card p-4 sm:p-5">
+              <div className="flex items-center gap-4">
+                <SmartImage
+                  src={portrait}
+                  alt={`${first}, trekking guide in ${guide.home_district ?? "Nepal"}`}
+                  width={200}
+                  height={200}
+                  eager
+                  cover
+                  className="h-20 w-20 shrink-0 rounded-md sm:h-24 sm:w-24"
+                />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="font-display text-2xl text-ink">{first}</h1>
+                    <TierBadge tier={guide.tier} />
+                  </div>
+                  <p className="mt-0.5 text-sm text-ink-soft">
+                    Trekking guide · {guide.home_district}, Nepal
+                  </p>
+                </div>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
+                {guide.years_experience ? (
+                  <BigNum n={guide.years_experience} label="years guiding" />
+                ) : null}
+                {treksLed > 0 && <BigNum n={treksLed} label={treksLed === 1 ? "trek led" : "treks led"} />}
+                {rating && (
+                  <BigNum n={rating.value.toFixed(1)} label={`rating (${rating.count})`} />
+                )}
+                {guide.median_response_mins != null && (
+                  <BigNum
+                    n={
+                      guide.median_response_mins >= 60
+                        ? `~${Math.round(guide.median_response_mins / 60)} h`
+                        : `~${guide.median_response_mins} m`
+                    }
+                    label="responds in"
+                  />
+                )}
+              </dl>
             </div>
-            <p className="mt-1 text-ink-soft">{guide.home_district}, Nepal</p>
 
-            {guide.only_with_me && (
-              <div className="pt-4">
-                <OnlyWithMe line={guide.only_with_me} firstName={first} size="profile" />
+            {/* ── Fact rows: trust facts in the open, not behind a
+                 disclosure. Languages out of the bio, verification out of
+                 the accordion. */}
+            <ul className="mt-5 space-y-2.5">
+              {languages.length > 0 && (
+                <FactRow icon="speech">
+                  Speaks{" "}
+                  <span className="text-ink">
+                    {languages.map((l: any) => l.language).join(", ")}
+                  </span>
+                </FactRow>
+              )}
+              {guide.home_district && (
+                <FactRow icon="pin">Lives in {guide.home_district}</FactRow>
+              )}
+              {receiptBy.id_match && (
+                <FactRow icon="shield">
+                  Identity verified {fmtDate(receiptBy.id_match.verified_at)}
+                </FactRow>
+              )}
+              {receiptBy.licence && (
+                <FactRow icon="card">
+                  Trekking licence verified
+                  {receiptBy.licence.expires_at
+                    ? ` to ${fmtDate(receiptBy.licence.expires_at)}`
+                    : ` ${fmtDate(receiptBy.licence.verified_at)}`}
+                </FactRow>
+              )}
+              {receiptBy.first_aid && (
+                <FactRow icon="aid">
+                  Wilderness first aid current
+                  {receiptBy.first_aid.expires_at
+                    ? ` to ${fmtDate(receiptBy.first_aid.expires_at)}`
+                    : ""}
+                </FactRow>
+              )}
+            </ul>
+
+            {/* ── Route stamps: where {first} has actually walked, with the
+                 write-ups to prove each count. Our travel stamps. */}
+            {routeChips.length > 0 && (
+              <div className="mt-6">
+                <p className="label text-muted">Routes {first} has walked</p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {routeChips.map((r: any) => (
+                    <Link
+                      key={r.slug}
+                      to={`/routes/${r.slug}`}
+                      prefetch="intent"
+                      className="group rounded-md border border-line bg-card px-3.5 py-2.5 transition-colors hover:border-sage hover:bg-mist/60"
+                    >
+                      <span className="flex items-center gap-2">
+                        <StampPeak />
+                        <span className="text-sm font-medium text-ink">{r.name}</span>
+                        {r.count > 0 && (
+                          <span className="font-mono text-sm text-moss">×{r.count}</span>
+                        )}
+                      </span>
+                      {r.count > 0 && (
+                        <span className="mt-0.5 block pl-6 text-caption text-muted">
+                          {r.count === 1 ? "written up once" : `written up ${r.count} times`}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 pt-4">
-              {rating && <Stars value={rating.value} count={rating.count} />}
-              <ResponseChip mins={guide.median_response_mins} />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-4">
-              <Form method="post" action="/conversations">
-                <input type="hidden" name="guide_id" value={guide.user_id} />
-                <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
-                <button className="rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine">
-                  Message {first} — free
-                </button>
-              </Form>
-              {/* Some people arrive having already picked their guide and will
-                  walk whatever he recommends. Let them start the group here,
-                  before they know which trek. */}
+            <div className="flex flex-wrap items-center gap-3 pt-6 lg:hidden">
+              {messageForm(
+                `Message ${first} — free`,
+                "rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine",
+              )}
               <Link
                 to={`/groups/new?guide=${guide.user_id}`}
                 prefetch="intent"
                 className="rounded border border-line px-5 py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
               >
-                Go with {first} as a group
+                Go as a group
               </Link>
             </div>
-          </header>
-        </div>
 
-        {/* Stat band — mono, real, and the counts jump to the section that
-            proves them. */}
-        <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-4 border-y border-line py-4">
-          <Stat n={guide.years_experience ?? "—"} label="years" />
-          <Stat
-            n={journals.length || guide.treks_completed_platform}
-            label={journals.length ? "treks written up" : "treks on Trek"}
-            href={journals.length ? "#journals" : undefined}
-          />
-          {routeChips.length > 0 && (
-            <Stat n={routeChips.length} label="routes" href="#routes" />
-          )}
-          {maxAltitude > 0 && (
-            <Stat n={`${maxAltitude.toLocaleString("en-US")} m`} label="highest" />
-          )}
-          {repeatClients > 0 && (
-            <Stat n={repeatClients} label={repeatClients === 1 ? "repeat client" : "repeat clients"} />
-          )}
-          {guide.day_rate_usd_cents ? (
-            <Stat n={`from ${mr(guide.day_rate_usd_cents)}`} label="per day" />
-          ) : null}
-        </dl>
-
-        {guide.voice_intro_url && (
-          <div className="mt-6">
-            <VoiceIntro src={guide.voice_intro_url} name={guide.full_name} />
-          </div>
-        )}
-      </div>
-
-      {/* ── 2. THE JOURNAL WALL ───────────────────────────────────────────
-          Directly under the header, because this is the argument. */}
-      <section id="journals" className="mx-auto mt-12 max-w-6xl scroll-mt-6 px-4">
-        <JournalWall journals={journals} guideName={guide.full_name} guideId={guide.user_id} slug={guide.slug} />
-      </section>
-
-      {/* ── 2b. The gallery ────────────────────────────────────────────── */}
-      <GuideGallery photos={gallery} first={first} />
-
-      <div className="mx-auto max-w-5xl px-4">
-        {/* ── 3. Routes he runs ─────────────────────────────────────────── */}
-        {routeChips.length > 0 && (
-          <section id="routes" className="mt-14 scroll-mt-6">
-            <h2 className="font-display text-2xl text-ink">Routes {first} runs</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {routeChips.map((r: any) => (
-                <Link
-                  key={r.slug}
-                  to={`/routes/${r.slug}`}
-                  prefetch="intent"
-                  className="rounded-pill border border-line bg-card px-3.5 py-1.5 text-sm text-ink hover:border-sage"
-                >
-                  {r.name}
-                  {r.count > 0 && (
-                    <span className="ml-1.5 font-mono text-muted">×{r.count}</span>
-                  )}
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── 4. Bookable trips ─────────────────────────────────────────── */}
-        {offerings.length > 0 && (
-          <section className="mt-14">
-            <h2 className="mb-4 font-display text-2xl text-ink">
-              Book {first}
-            </h2>
-            <div className="grid grid-cols-2 items-stretch gap-4 sm:grid-cols-3">
-              {offerings.map((o: PublicOffering) => (
-                <OfferingCard key={o.id} offering={o} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── The bio, demoted. The journals are the bio now. ───────────── */}
-        {guide.bio && (
-          <section className="mt-14">
-            <h2 className="font-display text-2xl text-ink">In {first}'s words</h2>
-            <Clamp text={guide.bio} />
-            {languages.length > 0 && (
-              <p className="mt-3 text-sm text-muted">
-                Speaks{" "}
-                <span className="text-ink">
-                  {languages.map((l: any) => l.language).join(", ")}
-                </span>
-              </p>
+            {guide.voice_intro_url && (
+              <div className="mt-6">
+                <VoiceIntro src={guide.voice_intro_url} name={guide.full_name} />
+              </div>
             )}
-          </section>
-        )}
+          </header>
 
-        {/* ── 5. Reviews — count stated honestly either way ─────────────── */}
-        <section className="mt-14">
-          <h2 className="font-display text-2xl text-ink">
-            {reviews.length > 0
-              ? `${reviews.length} review${reviews.length === 1 ? "" : "s"}`
-              : "Reviews"}
-          </h2>
-          {reviews.length > 0 ? (
-            <div className="mt-4 space-y-5">
-              {reviews.map((r: any) => (
-                <ReviewBlock
-                  key={r.id}
-                  authorName={r.author_name}
-                  country={r.author_country}
-                  overall={r.overall}
-                  body={r.body}
-                  date={r.published_at}
-                  reply={r.guide_reply}
-                  replyName={first}
-                />
-              ))}
+          {/* ── The rail: everything a decision needs, following the scroll.
+               This is what fills the right column the old page left dead. */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-20 rounded-md border border-line bg-card p-5">
+              {guide.day_rate_usd_cents ? (
+                <p>
+                  <span className="font-mono text-2xl text-ink">{m(guide.day_rate_usd_cents)}</span>
+                  <span className="text-sm text-muted"> per day, {pn.possessive} whole fee</span>
+                </p>
+              ) : (
+                <p className="font-medium text-ink">{guide.full_name}</p>
+              )}
+              <div className="mt-4 space-y-3">
+                {messageForm(
+                  `Message ${first} — free`,
+                  "w-full rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine",
+                )}
+                <Link
+                  to={`/groups/new?guide=${guide.user_id}`}
+                  prefetch="intent"
+                  className="block rounded border border-line px-5 py-2.5 text-center text-sm font-medium text-ink hover:border-sage hover:bg-mist"
+                >
+                  Go with {first} as a group
+                </Link>
+              </div>
+              <dl className="mt-5 space-y-1.5 border-t border-line pt-4 text-sm">
+                {nextWindow && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted">Next free</dt>
+                    <dd className="font-mono text-ink">{nextWindow}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">Open days, next 3 months</dt>
+                  <dd className="font-mono text-ink">{openIn90}</dd>
+                </div>
+                {repeatClients > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted">Clients who came back</dt>
+                    <dd className="font-mono text-ink">{repeatClients}</dd>
+                  </div>
+                )}
+              </dl>
+              <a
+                href="#availability"
+                className="mt-3 inline-block text-sm text-moss underline underline-offset-4 hover:text-pine"
+              >
+                See the calendar ↓
+              </a>
             </div>
-          ) : (
-            <p className="mt-2 max-w-[54ch] text-muted">
-              {guide.treks_completed_platform > 0
-                ? `${guide.treks_completed_platform} treks led — reviews arrive as clients get home. We ask after every single trek, and we publish whatever comes back.`
-                : `${first} is new to Trek. We ask for a review after every trek and publish whatever comes back — his first is still on the trail.`}
-            </p>
-          )}
-        </section>
-
-        {/* ── 6. Ask me anything ────────────────────────────────────────
-             Placed after the reviews on purpose: reviews tell a reader what
-             happened to other people, and the question they have next is
-             about themselves. This is where they get to ask it. */}
-        <div className="mt-14">
-          <QuestionWall
-            guideName={guide.full_name}
-            guideFirstName={first}
-            questions={questions}
-            canAsk={!reader.isThisGuide}
-            askerName={reader.name}
-          />
+          </aside>
         </div>
-
-        {/* ── 7. Verification receipts, collapsed ───────────────────────── */}
-        <section className="mt-10">
-          <details className="group rounded-md border border-line bg-card p-4">
-            <summary className="cursor-pointer font-medium text-ink">
-              {receipts.length > 0
-                ? `Verification receipts (${receipts.length})`
-                : "What we checked"}
-            </summary>
-            <ul className="mt-3 space-y-1.5 text-sm">
-              {receipts.length > 0
-                ? receipts.map((r: any) => (
-                    <li key={r.check_type} className="flex items-baseline justify-between gap-3">
-                      <span className="flex gap-2">
-                        <span className="text-accent">✓</span>
-                        {CHECK_LABELS[r.check_type] ?? r.check_type.replace(/_/g, " ")}
-                      </span>
-                      <span className="whitespace-nowrap font-mono text-xs text-ink-soft">
-                        {fmtDate(r.verified_at)}
-                        {r.expires_at ? ` → ${fmtDate(r.expires_at)}` : ""}
-                      </span>
-                    </li>
-                  ))
-                : checks.map((c: string) => (
-                    <li key={c} className="flex gap-2">
-                      <span className="text-accent">✓</span>
-                      {c}
-                    </li>
-                  ))}
-            </ul>
-            <Link to="/trust" className="mt-3 inline-block text-xs text-primary hover:underline">
-              How Trek verifies guides →
-            </Link>
-          </details>
-        </section>
-
-        {/* ── 7. Porter pledge — every profile that uses porters ─────────── */}
-        {usesPorters && (
-          <Link
-            to="/trust#porters"
-            className="mt-4 flex items-start gap-3 rounded-md border border-accent/30 bg-accent/5 p-4 hover:bg-accent/10"
-          >
-            <PorterIcon />
-            <p className="text-sm text-ink-soft">
-              <span className="font-medium text-ink">Porter-welfare pledge</span> — {first}{" "}
-              guarantees fair pay, weight limits, insurance and proper gear for every porter
-              on his treks. What that means →
-            </p>
-          </Link>
-        )}
-
-        {/* ── 8. Availability ───────────────────────────────────────────── */}
-        <section className="mt-14">
-          <h2 className="mb-4 font-display text-2xl text-ink">Availability</h2>
-          <AvailabilityCalendar openDays={openDays} monthsFrom={monthAnchor} />
-        </section>
       </div>
 
-      {/* Sticky bottom bar — replaces the right rail on every viewport. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur">
+      {/* ── 2. THE BODY — left column carries the story, rail follows ───── */}
+      <div className="mx-auto max-w-6xl px-4">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+          <div className="min-w-0">
+            {/* ── Her words, at editorial scale. The second-best content on
+                 the page after the quote — full width of the column, larger
+                 type, no clamp hiding it. */}
+            {guide.bio && (
+              <section className={brandNew ? "mt-10" : "mt-12"}>
+                <p className="label text-muted">In {first}&rsquo;s words</p>
+                <p className="mt-3 max-w-[58ch] whitespace-pre-line text-[19px] leading-relaxed text-ink">
+                  {guide.bio}
+                </p>
+              </section>
+            )}
+
+            {/* ── The trek(s). One trek gets one dominant card, not a third
+                 of a row — a thin catalogue displayed wide reads as focus,
+                 displayed sparse reads as absence. */}
+            {offerings.length > 0 && (
+              <section className="mt-12">
+                <h2 className="mb-4 font-display text-2xl text-ink">
+                  {offerings.length === 1 ? `${first}\u2019s trek` : `Book ${first}`}
+                </h2>
+                {offerings.length === 1 ? (
+                  <FeatureTrip o={offerings[0]} m={m} />
+                ) : (
+                  <div className="grid grid-cols-2 items-stretch gap-4 sm:grid-cols-3">
+                    {offerings.map((o: PublicOffering) => (
+                      <OfferingCard key={o.id} offering={o} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ── Journals — only when there are journals. The old page put a
+                 full-width empty block here apologising for their absence. */}
+            {journals.length > 0 && (
+              <section id="journals" className="mt-12 scroll-mt-6">
+                <JournalWall
+                  journals={journals}
+                  guideName={guide.full_name}
+                  guideId={guide.user_id}
+                  slug={guide.slug}
+                />
+              </section>
+            )}
+
+            <GuideGallery photos={gallery} first={first} />
+
+            {/* ── Reviews — only when there are reviews. ─────────────────── */}
+            {reviews.length > 0 && (
+              <section className="mt-12">
+                <h2 className="font-display text-2xl text-ink">
+                  {reviews.length} review{reviews.length === 1 ? "" : "s"}
+                </h2>
+                <div className="mt-4 space-y-5">
+                  {reviews.map((r: any) => (
+                    <ReviewBlock
+                      key={r.id}
+                      authorName={r.author_name}
+                      country={r.author_country}
+                      overall={r.overall}
+                      body={r.body}
+                      date={r.published_at}
+                      reply={r.guide_reply}
+                      replyName={first}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* ── Ask me anything — the wall renders only with content; empty
+                 it is a one-line affordance (see QuestionWall). */}
+            {questions.length > 0 && (
+              <div className="mt-12">
+                <QuestionWall
+                  guideName={guide.full_name}
+                  guideFirstName={first}
+                  questions={questions}
+                  canAsk={!reader.isThisGuide}
+                  askerName={reader.name}
+                />
+              </div>
+            )}
+
+            {/* ── One honest line instead of three hollow sections. A new
+                 guide's page used to apologise three separate times — no
+                 journals, no reviews, no questions — at full section size.
+                 Being early is one fact; it is said once, small. */}
+            {brandNew && (
+              <section className="mt-12 rounded-md border border-line bg-card p-5">
+                <p className="text-[15px] text-ink">
+                  {first} is new to bookings on Trek — {pn.possessive} licence and
+                  references are checked, {pn.possessive} first review is still on
+                  the trail. Be {pn.possessive} first trek, first review, or first
+                  question.
+                </p>
+                <div className="mt-3">
+                  <QuestionWall
+                    guideName={guide.full_name}
+                    guideFirstName={first}
+                    questions={questions}
+                    canAsk={!reader.isThisGuide}
+                    askerName={reader.name}
+                  />
+                </div>
+              </section>
+            )}
+
+            {/* ── The quiet strip: real, load-bearing, and small. ────────── */}
+            <section className="mt-12 space-y-4">
+              <details className="group rounded-md border border-line bg-card p-4">
+                <summary className="cursor-pointer text-sm font-medium text-ink">
+                  {receipts.length > 0
+                    ? `Verification receipts (${receipts.length})`
+                    : "What we checked"}
+                </summary>
+                <ul className="mt-3 space-y-1.5 text-sm">
+                  {receipts.length > 0
+                    ? receipts.map((r: any) => (
+                        <li key={r.check_type} className="flex items-baseline justify-between gap-3">
+                          <span className="flex gap-2">
+                            <span className="text-accent">✓</span>
+                            {CHECK_LABELS[r.check_type] ?? r.check_type.replace(/_/g, " ")}
+                          </span>
+                          <span className="whitespace-nowrap font-mono text-xs text-ink-soft">
+                            {fmtDate(r.verified_at)}
+                            {r.expires_at ? ` → ${fmtDate(r.expires_at)}` : ""}
+                          </span>
+                        </li>
+                      ))
+                    : checks.map((c: string) => (
+                        <li key={c} className="flex gap-2">
+                          <span className="text-accent">✓</span>
+                          {c}
+                        </li>
+                      ))}
+                </ul>
+                <Link to="/trust" className="mt-3 inline-block text-xs text-primary hover:underline">
+                  How Trek verifies guides →
+                </Link>
+              </details>
+
+              {usesPorters && (
+                <Link
+                  to="/trust#porters"
+                  className="flex items-start gap-3 rounded-md border border-line bg-card p-4 hover:bg-mist/60"
+                >
+                  <PorterIcon />
+                  <p className="text-sm text-ink-soft">
+                    <span className="font-medium text-ink">Porter-welfare pledge</span> — {first}{" "}
+                    guarantees fair pay, weight limits, insurance and proper gear for every
+                    porter on {pn.possessive} treks. What that means →
+                  </p>
+                </Link>
+              )}
+            </section>
+
+            {/* ── Availability, the full calendar. The rail summarises it. ── */}
+            <section id="availability" className="mt-12 scroll-mt-6">
+              <p className="label text-muted">Availability</p>
+              <div className="mt-3">
+                <AvailabilityCalendar openDays={openDays} monthsFrom={monthAnchor} />
+              </div>
+            </section>
+          </div>
+
+          {/* The rail's column continues so the sticky card above tracks the
+              whole body height. */}
+          <div aria-hidden className="hidden lg:block" />
+        </div>
+      </div>
+
+      {/* Sticky bottom bar — the rail's job, on viewports with no rail. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-2.5">
           <p className="min-w-0 flex-1 text-sm">
             {guide.day_rate_usd_cents ? (
@@ -681,6 +846,67 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
     </main>
+  );
+}
+
+/** "12–18 Oct" — the first stretch of at least `run` consecutive open days. */
+function firstRun(openDays: string[], run: number): string | null {
+  const days = [...openDays].sort();
+  let streak: string[] = [];
+  for (const d of days) {
+    if (streak.length) {
+      const prev = new Date(streak[streak.length - 1] + "T00:00:00Z");
+      prev.setUTCDate(prev.getUTCDate() + 1);
+      if (prev.toISOString().slice(0, 10) !== d) streak = [];
+    }
+    streak.push(d);
+    if (streak.length >= run) {
+      const a = new Date(streak[0] + "T00:00:00Z");
+      const b = new Date(streak[streak.length - 1] + "T00:00:00Z");
+      const mon = (x: Date) => x.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+      return a.getUTCMonth() === b.getUTCMonth()
+        ? `${a.getUTCDate()}–${b.getUTCDate()} ${mon(a)}`
+        : `${a.getUTCDate()} ${mon(a)} – ${b.getUTCDate()} ${mon(b)}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * One trek, shown wide. A single offering in a three-column grid reads as
+ * two empty slots; the same offering at full width reads as the thing this
+ * guide does.
+ */
+function FeatureTrip({ o, m }: { o: PublicOffering; m: (c: number) => string }) {
+  const href = `/${o.kind === "trek" ? "treks" : "experiences"}/${o.slug}`;
+  return (
+    <Link
+      to={href}
+      prefetch="intent"
+      className="group grid overflow-hidden rounded-md border border-line bg-card transition-transform duration-quick ease-out-soft hover:-translate-y-0.5 sm:grid-cols-[minmax(0,42%)_1fr]"
+    >
+      <SmartImage
+        src={o.cover_photo_url ?? ""}
+        alt={o.title}
+        width={900}
+        height={640}
+        cover
+        className="aspect-[3/2] w-full sm:h-full"
+      />
+      <div className="flex flex-col justify-center p-5">
+        <p className="font-display text-2xl leading-snug text-ink">{o.title}</p>
+        {o.summary && (
+          <p className="mt-2 line-clamp-3 text-[15px] text-ink-soft">{o.summary}</p>
+        )}
+        <p className="mt-3 font-mono text-sm text-ink">
+          {o.days} days
+          {o.price_usd_cents ? ` · from ${m(o.price_usd_cents)} per person` : ""}
+        </p>
+        <p className="mt-3 text-sm text-moss underline underline-offset-4 group-hover:text-pine">
+          The whole trip, day by day →
+        </p>
+      </div>
+    </Link>
   );
 }
 
@@ -953,5 +1179,76 @@ function GuideGallery({
       )}
       {lightbox.node}
     </section>
+  );
+}
+
+/** A trust-card number: large, mono, with its label underneath. */
+function BigNum({ n, label }: { n: number | string; label: string }) {
+  return (
+    <div>
+      <dd className="m-0 font-mono text-2xl leading-none text-ink sm:text-3xl">
+        {typeof n === "number" ? n.toLocaleString("en-US") : n}
+      </dd>
+      <dt className="mt-1 text-caption text-muted">{label}</dt>
+    </div>
+  );
+}
+
+/** One visible trust fact. Icon set is deliberately tiny and line-drawn. */
+function FactRow({ icon, children }: { icon: "speech" | "pin" | "shield" | "card" | "aid"; children: React.ReactNode }) {
+  const paths: Record<string, React.ReactNode> = {
+    speech: <path d="M3 4h12v8H8l-3 3v-3H3z" />,
+    pin: (
+      <>
+        <path d="M9 16s5-5.1 5-8.5A5 5 0 0 0 4 7.5C4 10.9 9 16 9 16z" />
+        <circle cx="9" cy="7.5" r="1.6" />
+      </>
+    ),
+    shield: (
+      <>
+        <path d="M9 2l6 2v5c0 4-2.7 6.3-6 7.5C5.7 15.3 3 13 3 9V4z" />
+        <path d="M6.4 9l1.8 1.8L12 7" />
+      </>
+    ),
+    card: (
+      <>
+        <rect x="2.5" y="4.5" width="13" height="9" rx="1" />
+        <path d="M2.5 7.5h13" />
+      </>
+    ),
+    aid: (
+      <>
+        <rect x="3" y="5" width="12" height="9" rx="1.5" />
+        <path d="M9 7.5v4M7 9.5h4M7 5V3.5h4V5" />
+      </>
+    ),
+  };
+  return (
+    <li className="flex items-start gap-2.5 text-sm text-ink-soft">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 18 18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className="mt-0.5 shrink-0 text-moss"
+      >
+        {paths[icon]}
+      </svg>
+      <span>{children}</span>
+    </li>
+  );
+}
+
+/** The stamp mark on a walked route. */
+function StampPeak() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-moss">
+      <path d="M1.5 13L6 5l3 5 2-3 3.5 6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
   );
 }
