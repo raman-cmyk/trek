@@ -47,30 +47,6 @@ export function QuestionWall({
   const shown = showAll ? sorted : sorted.slice(0, initial);
   const hidden = sorted.length - shown.length;
 
-  // An empty wall used to render at full size — a big "Ask X anything"
-  // heading, starter chips, a two-field form — over nothing at all. On the
-  // forty profiles with no questions yet that read as clutter, not as an
-  // invitation. Empty now means one quiet line that opens into the form;
-  // the wall earns its heading with its first answered question.
-  if (sorted.length === 0) {
-    if (!canAsk) return null;
-    return (
-      <section id="ask" className="scroll-mt-20">
-        <details className="group rounded-md border border-line bg-card p-4">
-          <summary className="cursor-pointer text-[15px] text-ink">
-            Have a question for {guideFirstName}?{" "}
-            <span className="text-moss underline underline-offset-4">Ask it here</span>
-            <span className="block text-caption text-muted">
-              The answer is published on this page, in {guideFirstName}&rsquo;s own
-              words, for the next person planning the same trek.
-            </span>
-          </summary>
-          <AskBox guideFirstName={guideFirstName} askerName={askerName} empty />
-        </details>
-      </section>
-    );
-  }
-
   return (
     <section id="ask" className="scroll-mt-20">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -79,33 +55,43 @@ export function QuestionWall({
         <h2 className="font-display text-2xl text-ink sm:text-3xl">
           Ask {guideFirstName} anything
         </h2>
-        <p className="text-sm text-muted">
-          <span className="font-mono text-ink">{sorted.length}</span>{" "}
-          {sorted.length === 1 ? "question" : "questions"} answered
-        </p>
+        {sorted.length > 0 && (
+          <p className="text-sm text-muted">
+            <span className="font-mono text-ink">{sorted.length}</span>{" "}
+            {sorted.length === 1 ? "question" : "questions"} answered
+          </p>
+        )}
       </div>
 
-      <ul className="mt-5 divide-y divide-line border-y border-line">
-        {shown.map((q) => (
-          <li key={q.id} className="py-5">
-            <h3 className="text-[17px] font-medium leading-snug text-ink">{q.body}</h3>
-            <p className="mt-1 text-caption text-muted">{askedLine(q)}</p>
-            {/* The answer first line, unwrapped. This is the paragraph an
-                assistant lifts when somebody asks it the same thing. */}
-            <p className="mt-2.5 whitespace-pre-line text-[15px] leading-relaxed text-ink">
-              {q.answer}
-            </p>
-            <p className="mt-2 text-caption text-muted">
-              — {guideName}
-              {q.helpful_count > 0 && (
-                <span className="ml-2">
-                  <span className="font-mono">{q.helpful_count}</span> found this useful
-                </span>
-              )}
-            </p>
-          </li>
-        ))}
-      </ul>
+      {sorted.length > 0 ? (
+        <ul className="mt-5 divide-y divide-line border-y border-line">
+          {shown.map((q) => (
+            <li key={q.id} className="py-5">
+              <h3 className="text-[17px] font-medium leading-snug text-ink">{q.body}</h3>
+              <p className="mt-1 text-caption text-muted">{askedLine(q)}</p>
+              {/* The answer first line, unwrapped. This is the paragraph an
+                  assistant lifts when somebody asks it the same thing. */}
+              <p className="mt-2.5 whitespace-pre-line text-[15px] leading-relaxed text-ink">
+                {q.answer}
+              </p>
+              <p className="mt-2 text-caption text-muted">
+                — {guideName}
+                {q.helpful_count > 0 && (
+                  <span className="ml-2">
+                    <span className="font-mono">{q.helpful_count}</span> found this useful
+                  </span>
+                )}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
+          Be the first to ask {guideFirstName} something. He answers in his own
+          words and the answer stays on this page, so the next person planning
+          the same trek reads it too.
+        </p>
+      )}
 
       {hidden > 0 && (
         <button
@@ -117,7 +103,9 @@ export function QuestionWall({
         </button>
       )}
 
-      {canAsk && <AskBox guideFirstName={guideFirstName} askerName={askerName} empty={false} />}
+      {canAsk && (
+        <AskBox guideFirstName={guideFirstName} askerName={askerName} empty={sorted.length === 0} />
+      )}
     </section>
   );
 }
@@ -150,8 +138,8 @@ function AskBox({
       <div className="mt-6 rounded-md border border-line bg-mist p-4">
         <p className="text-[15px] text-ink">{sent}</p>
         <p className="mt-1 text-caption text-muted">
-          {guideFirstName} answers between treks, in {guideFirstName}&rsquo;s own
-          words. You will get an email when the answer is live on this page.
+          {guideFirstName} answers on his own phone, usually between treks. You
+          will get an email when he does, and the answer goes on this page.
         </p>
       </div>
     );
