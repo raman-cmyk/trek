@@ -21,6 +21,7 @@ import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
+import { Rail } from "~/components/public/Rail";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Guide not found" }];
@@ -655,20 +656,18 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
             {/* ── The trek(s). One trek gets one dominant card, not a third
                  of a row — a thin catalogue displayed wide reads as focus,
                  displayed sparse reads as absence. */}
+            {/* One rail, whatever the count. Trips at half-width in a grid
+                 truncated their own titles; a rail you thumb card-by-card is
+                 how an app shows a set, and one card on a rail still reads
+                 as focus rather than absence. */}
             {offerings.length > 0 && (
               <section className="mt-12">
-                <h2 className="mb-4 font-display text-2xl text-ink">
-                  {offerings.length === 1 ? `${first}\u2019s trek` : `Book ${first}`}
-                </h2>
-                {offerings.length === 1 ? (
-                  <FeatureTrip o={offerings[0]} m={m} />
-                ) : (
-                  <div className="grid grid-cols-2 items-stretch gap-4 sm:grid-cols-3">
-                    {offerings.map((o: PublicOffering) => (
-                      <OfferingCard key={o.id} offering={o} />
-                    ))}
-                  </div>
-                )}
+                <h2 className="mb-4 font-display text-2xl text-ink">Book {first}</h2>
+                <Rail>
+                  {offerings.map((o: PublicOffering) => (
+                    <OfferingCard key={o.id} offering={o} />
+                  ))}
+                </Rail>
               </section>
             )}
 

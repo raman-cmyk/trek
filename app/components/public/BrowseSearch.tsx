@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Form } from "react-router";
+import { cn } from "~/lib/cn";
 
 /**
  * The browse search bar: free text + a date range, on one row.
@@ -32,6 +34,11 @@ export function BrowseSearch({
   /** Extra selects rendered on the row below the search field. */
   children?: React.ReactNode;
 }) {
+  // On a phone the search bar is one row: input + Search. Dates and the
+  // filter selects fold behind one chip — a form stack taller than the first
+  // guide card is what made browse read as a page instead of an app. Starts
+  // open when a filter is already applied, so state is never hidden.
+  const [open, setOpen] = useState(Boolean(from || to));
   return (
     <Form method="get" className="mt-5">
       {Object.entries(hidden ?? {}).map(([k, v]) =>
@@ -64,7 +71,12 @@ export function BrowseSearch({
         {/* The label wraps onto its own line on a phone — two bare date fields
             with no caption are the sort of thing only the person who built it
             can read. */}
-        <div className="flex flex-wrap items-center gap-x-1.5 border-line px-2 sm:border-l">
+        <div
+          className={cn(
+            "flex-wrap items-center gap-x-1.5 border-line px-2 sm:flex sm:border-l",
+            open ? "flex" : "hidden",
+          )}
+        >
           <span className="shrink-0 basis-full text-caption text-muted sm:basis-auto">
             {dateLabel}
           </span>
@@ -89,12 +101,26 @@ export function BrowseSearch({
           />
         </div>
 
-        <button className="shrink-0 rounded bg-pine px-5 py-2.5 text-sm font-medium text-paper hover:bg-moss">
-          Search
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="flex-1 rounded border border-line px-4 py-2.5 text-sm text-ink active:bg-mist sm:hidden"
+          >
+            {open ? "Fewer options" : "Dates & filters"}
+          </button>
+          <button className="flex-1 shrink-0 rounded bg-pine px-5 py-2.5 text-sm font-medium text-paper hover:bg-moss sm:flex-none">
+            Search
+          </button>
+        </div>
       </div>
 
-      {children && <div className="mt-2 flex flex-wrap gap-2">{children}</div>}
+      {children && (
+        <div className={cn("mt-2 flex-wrap gap-2 sm:flex", open ? "flex" : "hidden")}>
+          {children}
+        </div>
+      )}
     </Form>
   );
 }

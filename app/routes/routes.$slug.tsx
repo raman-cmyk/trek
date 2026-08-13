@@ -28,6 +28,7 @@ import { offeringsRating } from "~/lib/ratings.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { CLIMB_ROUTES } from "~/lib/climb";
+import { Rail } from "~/components/public/Rail";
 import { ClimbRoute } from "~/components/public/ClimbRoute";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -475,10 +476,12 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
                 All journals on this route →
               </Link>
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              {journals.slice(0, 3).map((j: PublicJournal) => (
-                <JournalCard key={j.id} journal={j} showGuide />
-              ))}
+            <div className="mt-4">
+              <Rail itemClassName="w-[80vw] max-w-[320px] sm:w-[300px]">
+                {journals.slice(0, 6).map((j: PublicJournal) => (
+                  <JournalCard key={j.id} journal={j} showGuide />
+                ))}
+              </Rail>
             </div>
           </section>
         )}
@@ -487,11 +490,11 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
         {offerings.length > 0 && (
           <section className="mt-12">
             <h2 className="mb-4 font-display text-2xl text-ink">Book this route</h2>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Rail>
               {offerings.map((o: PublicOffering) => (
                 <OfferingCard key={o.id} offering={o} />
               ))}
-            </div>
+            </Rail>
           </section>
         )}
 

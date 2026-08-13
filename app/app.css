@@ -197,6 +197,32 @@ h3,
 .wt-light { font-weight: 300; }
 .wt-heavy { font-weight: 800; }
 
+/* ── Native feel (§phone) ──────────────────────────────────────────────
+   The small things that separate "website on a phone" from "app": no grey
+   tap flash, no 350ms double-tap-zoom delay on controls, and horizontal
+   rails that snap card-by-card with the scrollbar hidden — the scroll
+   itself is the affordance. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+a, button, input, select, textarea, label, summary {
+  touch-action: manipulation;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.snap-rail {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.snap-rail > * {
+  scroll-snap-align: start;
+}
+
 /* The mono rule (§3): every number describing the mountain or the money is
    JetBrains Mono, hard-aligned. Apply `font-mono` to numeric spans; this makes
    those figures tabular so columns line up like an instrument readout. */
