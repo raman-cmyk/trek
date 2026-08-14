@@ -35,6 +35,9 @@ export interface PublicOffering {
   guide_day_rate_usd_cents: number | null;
   route_slug?: string | null;
   route_name?: string | null;
+  /** Selected only where they are displayed — the compare table. */
+  included?: string[] | null;
+  meeting_point?: string | null;
 }
 
 const KIND_LABEL: Record<string, string> = {

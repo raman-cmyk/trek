@@ -11,7 +11,9 @@ import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
 import { tierChecks } from "~/lib/tiers";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
-import { OfferingCard, type PublicOffering } from "~/components/public/cards";
+import { offeringFromUsdCents, type PublicOffering } from "~/components/public/cards";
+import { CompareOfferings } from "~/components/public/CompareOfferings";
+import { RatingSummary } from "~/components/public/RatingSummary";
 import { JournalCard } from "~/components/public/JournalCard";
 import { OnlyWithMe, ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
 import { VoiceIntro } from "~/components/public/VoiceIntro";
@@ -21,7 +23,6 @@ import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
-import { Rail } from "~/components/public/Rail";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Guide not found" }];
@@ -136,7 +137,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     client
       .from("public_offerings")
       .select(
-        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
+        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
       )
       .eq("guide_id", guide.user_id),
     client
@@ -690,16 +691,14 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                  truncated their own titles; a rail you thumb card-by-card is
                  how an app shows a set, and one card on a rail still reads
                  as focus rather than absence. */}
-            {offerings.length > 0 && (
+            {offerings.length > 1 ? (
+              <CompareOfferings offerings={offerings} first={first} />
+            ) : offerings.length === 1 ? (
               <section className="mt-12">
                 <h2 className="mb-4 font-display text-2xl text-ink">Book {first}</h2>
-                <Rail>
-                  {offerings.map((o: PublicOffering) => (
-                    <OfferingCard key={o.id} offering={o} />
-                  ))}
-                </Rail>
+                <FeatureTrip o={offerings[0]} />
               </section>
-            )}
+            ) : null}
 
             {/* ── Journals — only when there are journals. The old page put a
                  full-width empty block here apologising for their absence. */}
@@ -720,9 +719,10 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
             {reviews.length > 0 && (
               <section className="mt-12">
                 <h2 className="font-display text-2xl text-ink">
-                  {reviews.length} review{reviews.length === 1 ? "" : "s"}
+                  What trekkers said about {first}
                 </h2>
-                <div className="mt-4 space-y-5">
+                <RatingSummary reviews={reviews} />
+                <div className="mt-6 space-y-5">
                   {reviews.map((r: any) => (
                     <ReviewBlock
                       key={r.id}
@@ -906,7 +906,11 @@ function firstRun(openDays: string[], run: number): string | null {
  * two empty slots; the same offering at full width reads as the thing this
  * guide does.
  */
-function FeatureTrip({ o, m }: { o: PublicOffering; m: (c: number) => string }) {
+function FeatureTrip({ o }: { o: PublicOffering }) {
+  // mr, not m: a "from" price rounds, the way it does on every card and in
+  // the compare table. Exact cents here read as a quote, which it is not.
+  const { mr } = useMoney();
+  const from = offeringFromUsdCents(o);
   const href = `/${o.kind === "trek" ? "treks" : "experiences"}/${o.slug}`;
   return (
     <Link
@@ -927,9 +931,12 @@ function FeatureTrip({ o, m }: { o: PublicOffering; m: (c: number) => string }) 
         {o.summary && (
           <p className="mt-2 line-clamp-3 text-[15px] text-ink-soft">{o.summary}</p>
         )}
+        {/* A trek priced by breakdown carries no price_usd_cents, so reading
+            that column directly printed the days and silently dropped the
+            price. Same helper the cards and the compare table use. */}
         <p className="mt-3 font-mono text-sm text-ink">
           {o.days} days
-          {o.price_usd_cents ? ` · from ${m(o.price_usd_cents)} per person` : ""}
+          {from ? ` · from ${mr(from)} per person` : ""}
         </p>
         <p className="mt-3 text-sm text-moss underline underline-offset-4 group-hover:text-pine">
           The whole trip, day by day →
