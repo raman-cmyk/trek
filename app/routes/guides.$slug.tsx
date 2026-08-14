@@ -48,6 +48,22 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         languages: (data.languages ?? []).map((l: any) => l.language),
         routes: (data.routeChips ?? []).map((r: any) => r.name),
         dayRateUsd: g.day_rate_usd_cents ? g.day_rate_usd_cents / 100 : null,
+        // The regions this guide actually works, from the routes they run.
+        areas: [
+          ...new Set(
+            (data.routeChips ?? [])
+              .map((r: any) => r.region)
+              .filter(Boolean),
+          ),
+        ] as string[],
+        // Individual reviews alongside the aggregate — Google shows a review
+        // snippet only when both are present.
+        reviews: (data.reviews ?? []).map((r: any) => ({
+          author: r.author_name,
+          rating: r.overall,
+          body: r.body,
+          date: r.published_at,
+        })),
       }),
     ),
     jsonLd(
@@ -199,22 +215,36 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   // Routes he actually runs, with how many times he has led each — counted
   // from journals (real trips) and topped up from what he currently offers.
-  const routeCounts = new Map<string, { slug: string; name: string; count: number }>();
+  const routeCounts = new Map<
+    string,
+    { slug: string; name: string; region: string | null; count: number }
+  >();
   for (const j of js) {
     if (!j.route_slug || !j.route_name) continue;
     const cur = routeCounts.get(j.route_slug);
     if (cur) cur.count += 1;
-    else routeCounts.set(j.route_slug, { slug: j.route_slug, name: j.route_name, count: 1 });
+    else
+      routeCounts.set(j.route_slug, {
+        slug: j.route_slug,
+        name: j.route_name,
+        region: (j as any).route_region ?? null,
+        count: 1,
+      });
   }
   const { data: offeredRoutes } = await client
     .from("public_offerings")
-    .select("route_id, routes:routes(slug, name)")
+    .select("route_id, routes:routes(slug, name, region)")
     .eq("guide_id", guide.user_id)
     .not("route_id", "is", null);
   for (const o of (offeredRoutes ?? []) as any[]) {
     const r = o.routes;
     if (r?.slug && !routeCounts.has(r.slug)) {
-      routeCounts.set(r.slug, { slug: r.slug, name: r.name, count: 0 });
+      routeCounts.set(r.slug, {
+        slug: r.slug,
+        name: r.name,
+        region: r.region ?? null,
+        count: 0,
+      });
     }
   }
 

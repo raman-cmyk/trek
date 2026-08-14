@@ -55,6 +55,22 @@ export function jsonLd(obj: unknown) {
 // ---- JSON-LD builders --------------------------------------------------------
 
 /**
+ * An `image` in JSON-LD has to be a fully qualified URL — a validator that
+ * reads the graph out of context has no page to resolve "/img/x.jpg" against,
+ * and Google drops the rich result rather than guessing. Every builder below
+ * already receives an absolute canonical `url` for its own node, so that is
+ * the origin we resolve against.
+ */
+function absImage(image: string | null | undefined, base: string): string | undefined {
+  if (!image) return undefined;
+  try {
+    return new URL(image, base).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The publisher, on every page.
  *
  * An agent asked "who should I book a trekking guide in Nepal through" is
@@ -112,6 +128,16 @@ export function personLd(g: {
   routes?: string[];
   /** Day rate in USD dollars. */
   dayRateUsd?: number | null;
+  /** Regions this guide works — areaServed. */
+  areas?: string[];
+  /** Published reviews. Google shows a Review snippet only alongside the
+      aggregate, and only when individual reviews are present. */
+  reviews?: Array<{
+    author: string;
+    rating: number;
+    body?: string | null;
+    date?: string | null;
+  }>;
 }) {
   const node: Record<string, unknown> = {
     "@context": "https://schema.org",
@@ -119,7 +145,7 @@ export function personLd(g: {
     name: g.name,
     url: g.url,
     jobTitle: "Trekking guide",
-    ...(g.image ? { image: g.image } : {}),
+    ...(absImage(g.image, g.url) ? { image: absImage(g.image, g.url) } : {}),
     ...(g.district ? { homeLocation: g.district } : {}),
     ...(g.bio ? { description: g.bio } : {}),
     ...(g.languages?.length ? { knowsLanguage: g.languages } : {}),
@@ -146,14 +172,70 @@ export function personLd(g: {
       : {}),
     worksFor: { "@type": "Organization", name: "Trek", url: new URL(g.url).origin },
   };
+  // Where they actually work. Nepal always; the district and any route
+  // regions narrow it, which is what "a guide in the Khumbu" resolves against.
+  const areas = [...new Set([...(g.areas ?? []), g.district].filter(Boolean))];
+  node.areaServed = [
+    { "@type": "Country", name: "Nepal" },
+    ...areas.map((a) => ({ "@type": "Place", name: a })),
+  ];
   if (g.rating && g.rating.count > 0) {
     node.aggregateRating = {
       "@type": "AggregateRating",
       ratingValue: g.rating.value,
       reviewCount: g.rating.count,
+      bestRating: 5,
+      worstRating: 1,
     };
   }
+  // The reviews themselves. itemReviewed is omitted on purpose: these are
+  // nested inside the Person they review, which schema.org resolves without
+  // it, and repeating the subject invites a circular node.
+  if (g.reviews?.length) {
+    node.review = g.reviews.slice(0, 20).map((r) => ({
+      "@type": "Review",
+      author: { "@type": "Person", name: r.author },
+      reviewRating: {
+        "@type": "Rating",
+        ratingValue: r.rating,
+        bestRating: 5,
+        worstRating: 1,
+      },
+      ...(r.body ? { reviewBody: r.body } : {}),
+      ...(r.date ? { datePublished: r.date.slice(0, 10) } : {}),
+    }));
+  }
   return node;
+}
+
+/**
+ * The site itself, with its search box.
+ *
+ * WebSite + SearchAction is what earns a sitelinks searchbox in Google — a
+ * second search field under the result that queries us directly. It is also
+ * how an agent learns the shape of a query URL on this site rather than
+ * guessing one.
+ */
+export function websiteLd(origin: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${origin}/#website`,
+    url: origin,
+    name: "Trek",
+    description:
+      "Book a named, licensed Nepali trekking guide directly. Every guide checked, every price itemised.",
+    publisher: { "@id": `${origin}/#organization` },
+    inLanguage: "en",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${origin}/experiences?q={search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
 }
 
 export function productLd(o: {
@@ -170,7 +252,7 @@ export function productLd(o: {
     "@type": "Product",
     name: o.name,
     description: o.description,
-    ...(o.image ? { image: o.image } : {}),
+    ...(absImage(o.image, o.url) ? { image: absImage(o.image, o.url) } : {}),
     brand: { "@type": "Person", name: o.guideName },
     offers: {
       "@type": "Offer",
@@ -215,6 +297,8 @@ export function touristTripLd(t: {
   rating?: { value: number; count: number } | null;
   /** Day stops, in order — the itinerary as places, not prose. */
   stops?: Array<{ day: number; place: string; altitude_m?: number | null }>;
+  /** The guide who runs it — a Person provider, not the platform. */
+  provider?: { name: string; url: string } | null;
   origin?: string;
 }) {
   const node: Record<string, unknown> = {
@@ -223,7 +307,7 @@ export function touristTripLd(t: {
     name: t.name,
     url: t.url,
     description: t.description,
-    ...(t.image ? { image: t.image } : {}),
+    ...(absImage(t.image, t.url) ? { image: absImage(t.image, t.url) } : {}),
   };
   if (t.stops?.length) {
     node.itinerary = {
@@ -276,6 +360,16 @@ export function touristTripLd(t: {
       ratingValue: t.rating.value,
       reviewCount: t.rating.count,
       bestRating: 5,
+      worstRating: 1,
+    };
+  }
+  // A named human provides this trip, not an agency. That is the whole
+  // product thesis, and it belongs in the graph as a Person.
+  if (t.provider) {
+    node.provider = {
+      "@type": "Person",
+      name: t.provider.name,
+      url: t.provider.url,
     };
   }
   if (t.region) node.touristType = "Trekkers";

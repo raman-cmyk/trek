@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import type { Route } from "./+types/home";
 import { copy } from "~/lib/copy";
-import { pageMeta, absoluteUrl } from "~/lib/seo";
+import { pageMeta, absoluteUrl, jsonLd, websiteLd } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
 import { guideRatings } from "~/lib/ratings.server";
@@ -28,11 +28,19 @@ import { JournalCard } from "~/components/public/JournalCard";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
-  return pageMeta({
-    title: "Trek \u2014 know who\u2019s walking with you",
-    description: copy.brand.tagline,
-    canonical: data?.canonical ?? "",
-  });
+  const canonical = data?.canonical ?? "";
+  const tags = [
+    ...pageMeta({
+      title: "Trek \u2014 know who\u2019s walking with you",
+      description: copy.brand.tagline,
+      canonical,
+    }),
+  ];
+  // WebSite + SearchAction: the sitelinks searchbox, and how an agent learns
+  // our query URL instead of guessing one. Only ever on the homepage —
+  // Google reads it from the site root.
+  if (canonical) tags.push(jsonLd(websiteLd(new URL(canonical).origin)));
+  return tags;
 }
 
 type HomeGuide = PublicGuide & {

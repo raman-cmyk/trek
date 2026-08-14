@@ -63,6 +63,11 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
           place: s.place,
           altitude_m: s.altitude_m,
         })),
+        // A named human runs this trip, not an agency — the guide who has
+        // written this route up most is the one the graph names.
+        provider: data.guides?.[0]
+          ? { name: data.guides[0].name, url: `${origin}/guides/${data.guides[0].slug}` }
+          : null,
         origin,
       }),
     ),
