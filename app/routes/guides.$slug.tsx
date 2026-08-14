@@ -11,14 +11,12 @@ import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
 import { tierChecks } from "~/lib/tiers";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
-import { offeringFromUsdCents, type PublicOffering } from "~/components/public/cards";
-import { CompareOfferings } from "~/components/public/CompareOfferings";
+import { OfferingCard, offeringFromUsdCents, type PublicOffering } from "~/components/public/cards";
 import { RatingSummary } from "~/components/public/RatingSummary";
-import { JournalCard } from "~/components/public/JournalCard";
 import { OnlyWithMe, ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
 import { VoiceIntro } from "~/components/public/VoiceIntro";
 import { SmartImage } from "~/components/SmartImage";
-import { JOURNAL_COLS, journalMonth, type PublicJournal } from "~/lib/journals";
+import { JOURNAL_COLS, journalMonth, journalStatLine, type PublicJournal } from "~/lib/journals";
 import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
@@ -426,8 +424,15 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   const { m, mr } = useMoney();
   const first = guide.full_name.split(" ")[0];
   const pn = pronounsFor(guide.gender);
-  const portrait =
-    photos.find((p: any) => p.kind === "headshot")?.url ?? guide.avatar_url ?? "";
+  // Every photograph of the guide themselves, headshot first. Most guides
+  // have uploaded exactly one so far; the card handles one and handles six.
+  const portraits: Array<{ url: string; alt?: string }> = [];
+  for (const p of photos as any[]) {
+    if (p.kind !== "headshot" && p.kind !== "portrait") continue;
+    if (!p.url || portraits.some((q) => q.url === p.url)) continue;
+    portraits.push({ url: p.url, alt: p.alt_text ?? "" });
+  }
+  if (!portraits.length && guide.avatar_url) portraits.push({ url: guide.avatar_url });
   const checks = tierChecks(guide.tier);
 
   // What this guide actually has. The template scales to it: a guide with one
@@ -469,9 +474,6 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                 <p className="max-w-[24ch] font-display text-[28px] leading-[1.15] text-ink sm:text-4xl">
                   &ldquo;{quote}&rdquo;
                 </p>
-                <p className="mt-2 text-sm text-muted">
-                  — {first}&rsquo;s words, printed as written
-                </p>
               </>
             ) : (
               <p className="max-w-[24ch] font-display text-[28px] leading-[1.15] text-ink sm:text-4xl">
@@ -482,46 +484,56 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
             {/* ── The trust card: the Superhost moment. Portrait, name, and
                  the numbers that prove {first} is real — large, mono, in one
                  bordered card instead of scattered small beneath a header. */}
-            <div className="mt-6 rounded-md border border-line bg-card p-4 sm:p-5">
-              <div className="flex items-center gap-4">
-                <SmartImage
-                  src={portrait}
-                  alt={`${first}, trekking guide in ${guide.home_district ?? "Nepal"}`}
-                  width={200}
-                  height={200}
-                  eager
-                  cover
-                  className="h-20 w-20 shrink-0 rounded-md sm:h-24 sm:w-24"
+            <div className="mt-6 overflow-hidden rounded-md border border-line bg-card">
+              {/* The portrait is the point of a guide-first marketplace, so it
+                  is a photograph at photograph size rather than an avatar
+                  beside a name. Portrait and identity sit side by side above
+                  the wide breakpoint and stack under it. */}
+              <div className="grid sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                <GuidePortrait
+                  photos={portraits}
+                  first={first}
+                  district={guide.home_district}
                 />
-                <div className="min-w-0">
+                <div className="flex flex-col justify-center p-4 sm:p-5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="font-display text-2xl text-ink">{first}</h1>
+                    <h1 className="font-display text-3xl text-ink">{first}</h1>
                     <TierBadge tier={guide.tier} />
                   </div>
                   <p className="mt-0.5 text-sm text-ink-soft">
                     Trekking guide · {guide.home_district}, Nepal
                   </p>
+                  {quote && (
+                    <p className="mt-1 text-caption text-muted">
+                      The line above is {pn.possessive} own, printed as written.
+                    </p>
+                  )}
+                  {/* Two columns, not four: at four these numbers sat in a thin
+                      strip and read as a stats bar. Two gives each one room to
+                      be a fact. */}
+                  <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-4">
+                    {guide.years_experience ? (
+                      <BigNum n={guide.years_experience} label="years guiding" />
+                    ) : null}
+                    {treksLed > 0 && (
+                      <BigNum n={treksLed} label={treksLed === 1 ? "trek led" : "treks led"} />
+                    )}
+                    {rating && (
+                      <BigNum n={rating.value.toFixed(1)} label={`rating (${rating.count})`} />
+                    )}
+                    {guide.median_response_mins != null && (
+                      <BigNum
+                        n={
+                          guide.median_response_mins >= 60
+                            ? `~${Math.round(guide.median_response_mins / 60)} hr`
+                            : `~${guide.median_response_mins} min`
+                        }
+                        label="responds in"
+                      />
+                    )}
+                  </dl>
                 </div>
               </div>
-              <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
-                {guide.years_experience ? (
-                  <BigNum n={guide.years_experience} label="years guiding" />
-                ) : null}
-                {treksLed > 0 && <BigNum n={treksLed} label={treksLed === 1 ? "trek led" : "treks led"} />}
-                {rating && (
-                  <BigNum n={rating.value.toFixed(1)} label={`rating (${rating.count})`} />
-                )}
-                {guide.median_response_mins != null && (
-                  <BigNum
-                    n={
-                      guide.median_response_mins >= 60
-                        ? `~${Math.round(guide.median_response_mins / 60)} h`
-                        : `~${guide.median_response_mins} m`
-                    }
-                    label="responds in"
-                  />
-                )}
-              </dl>
             </div>
 
             {/* ── Fact rows: trust facts in the open, not behind a
@@ -691,14 +703,21 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                  truncated their own titles; a rail you thumb card-by-card is
                  how an app shows a set, and one card on a rail still reads
                  as focus rather than absence. */}
-            {offerings.length > 1 ? (
-              <CompareOfferings offerings={offerings} first={first} />
-            ) : offerings.length === 1 ? (
-              <section className="mt-12">
-                <h2 className="mb-4 font-display text-2xl text-ink">Book {first}</h2>
-                <FeatureTrip o={offerings[0]} />
+            {offerings.length > 0 && (
+              <section className="mt-14">
+                <SectionHead
+                  title={`Book ${first}`}
+                  meta={`${offerings.length} ${offerings.length === 1 ? "trip" : "trips"} he runs`}
+                />
+                {offerings.length === 1 ? (
+                  <div className="mt-4">
+                    <FeatureTrip o={offerings[0]} />
+                  </div>
+                ) : (
+                  <OfferingGrid offerings={offerings} />
+                )}
               </section>
-            ) : null}
+            )}
 
             {/* ── Journals — only when there are journals. The old page put a
                  full-width empty block here apologising for their absence. */}
@@ -717,10 +736,11 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 
             {/* ── Reviews — only when there are reviews. ─────────────────── */}
             {reviews.length > 0 && (
-              <section className="mt-12">
-                <h2 className="font-display text-2xl text-ink">
-                  What trekkers said about {first}
-                </h2>
+              <section className="mt-14">
+                <SectionHead
+                  title={`What trekkers said about ${first}`}
+                  meta={`${reviews.length} review${reviews.length === 1 ? "" : "s"}`}
+                />
                 <RatingSummary reviews={reviews} />
                 <div className="mt-6 space-y-5">
                   {reviews.map((r: any) => (
@@ -906,6 +926,131 @@ function firstRun(openDays: string[], run: number): string | null {
  * two empty slots; the same offering at full width reads as the thing this
  * guide does.
  */
+/**
+ * One heading treatment for the whole page: the title at display size with a
+ * small line of fact set on its baseline at the right. Every section used its
+ * own size and its own alignment before, which is what made the page read as
+ * a stack of unrelated blocks.
+ */
+/**
+ * The guide, at photograph size.
+ *
+ * An 80px avatar beside a name is how a comment thread shows a person. This
+ * page asks a stranger in Berlin to hand money to this specific human, so the
+ * photograph is the argument and gets the room. Extra frames, where a guide
+ * has uploaded them, sit under it as thumbnails and swap the main image;
+ * clicking the main image opens the full viewer.
+ */
+function GuidePortrait({
+  photos,
+  first,
+  district,
+}: {
+  photos: Array<{ url: string; alt?: string }>;
+  first: string;
+  district: string | null;
+}) {
+  const [i, setI] = useState(0);
+  const lightbox = useLightbox(photos.map((p) => ({ ...p, dayTitle: p.alt })));
+  if (!photos.length) return null;
+  const current = photos[Math.min(i, photos.length - 1)];
+  const alt = current.alt || `${first}, trekking guide in ${district ?? "Nepal"}`;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => lightbox.open(Math.min(i, photos.length - 1))}
+        className="group block w-full cursor-zoom-in"
+        aria-label={`See ${first}'s photograph larger`}
+      >
+        <SmartImage
+          src={current.url}
+          alt={alt}
+          width={520}
+          height={640}
+          eager
+          cover
+          // 4:3 on a phone, where a 4:5 frame pushed the name and the numbers
+          // off the first screen; the intrinsic portrait ratio takes over
+          // beside them on wider viewports.
+          className="aspect-[4/3] w-full sm:aspect-auto sm:h-full sm:min-h-[280px]"
+        />
+      </button>
+
+      {photos.length > 1 && (
+        <div className="absolute inset-x-0 bottom-0 flex gap-1.5 bg-gradient-to-t from-ink/55 to-transparent p-2">
+          {photos.map((p, n) => (
+            <button
+              key={p.url}
+              type="button"
+              onClick={() => setI(n)}
+              aria-label={`Photograph ${n + 1} of ${photos.length}`}
+              aria-current={n === i}
+              className={cn(
+                "size-10 overflow-hidden rounded-sm ring-2 transition",
+                n === i ? "ring-paper" : "ring-transparent hover:ring-paper/60",
+              )}
+            >
+              <SmartImage src={p.url} alt="" width={80} height={80} cover className="h-full w-full" />
+            </button>
+          ))}
+        </div>
+      )}
+      {lightbox.node}
+    </div>
+  );
+}
+
+function SectionHead({
+  title,
+  meta,
+  action,
+}: {
+  title: React.ReactNode;
+  meta?: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h2 className="font-display text-3xl text-ink">{title}</h2>
+      {action ?? (meta ? <p className="font-mono text-caption text-muted">{meta}</p> : null)}
+    </div>
+  );
+}
+
+/**
+ * The trips, laid out the way the homepage lays them out — a card grid that
+ * takes any number of them, with the tail behind a button.
+ *
+ * A comparison table was the wrong instinct here: it holds three trips and
+ * falls apart at six, and a guide's trips are not tiers of one product to be
+ * read across a row. Cards scale, and they are already the shape a reader
+ * has learned everywhere else on the site.
+ */
+function OfferingGrid({ offerings }: { offerings: PublicOffering[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? offerings : offerings.slice(0, 6);
+  return (
+    <>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {shown.map((o) => (
+          <OfferingCard key={o.id} offering={o} />
+        ))}
+      </div>
+      {!showAll && offerings.length > shown.length && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="mt-5 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink transition-colors duration-instant hover:border-sage hover:bg-mist"
+        >
+          Show the other <span className="font-mono">{offerings.length - shown.length}</span>
+        </button>
+      )}
+    </>
+  );
+}
+
 function FeatureTrip({ o }: { o: PublicOffering }) {
   // mr, not m: a "from" price rounds, the way it does on every card and in
   // the compare table. Exact cents here read as a quote, which it is not.
@@ -1030,13 +1175,54 @@ function JournalWall({
         </div>
       )}
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {shown.map((j, i) => (
-          <div key={j.id} className={i === 0 ? "sm:col-span-2 lg:row-span-2" : ""}>
-            <JournalCard journal={j} size={i === 0 ? "lead" : "normal"} />
-          </div>
+      {/* A blog index, not a card wall: these are dated pieces of writing
+          about particular trips, and the shape a reader already knows for
+          that is a list of entries you click into. It also survives one
+          journal, which a grid did not — a single card in a three-column
+          grid reads as a gap where two more should be. */}
+      <ul className="mt-6 divide-y divide-line border-y border-line">
+        {shown.map((j) => (
+          <li key={j.id}>
+            <Link
+              to={`/journals/${j.slug}`}
+              prefetch="intent"
+              className="group grid gap-4 py-5 sm:grid-cols-[200px_minmax(0,1fr)]"
+            >
+              <SmartImage
+                src={j.cover_photo_url ?? ""}
+                alt={j.title}
+                width={400}
+                height={280}
+                cover
+                className="aspect-[3/2] w-full rounded-md"
+              />
+              <div className="min-w-0">
+                <p className="font-mono text-caption text-muted">
+                  {journalStatLine(j)}
+                </p>
+                <h3 className="mt-1 font-display text-xl leading-snug text-ink group-hover:text-moss">
+                  {j.title}
+                </h3>
+                {j.guide_note && (
+                  <p className="mt-1.5 line-clamp-2 text-[15px] text-ink-soft">
+                    {j.guide_note}
+                  </p>
+                )}
+                <p className="mt-2 flex items-center gap-3 text-sm text-moss">
+                  <span className="underline-offset-4 group-hover:underline">
+                    Read the days
+                  </span>
+                  {(j.comment_count ?? 0) > 0 && (
+                    <span className="font-mono text-caption text-muted">
+                      {j.comment_count} comment{j.comment_count === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </Link>
+          </li>
         ))}
-      </div>
+      </ul>
       {shown.length === 0 && (
         <p className="mt-6 text-muted">Nothing on that route in that season yet.</p>
       )}
@@ -1168,27 +1354,24 @@ function GuideGallery({
   return (
     <section id="gallery" className="mx-auto mt-14 max-w-6xl scroll-mt-6 px-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-2xl text-ink">{first}&rsquo;s photographs</h2>
+        <h2 className="font-display text-3xl text-ink">{first}&rsquo;s photographs</h2>
         <p className="font-mono text-caption text-muted">
           {photos.length} from treks he led
         </p>
       </div>
 
-      {/* grid-flow-dense: the wide and tall tiles do not tessellate on their
-          own, and without back-filling the row leaves holes that read as
-          missing photographs rather than as a layout. */}
-      <ul className="mt-4 grid auto-rows-[9rem] grid-flow-dense grid-cols-2 gap-2 sm:auto-rows-[11rem] sm:grid-cols-4 sm:gap-3">
+      {/* One tile size, one rhythm. The masonry that ran here mixed wide and
+          tall spans and back-filled the gaps, which meant the order of the
+          photographs shuffled and any row that could not tessellate left a
+          hole. An even grid is what "organised" looks like, and the frames
+          are large enough that nothing reads as a thumbnail. */}
+      <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
         {shown.map((p, i) => (
-          <li
-            key={p.url + i}
-            // Every fourth frame takes two columns. Regular enough to be a
-            // rhythm, irregular enough not to be a grid of thumbnails.
-            className={cn(i % 7 === 0 && "col-span-2", i % 7 === 3 && "row-span-2")}
-          >
+          <li key={p.url + i}>
             <button
               type="button"
               onClick={() => lightbox.open(i)}
-              className="group block h-full w-full overflow-hidden rounded-sm bg-mist"
+              className="group block w-full overflow-hidden rounded-sm bg-mist"
               aria-label={p.caption ? `Open: ${p.caption}` : "Open photo"}
             >
               <SmartImage
@@ -1197,7 +1380,7 @@ function GuideGallery({
                 width={800}
                 height={600}
                 cover
-                className="h-full w-full transition-transform duration-slow ease-out-soft group-hover:scale-[1.03]"
+                className="aspect-[4/3] w-full transition-transform duration-slow ease-out-soft group-hover:scale-[1.03]"
               />
             </button>
           </li>
