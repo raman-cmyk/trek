@@ -1,8 +1,19 @@
 import { useState } from "react";
 import { Form, Link } from "react-router";
 import type { Route } from "./+types/guides.$slug";
-import { pageMeta, personLd, breadcrumbLd, faqLd, jsonLd, absoluteUrl } from "~/lib/seo";
-import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
+import {
+  pageMeta,
+  personLd,
+  breadcrumbLd,
+  faqLd,
+  jsonLd,
+  absoluteUrl,
+} from "~/lib/seo";
+import {
+  createAdminClient,
+  createPublicClient,
+  getEnv,
+} from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 import { QuestionWall } from "~/components/public/QuestionWall";
@@ -11,12 +22,27 @@ import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
 import { tierChecks } from "~/lib/tiers";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
-import { OfferingCard, offeringFromUsdCents, type PublicOffering } from "~/components/public/cards";
+import {
+  OfferingCard,
+  offeringFromUsdCents,
+  type PublicOffering,
+} from "~/components/public/cards";
 import { RatingSummary } from "~/components/public/RatingSummary";
-import { OnlyWithMe, ReviewBlock, ResponseChip, Stars, TierBadge } from "~/components/public/bits";
+import {
+  OnlyWithMe,
+  ReviewBlock,
+  ResponseChip,
+  Stars,
+  TierBadge,
+} from "~/components/public/bits";
 import { VoiceIntro } from "~/components/public/VoiceIntro";
 import { SmartImage } from "~/components/SmartImage";
-import { JOURNAL_COLS, journalMonth, journalStatLine, type PublicJournal } from "~/lib/journals";
+import {
+  JOURNAL_COLS,
+  journalMonth,
+  journalStatLine,
+  type PublicJournal,
+} from "~/lib/journals";
 import { fmtDate } from "~/lib/format";
 import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
@@ -50,9 +76,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         // The regions this guide actually works, from the routes they run.
         areas: [
           ...new Set(
-            (data.routeChips ?? [])
-              .map((r: any) => r.region)
-              .filter(Boolean),
+            (data.routeChips ?? []).map((r: any) => r.region).filter(Boolean),
           ),
         ] as string[],
         // Individual reviews alongside the aggregate — Google shows a review
@@ -131,7 +155,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .select("url, alt_text, kind")
       .eq("guide_id", guide.user_id)
       .order("sort"),
-    client.from("guide_languages").select("language, proficiency").eq("guide_id", guide.user_id),
+    client
+      .from("guide_languages")
+      .select("language, proficiency")
+      .eq("guide_id", guide.user_id),
     client
       .from("public_offerings")
       .select(
@@ -147,7 +174,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .order("day"),
     client
       .from("public_reviews")
-      .select("id, overall, body, published_at, author_name, author_country, guide_reply")
+      .select(
+        "id, overall, body, published_at, author_name, author_country, guide_reply",
+      )
       .eq("guide_id", guide.user_id)
       .order("published_at", { ascending: false }),
     client
@@ -193,7 +222,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   for (const p of (photos ?? []) as any[]) {
     if (p.kind === "headshot" || !p.url || seenUrl.has(p.url)) continue;
     seenUrl.add(p.url);
-    gallery.push({ url: p.url, alt: p.alt_text ?? "", caption: p.alt_text ?? undefined });
+    gallery.push({
+      url: p.url,
+      alt: p.alt_text ?? "",
+      caption: p.alt_text ?? undefined,
+    });
   }
   for (const e of (journalEntries ?? []) as any[]) {
     const j = journalBySlug.get(e.journal_id);
@@ -258,7 +291,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .eq("guide_id", guide.user_id)
       .in("status", ["completed", "active", "confirmed"]);
     const seen = new Map<string, number>();
-    for (const b of bk ?? []) seen.set(b.trekker_id, (seen.get(b.trekker_id) ?? 0) + 1);
+    for (const b of bk ?? [])
+      seen.set(b.trekker_id, (seen.get(b.trekker_id) ?? 0) + 1);
     repeatClients = [...seen.values()].filter((n) => n > 1).length;
   } catch {
     repeatClients = 0;
@@ -295,12 +329,22 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     (o: any) => (o.price_breakdown?.porters_usd_cents ?? 0) > 0,
   );
 
-  const maxAltitude = js.reduce((n, j) => Math.max(n, j.max_altitude_m ?? 0), 0);
+  const maxAltitude = js.reduce(
+    (n, j) => Math.max(n, j.max_altitude_m ?? 0),
+    0,
+  );
 
   return {
     guide,
-    photos: (photos ?? []) as Array<{ url: string; alt_text: string; kind: string }>,
-    languages: (langs ?? []) as Array<{ language: string; proficiency: string }>,
+    photos: (photos ?? []) as Array<{
+      url: string;
+      alt_text: string;
+      kind: string;
+    }>,
+    languages: (langs ?? []) as Array<{
+      language: string;
+      proficiency: string;
+    }>,
     offerings: (offerings ?? []) as PublicOffering[],
     journals: js,
     gallery,
@@ -343,10 +387,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const name = String(form.get("name") ?? "").trim();
   const body = String(form.get("body") ?? "").trim();
-  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const email = String(form.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   const bad = validateQuestion({ name, body });
   if (bad) return { error: bad };
-  if (!email.includes("@")) return { error: "Add an email so we can tell you the answer." };
+  if (!email.includes("@"))
+    return { error: "Add an email so we can tell you the answer." };
 
   const admin = createAdminClient(env);
   const { data: guide } = await admin
@@ -367,7 +414,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     .gte("created_at", hourAgo);
   if ((count ?? 0) >= 1) {
     return {
-      error: "You already asked this guide something in the last hour — give him a chance to answer that one first.",
+      error:
+        "You already asked this guide something in the last hour — give him a chance to answer that one first.",
     };
   }
 
@@ -432,14 +480,19 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     if (!p.url || portraits.some((q) => q.url === p.url)) continue;
     portraits.push({ url: p.url, alt: p.alt_text ?? "" });
   }
-  if (!portraits.length && guide.avatar_url) portraits.push({ url: guide.avatar_url });
+  if (!portraits.length && guide.avatar_url)
+    portraits.push({ url: guide.avatar_url });
   const checks = tierChecks(guide.tier);
 
   // What this guide actually has. The template scales to it: a guide with one
   // trek and no history gets a tight, single-focus page, not twelve headings
   // with apologies under most of them.
-  const brandNew = journals.length === 0 && reviews.length === 0 && questions.length === 0;
-  const treksLed = Math.max(guide.treks_completed_platform ?? 0, journals.length);
+  const brandNew =
+    journals.length === 0 && reviews.length === 0 && questions.length === 0;
+  const treksLed = Math.max(
+    guide.treks_completed_platform ?? 0,
+    journals.length,
+  );
   // Receipts keyed by check, for the fact rows.
   const receiptBy: Record<string, any> = {};
   for (const r of receipts) receiptBy[r.check_type] = r;
@@ -448,7 +501,9 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   // The rail's availability summary: the next stretch of ≥3 open days, and
   // how much of the next three months is open at all.
   const nextWindow = firstRun(openDays, 3);
-  const in90 = new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10);
+  const in90 = new Date(Date.now() + 90 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   const openIn90 = openDays.filter((d: string) => d <= in90).length;
 
   const messageForm = (label: string, cls: string) => (
@@ -461,179 +516,393 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="pb-28">
-      {/* ── 1. HEADER — her words are the hero, her name is the byline ────
-          The quote is the most persuasive thing on the page: it is one
-          specific promise, in the guide's own voice, that no agency template
-          could produce. So it gets the display size, and the name — which a
-          reader can get from any of 48 profiles — steps down to a byline. */}
+      {/* ── 1. HEADER — the card is the whole introduction ───────────────
+          The guide's promise used to run above the card at display size and
+          the card restated the name underneath it. One introduction, not two:
+          photograph, name, what they do, and the promise in their own words,
+          all inside the same border. */}
+      {/* One grid for the whole page, not one for the header and another for
+          the body. Two grids meant the rail could only stick inside the
+          header's row and scrolled away the moment the body began; sharing a
+          grid gives the sticky card the full page height to track. */}
       <div className="mx-auto max-w-6xl px-4 pt-8">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <header>
-            {quote ? (
-              <>
-                <p className="max-w-[24ch] font-display text-[28px] leading-[1.15] text-ink sm:text-4xl">
-                  &ldquo;{quote}&rdquo;
-                </p>
-              </>
-            ) : (
-              <p className="max-w-[24ch] font-display text-[28px] leading-[1.15] text-ink sm:text-4xl">
-                A licensed guide from {guide.home_district ?? "Nepal"}.
-              </p>
-            )}
-
-            {/* ── The trust card: the Superhost moment. Portrait, name, and
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+          <div className="min-w-0">
+            <header>
+              {/* ── The trust card: the Superhost moment. Portrait, name, and
                  the numbers that prove {first} is real — large, mono, in one
                  bordered card instead of scattered small beneath a header. */}
-            <div className="mt-6 overflow-hidden rounded-md border border-line bg-card">
-              {/* The portrait is the point of a guide-first marketplace, so it
+              <div className="overflow-hidden rounded-md border border-line bg-card">
+                {/* The portrait is the point of a guide-first marketplace, so it
                   is a photograph at photograph size rather than an avatar
                   beside a name. Portrait and identity sit side by side above
                   the wide breakpoint and stack under it. */}
-              <div className="grid sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
-                <GuidePortrait
-                  photos={portraits}
-                  first={first}
-                  district={guide.home_district}
-                />
-                <div className="flex flex-col justify-center p-4 sm:p-5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="font-display text-3xl text-ink">{first}</h1>
-                    <TierBadge tier={guide.tier} />
-                  </div>
-                  <p className="mt-0.5 text-sm text-ink-soft">
-                    Trekking guide · {guide.home_district}, Nepal
-                  </p>
-                  {quote && (
-                    <p className="mt-1 text-caption text-muted">
-                      The line above is {pn.possessive} own, printed as written.
+                <div className="grid sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                  <GuidePortrait
+                    photos={portraits}
+                    first={first}
+                    district={guide.home_district}
+                  />
+                  <div className="flex flex-col justify-center p-4 sm:p-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="font-display text-3xl text-ink">
+                        {first}
+                      </h1>
+                      <TierBadge tier={guide.tier} />
+                    </div>
+                    <p className="mt-0.5 text-sm text-ink-soft">
+                      Trekking guide · {guide.home_district}, Nepal
                     </p>
-                  )}
-                  {/* Two columns, not four: at four these numbers sat in a thin
+                    {/* The promise, in the guide's own words — the one thing on
+                      this page no agency template could produce, so it is set
+                      bold and sits with the identity rather than floating
+                      above the card as a headline. */}
+                    {quote && (
+                      <>
+                        <p className="mt-3 max-w-[34ch] text-lg font-semibold leading-snug text-ink">
+                          &ldquo;{quote}&rdquo;
+                        </p>
+                        <p className="mt-1 text-caption text-muted">
+                          {pn.possessive.charAt(0).toUpperCase() +
+                            pn.possessive.slice(1)}{" "}
+                          own words, printed as written.
+                        </p>
+                      </>
+                    )}
+                    {/* Two columns, not four: at four these numbers sat in a thin
                       strip and read as a stats bar. Two gives each one room to
                       be a fact. */}
-                  <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-4">
-                    {guide.years_experience ? (
-                      <BigNum n={guide.years_experience} label="years guiding" />
-                    ) : null}
-                    {treksLed > 0 && (
-                      <BigNum n={treksLed} label={treksLed === 1 ? "trek led" : "treks led"} />
-                    )}
-                    {rating && (
-                      <BigNum n={rating.value.toFixed(1)} label={`rating (${rating.count})`} />
-                    )}
-                    {guide.median_response_mins != null && (
-                      <BigNum
-                        n={
-                          guide.median_response_mins >= 60
-                            ? `~${Math.round(guide.median_response_mins / 60)} hr`
-                            : `~${guide.median_response_mins} min`
-                        }
-                        label="responds in"
-                      />
-                    )}
-                  </dl>
+                    <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-4">
+                      {guide.years_experience ? (
+                        <BigNum
+                          n={guide.years_experience}
+                          label="years guiding"
+                        />
+                      ) : null}
+                      {treksLed > 0 && (
+                        <BigNum
+                          n={treksLed}
+                          label={treksLed === 1 ? "trek led" : "treks led"}
+                        />
+                      )}
+                      {rating && (
+                        <BigNum
+                          n={rating.value.toFixed(1)}
+                          label={`rating (${rating.count})`}
+                        />
+                      )}
+                      {guide.median_response_mins != null && (
+                        <BigNum
+                          n={
+                            guide.median_response_mins >= 60
+                              ? `~${Math.round(guide.median_response_mins / 60)} hr`
+                              : `~${guide.median_response_mins} min`
+                          }
+                          label="responds in"
+                        />
+                      )}
+                    </dl>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* ── Fact rows: trust facts in the open, not behind a
-                 disclosure. Languages out of the bio, verification out of
-                 the accordion. */}
-            <ul className="mt-5 space-y-2.5">
-              {languages.length > 0 && (
-                <FactRow icon="speech">
-                  Speaks{" "}
-                  <span className="text-ink">
-                    {languages.map((l: any) => l.language).join(", ")}
-                  </span>
-                </FactRow>
+              {/* ── The guide's own account, straight after the card that
+                 introduced them, and then their voice. Both used to sit far
+                 down the page behind the catalogue, which meant a reader met
+                 the product before they met the person. */}
+              {guide.bio && (
+                <section className="mt-8">
+                  <p className="label text-muted">In {first}&rsquo;s words</p>
+                  <p className="mt-3 max-w-[58ch] whitespace-pre-line text-[19px] leading-relaxed text-ink">
+                    {guide.bio}
+                  </p>
+                </section>
               )}
-              {guide.home_district && (
-                <FactRow icon="pin">Lives in {guide.home_district}</FactRow>
-              )}
-              {receiptBy.id_match && (
-                <FactRow icon="shield">
-                  Identity verified {fmtDate(receiptBy.id_match.verified_at)}
-                </FactRow>
-              )}
-              {receiptBy.licence && (
-                <FactRow icon="card">
-                  Trekking licence verified
-                  {receiptBy.licence.expires_at
-                    ? ` to ${fmtDate(receiptBy.licence.expires_at)}`
-                    : ` ${fmtDate(receiptBy.licence.verified_at)}`}
-                </FactRow>
-              )}
-              {receiptBy.first_aid && (
-                <FactRow icon="aid">
-                  Wilderness first aid current
-                  {receiptBy.first_aid.expires_at
-                    ? ` to ${fmtDate(receiptBy.first_aid.expires_at)}`
-                    : ""}
-                </FactRow>
-              )}
-            </ul>
 
-            {/* ── Route stamps: where {first} has actually walked, with the
+              {guide.voice_intro_url && (
+                <div className="mt-6">
+                  <VoiceIntro
+                    src={guide.voice_intro_url}
+                    name={guide.full_name}
+                  />
+                </div>
+              )}
+
+              {/* ── Fact rows: trust facts in the open, not behind a
+                 disclosure. Two columns — as one long list they read as fine
+                 print; side by side they read as a short set of facts. */}
+              <ul className="mt-8 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+                {languages.length > 0 && (
+                  <FactRow icon="speech">
+                    Speaks{" "}
+                    <span className="text-ink">
+                      {languages.map((l: any) => l.language).join(", ")}
+                    </span>
+                  </FactRow>
+                )}
+                {guide.home_district && (
+                  <FactRow icon="pin">Lives in {guide.home_district}</FactRow>
+                )}
+                {receiptBy.id_match && (
+                  <FactRow icon="shield">
+                    Identity verified {fmtDate(receiptBy.id_match.verified_at)}
+                  </FactRow>
+                )}
+                {receiptBy.licence && (
+                  <FactRow icon="card">
+                    Trekking licence verified
+                    {receiptBy.licence.expires_at
+                      ? ` to ${fmtDate(receiptBy.licence.expires_at)}`
+                      : ` ${fmtDate(receiptBy.licence.verified_at)}`}
+                  </FactRow>
+                )}
+                {receiptBy.first_aid && (
+                  <FactRow icon="aid">
+                    Wilderness first aid current
+                    {receiptBy.first_aid.expires_at
+                      ? ` to ${fmtDate(receiptBy.first_aid.expires_at)}`
+                      : ""}
+                  </FactRow>
+                )}
+              </ul>
+
+              {/* ── Route stamps: where {first} has actually walked, with the
                  write-ups to prove each count. Our travel stamps. */}
-            {routeChips.length > 0 && (
-              <div className="mt-6">
-                <p className="label text-muted">Routes {first} has walked</p>
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {routeChips.map((r: any) => (
-                    <Link
-                      key={r.slug}
-                      to={`/routes/${r.slug}`}
-                      prefetch="intent"
-                      className="group rounded-md border border-line bg-card px-3.5 py-2.5 transition-colors hover:border-sage hover:bg-mist/60"
-                    >
-                      <span className="flex items-center gap-2">
-                        <StampPeak />
-                        <span className="text-sm font-medium text-ink">{r.name}</span>
-                        {r.count > 0 && (
-                          <span className="font-mono text-sm text-moss">×{r.count}</span>
-                        )}
-                      </span>
-                      {r.count > 0 && (
-                        <span className="mt-0.5 block pl-6 text-caption text-muted">
-                          {r.count === 1 ? "written up once" : `written up ${r.count} times`}
+              {routeChips.length > 0 && (
+                <div className="mt-6">
+                  <p className="label text-muted">Routes {first} has walked</p>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {routeChips.map((r: any) => (
+                      <Link
+                        key={r.slug}
+                        to={`/routes/${r.slug}`}
+                        prefetch="intent"
+                        className="group rounded-md border border-line bg-card px-3.5 py-2.5 transition-colors hover:border-sage hover:bg-mist/60"
+                      >
+                        <span className="flex items-center gap-2">
+                          <StampPeak />
+                          <span className="text-sm font-medium text-ink">
+                            {r.name}
+                          </span>
+                          {r.count > 0 && (
+                            <span className="font-mono text-sm text-moss">
+                              ×{r.count}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </Link>
+                        {r.count > 0 && (
+                          <span className="mt-0.5 block pl-6 text-caption text-muted">
+                            {r.count === 1
+                              ? "written up once"
+                              : `written up ${r.count} times`}
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 pt-6 lg:hidden">
+                {messageForm(
+                  `Message ${first} — free`,
+                  "rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine",
+                )}
+                <Link
+                  to={`/groups/new?guide=${guide.user_id}`}
+                  prefetch="intent"
+                  className="rounded border border-line px-5 py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
+                >
+                  Go as a group
+                </Link>
+              </div>
+            </header>
+
+            {/* ── 2. THE BODY — same column as the header, so the rail beside
+               it stays put for the whole scroll. ───────────────────────── */}
+            {/* ── What the guide sells. "Book {first}" named the transaction
+                 before the reader had decided there was one; this names what
+                 is on offer and lets them decide. */}
+            {offerings.length > 0 && (
+              <section className="mt-14">
+                <SectionHead
+                  title={`Here's what ${first} provides`}
+                  meta={`${offerings.length} ${offerings.length === 1 ? "trip" : "trips"} ${pn.subject} runs`}
+                />
+                {offerings.length === 1 ? (
+                  <div className="mt-4">
+                    <FeatureTrip o={offerings[0]} />
+                  </div>
+                ) : (
+                  <OfferingGrid offerings={offerings} />
+                )}
+              </section>
+            )}
+
+            {/* ── Journals — only when there are journals. The old page put a
+                 full-width empty block here apologising for their absence. */}
+            {journals.length > 0 && (
+              <section id="journals" className="mt-12 scroll-mt-6">
+                <JournalWall
+                  journals={journals}
+                  guideName={guide.full_name}
+                  guideId={guide.user_id}
+                  slug={guide.slug}
+                />
+              </section>
+            )}
+
+            {/* ── Reviews — only when there are reviews. ─────────────────── */}
+            {reviews.length > 0 && (
+              <section className="mt-14">
+                <SectionHead
+                  title={`What trekkers said about ${first}`}
+                  meta={`${reviews.length} review${reviews.length === 1 ? "" : "s"}`}
+                />
+                <RatingSummary reviews={reviews} />
+                <div className="mt-6 space-y-5">
+                  {reviews.map((r: any) => (
+                    <ReviewBlock
+                      key={r.id}
+                      authorName={r.author_name}
+                      country={r.author_country}
+                      overall={r.overall}
+                      body={r.body}
+                      date={r.published_at}
+                      reply={r.guide_reply}
+                      replyName={first}
+                    />
                   ))}
                 </div>
+              </section>
+            )}
+
+            {/* Photographs sit after the reviews so the journeys run straight
+                into what trekkers said about them. */}
+            <GuideGallery photos={gallery} first={first} />
+
+            {/* ── Ask me anything — the wall renders only with content; empty
+                 it is a one-line affordance (see QuestionWall). */}
+            {questions.length > 0 && (
+              <div className="mt-12">
+                <QuestionWall
+                  guideName={guide.full_name}
+                  guideFirstName={first}
+                  questions={questions}
+                  canAsk={!reader.isThisGuide}
+                  askerName={reader.name}
+                />
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 pt-6 lg:hidden">
-              {messageForm(
-                `Message ${first} — free`,
-                "rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine",
+            {/* ── One honest line instead of three hollow sections. A new
+                 guide's page used to apologise three separate times — no
+                 journals, no reviews, no questions — at full section size.
+                 Being early is one fact; it is said once, small. */}
+            {brandNew && (
+              <section className="mt-12 rounded-md border border-line bg-card p-5">
+                <p className="text-[15px] text-ink">
+                  {first} is new to bookings on Trek — {pn.possessive} licence
+                  and references are checked, {pn.possessive} first review is
+                  still on the trail. Be {pn.possessive} first trek, first
+                  review, or first question.
+                </p>
+                <div className="mt-3">
+                  <QuestionWall
+                    guideName={guide.full_name}
+                    guideFirstName={first}
+                    questions={questions}
+                    canAsk={!reader.isThisGuide}
+                    askerName={reader.name}
+                  />
+                </div>
+              </section>
+            )}
+
+            {/* ── The quiet strip: real, load-bearing, and small. ────────── */}
+            <section className="mt-12 space-y-4">
+              <details className="group rounded-md border border-line bg-card p-4">
+                <summary className="cursor-pointer text-sm font-medium text-ink">
+                  {receipts.length > 0
+                    ? `Verification receipts (${receipts.length})`
+                    : "What we checked"}
+                </summary>
+                <ul className="mt-3 space-y-1.5 text-sm">
+                  {receipts.length > 0
+                    ? receipts.map((r: any) => (
+                        <li
+                          key={r.check_type}
+                          className="flex items-baseline justify-between gap-3"
+                        >
+                          <span className="flex gap-2">
+                            <span className="text-accent">✓</span>
+                            {CHECK_LABELS[r.check_type] ??
+                              r.check_type.replace(/_/g, " ")}
+                          </span>
+                          <span className="whitespace-nowrap font-mono text-xs text-ink-soft">
+                            {fmtDate(r.verified_at)}
+                            {r.expires_at ? ` → ${fmtDate(r.expires_at)}` : ""}
+                          </span>
+                        </li>
+                      ))
+                    : checks.map((c: string) => (
+                        <li key={c} className="flex gap-2">
+                          <span className="text-accent">✓</span>
+                          {c}
+                        </li>
+                      ))}
+                </ul>
+                <Link
+                  to="/trust"
+                  className="mt-3 inline-block text-xs text-primary hover:underline"
+                >
+                  How Trek verifies guides →
+                </Link>
+              </details>
+
+              {usesPorters && (
+                <Link
+                  to="/trust#porters"
+                  className="flex items-start gap-3 rounded-md border border-line bg-card p-4 hover:bg-mist/60"
+                >
+                  <PorterIcon />
+                  <p className="text-sm text-ink-soft">
+                    <span className="font-medium text-ink">
+                      Porter-welfare pledge
+                    </span>{" "}
+                    — {first} guarantees fair pay, weight limits, insurance and
+                    proper gear for every porter on {pn.possessive} treks. What
+                    that means →
+                  </p>
+                </Link>
               )}
-              <Link
-                to={`/groups/new?guide=${guide.user_id}`}
-                prefetch="intent"
-                className="rounded border border-line px-5 py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
-              >
-                Go as a group
-              </Link>
-            </div>
+            </section>
 
-            {guide.voice_intro_url && (
-              <div className="mt-6">
-                <VoiceIntro src={guide.voice_intro_url} name={guide.full_name} />
+            {/* ── Availability, the full calendar. The rail summarises it. ── */}
+            <section id="availability" className="mt-12 scroll-mt-6">
+              <p className="label text-muted">Availability</p>
+              <div className="mt-3">
+                <AvailabilityCalendar
+                  openDays={openDays}
+                  monthsFrom={monthAnchor}
+                />
               </div>
-            )}
-          </header>
+            </section>
+          </div>
 
-          {/* ── The rail: everything a decision needs, following the scroll.
-               This is what fills the right column the old page left dead. */}
+          {/* ── The rail: everything a decision needs, following the scroll
+               for the whole page rather than only the header. */}
           <aside className="hidden lg:block">
             <div className="sticky top-20 rounded-md border border-line bg-card p-5">
               {guide.day_rate_usd_cents ? (
                 <p>
-                  <span className="font-mono text-2xl text-ink">{m(guide.day_rate_usd_cents)}</span>
-                  <span className="text-sm text-muted"> per day, {pn.possessive} whole fee</span>
+                  <span className="font-mono text-2xl text-ink">
+                    {m(guide.day_rate_usd_cents)}
+                  </span>
+                  <span className="text-sm text-muted">
+                    {" "}
+                    per day, {pn.possessive} whole fee
+                  </span>
                 </p>
               ) : (
                 <p className="font-medium text-ink">{guide.full_name}</p>
@@ -677,187 +946,6 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               </a>
             </div>
           </aside>
-        </div>
-      </div>
-
-      {/* ── 2. THE BODY — left column carries the story, rail follows ───── */}
-      <div className="mx-auto max-w-6xl px-4">
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
-          <div className="min-w-0">
-            {/* ── Her words, at editorial scale. The second-best content on
-                 the page after the quote — full width of the column, larger
-                 type, no clamp hiding it. */}
-            {guide.bio && (
-              <section className={brandNew ? "mt-10" : "mt-12"}>
-                <p className="label text-muted">In {first}&rsquo;s words</p>
-                <p className="mt-3 max-w-[58ch] whitespace-pre-line text-[19px] leading-relaxed text-ink">
-                  {guide.bio}
-                </p>
-              </section>
-            )}
-
-            {/* ── The trek(s). One trek gets one dominant card, not a third
-                 of a row — a thin catalogue displayed wide reads as focus,
-                 displayed sparse reads as absence. */}
-            {/* One rail, whatever the count. Trips at half-width in a grid
-                 truncated their own titles; a rail you thumb card-by-card is
-                 how an app shows a set, and one card on a rail still reads
-                 as focus rather than absence. */}
-            {offerings.length > 0 && (
-              <section className="mt-14">
-                <SectionHead
-                  title={`Book ${first}`}
-                  meta={`${offerings.length} ${offerings.length === 1 ? "trip" : "trips"} he runs`}
-                />
-                {offerings.length === 1 ? (
-                  <div className="mt-4">
-                    <FeatureTrip o={offerings[0]} />
-                  </div>
-                ) : (
-                  <OfferingGrid offerings={offerings} />
-                )}
-              </section>
-            )}
-
-            {/* ── Journals — only when there are journals. The old page put a
-                 full-width empty block here apologising for their absence. */}
-            {journals.length > 0 && (
-              <section id="journals" className="mt-12 scroll-mt-6">
-                <JournalWall
-                  journals={journals}
-                  guideName={guide.full_name}
-                  guideId={guide.user_id}
-                  slug={guide.slug}
-                />
-              </section>
-            )}
-
-            <GuideGallery photos={gallery} first={first} />
-
-            {/* ── Reviews — only when there are reviews. ─────────────────── */}
-            {reviews.length > 0 && (
-              <section className="mt-14">
-                <SectionHead
-                  title={`What trekkers said about ${first}`}
-                  meta={`${reviews.length} review${reviews.length === 1 ? "" : "s"}`}
-                />
-                <RatingSummary reviews={reviews} />
-                <div className="mt-6 space-y-5">
-                  {reviews.map((r: any) => (
-                    <ReviewBlock
-                      key={r.id}
-                      authorName={r.author_name}
-                      country={r.author_country}
-                      overall={r.overall}
-                      body={r.body}
-                      date={r.published_at}
-                      reply={r.guide_reply}
-                      replyName={first}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* ── Ask me anything — the wall renders only with content; empty
-                 it is a one-line affordance (see QuestionWall). */}
-            {questions.length > 0 && (
-              <div className="mt-12">
-                <QuestionWall
-                  guideName={guide.full_name}
-                  guideFirstName={first}
-                  questions={questions}
-                  canAsk={!reader.isThisGuide}
-                  askerName={reader.name}
-                />
-              </div>
-            )}
-
-            {/* ── One honest line instead of three hollow sections. A new
-                 guide's page used to apologise three separate times — no
-                 journals, no reviews, no questions — at full section size.
-                 Being early is one fact; it is said once, small. */}
-            {brandNew && (
-              <section className="mt-12 rounded-md border border-line bg-card p-5">
-                <p className="text-[15px] text-ink">
-                  {first} is new to bookings on Trek — {pn.possessive} licence and
-                  references are checked, {pn.possessive} first review is still on
-                  the trail. Be {pn.possessive} first trek, first review, or first
-                  question.
-                </p>
-                <div className="mt-3">
-                  <QuestionWall
-                    guideName={guide.full_name}
-                    guideFirstName={first}
-                    questions={questions}
-                    canAsk={!reader.isThisGuide}
-                    askerName={reader.name}
-                  />
-                </div>
-              </section>
-            )}
-
-            {/* ── The quiet strip: real, load-bearing, and small. ────────── */}
-            <section className="mt-12 space-y-4">
-              <details className="group rounded-md border border-line bg-card p-4">
-                <summary className="cursor-pointer text-sm font-medium text-ink">
-                  {receipts.length > 0
-                    ? `Verification receipts (${receipts.length})`
-                    : "What we checked"}
-                </summary>
-                <ul className="mt-3 space-y-1.5 text-sm">
-                  {receipts.length > 0
-                    ? receipts.map((r: any) => (
-                        <li key={r.check_type} className="flex items-baseline justify-between gap-3">
-                          <span className="flex gap-2">
-                            <span className="text-accent">✓</span>
-                            {CHECK_LABELS[r.check_type] ?? r.check_type.replace(/_/g, " ")}
-                          </span>
-                          <span className="whitespace-nowrap font-mono text-xs text-ink-soft">
-                            {fmtDate(r.verified_at)}
-                            {r.expires_at ? ` → ${fmtDate(r.expires_at)}` : ""}
-                          </span>
-                        </li>
-                      ))
-                    : checks.map((c: string) => (
-                        <li key={c} className="flex gap-2">
-                          <span className="text-accent">✓</span>
-                          {c}
-                        </li>
-                      ))}
-                </ul>
-                <Link to="/trust" className="mt-3 inline-block text-xs text-primary hover:underline">
-                  How Trek verifies guides →
-                </Link>
-              </details>
-
-              {usesPorters && (
-                <Link
-                  to="/trust#porters"
-                  className="flex items-start gap-3 rounded-md border border-line bg-card p-4 hover:bg-mist/60"
-                >
-                  <PorterIcon />
-                  <p className="text-sm text-ink-soft">
-                    <span className="font-medium text-ink">Porter-welfare pledge</span> — {first}{" "}
-                    guarantees fair pay, weight limits, insurance and proper gear for every
-                    porter on {pn.possessive} treks. What that means →
-                  </p>
-                </Link>
-              )}
-            </section>
-
-            {/* ── Availability, the full calendar. The rail summarises it. ── */}
-            <section id="availability" className="mt-12 scroll-mt-6">
-              <p className="label text-muted">Availability</p>
-              <div className="mt-3">
-                <AvailabilityCalendar openDays={openDays} monthsFrom={monthAnchor} />
-              </div>
-            </section>
-          </div>
-
-          {/* The rail's column continues so the sticky card above tracks the
-              whole body height. */}
-          <div aria-hidden className="hidden lg:block" />
         </div>
       </div>
 
@@ -912,7 +1000,8 @@ function firstRun(openDays: string[], run: number): string | null {
     if (streak.length >= run) {
       const a = new Date(streak[0] + "T00:00:00Z");
       const b = new Date(streak[streak.length - 1] + "T00:00:00Z");
-      const mon = (x: Date) => x.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+      const mon = (x: Date) =>
+        x.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
       return a.getUTCMonth() === b.getUTCMonth()
         ? `${a.getUTCDate()}–${b.getUTCDate()} ${mon(a)}`
         : `${a.getUTCDate()} ${mon(a)} – ${b.getUTCDate()} ${mon(b)}`;
@@ -954,7 +1043,8 @@ function GuidePortrait({
   const lightbox = useLightbox(photos.map((p) => ({ ...p, dayTitle: p.alt })));
   if (!photos.length) return null;
   const current = photos[Math.min(i, photos.length - 1)];
-  const alt = current.alt || `${first}, trekking guide in ${district ?? "Nepal"}`;
+  const alt =
+    current.alt || `${first}, trekking guide in ${district ?? "Nepal"}`;
 
   return (
     <div className="relative">
@@ -992,7 +1082,14 @@ function GuidePortrait({
                 n === i ? "ring-paper" : "ring-transparent hover:ring-paper/60",
               )}
             >
-              <SmartImage src={p.url} alt="" width={80} height={80} cover className="h-full w-full" />
+              <SmartImage
+                src={p.url}
+                alt=""
+                width={80}
+                height={80}
+                cover
+                className="h-full w-full"
+              />
             </button>
           ))}
         </div>
@@ -1014,7 +1111,10 @@ function SectionHead({
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <h2 className="font-display text-3xl text-ink">{title}</h2>
-      {action ?? (meta ? <p className="font-mono text-caption text-muted">{meta}</p> : null)}
+      {action ??
+        (meta ? (
+          <p className="font-mono text-caption text-muted">{meta}</p>
+        ) : null)}
     </div>
   );
 }
@@ -1044,7 +1144,8 @@ function OfferingGrid({ offerings }: { offerings: PublicOffering[] }) {
           onClick={() => setShowAll(true)}
           className="mt-5 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink transition-colors duration-instant hover:border-sage hover:bg-mist"
         >
-          Show the other <span className="font-mono">{offerings.length - shown.length}</span>
+          Show the other{" "}
+          <span className="font-mono">{offerings.length - shown.length}</span>
         </button>
       )}
     </>
@@ -1074,7 +1175,9 @@ function FeatureTrip({ o }: { o: PublicOffering }) {
       <div className="flex flex-col justify-center p-5">
         <p className="font-display text-2xl leading-snug text-ink">{o.title}</p>
         {o.summary && (
-          <p className="mt-2 line-clamp-3 text-[15px] text-ink-soft">{o.summary}</p>
+          <p className="mt-2 line-clamp-3 text-[15px] text-ink-soft">
+            {o.summary}
+          </p>
         )}
         {/* A trek priced by breakdown carries no price_usd_cents, so reading
             that column directly printed the days and silently dropped the
@@ -1133,8 +1236,12 @@ function JournalWall({
     );
   }
 
-  const routes = [...new Set(journals.map((j) => j.route_name).filter(Boolean))] as string[];
-  const seasons = [...new Set(journals.map((j) => journalMonth(j.start_date).split(" ")[0]))];
+  const routes = [
+    ...new Set(journals.map((j) => j.route_name).filter(Boolean)),
+  ] as string[];
+  const seasons = [
+    ...new Set(journals.map((j) => journalMonth(j.start_date).split(" ")[0])),
+  ];
   const shown = journals.filter(
     (j) =>
       (!route || j.route_name === route) &&
@@ -1146,7 +1253,9 @@ function JournalWall({
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-display text-3xl text-ink">
           <span className="font-mono">{journals.length}</span>{" "}
-          {journals.length === 1 ? "trek, as it happened" : "treks, as they happened"}
+          {journals.length === 1
+            ? "trek, as it happened"
+            : "treks, as they happened"}
         </h2>
         <Link
           to={`/journals?guide=${slug}`}
@@ -1159,16 +1268,30 @@ function JournalWall({
 
       {journals.length > 6 && (
         <div className="mt-4 flex flex-wrap gap-2">
-          <Chip active={!route && !season} onClick={() => { setRoute(""); setSeason(""); }}>
+          <Chip
+            active={!route && !season}
+            onClick={() => {
+              setRoute("");
+              setSeason("");
+            }}
+          >
             All
           </Chip>
           {routes.map((r) => (
-            <Chip key={r} active={route === r} onClick={() => setRoute(route === r ? "" : r)}>
+            <Chip
+              key={r}
+              active={route === r}
+              onClick={() => setRoute(route === r ? "" : r)}
+            >
               {r}
             </Chip>
           ))}
           {seasons.map((s) => (
-            <Chip key={s} active={season === s} onClick={() => setSeason(season === s ? "" : s)}>
+            <Chip
+              key={s}
+              active={season === s}
+              onClick={() => setSeason(season === s ? "" : s)}
+            >
               {s}
             </Chip>
           ))}
@@ -1214,7 +1337,8 @@ function JournalWall({
                   </span>
                   {(j.comment_count ?? 0) > 0 && (
                     <span className="font-mono text-caption text-muted">
-                      {j.comment_count} comment{j.comment_count === 1 ? "" : "s"}
+                      {j.comment_count} comment
+                      {j.comment_count === 1 ? "" : "s"}
                     </span>
                   )}
                 </p>
@@ -1224,7 +1348,9 @@ function JournalWall({
         ))}
       </ul>
       {shown.length === 0 && (
-        <p className="mt-6 text-muted">Nothing on that route in that season yet.</p>
+        <p className="mt-6 text-muted">
+          Nothing on that route in that season yet.
+        </p>
       )}
     </>
   );
@@ -1246,7 +1372,9 @@ function Chip({
       aria-pressed={active}
       className={cn(
         "rounded-pill px-3 py-1.5 text-sm transition-colors",
-        active ? "bg-pine text-paper" : "border border-line bg-card text-ink hover:border-sage",
+        active
+          ? "bg-pine text-paper"
+          : "border border-line bg-card text-ink hover:border-sage",
       )}
     >
       {children}
@@ -1324,7 +1452,6 @@ function PorterIcon() {
   );
 }
 
-
 /**
  * Everything this guide has photographed.
  *
@@ -1342,11 +1469,19 @@ function GuideGallery({
   photos,
   first,
 }: {
-  photos: Array<{ url: string; alt?: string; caption?: string; day?: number; href?: string }>;
+  photos: Array<{
+    url: string;
+    alt?: string;
+    caption?: string;
+    day?: number;
+    href?: string;
+  }>;
   first: string;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const lightbox = useLightbox(photos.map((p) => ({ ...p, dayTitle: p.caption })));
+  const lightbox = useLightbox(
+    photos.map((p) => ({ ...p, dayTitle: p.caption })),
+  );
   if (photos.length < 4) return null;
 
   const shown = showAll ? photos : photos.slice(0, 12);
@@ -1354,7 +1489,9 @@ function GuideGallery({
   return (
     <section id="gallery" className="mx-auto mt-14 max-w-6xl scroll-mt-6 px-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-3xl text-ink">{first}&rsquo;s photographs</h2>
+        <h2 className="font-display text-3xl text-ink">
+          {first}&rsquo;s photographs
+        </h2>
         <p className="font-mono text-caption text-muted">
           {photos.length} from treks he led
         </p>
@@ -1393,7 +1530,8 @@ function GuideGallery({
           onClick={() => setShowAll(true)}
           className="mt-4 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink hover:border-sage hover:bg-mist"
         >
-          Show the other <span className="font-mono">{photos.length - shown.length}</span>
+          Show the other{" "}
+          <span className="font-mono">{photos.length - shown.length}</span>
         </button>
       )}
       {lightbox.node}
@@ -1414,7 +1552,13 @@ function BigNum({ n, label }: { n: number | string; label: string }) {
 }
 
 /** One visible trust fact. Icon set is deliberately tiny and line-drawn. */
-function FactRow({ icon, children }: { icon: "speech" | "pin" | "shield" | "card" | "aid"; children: React.ReactNode }) {
+function FactRow({
+  icon,
+  children,
+}: {
+  icon: "speech" | "pin" | "shield" | "card" | "aid";
+  children: React.ReactNode;
+}) {
   const paths: Record<string, React.ReactNode> = {
     speech: <path d="M3 4h12v8H8l-3 3v-3H3z" />,
     pin: (
@@ -1466,8 +1610,20 @@ function FactRow({ icon, children }: { icon: "speech" | "pin" | "shield" | "card
 /** The stamp mark on a walked route. */
 function StampPeak() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0 text-moss">
-      <path d="M1.5 13L6 5l3 5 2-3 3.5 6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className="shrink-0 text-moss"
+    >
+      <path
+        d="M1.5 13L6 5l3 5 2-3 3.5 6z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
