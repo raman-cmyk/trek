@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { DISTRICT_CENTRES, NEPAL_BOUNDS, ROUTE_LINES } from "~/lib/geo";
 import { MAP_STYLE } from "~/lib/map-style";
+import { Skeleton } from "~/components/skeletons/Shimmer";
 
 export interface MapPin {
   district: string;
@@ -32,9 +33,12 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
   const [view, setView] = useState<"map" | "grid">("map");
   const el = useRef<HTMLDivElement | null>(null);
   const [failed, setFailed] = useState(false);
+  /** False until the visible tiles have painted, so the cover can clear. */
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (view !== "map" || !el.current) return;
+    setReady(false);
     let map: { remove: () => void } | null = null;
     let cancelled = false;
 
@@ -63,6 +67,11 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
         // Tile fetches fail on locked-down networks; that must not take the
         // whole map down, and it must not spam the console either.
         m.on("error", () => {});
+        // `idle` = every visible tile fetched and drawn. Also cleared on
+        // error, so a blocked tile host shows the degraded map with its
+        // markers rather than shimmering forever.
+        m.on("idle", () => !cancelled && setReady(true));
+        m.on("error", () => !cancelled && setReady(true));
 
         // Markers are DOM overlays, not style layers, so they go on straight
         // away — they render even if the tile host is unreachable, which is
@@ -196,10 +205,27 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
             ))}
         </ul>
       ) : (
-        <div
-          ref={el}
-          className="h-[420px] w-full overflow-hidden rounded-md border border-line bg-mist sm:h-[520px]"
-        />
+        // Relative, because the loading cover sits over the canvas.
+        <div className="relative h-[420px] w-full sm:h-[520px]">
+          <div
+            ref={el}
+            className="h-full w-full overflow-hidden rounded-md border border-line bg-mist"
+          />
+          {/* Markers are DOM overlays and land immediately; the OSM tiles
+              behind them arrive over the network a beat later. That beat used
+              to read as a broken map — numbered pins floating on a flat green
+              field. A shimmer says "loading" instead, and clears on the map's
+              first idle, which is when the visible tiles have actually
+              painted. */}
+          {!ready && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-md">
+              <Skeleton className="h-full w-full" />
+              <p className="absolute inset-x-0 bottom-4 text-center text-caption text-muted">
+                Drawing Nepal&hellip;
+              </p>
+            </div>
+          )}
+        </div>
       )}
       {failed && view === "map" && (
         <p className="mt-2 text-caption text-muted">

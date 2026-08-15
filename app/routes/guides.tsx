@@ -171,6 +171,27 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
     !!intent ||
     filters.fWomen;
 
+  // The empty state has to name the filter that actually emptied the page.
+  // It used to say "no one's free those exact days" whatever you had typed,
+  // so a search for a word that matches nobody blamed the calendar — and
+  // sent the reader off to try a different week that was never the problem.
+  const empty = (() => {
+    if (filters.q)
+      return {
+        head: `Nothing matched “${filters.q}”.`,
+        body: "Try a place, a language, or a word a guide might use about themselves — “nurse”, “village”, “photography”.",
+      };
+    if (filters.from)
+      return {
+        head: "No one's free those exact days.",
+        body: "Try the week either side, or widen the region — most guides work across more than one.",
+      };
+    return {
+      head: "No guide matches all of those.",
+      body: "Loosen one filter and the list usually fills up again — the tiers and the languages are the two that narrow it fastest.",
+    };
+  })();
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       {intent && <p className="label text-muted">{intent.blurb}</p>}
@@ -265,13 +286,8 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
 
       {guides.length === 0 ? (
         <div className="mt-10">
-          <p className="font-display text-xl text-ink">
-            No one&rsquo;s free those exact days.
-          </p>
-          <p className="mt-1 max-w-[52ch] text-muted">
-            Try the week either side, or widen the region — most guides work
-            across more than one.
-          </p>
+          <p className="font-display text-xl text-ink">{empty.head}</p>
+          <p className="mt-1 max-w-[52ch] text-muted">{empty.body}</p>
           <Link
             to="/guides"
             className="mt-3 inline-block rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
