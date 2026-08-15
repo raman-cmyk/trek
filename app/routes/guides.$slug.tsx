@@ -484,11 +484,11 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     portraits.push({ url: guide.avatar_url });
   const checks = tierChecks(guide.tier);
 
-  // What this guide actually has. The template scales to it: a guide with one
-  // trek and no history gets a tight, single-focus page, not twelve headings
-  // with apologies under most of them.
-  const brandNew =
-    journals.length === 0 && reviews.length === 0 && questions.length === 0;
+  // Every guide gets the same sections in the same order. The page used to
+  // drop a heading whenever its content was missing, which on a roster where
+  // most guides are new meant two guides got two different-looking pages —
+  // and a reader cannot tell "this guide is new" from "this site is broken".
+  // Sections with nothing in them explain themselves instead (EmptyNote).
   const treksLed = Math.max(
     guide.treks_completed_platform ?? 0,
     journals.length,
@@ -739,85 +739,99 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               </section>
             )}
 
-            {/* ── Journals — only when there are journals. The old page put a
-                 full-width empty block here apologising for their absence. */}
-            {journals.length > 0 && (
-              <section id="journals" className="mt-12 scroll-mt-6">
+            {/* ── Journeys. The section is always here. Nine guides in ten
+                 have not written one yet, and hiding the heading for them
+                 gave two guides two different-looking pages — the reader
+                 cannot tell "this guide is new" from "this site is broken".
+                 Absent content gets a line that explains and invites. */}
+            <section id="journals" className="mt-14 scroll-mt-6">
+              {journals.length > 0 ? (
                 <JournalWall
                   journals={journals}
                   guideName={guide.full_name}
                   guideId={guide.user_id}
                   slug={guide.slug}
                 />
-              </section>
-            )}
+              ) : (
+                <>
+                  <SectionHead title={`${first}'s journeys`} meta="none yet" />
+                  <EmptyNote>
+                    Every trek here ends with the guide&rsquo;s own account of the
+                    days, written up once {pn.subject}
+                    {pn.s ? " is" : " are"} back on wifi. {first} hasn&rsquo;t
+                    posted one yet — book {pn.object} and yours is the first.
+                    {messageForm(
+                      `Message ${first} — free`,
+                      "mt-3 rounded bg-moss px-4 py-2 text-sm font-medium text-white hover:bg-pine",
+                    )}
+                  </EmptyNote>
+                </>
+              )}
+            </section>
 
-            {/* ── Reviews — only when there are reviews. ─────────────────── */}
-            {reviews.length > 0 && (
-              <section className="mt-14">
-                <SectionHead
-                  title={`What trekkers said about ${first}`}
-                  meta={`${reviews.length} review${reviews.length === 1 ? "" : "s"}`}
-                />
-                <RatingSummary reviews={reviews} />
-                <div className="mt-6 space-y-5">
-                  {reviews.map((r: any) => (
-                    <ReviewBlock
-                      key={r.id}
-                      authorName={r.author_name}
-                      country={r.author_country}
-                      overall={r.overall}
-                      body={r.body}
-                      date={r.published_at}
-                      reply={r.guide_reply}
-                      replyName={first}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
+            {/* ── Reviews. Also always here — and when there are none, the
+                 reason is itself the reassurance. */}
+            <section className="mt-14">
+              <SectionHead
+                title={`What trekkers said about ${first}`}
+                meta={
+                  reviews.length
+                    ? `${reviews.length} review${reviews.length === 1 ? "" : "s"}`
+                    : "no reviews yet"
+                }
+              />
+              {reviews.length > 0 ? (
+                <>
+                  <RatingSummary reviews={reviews} />
+                  <div className="mt-6 space-y-5">
+                    {reviews.map((r: any) => (
+                      <ReviewBlock
+                        key={r.id}
+                        authorName={r.author_name}
+                        country={r.author_country}
+                        overall={r.overall}
+                        body={r.body}
+                        date={r.published_at}
+                        reply={r.guide_reply}
+                        replyName={first}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <EmptyNote>
+                  A review on Trek can only be written by someone who finished a
+                  trek they paid for, which is why they arrive slowly and why
+                  none of them can be bought. {first}&rsquo;s licence, identity
+                  and first aid are checked and dated below —{" "}
+                  {treksLed > 0
+                    ? `and ${pn.subject} ${pn.s ? "has" : "have"} led ${treksLed} trek${treksLed === 1 ? "" : "s"}.`
+                    : `the reviews are simply still on the trail.`}
+                </EmptyNote>
+              )}
+            </section>
 
             {/* Photographs sit after the reviews so the journeys run straight
                 into what trekkers said about them. */}
             <GuideGallery photos={gallery} first={first} />
 
-            {/* ── Ask me anything — the wall renders only with content; empty
-                 it is a one-line affordance (see QuestionWall). */}
-            {questions.length > 0 && (
-              <div className="mt-12">
-                <QuestionWall
-                  guideName={guide.full_name}
-                  guideFirstName={first}
-                  questions={questions}
-                  canAsk={!reader.isThisGuide}
-                  askerName={reader.name}
-                />
-              </div>
-            )}
+            {/* ── Ask me anything. Always here: with questions it is the
+                 richest thing on the page, and with none it is still the
+                 cheapest way for a reader to start a conversation. */}
+            <div className="mt-14">
+              <QuestionWall
+                guideName={guide.full_name}
+                guideFirstName={first}
+                questions={questions}
+                canAsk={!reader.isThisGuide}
+                askerName={reader.name}
+              />
+            </div>
 
             {/* ── One honest line instead of three hollow sections. A new
                  guide's page used to apologise three separate times — no
                  journals, no reviews, no questions — at full section size.
                  Being early is one fact; it is said once, small. */}
-            {brandNew && (
-              <section className="mt-12 rounded-md border border-line bg-card p-5">
-                <p className="text-[15px] text-ink">
-                  {first} is new to bookings on Trek — {pn.possessive} licence
-                  and references are checked, {pn.possessive} first review is
-                  still on the trail. Be {pn.possessive} first trek, first
-                  review, or first question.
-                </p>
-                <div className="mt-3">
-                  <QuestionWall
-                    guideName={guide.full_name}
-                    guideFirstName={first}
-                    questions={questions}
-                    canAsk={!reader.isThisGuide}
-                    askerName={reader.name}
-                  />
-                </div>
-              </section>
-            )}
 
             {/* ── The quiet strip: real, load-bearing, and small. ────────── */}
             <section className="mt-12 space-y-4">
@@ -1095,6 +1109,23 @@ function GuidePortrait({
         </div>
       )}
       {lightbox.node}
+    </div>
+  );
+}
+
+/**
+ * What a section says when it has nothing in it yet.
+ *
+ * Deliberately not a dashed "no content" box: on a marketplace where most
+ * guides are new, that shape appears on nine pages in ten and teaches the
+ * reader that the site is half-built. This is a plain bordered note that
+ * explains why the section is empty and what to do about it — the same weight
+ * as a short paragraph, not the weight of a missing feature.
+ */
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-4 rounded-md border border-line bg-card p-5">
+      <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">{children}</p>
     </div>
   );
 }
