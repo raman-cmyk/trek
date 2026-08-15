@@ -20,24 +20,76 @@ export interface MapRoute {
 /**
  * Guides across Nepal, on a real map.
  *
- * MapLibre is ~200 kB and cannot server-render, so it is imported lazily on
- * mount and only when the map tab is actually shown — the homepage still SSRs
- * to complete HTML, and a visitor who never opens the map never pays for it.
+ * MapLibre is 977 kB of JavaScript and cannot server-render, and this map sits
+ * around 1,200px down the homepage — below the fold on every laptop. It used
+ * to start downloading and parsing all of that the moment the page mounted,
+ * competing with the hero for the main thread, for a picture nobody had
+ * scrolled to. It now waits until it is nearly in view.
+ *
  * The grid tab is the no-JavaScript answer and renders the same data.
  *
- * Tiles are OpenStreetMap raster (docs/02: MapLibre GL + OSM). Swapping in
- * Baato when the founder has a key is a one-line change to STYLE.
+ * Tiles are OpenStreetMap raster (docs/02: MapLibre GL + OSM). Their public
+ * tile server is rate-limited and asks not to be used by applications, which
+ * is the other half of why this is slow; swapping in Baato when the founder
+ * has a key is a one-line change to MAP_STYLE.
  */
 
 export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] }) {
   const [view, setView] = useState<"map" | "grid">("map");
   const el = useRef<HTMLDivElement | null>(null);
+  const wrap = useRef<HTMLDivElement | null>(null);
   const [failed, setFailed] = useState(false);
   /** False until the visible tiles have painted, so the cover can clear. */
   const [ready, setReady] = useState(false);
+  /** Nothing is fetched until the map is nearly on screen. */
+  const [near, setNear] = useState(false);
 
   useEffect(() => {
-    if (view !== "map" || !el.current) return;
+    let fired = false;
+    const go = () => {
+      if (!fired) {
+        fired = true;
+        setNear(true);
+      }
+    };
+
+    // Two triggers, whichever comes first.
+    //
+    // Scrolling to it starts it immediately — a small margin only, because
+    // the map sits about 265px below the fold and a generous one fires on
+    // load, which is the thing we are trying to avoid.
+    const node = wrap.current;
+    let io: IntersectionObserver | undefined;
+    if (node && typeof IntersectionObserver !== "undefined") {
+      io = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            go();
+            io?.disconnect();
+          }
+        },
+        { rootMargin: "200px 0px" },
+      );
+      io.observe(node);
+    }
+
+    // Otherwise it warms itself once the browser has nothing better to do, so
+    // a megabyte of MapLibre never competes with the hero, and the map is
+    // usually drawn by the time a reader scrolls down to it.
+    const idle: any =
+      typeof requestIdleCallback !== "undefined"
+        ? requestIdleCallback(go, { timeout: 4000 })
+        : setTimeout(go, 2500);
+
+    return () => {
+      io?.disconnect();
+      if (typeof cancelIdleCallback !== "undefined") cancelIdleCallback(idle);
+      else clearTimeout(idle);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (view !== "map" || !near || !el.current) return;
     setReady(false);
     let map: { remove: () => void } | null = null;
     let cancelled = false;
@@ -61,6 +113,10 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
           maxZoom: 10,
           minZoom: 5,
           dragRotate: false,
+          // No cross-fade. The tiles are already late off a slow public
+          // server; spending another 300ms dissolving them in is 300ms of
+          // looking unfinished for no information gained.
+          fadeDuration: 0,
         });
         map = m;
         m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -157,13 +213,13 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
       cancelled = true;
       map?.remove();
     };
-  }, [view, pins, routes]);
+  }, [view, near, pins, routes]);
 
   const total = pins.reduce((s, p) => s + p.count, 0);
   const showGrid = view === "grid" || failed;
 
   return (
-    <div>
+    <div ref={wrap}>
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <p className="text-muted">
           <span className="font-mono text-ink">{total}</span> guides in{" "}
