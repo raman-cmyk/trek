@@ -122,6 +122,7 @@ export default [
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
   route("api/journal-photo", "routes/api.journal-photo.tsx"),
+  route("api/guide-voice", "routes/api.guide-voice.tsx"),
   route("api/message-photo", "routes/api.message-photo.tsx"),
 
   // Recap OG image (binary resource route — outside the layout).

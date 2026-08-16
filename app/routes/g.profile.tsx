@@ -5,6 +5,7 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { Button } from "~/components/Button";
 import { formatUsd } from "~/lib/pricing";
+import { fmtDate } from "~/lib/format";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -13,7 +14,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("guides")
       .select(
-        "slug, hook_line, bio, only_with_me, home_district, years_experience, gender, licence_no, licence_expiry, porter_welfare, day_rate_usd_cents, payout_method, payout_account, payout_account_name, tier, status",
+        "slug, hook_line, bio, only_with_me, home_district, years_experience, gender, licence_no, licence_expiry, porter_welfare, voice_intro_url, day_rate_usd_cents, payout_method, payout_account, payout_account_name, tier, status",
       )
       .eq("user_id", user.id)
       .single(),
@@ -42,6 +43,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     },
     { headers },
   );
+}
+
+/**
+ * The object path inside a bucket, recovered from its public URL.
+ *
+ * Deleting the row is not deleting the file: without this, every removed photo
+ * and every re-recorded voice note stays in storage for ever, paid for and
+ * still reachable by anyone who kept the link. Returns null for anything that
+ * is not a public URL for this bucket — seeded photos are served from /img,
+ * and those must not be touched.
+ */
+function storagePath(url: string | null | undefined, bucket: string): string | null {
+  if (!url) return null;
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const i = url.indexOf(marker);
+  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length));
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -100,6 +117,33 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ ok: "Saved." }, { headers });
   }
 
+  // The voice note. The column and the player have both existed since the
+  // profile rebuild; nothing ever let a guide record one.
+  if (intent === "voice") {
+    // Whatever is being replaced or removed, the old file goes too.
+    const { data: cur } = await admin
+      .from("guides")
+      .select("voice_intro_url")
+      .eq("user_id", user.id)
+      .single();
+    const old = storagePath(cur?.voice_intro_url, "guide-audio");
+
+    if (form.get("delete")) {
+      await admin.from("guides").update({ voice_intro_url: null }).eq("user_id", user.id);
+      if (old) await admin.storage.from("guide-audio").remove([old]);
+      return data({ ok: "Recording removed." }, { headers });
+    }
+    const url = String(form.get("url") ?? "").trim();
+    if (!url) {
+      return data({ error: "The upload didn't finish. Try again." }, { status: 400, headers });
+    }
+    await admin.from("guides").update({ voice_intro_url: url }).eq("user_id", user.id);
+    if (old && old !== storagePath(url, "guide-audio")) {
+      await admin.storage.from("guide-audio").remove([old]);
+    }
+    return data({ ok: "Saved. Trekkers can hear you now." }, { headers });
+  }
+
   if (intent === "language") {
     const language = String(form.get("language") ?? "").trim().slice(0, 40);
     if (form.get("delete")) {
@@ -132,7 +176,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === "photo") {
     const id = String(form.get("photo_id") ?? "");
     if (form.get("delete")) {
+      const { data: row } = await admin
+        .from("guide_photos")
+        .select("url")
+        .eq("id", id)
+        .eq("guide_id", user.id)
+        .single();
       await admin.from("guide_photos").delete().eq("id", id).eq("guide_id", user.id);
+      // The file too, not just the row — a photo a guide took down should
+      // stop existing, not merely stop being listed.
+      const path = storagePath(row?.url, "journal-photos");
+      if (path) await admin.storage.from("journal-photos").remove([path]);
       return data({ ok: "Photo removed." }, { headers });
     }
     if (form.get("make_main")) {
@@ -336,6 +390,8 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         </Button>
       </Form>
 
+      <GuideVoice url={guide?.voice_intro_url ?? null} busy={busy} />
+
       {/* ── Languages: add and remove, which nothing offered before. */}
       <section className="space-y-3 rounded-card border border-border bg-card p-4">
         <div>
@@ -424,6 +480,11 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
               className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
             />
           </label>
+          {/* A date input prints its boxes in the browser's locale, so a guide
+              in Nepal is shown mm/dd/yyyy and has no way to tell whether the
+              5 they typed was the day or the month. The widget order is not
+              ours to set — so the saved value is echoed back in words, where
+              "5 January 2028" cannot be read two ways. */}
           <label className="block text-sm text-ink-soft">
             Licence expires
             <input
@@ -432,6 +493,11 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
               defaultValue={guide?.licence_expiry ?? ""}
               className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
             />
+            {guide?.licence_expiry && (
+              <span className="mt-1 block text-xs text-ink-soft">
+                Saved as {fmtDate(guide.licence_expiry)}
+              </span>
+            )}
           </label>
           <label className="block text-sm text-ink-soft">
             We should call you
@@ -729,6 +795,90 @@ function GuidePhotos({
             </label>
             <Button type="submit" size="sm" loading={busy}>
               Add this photo
+            </Button>
+          </>
+        )}
+      </Form>
+    </section>
+  );
+}
+
+/**
+ * The voice introduction.
+ *
+ * A file picker rather than an in-browser recorder: `accept="audio/*"` opens
+ * the phone's own voice-memo app on both Android and iOS, which is a recorder
+ * the guide already knows how to use and which does not need microphone
+ * permission inside a web page on a cheap handset.
+ */
+function GuideVoice({ url, busy }: { url: string | null; busy: boolean }) {
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function send(file: File) {
+    setErr(null);
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/guide-voice", { method: "POST", body });
+      const json: any = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? "Upload failed.");
+      setFresh(json.url);
+    } catch (e: any) {
+      setErr(e.message ?? "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <section className="space-y-3 rounded-card border border-border bg-card p-4">
+      <div>
+        <p className="text-sm font-medium text-ink">Your voice</p>
+        <p className="mt-0.5 text-sm text-ink-soft">
+          About a minute. Say your name, where you are from, and one thing you
+          want a trekker to know. Hearing you is the strongest thing on your
+          profile.
+        </p>
+      </div>
+
+      {url && !fresh && (
+        <div className="space-y-2">
+          <audio controls src={url} className="w-full" />
+          <Form method="post">
+            <input type="hidden" name="intent" value="voice" />
+            <button name="delete" value="1" className="text-xs text-ember underline">
+              Remove recording
+            </button>
+          </Form>
+        </div>
+      )}
+
+      <Form method="post" className="space-y-2">
+        <input type="hidden" name="intent" value="voice" />
+        <input type="hidden" name="url" value={fresh ?? ""} />
+        <label className="block text-sm text-ink-soft">
+          {url ? "Record a new one" : "Record one"}
+          <input
+            type="file"
+            accept="audio/*"
+            className="mt-1 block w-full text-sm text-ink-soft file:mr-3 file:rounded-button file:border-0 file:bg-mist file:px-3 file:py-2 file:text-sm file:text-ink"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) send(f);
+            }}
+          />
+        </label>
+        {uploading && <p className="text-sm text-ink-soft">Sending the recording…</p>}
+        {err && <p className="text-sm text-ember">{err}</p>}
+        {fresh && (
+          <>
+            <audio controls src={fresh} className="w-full" />
+            <p className="text-xs text-ink-soft">Listen back before you save it.</p>
+            <Button type="submit" size="sm" loading={busy}>
+              Use this recording
             </Button>
           </>
         )}
