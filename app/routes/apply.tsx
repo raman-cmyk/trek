@@ -223,21 +223,59 @@ export default function Apply({ actionData }: Route.ComponentProps) {
           aria-hidden="true"
           className="absolute -left-[9999px] h-0 w-0 opacity-0"
         />
-        <Field name="full_name" label="Full name (as on your licence)" required />
-        <Field name="phone" label="Phone (with country code, e.g. +9779…)" required />
-        <Field name="email" label="Email (you'll sign in with this)" required />
-        <Field name="password" label="Choose a password (8+ characters)" type="password" required />
-        <Field name="home_district" label="Home district" />
-        <div className="grid grid-cols-2 gap-4">
-          <Field name="licence_no" label="Trekking licence no." />
-          <Field name="licence_expiry" label="Licence expiry" type="date" />
+        {/* Three short groups instead of eleven fields in a column. The form
+            is the same length; knowing which part you are in is what makes it
+            feel answerable on a phone. */}
+        <Group n={1} title="How we reach you" note="All four needed.">
+          <Field name="full_name" label="Full name" hint="As written on your licence" required />
+          <Field name="phone" label="Phone" hint="With country code, like +977 98…" required />
+          <Field name="email" label="Email" hint="You sign in with this" type="email" required />
+          <Field
+            name="password"
+            label="Choose a password"
+            hint="8 letters or more"
+            type="password"
+            required
+          />
+        </Group>
+
+        <Group n={2} title="Your licence" note="Leave anything blank if you don't have it yet.">
+          <Field name="licence_no" label="Trekking licence number" />
+          <Field name="licence_expiry" label="Licence expires" type="date" />
+          <Field name="home_district" label="Home district" hint="Where you are from" />
+        </Group>
+
+        <Group n={3} title="Your work" note="You can change all of this later.">
+          <div className="grid grid-cols-2 gap-4">
+            <Field name="years_experience" label="Years guiding" type="number" />
+            <Field
+              name="day_rate_usd"
+              label="Your day rate"
+              hint="US dollars. Most guides: 30–60"
+              type="number"
+            />
+          </div>
+          <Field
+            name="languages"
+            label="Languages you speak"
+            hint="Separate them with commas — Nepali, English, German"
+          />
+          <Field
+            name="hook_line"
+            label="One line about you"
+            hint="The real thing you do. “I know every teahouse from Lukla to Gorak Shep.”"
+          />
+        </Group>
+
+        <div className="rounded-card border border-border bg-card p-4 text-sm text-ink-soft">
+          <p className="font-medium text-ink">What happens next</p>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+            <li>You can sign in straight away and finish your profile.</li>
+            <li>We check your licence, your ID and your references.</li>
+            <li>Once checked, your profile goes live and trekkers can book you.</li>
+          </ol>
+          <p className="mt-2">Adding your photo and your story is what gets you booked — you do that yourself after signing in.</p>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field name="years_experience" label="Years guiding" type="number" />
-          <Field name="day_rate_usd" label="Your day rate (USD)" type="number" />
-        </div>
-        <Field name="languages" label="Languages (comma-separated)" />
-        <Field name="hook_line" label="One line about you" />
 
         {actionData && "error" in actionData && actionData.error && (
           <p className="text-sm text-danger">{actionData.error}</p>
@@ -253,25 +291,61 @@ export default function Apply({ actionData }: Route.ComponentProps) {
   );
 }
 
+/** A numbered step. Not a wizard — one page still works with no JavaScript. */
+function Group({
+  n,
+  title,
+  note,
+  children,
+}: {
+  n: number;
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4 rounded-card border border-border bg-card p-4">
+      <div className="flex items-baseline gap-2">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-mist font-mono text-xs text-ink">
+          {n}
+        </span>
+        <div>
+          <p className="font-medium text-ink">{title}</p>
+          {note && <p className="text-sm text-ink-soft">{note}</p>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function Field({
   name,
   label,
+  hint,
   type = "text",
   required,
 }: {
   name: string;
   label: string;
+  /** Said under the label, because a guide reading this in their third
+      language should never have to guess what a field wants. */
+  hint?: string;
   type?: string;
   required?: boolean;
 }) {
   return (
     <label className="block">
-      <span className="text-sm text-ink-soft">{label}</span>
+      <span className="text-sm text-ink">
+        {label}
+        {!required && <span className="ml-1.5 text-xs text-ink-soft">optional</span>}
+      </span>
+      {hint && <span className="mt-0.5 block text-xs text-ink-soft">{hint}</span>}
       <input
         name={name}
         type={type}
         required={required}
-        className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
+        className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base outline-none focus:border-primary"
       />
     </label>
   );

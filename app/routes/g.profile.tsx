@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Form, data, useNavigation } from "react-router";
 import type { Route } from "./+types/g.profile";
 import { getEnv } from "~/lib/supabase.server";
@@ -8,16 +9,24 @@ import { formatUsd } from "~/lib/pricing";
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
-  const [{ data: guide }, { data: langs }, { count: photoCount }] = await Promise.all([
+  const [{ data: guide }, { data: langs }, { data: photos }] = await Promise.all([
     admin
       .from("guides")
       .select(
-        "slug, hook_line, bio, only_with_me, home_district, day_rate_usd_cents, payout_method, payout_account, tier",
+        "slug, hook_line, bio, only_with_me, home_district, years_experience, gender, licence_no, licence_expiry, porter_welfare, day_rate_usd_cents, payout_method, payout_account, payout_account_name, tier, status",
       )
       .eq("user_id", user.id)
       .single(),
-    admin.from("guide_languages").select("language").eq("guide_id", user.id),
-    admin.from("guide_photos").select("id", { count: "exact", head: true }).eq("guide_id", user.id),
+    admin
+      .from("guide_languages")
+      .select("language, proficiency")
+      .eq("guide_id", user.id)
+      .order("language"),
+    admin
+      .from("guide_photos")
+      .select("id, url, kind, alt_text, sort")
+      .eq("guide_id", user.id)
+      .order("sort"),
   ]);
   const { data: canned } = await admin
     .from("canned_replies")
@@ -27,8 +36,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return data(
     {
       guide,
-      languages: (langs ?? []).map((l: any) => l.language),
-      photoCount: photoCount ?? 0,
+      languages: langs ?? [],
+      photos: photos ?? [],
       canned: canned ?? [],
     },
     { headers },
@@ -51,10 +60,128 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (["esewa", "khalti", "bank"].includes(method)) patch.payout_method = method;
     const acct = String(form.get("payout_account") ?? "").trim();
     if (acct) patch.payout_account = acct;
+    // The name the account is held in. Payouts are made by hand in NPR, and a
+    // number without a name is the single most common reason one bounces.
+    const acctName = String(form.get("payout_account_name") ?? "").trim();
+    if (acctName) patch.payout_account_name = acctName;
     if (Object.keys(patch).length) {
       await admin.from("guides").update(patch).eq("user_id", user.id);
     }
     return data({ ok: "Saved." }, { headers });
+  }
+
+  // The guide's own words about themselves. Previously this could only be
+  // changed by asking ops in a free-text note and waiting — which is why most
+  // profiles carry whatever was typed on the day they applied.
+  if (intent === "story") {
+    const bio = String(form.get("bio") ?? "").trim().slice(0, 4000);
+    const hook = String(form.get("hook_line") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+    await admin
+      .from("guides")
+      .update({ bio: bio || null, hook_line: hook || null })
+      .eq("user_id", user.id);
+    return data({ ok: "Saved. This is on your profile now." }, { headers });
+  }
+
+  // Facts about the guide that are theirs to correct. licence_no, tier, slug
+  // and status are guarded in the database and deliberately absent here.
+  if (intent === "basics") {
+    const patch: Record<string, unknown> = {
+      home_district: String(form.get("home_district") ?? "").trim() || null,
+      porter_welfare: form.get("porter_welfare") === "on",
+    };
+    const years = Number(form.get("years_experience"));
+    if (Number.isFinite(years) && years >= 0 && years <= 70) patch.years_experience = years;
+    const gender = String(form.get("gender") ?? "");
+    if (["female", "male", "other"].includes(gender)) patch.gender = gender;
+    const exp = String(form.get("licence_expiry") ?? "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(exp)) patch.licence_expiry = exp;
+    await admin.from("guides").update(patch).eq("user_id", user.id);
+    return data({ ok: "Saved." }, { headers });
+  }
+
+  if (intent === "language") {
+    const language = String(form.get("language") ?? "").trim().slice(0, 40);
+    if (form.get("delete")) {
+      await admin
+        .from("guide_languages")
+        .delete()
+        .eq("guide_id", user.id)
+        .eq("language", language);
+      return data({ ok: `Removed ${language}.` }, { headers });
+    }
+    if (!language) return data({ error: "Type a language first." }, { status: 400, headers });
+    const proficiency = String(form.get("proficiency") ?? "conversational");
+    // Upsert, so adding a language you already have changes how well you speak
+    // it rather than failing on the primary key.
+    await admin.from("guide_languages").upsert(
+      {
+        guide_id: user.id,
+        language: language[0].toUpperCase() + language.slice(1),
+        proficiency: ["basic", "conversational", "fluent", "native"].includes(proficiency)
+          ? proficiency
+          : "conversational",
+      },
+      { onConflict: "guide_id,language" },
+    );
+    return data({ ok: `Added ${language}.` }, { headers });
+  }
+
+  // Photographs. The upload itself happens at /api/journal-photo (which strips
+  // the GPS out of the EXIF first); this only records the row.
+  if (intent === "photo") {
+    const id = String(form.get("photo_id") ?? "");
+    if (form.get("delete")) {
+      await admin.from("guide_photos").delete().eq("id", id).eq("guide_id", user.id);
+      return data({ ok: "Photo removed." }, { headers });
+    }
+    if (form.get("make_main")) {
+      // Exactly one headshot: the profile portrait reads the first one, so two
+      // would make which-photo-shows-first a coin toss.
+      await admin
+        .from("guide_photos")
+        .update({ kind: "trail" })
+        .eq("guide_id", user.id)
+        .eq("kind", "headshot");
+      await admin
+        .from("guide_photos")
+        .update({ kind: "headshot", sort: 0 })
+        .eq("id", id)
+        .eq("guide_id", user.id);
+      return data({ ok: "That's your main photo now." }, { headers });
+    }
+    const url = String(form.get("url") ?? "").trim();
+    const alt = String(form.get("alt_text") ?? "").trim().slice(0, 160);
+    if (!url) return data({ error: "The upload didn't finish. Try again." }, { status: 400, headers });
+    if (!alt) {
+      return data(
+        { error: "Add a few words about the photo — it is what a blind reader and Google get." },
+        { status: 400, headers },
+      );
+    }
+    const { count } = await admin
+      .from("guide_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("guide_id", user.id);
+    const existing = count ?? 0;
+    if (existing >= 24) {
+      return data({ error: "That's 24 photos — remove one first." }, { status: 400, headers });
+    }
+    const { count: heads } = await admin
+      .from("guide_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("guide_id", user.id)
+      .eq("kind", "headshot");
+    await admin.from("guide_photos").insert({
+      guide_id: user.id,
+      url,
+      alt_text: alt,
+      // The first photo a guide ever adds becomes their portrait, so a new
+      // guide is never left with a profile that has no face on it.
+      kind: (heads ?? 0) === 0 ? "headshot" : "trail",
+      sort: existing,
+    });
+    return data({ ok: "Photo added." }, { headers });
   }
 
   if (intent === "canned") {
@@ -115,7 +242,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideProfile({ loaderData, actionData }: Route.ComponentProps) {
-  const { guide, languages, photoCount, canned } = loaderData as any;
+  const { guide, languages, photos, canned } = loaderData as any;
   const nav = useNavigation();
   const busy = nav.state !== "idle";
 
@@ -168,15 +295,188 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         </Button>
       </Form>
 
+      {/* ── Your photographs. This is the section whose absence shows: a
+           guide could not add a picture of themselves at all, so 47 of 48
+           profiles carry one seeded headshot and no gallery. */}
+      <GuidePhotos photos={photos} busy={busy} />
+
+      {/* ── The guide's own account of themselves. */}
+      <Form method="post" className="space-y-3 rounded-card border border-border bg-card p-4">
+        <input type="hidden" name="intent" value="story" />
+        <div>
+          <p className="text-sm font-medium text-ink">About you</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            This is the longest thing a trekker reads about you. Where you are
+            from, how you walk, what you care about. Your words, not ours.
+          </p>
+        </div>
+        <label className="block text-sm text-ink-soft">
+          Short line under your name
+          <input
+            name="hook_line"
+            maxLength={120}
+            defaultValue={guide?.hook_line ?? ""}
+            placeholder="Knows every teahouse from Lukla to Gorak Shep"
+            className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+          />
+        </label>
+        <label className="block text-sm text-ink-soft">
+          Your story
+          <textarea
+            name="bio"
+            rows={7}
+            maxLength={4000}
+            defaultValue={guide?.bio ?? ""}
+            placeholder="I grew up in Khumjung, an hour below Everest View Hotel…"
+            className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+          />
+        </label>
+        <Button type="submit" size="sm" loading={busy}>
+          Save
+        </Button>
+      </Form>
+
+      {/* ── Languages: add and remove, which nothing offered before. */}
+      <section className="space-y-3 rounded-card border border-border bg-card p-4">
+        <div>
+          <p className="text-sm font-medium text-ink">Languages you speak</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            Trekkers filter by this. Every one you add puts you in another
+            search.
+          </p>
+        </div>
+        {languages.length > 0 ? (
+          <ul className="flex flex-wrap gap-2">
+            {languages.map((l: any) => (
+              <li key={l.language}>
+                <Form method="post" className="flex items-center gap-1 rounded-full border border-border bg-paper py-1 pl-3 pr-1 text-sm">
+                  <input type="hidden" name="intent" value="language" />
+                  <input type="hidden" name="language" value={l.language} />
+                  <span className="text-ink">{l.language}</span>
+                  <span className="text-xs text-ink-soft">{l.proficiency}</span>
+                  <button
+                    name="delete"
+                    value="1"
+                    aria-label={`Remove ${l.language}`}
+                    className="ml-0.5 flex size-6 items-center justify-center rounded-full text-ink-soft hover:bg-ember/10 hover:text-ember"
+                  >
+                    ×
+                  </button>
+                </Form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-soft">None yet.</p>
+        )}
+        <Form method="post" className="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="intent" value="language" />
+          <label className="flex-1 text-sm text-ink-soft">
+            Add a language
+            <input
+              name="language"
+              required
+              placeholder="German"
+              className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+            />
+          </label>
+          <label className="text-sm text-ink-soft">
+            How well
+            <select
+              name="proficiency"
+              defaultValue="conversational"
+              className="mt-1 block rounded-button border border-border px-3 py-2 text-base text-ink"
+            >
+              <option value="basic">A little</option>
+              <option value="conversational">Enough to guide</option>
+              <option value="fluent">Fluent</option>
+              <option value="native">First language</option>
+            </select>
+          </label>
+          <Button type="submit" size="sm" loading={busy}>
+            Add
+          </Button>
+        </Form>
+      </section>
+
+      {/* ── The facts. Licence number, tier and status stay ops-controlled and
+           are shown read-only so a guide can see what we hold. */}
+      <Form method="post" className="space-y-3 rounded-card border border-border bg-card p-4">
+        <input type="hidden" name="intent" value="basics" />
+        <p className="text-sm font-medium text-ink">Your details</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm text-ink-soft">
+            Home district
+            <input
+              name="home_district"
+              defaultValue={guide?.home_district ?? ""}
+              className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+            />
+          </label>
+          <label className="block text-sm text-ink-soft">
+            Years guiding
+            <input
+              name="years_experience"
+              type="number"
+              min={0}
+              max={70}
+              defaultValue={guide?.years_experience ?? ""}
+              className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+            />
+          </label>
+          <label className="block text-sm text-ink-soft">
+            Licence expires
+            <input
+              name="licence_expiry"
+              type="date"
+              defaultValue={guide?.licence_expiry ?? ""}
+              className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+            />
+          </label>
+          <label className="block text-sm text-ink-soft">
+            We should call you
+            <select
+              name="gender"
+              defaultValue={guide?.gender ?? ""}
+              className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+            >
+              <option value="">Prefer not to say (they)</option>
+              <option value="female">She</option>
+              <option value="male">He</option>
+              <option value="other">They</option>
+            </select>
+          </label>
+        </div>
+        <label className="flex items-start gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            name="porter_welfare"
+            defaultChecked={!!guide?.porter_welfare}
+            className="mt-0.5 size-4"
+          />
+          <span>
+            I promise fair pay, weight limits, insurance and proper gear for
+            every porter on my treks.
+            <span className="block text-ink-soft">Shown on your profile.</span>
+          </span>
+        </label>
+        <Button type="submit" size="sm" loading={busy}>
+          Save
+        </Button>
+      </Form>
+
       <section className="space-y-1 rounded-card border border-border bg-card p-4 text-sm">
-        <Row label="Hook line" value={guide?.hook_line} />
-        <Row label="District" value={guide?.home_district} />
-        <Row label="Languages" value={languages.join(", ") || "—"} />
-        <Row label="Photos" value={`${photoCount}`} />
+        <p className="mb-2 text-sm font-medium text-ink">Held by our team</p>
+        <Row label="Licence no." value={guide?.licence_no} />
+        <Row label="Status" value={guide?.status} />
+        <Row label="Tier" value={`${guide?.tier ?? 0}`} />
         <Row
           label="Current day rate"
           value={guide?.day_rate_usd_cents ? formatUsd(guide.day_rate_usd_cents) : "—"}
         />
+        <p className="pt-2 text-ink-soft">
+          These we check and set ourselves — ask below if any of it is wrong.
+        </p>
       </section>
 
       {/* Quick answers — tappable in the message composer. Most guides reply
@@ -268,19 +568,32 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
             className="mt-1 w-full rounded-button border border-border px-3 py-2"
           />
         </label>
+        <label className="block text-sm">
+          <span className="text-ink-soft">Name on the account</span>
+          <input
+            name="payout_account_name"
+            defaultValue={guide?.payout_account_name ?? ""}
+            placeholder="Exactly as your bank has it"
+            className="mt-1 w-full rounded-button border border-border px-3 py-2"
+          />
+        </label>
         <Button type="submit" size="sm" loading={busy}>
           Save
         </Button>
       </Form>
 
-      {/* Bio/photo changes go through ops */}
+      {/* What is left for ops. Bio and photos used to be asked for here and
+          waited on; now only the things a guide genuinely cannot set alone. */}
       <Form method="post" className="space-y-2 rounded-card border border-border bg-card p-4">
         <input type="hidden" name="intent" value="request" />
-        <p className="text-sm font-medium text-ink">Request a change to your bio or photos</p>
+        <p className="text-sm font-medium text-ink">Ask our team for something else</p>
+        <p className="text-sm text-ink-soft">
+          Your name, your licence number, or anything above that looks wrong.
+        </p>
         <textarea
           name="note"
           rows={3}
-          placeholder="e.g. Please update my bio to mention my new first-aid cert."
+          placeholder="e.g. My licence number has a typo — it should end 4471."
           className="w-full rounded-button border border-border px-3 py-2 text-sm"
         />
         <Button type="submit" size="sm" variant="secondary">
@@ -288,6 +601,139 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         </Button>
       </Form>
     </div>
+  );
+}
+
+/**
+ * The guide's photographs: see them, add one, remove one, choose which is the
+ * portrait.
+ *
+ * Uploading goes through /api/journal-photo, which strips the GPS out of the
+ * EXIF before a byte is stored — a guide uploading off their phone should not
+ * publish the coordinates of their own house. The row is only written once the
+ * file is up, so a failed upload leaves nothing behind.
+ *
+ * Alt text is required because the column is NOT NULL and because these end up
+ * on indexed public pages; it is asked for in plain words, not as "alt text".
+ */
+function GuidePhotos({
+  photos,
+  busy,
+}: {
+  photos: Array<{ id: string; url: string; kind: string; alt_text: string }>;
+  busy: boolean;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function pick(file: File) {
+    setErr(null);
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/journal-photo", { method: "POST", body });
+      const json: any = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? "Upload failed.");
+      setUrl(json.url);
+    } catch (e: any) {
+      setErr(e.message ?? "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <section className="space-y-3 rounded-card border border-border bg-card p-4">
+      <div>
+        <p className="text-sm font-medium text-ink">Your photographs</p>
+        <p className="mt-0.5 text-sm text-ink-soft">
+          Your face, and the trail as you see it. The first one is what
+          trekkers see beside your name.
+        </p>
+      </div>
+
+      {photos.length > 0 && (
+        <ul className="grid grid-cols-3 gap-2">
+          {photos.map((p) => (
+            <li key={p.id} className="space-y-1">
+              <div className="relative overflow-hidden rounded-button border border-border">
+                <img src={p.url} alt={p.alt_text} className="aspect-square w-full object-cover" />
+                {p.kind === "headshot" && (
+                  <span className="absolute left-1 top-1 rounded-full bg-pine px-1.5 py-0.5 text-[10px] font-semibold text-paper">
+                    Main
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2 text-xs">
+                {p.kind !== "headshot" && (
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="photo" />
+                    <input type="hidden" name="photo_id" value={p.id} />
+                    <button name="make_main" value="1" className="text-moss underline">
+                      Make main
+                    </button>
+                  </Form>
+                )}
+                <Form
+                  method="post"
+                  onSubmit={(e) => {
+                    if (!confirm("Remove this photo?")) e.preventDefault();
+                  }}
+                >
+                  <input type="hidden" name="intent" value="photo" />
+                  <input type="hidden" name="photo_id" value={p.id} />
+                  <button name="delete" value="1" className="text-ember underline">
+                    Remove
+                  </button>
+                </Form>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Form method="post" className="space-y-2 border-t border-border pt-3">
+        <input type="hidden" name="intent" value="photo" />
+        <input type="hidden" name="url" value={url ?? ""} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-button file:border-0 file:bg-mist file:px-3 file:py-2 file:text-sm file:text-ink"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) pick(f);
+          }}
+        />
+        {uploading && <p className="text-sm text-ink-soft">Sending the photo…</p>}
+        {err && <p className="text-sm text-ember">{err}</p>}
+        {url && (
+          <>
+            <img
+              src={url}
+              alt=""
+              className="h-24 w-24 rounded-button border border-border object-cover"
+            />
+            <label className="block text-sm text-ink-soft">
+              What is in this photo?
+              <input
+                name="alt_text"
+                required
+                maxLength={160}
+                placeholder="Me at Gorak Shep, last April"
+                className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+              />
+            </label>
+            <Button type="submit" size="sm" loading={busy}>
+              Add this photo
+            </Button>
+          </>
+        )}
+      </Form>
+    </section>
   );
 }
 
