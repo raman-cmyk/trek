@@ -3,6 +3,7 @@ import { Form } from "react-router";
 import { Button } from "~/components/Button";
 import { type PriceBreakdown } from "~/lib/experience-pricing";
 import { PriceBuilder, toDraft } from "~/components/PriceBuilder";
+import { PhotoGallery, type GalleryPhoto } from "~/components/PhotoGallery";
 
 /**
  * One form for an experience, shared by the guide (/g/experiences) and the
@@ -24,6 +25,7 @@ export interface ExperienceValues {
   min_party: number;
   max_party: number;
   cover_photo_url: string | null;
+  photos: GalleryPhoto[];
   price_breakdown: PriceBreakdown | null;
   status: string;
 }
@@ -60,31 +62,9 @@ export function ExperienceForm({
     values?.days ?? ((values?.kind ?? "trek") === "trek" ? 12 : 1),
   );
   const [draft] = useState(() => toDraft(values?.price_breakdown ?? null));
-  const [cover, setCover] = useState(values?.cover_photo_url ?? "");
-  const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState<string | null>(null);
-
-  async function upload(file: File) {
-    setUploading(true);
-    setUploadErr(null);
-    const body = new FormData();
-    body.append("file", file);
-    body.append("guide_id", guideId);
-    try {
-      const res = await fetch("/api/journal-photo", { method: "POST", body });
-      const json: any = await res.json();
-      if (!res.ok) setUploadErr(json?.error ?? "That didn't send. Try again.");
-      else setCover(json.url);
-    } catch {
-      setUploadErr("No connection. Try again when you have signal.");
-    }
-    setUploading(false);
-  }
-
   return (
     <Form method="post" className="space-y-4">
       {values?.id && <input type="hidden" name="experience_id" value={values.id} />}
-      <input type="hidden" name="cover_photo_url" value={cover} />
 
       <label className={label}>
         What kind of trip is it?
@@ -155,35 +135,10 @@ export function ExperienceForm({
       {/* ── The money. A library of lines, and the arithmetic done for them. */}
       <PriceBuilder kind={kind} days={days} initial={draft} />
 
-      {/* ── The cover photograph. ────────────────────────────────────────── */}
-      <div>
-        <p className={label}>Cover photo — the picture that sells it</p>
-        {cover ? (
-          <div className="mt-1.5 flex items-center gap-3">
-            <img src={cover} alt="" className="h-20 w-32 rounded object-cover" />
-            <button
-              type="button"
-              onClick={() => setCover("")}
-              className="text-sm text-ember underline underline-offset-4"
-            >
-              Change it
-            </button>
-          </div>
-        ) : (
-          <label className="mt-1.5 block cursor-pointer rounded-md border border-dashed border-line bg-card p-4 text-center text-sm text-ink-soft hover:border-sage">
-            {uploading ? "Sending…" : "Add a photo from your phone"}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-            />
-          </label>
-        )}
-        {uploadErr && <p className="mt-2 rounded bg-ember/10 px-3 py-2 text-sm text-ember">{uploadErr}</p>}
-      </div>
+      {/* ── The photographs. The cover is simply the first of them. */}
+      <PhotoGallery initial={values?.photos ?? []} guideId={guideId} />
 
-      <Button type="submit" disabled={busy || uploading}>
+      <Button type="submit" disabled={busy}>
         {busy ? "Saving…" : submitLabel}
       </Button>
     </Form>

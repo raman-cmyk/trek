@@ -2,7 +2,7 @@ import { Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.experiences.$id";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
-import { parseExperienceForm } from "~/lib/offerings.server";
+import { parseExperienceForm, saveOfferingPhotos } from "~/lib/offerings.server";
 import { Badge } from "~/components/ops/ui";
 import { firstName } from "~/lib/names";
 
@@ -22,8 +22,22 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .maybeSingle(),
     admin.from("routes").select("id, name").order("name"),
   ]);
+  const { data: opsPhotos } = await admin
+    .from("offering_photos")
+    .select("url, alt_text")
+    .eq("offering_id", params.id)
+    .order("sort");
   if (!offering) throw new Response("Not found", { status: 404 });
-  return data({ offering, routes: routes ?? [] }, { headers });
+  return data(
+    {
+      offering: {
+        ...offering,
+        photos: (opsPhotos ?? []).map((p: any) => ({ url: p.url, alt: p.alt_text })),
+      },
+      routes: routes ?? [],
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -38,10 +52,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: next === "live" ? "Live." : "Paused." }, { headers });
   }
 
-  const { patch, error } = parseExperienceForm(form);
+  const { patch, photos, error } = parseExperienceForm(form);
   if (!patch) return data({ error }, { status: 400, headers });
   const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", params.id);
   if (dbErr) return data({ error: dbErr.message }, { status: 400, headers });
+  await saveOfferingPhotos(admin, params.id!, photos ?? [], "ops");
   return data({ ok: "Saved." }, { headers });
 }
 

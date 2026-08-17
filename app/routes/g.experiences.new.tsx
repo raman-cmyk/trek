@@ -3,7 +3,11 @@ import type { Route } from "./+types/g.experiences.new";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
-import { parseExperienceForm, uniqueOfferingSlug } from "~/lib/offerings.server";
+import {
+  parseExperienceForm,
+  saveOfferingPhotos,
+  uniqueOfferingSlug,
+} from "~/lib/offerings.server";
 
 /**
  * A guide lists a new experience. It is born `pending`: the office checks it
@@ -21,17 +25,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
-  const { patch, error } = parseExperienceForm(await request.formData());
+  const { patch, photos, error } = parseExperienceForm(await request.formData(), {
+    minPhotos: 3,
+  });
   if (!patch) return data({ error }, { status: 400, headers });
 
   const slug = await uniqueOfferingSlug(admin, patch.title);
-  const { error: dbErr } = await admin.from("offerings").insert({
-    ...patch,
-    slug,
-    guide_id: user.id,
-    status: "pending",
-  });
-  if (dbErr) return data({ error: "That did not save. Try again." }, { status: 400, headers });
+  const { data: created, error: dbErr } = await admin
+    .from("offerings")
+    .insert({ ...patch, slug, guide_id: user.id, status: "pending" })
+    .select("id")
+    .single();
+  if (dbErr || !created) {
+    return data({ error: "That did not save. Try again." }, { status: 400, headers });
+  }
+  await saveOfferingPhotos(admin, created.id, photos ?? []);
 
   // The office finds out through the queue it already watches.
   await admin.from("guide_change_requests").insert({

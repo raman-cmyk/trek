@@ -26,7 +26,45 @@ export interface OfferingPatch {
   price_usd_cents: number;
 }
 
-export function parseExperienceForm(form: FormData): { patch?: OfferingPatch; error?: string } {
+export interface ParsedPhoto {
+  url: string;
+  alt: string;
+}
+
+/**
+ * Replace an offering's photographs with exactly what the form sent.
+ *
+ * Guide-uploaded photos are approved on arrival: the offering itself already
+ * passes through the office before it can go live, so a second gate would only
+ * mean a guide adds six photographs and sees none of them. Trekker photos are
+ * the ones `approved` exists for.
+ */
+export async function saveOfferingPhotos(
+  admin: SupabaseClient,
+  offeringId: string,
+  photos: ParsedPhoto[],
+  source: "guide" | "ops" = "guide",
+) {
+  await admin.from("offering_photos").delete().eq("offering_id", offeringId).eq("source", source);
+  if (!photos.length) return;
+  await admin.from("offering_photos").insert(
+    photos.map((p, i) => ({
+      offering_id: offeringId,
+      url: p.url,
+      // alt_text is NOT NULL and these land on indexed pages; fall back to
+      // something true rather than refusing the save over a blank caption.
+      alt_text: p.alt.trim() || "Photograph from this trip",
+      source,
+      approved: true,
+      sort: i,
+    })),
+  );
+}
+
+export function parseExperienceForm(
+  form: FormData,
+  opts: { minPhotos?: number } = {},
+): { patch?: OfferingPatch; photos?: ParsedPhoto[]; error?: string } {
   const kind = String(form.get("kind") ?? "");
   const title = String(form.get("title") ?? "").trim();
   const summary = String(form.get("summary") ?? "").trim();
@@ -104,7 +142,37 @@ export function parseExperienceForm(form: FormData): { patch?: OfferingPatch; er
     return { error: "At least one line has to be part of the price, not an extra." };
   }
 
+  // The gallery. The first photograph is the cover — one list, not a cover
+  // field and a gallery that could disagree about which picture leads.
+  let photos: ParsedPhoto[] = [];
+  const rawPhotos = String(form.get("photos") ?? "").trim();
+  if (rawPhotos) {
+    try {
+      const parsed = JSON.parse(rawPhotos);
+      if (Array.isArray(parsed)) {
+        photos = parsed
+          .map((p: any) => ({
+            url: String(p?.url ?? "").trim(),
+            alt: String(p?.alt ?? "").trim().slice(0, 160),
+          }))
+          .filter((p) => /^https?:\/\//.test(p.url))
+          .slice(0, 30);
+      }
+    } catch {
+      return { error: "The photos didn't save. Try adding them again." };
+    }
+  }
+  const minPhotos = opts.minPhotos ?? 0;
+  if (photos.length < minPhotos) {
+    return {
+      error: `Add ${minPhotos} photographs before you send it — a trip with ${
+        photos.length === 1 ? "one photo" : `${photos.length} photos`
+      } does not sell.`,
+    };
+  }
+
   return {
+    photos,
     patch: {
       kind,
       title,
@@ -113,7 +181,8 @@ export function parseExperienceForm(form: FormData): { patch?: OfferingPatch; er
       days,
       min_party,
       max_party,
-      cover_photo_url: String(form.get("cover_photo_url") ?? "").trim() || null,
+      cover_photo_url:
+        photos[0]?.url ?? (String(form.get("cover_photo_url") ?? "").trim() || null),
       price_breakdown,
       price_usd_cents: fromPerPersonUsdCents(price_breakdown, max_party),
     },

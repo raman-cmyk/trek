@@ -3,7 +3,7 @@ import type { Route } from "./+types/g.experiences.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
-import { parseExperienceForm } from "~/lib/offerings.server";
+import { parseExperienceForm, saveOfferingPhotos } from "~/lib/offerings.server";
 import { Badge } from "~/components/ops/ui";
 
 /**
@@ -25,7 +25,24 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     admin.from("routes").select("id, name").order("name"),
   ]);
   if (!offering) throw new Response("Not found", { status: 404 });
-  return data({ offering, routes: routes ?? [], guideId: user.id }, { headers });
+  // The gallery has to arrive with the form, or saving would post an empty
+  // list and wipe the photographs that are already there.
+  const { data: photos } = await admin
+    .from("offering_photos")
+    .select("url, alt_text")
+    .eq("offering_id", offering.id)
+    .order("sort");
+  return data(
+    {
+      offering: {
+        ...offering,
+        photos: (photos ?? []).map((p: any) => ({ url: p.url, alt: p.alt_text })),
+      },
+      routes: routes ?? [],
+      guideId: user.id,
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -56,11 +73,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
   }
 
-  const { patch, error } = parseExperienceForm(form);
+  const { patch, photos, error } = parseExperienceForm(form, { minPhotos: 3 });
   if (!patch) return data({ error }, { status: 400, headers });
 
   const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", offering.id);
   if (dbErr) return data({ error: "That did not save. Try again." }, { status: 400, headers });
+  await saveOfferingPhotos(admin, offering.id, photos ?? []);
 
   if (offering.status === "live") {
     await admin.from("guide_change_requests").insert({
