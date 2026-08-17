@@ -10,6 +10,30 @@
  * group grows. All money is integer USD cents.
  */
 
+/**
+ * Which booking-snapshot column a line belongs to.
+ *
+ * A guide's own labels are what the traveller reads, but a booking stores four
+ * fixed money columns and the Fund is computed off them. Every line therefore
+ * declares which bucket it lands in, so custom wording never changes what a
+ * booking records or what the Fund is owed.
+ */
+export type PriceBucket = "guide" | "permits" | "porters" | "logistics";
+
+export interface PriceLine {
+  /** Stable across edits, so React keys and diffing behave. */
+  id: string;
+  label: string;
+  amountUsdCents: number;
+  /** "group" divides across the party (a guide's fee); "person" does not. */
+  basis: "person" | "group";
+  /** "day" multiplies by the trip's length; "trip" is a one-off. */
+  cadence: "day" | "trip";
+  /** An add-on the traveller chooses — priced, but outside the headline. */
+  optional: boolean;
+  bucket: PriceBucket;
+}
+
 export interface PriceBreakdown {
   /** Fixed per trip (the guide's cut = day_rate × days). Split across the group. */
   guide_fee_total_usd_cents: number;
@@ -20,12 +44,45 @@ export interface PriceBreakdown {
   /** Percentages (0.10 = 10%). */
   trek_pct: number;
   fund_pct: number;
+  /**
+   * The line-item form. A fourteen-day Manaslu trek and a three-hour momo walk
+   * cannot share four fixed slots, so a breakdown may instead carry as many
+   * lines as the trip actually has. When present these win; the four slots
+   * above stay for every offering priced before this existed.
+   */
+  lines?: PriceLine[];
+  /** Trip length, needed to resolve cadence:"day" lines. */
+  days?: number;
+}
+
+/**
+ * Does this offering carry a real itemised price?
+ *
+ * Seven call sites used to test `guide_fee_total_usd_cents` for truthiness as a
+ * stand-in for this question — including the booking path. A line-item trip can
+ * leave that slot at zero, so the test has to be asked properly.
+ */
+export function hasBreakdown(bd: PriceBreakdown | null | undefined): bd is PriceBreakdown {
+  if (!bd) return false;
+  if (bd.lines?.length) return bd.lines.some((l) => l.amountUsdCents > 0);
+  return !!bd.guide_fee_total_usd_cents;
+}
+
+/** Per-person contribution of one line at a given group size. */
+function linePerPerson(l: PriceLine, groupSize: number, days: number): number {
+  const spans = l.cadence === "day" ? Math.max(1, days) : 1;
+  const total = l.amountUsdCents * spans;
+  return l.basis === "group" ? Math.round(total / groupSize) : total;
 }
 
 export interface PricingLine {
-  key: "guide" | "permits" | "porters" | "logistics" | "trek" | "fund";
+  /** Fixed keys for the four legacy buckets and the two percentages; a
+      line-item breakdown emits `line:<id>` for each of the guide's own. */
+  key: string;
   label: string;
   amountUsdCents: number;
+  /** Which snapshot column this belongs to. Absent on trek/fund. */
+  bucket?: PriceBucket;
 }
 
 export interface ExperiencePricing {
@@ -44,26 +101,79 @@ export function computeExperiencePricing(
   groupSize: number,
 ): ExperiencePricing {
   const g = Math.max(1, Math.floor(groupSize));
-  const guidePP = Math.round(bd.guide_fee_total_usd_cents / g);
-  const base = guidePP + bd.permits_usd_cents + bd.porters_usd_cents + bd.logistics_usd_cents;
-  const trek = Math.round(base * bd.trek_pct);
-  const fund = Math.round(base * bd.fund_pct);
-  const lines: PricingLine[] = [
-    { key: "guide", label: "Guide fees", amountUsdCents: guidePP },
-    { key: "permits", label: "Permits (TIMS + park)", amountUsdCents: bd.permits_usd_cents },
-    { key: "porters", label: "Porters", amountUsdCents: bd.porters_usd_cents },
-    { key: "logistics", label: "Teahouse, food & logistics", amountUsdCents: bd.logistics_usd_cents },
-    { key: "trek", label: `Trek fee (${pct(bd.trek_pct)})`, amountUsdCents: trek },
-    { key: "fund", label: `The Fund (${pct(bd.fund_pct)})`, amountUsdCents: fund },
-  ];
+
+  // Line-item breakdowns keep the guide's own labels; the four-slot form is
+  // what every offering priced before the builder existed still carries.
+  const itemised = bd.lines?.length
+    ? bd.lines.filter((l) => !l.optional)
+    : null;
+
+  let lines: PricingLine[];
+  let soloGuide: number;
+
+  if (itemised) {
+    const days = bd.days ?? 1;
+    const own: PricingLine[] = itemised.map((l) => ({
+      key: `line:${l.id}`,
+      label: l.label,
+      amountUsdCents: linePerPerson(l, g, days),
+      bucket: l.bucket,
+    }));
+    const base = own.reduce((s, l) => s + l.amountUsdCents, 0);
+    lines = [
+      ...own,
+      { key: "trek", label: `Trek fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
+      { key: "fund", label: `The Fund (${pct(bd.fund_pct)})`, amountUsdCents: Math.round(base * bd.fund_pct) },
+    ];
+    // What one person would carry alone, for the group-saving figure.
+    soloGuide = itemised
+      .filter((l) => l.basis === "group")
+      .reduce((s, l) => s + linePerPerson(l, 1, days), 0);
+  } else {
+    const guidePP = Math.round(bd.guide_fee_total_usd_cents / g);
+    const base = guidePP + bd.permits_usd_cents + bd.porters_usd_cents + bd.logistics_usd_cents;
+    lines = [
+      { key: "guide", label: "Guide fees", amountUsdCents: guidePP, bucket: "guide" },
+      { key: "permits", label: "Permits (TIMS + park)", amountUsdCents: bd.permits_usd_cents, bucket: "permits" },
+      { key: "porters", label: "Porters", amountUsdCents: bd.porters_usd_cents, bucket: "porters" },
+      { key: "logistics", label: "Teahouse, food & logistics", amountUsdCents: bd.logistics_usd_cents, bucket: "logistics" },
+      { key: "trek", label: `Trek fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
+      { key: "fund", label: `The Fund (${pct(bd.fund_pct)})`, amountUsdCents: Math.round(base * bd.fund_pct) },
+    ];
+    soloGuide = bd.guide_fee_total_usd_cents;
+  }
+
   const perPerson = lines.reduce((s, l) => s + l.amountUsdCents, 0);
-  const soloGuide = bd.guide_fee_total_usd_cents; // guide fee at group of 1
+  const amortisedPP = itemised
+    ? itemised
+        .filter((l) => l.basis === "group")
+        .reduce((s, l) => s + linePerPerson(l, g, bd.days ?? 1), 0)
+    : Math.round(bd.guide_fee_total_usd_cents / g);
   return {
     groupSize: g,
     lines,
     perPersonUsdCents: perPerson,
-    groupSavingsEachUsdCents: soloGuide - guidePP,
+    groupSavingsEachUsdCents: soloGuide - amortisedPP,
   };
+}
+
+/**
+ * The optional lines, priced per person for a group — the add-ons a traveller
+ * toggles at checkout. Kept out of the headline so a price is never quoted
+ * including something the traveller has not chosen.
+ */
+export function addOns(
+  bd: PriceBreakdown,
+  groupSize: number,
+): Array<{ id: string; label: string; perPersonUsdCents: number }> {
+  const g = Math.max(1, Math.floor(groupSize));
+  return (bd.lines ?? [])
+    .filter((l) => l.optional)
+    .map((l) => ({
+      id: l.id,
+      label: l.label,
+      perPersonUsdCents: linePerPerson(l, g, bd.days ?? 1),
+    }));
 }
 
 /** Sum of line amounts — the single source of truth for the total. */
@@ -108,17 +218,59 @@ export interface PartyAmounts {
 export function partyAmounts(bd: PriceBreakdown, groupSize: number): PartyAmounts {
   const g = Math.max(1, Math.floor(groupSize));
   const pp = computeExperiencePricing(bd, g);
-  const x = (i: number) => pp.lines[i].amountUsdCents * g;
+  // Summed by bucket, not by position: a line-item breakdown has as many lines
+  // as the trip needs, and reading index 3 for "logistics" would silently
+  // record the wrong number against a booking.
+  const bucket = (b: PriceBucket) =>
+    pp.lines.filter((l) => l.bucket === b).reduce((s, l) => s + l.amountUsdCents, 0) * g;
+  const keyed = (k: string) =>
+    pp.lines.filter((l) => l.key === k).reduce((s, l) => s + l.amountUsdCents, 0) * g;
   return {
-    guideUsdCents: x(0),
-    permitsUsdCents: x(1),
-    portersUsdCents: x(2),
-    logisticsUsdCents: x(3),
-    trekUsdCents: x(4),
-    fundUsdCents: x(5),
+    guideUsdCents: bucket("guide"),
+    permitsUsdCents: bucket("permits"),
+    portersUsdCents: bucket("porters"),
+    logisticsUsdCents: bucket("logistics"),
+    trekUsdCents: keyed("trek"),
+    fundUsdCents: keyed("fund"),
     totalUsdCents: pp.perPersonUsdCents * g,
   };
 }
+
+/**
+ * The cost components a guide picks from, by trip type. Scaffolding for the
+ * builder, not a closed list — a guide can always add their own line, and what
+ * they add here is what tells us which components to offer next.
+ */
+export const COMPONENT_LIBRARY: Record<
+  string,
+  Array<Omit<PriceLine, "id" | "amountUsdCents">>
+> = {
+  trek: [
+    { label: "Guide fee", basis: "group", cadence: "day", optional: false, bucket: "guide" },
+    { label: "Porter", basis: "person", cadence: "day", optional: false, bucket: "porters" },
+    { label: "Permits", basis: "person", cadence: "trip", optional: false, bucket: "permits" },
+    { label: "Teahouse & food", basis: "person", cadence: "day", optional: false, bucket: "logistics" },
+    { label: "Transport in and out", basis: "group", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Domestic flights", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Gear hire", basis: "person", cadence: "trip", optional: true, bucket: "logistics" },
+    { label: "Extra acclimatisation day", basis: "person", cadence: "trip", optional: true, bucket: "logistics" },
+  ],
+  day_hike: [
+    { label: "Guide fee", basis: "group", cadence: "trip", optional: false, bucket: "guide" },
+    { label: "Entry tickets", basis: "person", cadence: "trip", optional: false, bucket: "permits" },
+    { label: "Transport", basis: "group", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Food", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Equipment", basis: "person", cadence: "trip", optional: true, bucket: "logistics" },
+  ],
+  adventure: [
+    { label: "Activity fee", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Instructor", basis: "group", cadence: "trip", optional: false, bucket: "guide" },
+    { label: "Safety equipment", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Transport", basis: "group", cadence: "trip", optional: false, bucket: "logistics" },
+  ],
+};
+COMPONENT_LIBRARY.city = COMPONENT_LIBRARY.day_hike;
+COMPONENT_LIBRARY.food_culture = COMPONENT_LIBRARY.day_hike;
 
 // ── Budget recomposer (v3 §1c) ──────────────────────────────────────────────
 // A budget slider recomposes the package to hit a target — teahouse tier and
@@ -142,6 +294,19 @@ export function recompose(
   bd: PriceBreakdown,
   opts: { tier: TeahouseTier; porter: boolean },
 ): PriceBreakdown {
+  // The levers act on the same two buckets whichever shape the price is in.
+  if (bd.lines?.length) {
+    return {
+      ...bd,
+      lines: bd.lines.map((l) =>
+        l.bucket === "logistics"
+          ? { ...l, amountUsdCents: Math.round(l.amountUsdCents * TEAHOUSE_MULT[opts.tier]) }
+          : l.bucket === "porters" && !opts.porter
+            ? { ...l, amountUsdCents: 0 }
+            : l,
+      ),
+    };
+  }
   return {
     ...bd,
     logistics_usd_cents: Math.round(bd.logistics_usd_cents * TEAHOUSE_MULT[opts.tier]),

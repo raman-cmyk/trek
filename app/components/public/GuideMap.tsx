@@ -93,6 +93,7 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
     setReady(false);
     let map: { remove: () => void } | null = null;
     let cancelled = false;
+    let coverTimer: ReturnType<typeof setTimeout> | undefined;
 
     (async () => {
       try {
@@ -123,11 +124,17 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
         // Tile fetches fail on locked-down networks; that must not take the
         // whole map down, and it must not spam the console either.
         m.on("error", () => {});
-        // `idle` = every visible tile fetched and drawn. Also cleared on
-        // error, so a blocked tile host shows the degraded map with its
-        // markers rather than shimmering forever.
-        m.on("idle", () => !cancelled && setReady(true));
-        m.on("error", () => !cancelled && setReady(true));
+        // The cover must never outlive the map. `idle` is the good signal —
+        // every visible tile fetched and drawn — but it is not guaranteed to
+        // arrive: a tile host that hangs rather than fails leaves the map
+        // usable and `idle` pending for ever, and a shimmer over a working map
+        // is worse than no shimmer at all. So: whichever of style-loaded,
+        // idle, error or a short deadline comes first.
+        const clear = () => !cancelled && setReady(true);
+        m.on("idle", clear);
+        m.on("load", clear);
+        m.on("error", clear);
+        coverTimer = setTimeout(clear, 3000);
 
         // Markers are DOM overlays, not style layers, so they go on straight
         // away — they render even if the tile host is unreachable, which is
@@ -211,6 +218,7 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
 
     return () => {
       cancelled = true;
+      clearTimeout(coverTimer);
       map?.remove();
     };
   }, [view, near, pins, routes]);

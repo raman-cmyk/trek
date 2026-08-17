@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import type { Route } from "./+types/transparency";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
-import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
+import { computeExperiencePricing, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -29,8 +29,8 @@ export async function loader({ context }: Route.LoaderArgs) {
     .maybeSingle();
 
   const bd = (o?.price_breakdown ?? null) as PriceBreakdown | null;
-  const example = bd?.guide_fee_total_usd_cents
-    ? { ...computeExperiencePricing(bd, 2), title: o!.title, slug: o!.slug, guide: o!.guide_name, days: o!.days }
+  const example = hasBreakdown(bd)
+        ? { ...computeExperiencePricing(bd, 2), title: o!.title, slug: o!.slug, guide: o!.guide_name, days: o!.days }
     : null;
 
   return { example, canonical: absoluteUrl(env.SITE_URL, "/transparency") };

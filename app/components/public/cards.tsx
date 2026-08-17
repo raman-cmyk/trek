@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
-import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
 
@@ -55,7 +55,7 @@ export function offeringPath(o: { kind: string; slug: string }) {
 export function offeringFromUsdCents(o: PublicOffering): number | null {
   // v3: an experience's price is its packaged breakdown total (cheapest per
   // person = largest sensible group), NOT day_rate × days.
-  if (o.price_breakdown?.guide_fee_total_usd_cents) {
+  if (hasBreakdown(o.price_breakdown)) {
     return fromPerPersonUsdCents(o.price_breakdown, o.max_party ?? undefined);
   }
   return o.price_usd_cents;

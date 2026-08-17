@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { partyAmounts, type PriceBreakdown } from "~/lib/experience-pricing";
+import { partyAmounts, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 
 /**
  * The Fund total, in USD cents. One implementation, because /fund and the
@@ -28,7 +28,7 @@ export async function fundCollected(
     let fund = (b as any).fund_usd_cents ?? 0;
     if (!fund) {
       const bd = ((b as any).offering?.price_breakdown ?? null) as PriceBreakdown | null;
-      if (!bd?.guide_fee_total_usd_cents) continue;
+      if (!hasBreakdown(bd)) continue;
       fund = partyAmounts(bd, (b as any).party_size).fundUsdCents;
     }
     collected += fund;

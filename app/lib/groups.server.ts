@@ -9,7 +9,7 @@ import {
   type PaymentMode,
   type TripGroup,
 } from "~/lib/groups";
-import { partyAmounts, type PriceBreakdown } from "~/lib/experience-pricing";
+import { partyAmounts, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 
 /**
  * Trip-group writes.
@@ -151,7 +151,7 @@ export async function recomputeShares(admin: SupabaseClient, groupId: string) {
       .eq("id", group.offering_id)
       .maybeSingle();
     const bd = offering?.price_breakdown as PriceBreakdown | null;
-    if (bd?.guide_fee_total_usd_cents) {
+    if (hasBreakdown(bd)) {
       // The whole trip for this many people — the same number the
       // booking would charge, so the shares add up to the real bill.
       total = partyAmounts(bd, party).totalUsdCents;

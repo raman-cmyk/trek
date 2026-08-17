@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Form } from "react-router";
 import { Button } from "~/components/Button";
-import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
-import { formatUsd } from "~/lib/pricing";
+import { type PriceBreakdown } from "~/lib/experience-pricing";
+import { PriceBuilder, toDraft } from "~/components/PriceBuilder";
 
 /**
  * One form for an experience, shared by the guide (/g/experiences) and the
@@ -40,10 +40,6 @@ const field =
   "mt-1 w-full rounded border border-line bg-paper px-3 py-2.5 text-base text-ink outline-none focus:border-moss";
 const label = "block text-sm text-ink-soft";
 
-/** Dollars in the form, cents in the database. */
-const toC = (v: string) => Math.round((Number(v) || 0) * 100);
-const toD = (c: number | undefined | null) => (c ? (c / 100).toString() : "");
-
 export function ExperienceForm({
   values,
   routes,
@@ -57,31 +53,16 @@ export function ExperienceForm({
   submitLabel: string;
   busy?: boolean;
 }) {
-  const bd = values?.price_breakdown ?? null;
   const [kind, setKind] = useState(values?.kind ?? "trek");
+  // Days is mirrored in state because per-day price lines multiply by it — a
+  // guide changing 10 days to 14 must see the price move.
+  const [days, setDays] = useState<number>(
+    values?.days ?? ((values?.kind ?? "trek") === "trek" ? 12 : 1),
+  );
+  const [draft] = useState(() => toDraft(values?.price_breakdown ?? null));
   const [cover, setCover] = useState(values?.cover_photo_url ?? "");
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
-
-  // The live quote: what a group of two would pay, recomputed as the money
-  // fields change. Uncontrolled inputs + a light state mirror.
-  const [money, setMoney] = useState({
-    guide: bd?.guide_fee_total_usd_cents ?? 0,
-    permits: bd?.permits_usd_cents ?? 0,
-    porters: bd?.porters_usd_cents ?? 0,
-    logistics: bd?.logistics_usd_cents ?? 0,
-  });
-  const quote = computeExperiencePricing(
-    {
-      guide_fee_total_usd_cents: money.guide,
-      permits_usd_cents: money.permits,
-      porters_usd_cents: money.porters,
-      logistics_usd_cents: money.logistics,
-      trek_pct: 0.1,
-      fund_pct: 0.03,
-    },
-    2,
-  );
 
   async function upload(file: File) {
     setUploading(true);
@@ -159,7 +140,7 @@ export function ExperienceForm({
       <div className="grid grid-cols-3 gap-3">
         <label className={label}>
           Days
-          <input type="number" name="days" min={1} max={60} defaultValue={values?.days ?? (kind === "trek" ? 12 : 1)} className={field} required />
+          <input type="number" name="days" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))} className={field} required />
         </label>
         <label className={label}>
           Smallest group
@@ -171,56 +152,8 @@ export function ExperienceForm({
         </label>
       </div>
 
-      {/* ── The money, in plain rows. ─────────────────────────────────────── */}
-      <fieldset className="rounded-md border border-line bg-card p-4">
-        <legend className="px-1 text-sm font-medium text-ink">The price, line by line</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className={label}>
-            Your fee for the whole trip ($)
-            <input
-              type="number" step="0.01" min={0} name="guide_fee_usd"
-              defaultValue={toD(bd?.guide_fee_total_usd_cents)}
-              onChange={(e) => setMoney((m) => ({ ...m, guide: toC(e.target.value) }))}
-              className={field} required
-            />
-            <span className="mt-0.5 block text-caption text-muted">Yours in full — we add our 10% on top.</span>
-          </label>
-          <label className={label}>
-            Permits, per person ($)
-            <input
-              type="number" step="0.01" min={0} name="permits_usd"
-              defaultValue={toD(bd?.permits_usd_cents)}
-              onChange={(e) => setMoney((m) => ({ ...m, permits: toC(e.target.value) }))}
-              className={field}
-            />
-            <span className="mt-0.5 block text-caption text-muted">Charged at cost, shown to the client as permits.</span>
-          </label>
-          <label className={label}>
-            Porters, per person ($)
-            <input
-              type="number" step="0.01" min={0} name="porters_usd"
-              defaultValue={toD(bd?.porters_usd_cents)}
-              onChange={(e) => setMoney((m) => ({ ...m, porters: toC(e.target.value) }))}
-              className={field}
-            />
-          </label>
-          <label className={label}>
-            Lodges & food, per person ($)
-            <input
-              type="number" step="0.01" min={0} name="logistics_usd"
-              defaultValue={toD(bd?.logistics_usd_cents)}
-              onChange={(e) => setMoney((m) => ({ ...m, logistics: toC(e.target.value) }))}
-              className={field}
-            />
-          </label>
-        </div>
-        <p className="mt-4 border-t border-line pt-3 text-sm text-ink">
-          A group of two would pay{" "}
-          <span className="font-mono font-medium">{formatUsd(quote.perPersonUsdCents)}</span>{" "}
-          each. You would earn{" "}
-          <span className="font-mono font-medium">{formatUsd(money.guide)}</span> for the trip.
-        </p>
-      </fieldset>
+      {/* ── The money. A library of lines, and the arithmetic done for them. */}
+      <PriceBuilder kind={kind} days={days} initial={draft} />
 
       {/* ── The cover photograph. ────────────────────────────────────────── */}
       <div>

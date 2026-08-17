@@ -2,7 +2,7 @@ import type { Route } from "./+types/treks.$slug";
 import { loadOfferingDetail } from "~/features/offering-detail.server";
 import { OfferingDetailView } from "~/components/public/OfferingDetailView";
 import { pageMeta, productLd, breadcrumbLd, jsonLd } from "~/lib/seo";
-import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
   return loadOfferingDetail(context, params.slug, "trek");
@@ -12,8 +12,8 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Not found" }];
   const o = data.o;
   const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
-  const fromCents = bd?.guide_fee_total_usd_cents
-    ? fromPerPersonUsdCents(bd, (o as any).max_party)
+  const fromCents = hasBreakdown(bd)
+        ? fromPerPersonUsdCents(bd, (o as any).max_party)
     : (o.price_usd_cents ?? 0);
   return [
     ...pageMeta({

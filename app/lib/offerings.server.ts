@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import {
+  fromPerPersonUsdCents,
+  hasBreakdown,
+  type PriceBreakdown,
+  type PriceLine,
+} from "~/lib/experience-pricing";
 
 /**
  * Parsing and rules for the experience form — shared by the guide's editor
@@ -42,17 +47,62 @@ export function parseExperienceForm(form: FormData): { patch?: OfferingPatch; er
   const max_party = num("max_party", 1, 16, 6);
   if (min_party > max_party) return { error: "The smallest group cannot be larger than the largest." };
 
-  const guideFee = usd("guide_fee_usd");
-  if (guideFee === 0) return { error: "Put your fee in — working free is not the deal here." };
+  // The line-item price, when the builder sent one. Parsed defensively: this
+  // arrives as JSON from a form field, so every field is checked rather than
+  // trusted, and a line that survives is one we can price.
+  let lines: PriceLine[] | null = null;
+  const raw = String(form.get("price_lines") ?? "").trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        lines = parsed
+          .map((l: any, i: number): PriceLine => ({
+            id: String(l?.id ?? `l${i}`).slice(0, 40),
+            label: String(l?.label ?? "").trim().slice(0, 60),
+            amountUsdCents: Math.max(0, Math.round((Number(l?.amountUsd) || 0) * 100)),
+            basis: l?.basis === "group" ? "group" : "person",
+            cadence: l?.cadence === "day" ? "day" : "trip",
+            optional: !!l?.optional,
+            bucket: ["guide", "permits", "porters", "logistics"].includes(l?.bucket)
+              ? l.bucket
+              : "logistics",
+          }))
+          .filter((l) => l.label.length > 0);
+      }
+    } catch {
+      return { error: "The price didn't save. Check the lines and try again." };
+    }
+  }
 
-  const price_breakdown: PriceBreakdown = {
-    guide_fee_total_usd_cents: guideFee,
-    permits_usd_cents: usd("permits_usd"),
-    porters_usd_cents: usd("porters_usd"),
-    logistics_usd_cents: usd("logistics_usd"),
-    trek_pct: 0.1,
-    fund_pct: 0.03,
-  };
+  const price_breakdown: PriceBreakdown = lines?.length
+    ? {
+        // The four slots stay zero on a line-item price; every reader now asks
+        // hasBreakdown() rather than testing the guide-fee slot for truthiness.
+        guide_fee_total_usd_cents: 0,
+        permits_usd_cents: 0,
+        porters_usd_cents: 0,
+        logistics_usd_cents: 0,
+        trek_pct: 0.1,
+        fund_pct: 0.03,
+        lines,
+        days,
+      }
+    : {
+        guide_fee_total_usd_cents: usd("guide_fee_usd"),
+        permits_usd_cents: usd("permits_usd"),
+        porters_usd_cents: usd("porters_usd"),
+        logistics_usd_cents: usd("logistics_usd"),
+        trek_pct: 0.1,
+        fund_pct: 0.03,
+      };
+
+  if (!hasBreakdown(price_breakdown)) {
+    return { error: "Put your price in — working free is not the deal here." };
+  }
+  if (lines?.length && !lines.some((l) => !l.optional && l.amountUsdCents > 0)) {
+    return { error: "At least one line has to be part of the price, not an extra." };
+  }
 
   return {
     patch: {

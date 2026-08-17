@@ -6,7 +6,7 @@ import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.se
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { createGroup } from "~/lib/groups.server";
 import { useMoney } from "~/lib/currency-context";
-import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { firstName } from "~/lib/names";
 
 export function meta() {
@@ -220,7 +220,7 @@ export default function NewGroup({ loaderData, actionData }: Route.ComponentProp
             <select name="offering_id" defaultValue={preselect} className={field} key={guideId}>
               <option value="">— not decided yet —</option>
               {(start === "guide" ? guideTreks : offerings).map((o: any) => {
-                const from = o.price_breakdown?.guide_fee_total_usd_cents
+                const from = hasBreakdown(o.price_breakdown)
                   ? fromPerPersonUsdCents(o.price_breakdown as PriceBreakdown, o.max_party ?? undefined)
                   : o.price_usd_cents;
                 return (

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computePricing, computeDeposit, type PriceBreakdown } from "~/lib/pricing";
-import { partyAmounts, type PriceBreakdown as ExperienceBreakdown } from "~/lib/experience-pricing";
+import { partyAmounts, type PriceBreakdown as ExperienceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
@@ -49,7 +49,7 @@ export async function quote(
   let logisticsUsdCents = 0;
   let fundUsdCents = 0;
   const pb = (o as any).price_breakdown as ExperienceBreakdown | null;
-  if (pb?.guide_fee_total_usd_cents) {
+  if (hasBreakdown(pb)) {
     // v3: charge exactly what the page displayed — derive from the breakdown.
     const a = partyAmounts(pb, partySize);
     const guideReceives = a.guideUsdCents;

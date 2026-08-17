@@ -4,7 +4,7 @@ import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
 import { PriceBreakdown } from "./bits";
 import { computePricing } from "~/lib/pricing";
-import { computeExperiencePricing, type PriceBreakdown as PB } from "~/lib/experience-pricing";
+import { computeExperiencePricing, type PriceBreakdown as PB , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { TrustPanel } from "~/components/public/TrustPanel";
 
@@ -44,7 +44,7 @@ function useQuote(
   return useMemo(() => {
     // v3: an experience with a price_breakdown is priced from the breakdown
     // (shown in full on the page); the widget just states the per-person price.
-    if (breakdown?.guide_fee_total_usd_cents) {
+    if (hasBreakdown(breakdown)) {
       const p = computeExperiencePricing(breakdown, party);
       return { headline: p.perPersonUsdCents + addonsPerPerson, perPerson: true, rows: null };
     }

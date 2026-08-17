@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { budgetConfigs, computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
+import { budgetConfigs, computeExperiencePricing, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { guideRatings } from "~/lib/ratings.server";
 import { rankGuides, type GuideFacts, type MatchQuery, type MatchResult, type Region } from "~/lib/match";
 
@@ -72,7 +72,7 @@ export async function matchGuides(
         const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
         let cheapest: number | null = null;
         let from: number | null = null;
-        if (bd?.guide_fee_total_usd_cents) {
+        if (hasBreakdown(bd)) {
           // Budget floor = the recomposer's cheapest package at this group size.
           cheapest = budgetConfigs(bd, q.groupSize)[0]?.perPersonUsdCents ?? null;
           from = computeExperiencePricing(bd, q.groupSize).perPersonUsdCents;

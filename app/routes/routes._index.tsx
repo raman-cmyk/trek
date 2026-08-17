@@ -3,7 +3,7 @@ import type { Route } from "./+types/routes._index";
 import { pageMeta, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { getRouteArticle } from "~/lib/content";
-import { fromPerPersonUsdCents, type PriceBreakdown } from "~/lib/experience-pricing";
+import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { monthName } from "~/lib/match";
 import { useMoney } from "~/lib/currency-context";
 import { SmartImage } from "~/components/SmartImage";
@@ -42,7 +42,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     let from: number | null = null;
     for (const o of own) {
       const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
-      const price = bd?.guide_fee_total_usd_cents
+      const price = hasBreakdown(bd)
         ? fromPerPersonUsdCents(bd, (o as any).max_party)
         : (o.price_usd_cents ?? null);
       if (price != null && (from == null || price < from)) from = price;

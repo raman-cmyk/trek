@@ -12,6 +12,7 @@ import {
   budgetConfigs,
   pickConfig,
   TEAHOUSE_LABEL,
+  hasBreakdown,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
 import { STANDARD_ADDONS, addonsTotalUsdCents } from "~/lib/addons";
@@ -21,18 +22,18 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
-  const hasBreakdown = !!breakdown?.guide_fee_total_usd_cents;
+  const showBreakdown = hasBreakdown(breakdown);
   const [party, setParty] = useState(o.min_party || 1);
   const [budgetTarget, setBudgetTarget] = useState<number | null>(null); // null = full package
   const [addons, setAddons] = useState<Set<string>>(new Set());
 
   // Budget recomposer (v3 §1c): the slider hits a target by swapping teahouse
   // tier / porter; the package (and the fee that follows it) recomposes live.
-  const configs = hasBreakdown ? budgetConfigs(breakdown!, party) : [];
+  const configs = showBreakdown ? budgetConfigs(breakdown!, party) : [];
   const minP = configs[0]?.perPersonUsdCents ?? 0;
   const maxP = configs[configs.length - 1]?.perPersonUsdCents ?? 0;
   const target = budgetTarget == null ? maxP : Math.min(Math.max(budgetTarget, minP), maxP);
-  const selected = hasBreakdown ? pickConfig(configs, target) : null;
+  const selected = showBreakdown ? pickConfig(configs, target) : null;
   const effBreakdown = selected
     ? recompose(breakdown!, { tier: selected.tier, porter: selected.porter })
     : null;
@@ -41,7 +42,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
   // Exact, sequential per-lever deltas vs the full comfort package (they sum).
   const afterTeahouse =
-    selected && hasBreakdown
+    selected && showBreakdown
       ? computeExperiencePricing(recompose(breakdown!, { tier: selected.tier, porter: true }), party)
           .perPersonUsdCents
       : 0;
@@ -194,7 +195,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
 
           {/* Price breakdown — transaction layer: plain, mono, everything shown.
               Per-person price recomputes live as the group grows (v3 §0). */}
-          {hasBreakdown && pricing && (
+          {showBreakdown && pricing && (
             <section className="rounded-card border border-line bg-card p-5">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="font-display text-xl text-ink">What you pay</h2>
