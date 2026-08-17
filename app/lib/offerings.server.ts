@@ -239,3 +239,57 @@ export async function uniqueOfferingSlug(
   }
   return `${base}-${Date.now().toString(36)}`;
 }
+
+/**
+ * What actually changed, as before/after pairs.
+ *
+ * Only the fields that moved, and only in a form a person can read a year
+ * later — the price breakdown is a nested object nobody wants rendered raw, so
+ * it is recorded as having changed rather than reproduced.
+ */
+export function diffOffering(
+  before: Record<string, any>,
+  after: Record<string, any>,
+): Record<string, { from: unknown; to: unknown }> {
+  const out: Record<string, { from: unknown; to: unknown }> = {};
+  const label: Record<string, string> = {
+    kind: "kind",
+    title: "title",
+    summary: "description",
+    route_id: "route",
+    days: "length",
+    min_party: "smallest group",
+    max_party: "largest group",
+    price_usd_cents: "price",
+  };
+  for (const k of Object.keys(label)) {
+    if (before?.[k] !== after?.[k]) out[label[k]] = { from: before?.[k] ?? null, to: after?.[k] ?? null };
+  }
+  if (JSON.stringify(before?.price_breakdown ?? null) !== JSON.stringify(after?.price_breakdown ?? null)) {
+    out["the price lines"] = { from: "changed", to: "changed" };
+  }
+  return out;
+}
+
+/** Write one entry to the trail. Never throws into the caller's save. */
+export async function logOfferingEdit(
+  admin: SupabaseClient,
+  args: {
+    offeringId: string;
+    editorId: string;
+    editorRole: "guide" | "ops";
+    changed: Record<string, unknown>;
+  },
+) {
+  if (!Object.keys(args.changed).length) return;
+  try {
+    await admin.from("offering_edits").insert({
+      offering_id: args.offeringId,
+      editor_id: args.editorId,
+      editor_role: args.editorRole,
+      changed: args.changed,
+    });
+  } catch {
+    /* an audit write must never be the reason an edit fails to save */
+  }
+}

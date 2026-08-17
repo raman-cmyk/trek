@@ -40,12 +40,13 @@ function useQuote(
   party: number,
   breakdown?: PB | null,
   addonsPerPerson = 0,
+  startDate?: string | null,
 ): QuoteResult | null {
   return useMemo(() => {
     // v3: an experience with a price_breakdown is priced from the breakdown
     // (shown in full on the page); the widget just states the per-person price.
     if (hasBreakdown(breakdown)) {
-      const p = computeExperiencePricing(breakdown, party);
+      const p = computeExperiencePricing(breakdown, party, startDate);
       return { headline: p.perPersonUsdCents + addonsPerPerson, perPerson: true, rows: null };
     }
     const isMultiDay = o.kind === "trek";
@@ -209,6 +210,8 @@ export function BookingWidget({
   addonsPerPerson = 0,
   party,
   setParty,
+  day,
+  setDay,
   availableDays,
   returnTo,
 }: {
@@ -217,12 +220,15 @@ export function BookingWidget({
   addonsPerPerson?: number;
   party: number;
   setParty: (n: number) => void;
+  /** Lifted, like the party size: the itemised breakdown on the page has to
+      be priced on the same date this widget is going to book. */
+  day: string;
+  setDay: (d: string) => void;
   availableDays: string[];
   returnTo: string;
 }) {
-  const [day, setDay] = useState(availableDays[0] ?? "");
   const [sheetOpen, setSheetOpen] = useState(false);
-  const quote = useQuote(offering, party, priceBreakdown, addonsPerPerson);
+  const quote = useQuote(offering, party, priceBreakdown, addonsPerPerson, day);
   const { m } = useMoney();
   const unit = quote?.perPerson
     ? "per person"

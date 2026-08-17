@@ -238,3 +238,36 @@ export async function notifyQuestionAnswered(
     ].join("\n"),
   );
 }
+
+/**
+ * The office changed a guide's listing.
+ *
+ * A guide whose price or itinerary moved overnight, with no note and no name
+ * against it, has been given a reason to distrust the platform holding their
+ * money. So: what changed, and where to look.
+ */
+export async function notifyListingEdited(
+  env: Env,
+  admin: SupabaseClient,
+  args: { guideId: string; offeringId: string; title: string; fields: string[] },
+) {
+  const { data: g } = await admin
+    .from("users")
+    .select("phone, email")
+    .eq("id", args.guideId)
+    .maybeSingle();
+  const what = args.fields.slice(0, 4).join(", ");
+  await sendGuideSms(
+    env,
+    g?.phone,
+    `Trek: our office updated "${args.title}" (${what}). See it: ${env.SITE_URL}/g/experiences/${args.offeringId}`,
+  );
+  if (g?.email) {
+    await sendEmail(
+      env,
+      g.email,
+      `We updated your listing: ${args.title}`,
+      `Our office made a change to "${args.title}".\n\nWhat changed: ${args.fields.join(", ")}.\n\nHave a look, and tell us if any of it is wrong:\n${env.SITE_URL}/g/experiences/${args.offeringId}`,
+    );
+  }
+}

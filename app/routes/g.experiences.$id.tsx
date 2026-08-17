@@ -5,6 +5,7 @@ import { requireUser } from "~/lib/auth.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
 import { parseExperienceForm, saveOfferingPhotos } from "~/lib/offerings.server";
 import { Badge } from "~/components/ops/ui";
+import { fmtDate } from "~/lib/format";
 
 /**
  * A guide edits an experience he already listed.
@@ -29,6 +30,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .order("name"),
   ]);
   if (!offering) throw new Response("Not found", { status: 404 });
+  // What the office has changed on this listing, so a guide is never looking
+  // at an edit they did not make with no idea where it came from.
+  const { data: edits } = await admin
+    .from("offering_edits")
+    .select("changed, created_at, editor_role")
+    .eq("offering_id", offering.id)
+    .eq("editor_role", "ops")
+    .order("created_at", { ascending: false })
+    .limit(5);
   // The gallery has to arrive with the form, or saving would post an empty
   // list and wipe the photographs that are already there.
   const { data: photos } = await admin
@@ -44,6 +54,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       },
       routes: routes ?? [],
       guideId: user.id,
+      edits: edits ?? [],
     },
     { headers },
   );
@@ -94,7 +105,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function EditExperience({ loaderData, actionData }: Route.ComponentProps) {
-  const { offering, routes, guideId } = loaderData as any;
+  const { offering, routes, guideId, edits } = loaderData as any;
   const nav = useNavigation();
   return (
     <div className="space-y-5">
@@ -120,6 +131,23 @@ export default function EditExperience({ loaderData, actionData }: Route.Compone
       )}
       {actionData && "error" in actionData && (actionData as any).error && (
         <p className="rounded bg-ember/10 px-3 py-2 text-sm text-ember">{(actionData as any).error}</p>
+      )}
+
+      {edits.length > 0 && (
+        <section className="rounded-card border border-border bg-card p-4">
+          <p className="text-sm font-medium text-ink">Changes our office made</p>
+          <ul className="mt-1.5 space-y-1 text-caption text-ink-soft">
+            {edits.map((e: any) => (
+              <li key={e.created_at} className="flex flex-wrap gap-x-2">
+                <span className="font-mono text-muted">{fmtDate(e.created_at)}</span>
+                <span>{Object.keys(e.changed).join(", ")}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-caption text-muted">
+            Anything here look wrong? Tell us and we will put it back.
+          </p>
+        </section>
       )}
 
       <ExperienceForm

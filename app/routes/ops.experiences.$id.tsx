@@ -2,7 +2,13 @@ import { Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.experiences.$id";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
-import { parseExperienceForm, saveOfferingPhotos } from "~/lib/offerings.server";
+import {
+  diffOffering,
+  logOfferingEdit,
+  parseExperienceForm,
+  saveOfferingPhotos,
+} from "~/lib/offerings.server";
+import { notifyListingEdited } from "~/lib/notifications.server";
 import { Badge } from "~/components/ops/ui";
 import { firstName } from "~/lib/names";
 
@@ -42,7 +48,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
 export async function action({ request, params, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  const { admin, headers } = await requireOps(request, env);
+  const { user, admin, headers } = await requireOps(request, env);
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "save");
 
@@ -54,10 +60,39 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const { patch, photos, error } = parseExperienceForm(form);
   if (!patch) return data({ error }, { status: 400, headers });
+
+  // Read it first so the trail records what actually moved, not a snapshot.
+  const { data: before } = await admin
+    .from("offerings")
+    .select("*")
+    .eq("id", params.id)
+    .maybeSingle();
+
   const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", params.id);
   if (dbErr) return data({ error: dbErr.message }, { status: 400, headers });
   await saveOfferingPhotos(admin, params.id!, photos ?? [], "ops");
-  return data({ ok: "Saved." }, { headers });
+
+  // The office editing a guide's listing is the concierge model working, not
+  // an exception to it — but the guide has to be told, and it has to be
+  // written down with a name against it.
+  const changed = diffOffering(before ?? {}, patch);
+  if (Object.keys(changed).length) {
+    await logOfferingEdit(admin, {
+      offeringId: params.id!,
+      editorId: user.id,
+      editorRole: "ops",
+      changed,
+    });
+    if (before?.guide_id) {
+      await notifyListingEdited(env, admin, {
+        guideId: before.guide_id,
+        offeringId: params.id!,
+        title: patch.title,
+        fields: Object.keys(changed),
+      });
+    }
+  }
+  return data({ ok: "Saved. The guide has been told." }, { headers });
 }
 
 export default function OpsExperienceEdit({ loaderData, actionData }: Route.ComponentProps) {

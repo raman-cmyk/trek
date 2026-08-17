@@ -24,6 +24,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
   const [party, setParty] = useState(o.min_party || 1);
+  const [day, setDay] = useState(availableDays[0] ?? "");
   const [budgetTarget, setBudgetTarget] = useState<number | null>(null); // null = full package
   const [addons, setAddons] = useState<Set<string>>(new Set());
 
@@ -37,14 +38,10 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const effBreakdown = selected
     ? recompose(breakdown!, { tier: selected.tier, porter: selected.porter })
     : null;
-  // Priced on the date the booking widget starts on, so the itemised list a
-  // reader is looking at is the one they will be charged. Changing the date
-  // inside the widget does not yet move this list — noted, and the reason the
-  // day state wants lifting out of the widget.
-  const priceDate = availableDays[0] ?? null;
-  const pricing = effBreakdown
-    ? computeExperiencePricing(effBreakdown, party, priceDate)
-    : null;
+  // Priced on the date the widget will actually book, so the itemised list a
+  // reader is looking at is the one they will be charged — including any
+  // seasonal uplift, which moves the moment they change the date.
+  const pricing = effBreakdown ? computeExperiencePricing(effBreakdown, party, day || null) : null;
   const addonsPP = addonsTotalUsdCents(addons);
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
   // Exact, sequential per-lever deltas vs the full comfort package (they sum).
@@ -53,7 +50,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
       ? computeExperiencePricing(
           recompose(breakdown!, { tier: selected.tier, porter: true }),
           party,
-          availableDays[0] ?? null,
+          day || null,
         ).perPersonUsdCents
       : 0;
   const teahouseDelta = afterTeahouse - maxP;
@@ -435,6 +432,8 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           addonsPerPerson={addonsPP}
           party={party}
           setParty={setParty}
+          day={day}
+          setDay={setDay}
           availableDays={availableDays}
           returnTo={data.canonical ? new URL(data.canonical).pathname : "/"}
         />
