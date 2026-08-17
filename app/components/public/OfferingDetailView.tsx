@@ -37,14 +37,24 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const effBreakdown = selected
     ? recompose(breakdown!, { tier: selected.tier, porter: selected.porter })
     : null;
-  const pricing = effBreakdown ? computeExperiencePricing(effBreakdown, party) : null;
+  // Priced on the date the booking widget starts on, so the itemised list a
+  // reader is looking at is the one they will be charged. Changing the date
+  // inside the widget does not yet move this list — noted, and the reason the
+  // day state wants lifting out of the widget.
+  const priceDate = availableDays[0] ?? null;
+  const pricing = effBreakdown
+    ? computeExperiencePricing(effBreakdown, party, priceDate)
+    : null;
   const addonsPP = addonsTotalUsdCents(addons);
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
   // Exact, sequential per-lever deltas vs the full comfort package (they sum).
   const afterTeahouse =
     selected && showBreakdown
-      ? computeExperiencePricing(recompose(breakdown!, { tier: selected.tier, porter: true }), party)
-          .perPersonUsdCents
+      ? computeExperiencePricing(
+          recompose(breakdown!, { tier: selected.tier, porter: true }),
+          party,
+          availableDays[0] ?? null,
+        ).perPersonUsdCents
       : 0;
   const teahouseDelta = afterTeahouse - maxP;
   const porterDelta = selected ? selected.perPersonUsdCents - afterTeahouse : 0;

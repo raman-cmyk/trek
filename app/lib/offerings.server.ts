@@ -4,6 +4,7 @@ import {
   hasBreakdown,
   type PriceBreakdown,
   type PriceLine,
+  type PriceSeason,
 } from "~/lib/experience-pricing";
 
 /**
@@ -113,6 +114,31 @@ export function parseExperienceForm(
     }
   }
 
+  // Seasons. Month-day only, so they recur; anything malformed is dropped
+  // rather than allowed to silently mis-price a booking.
+  let seasons: PriceSeason[] = [];
+  const rawSeasons = String(form.get("price_seasons") ?? "").trim();
+  if (rawSeasons) {
+    try {
+      const parsed = JSON.parse(rawSeasons);
+      if (Array.isArray(parsed)) {
+        seasons = parsed
+          .map((s: any, i: number) => ({
+            id: String(s?.id ?? `s${i}`).slice(0, 40),
+            label: String(s?.label ?? "").trim().slice(0, 40) || "Season",
+            from: String(s?.from ?? ""),
+            to: String(s?.to ?? ""),
+            // A season may not double a price or make a trip free.
+            pct: Math.max(-0.9, Math.min(2, (Number(s?.pct) || 0) / 100)),
+          }))
+          .filter((s) => /^\d{2}-\d{2}$/.test(s.from) && /^\d{2}-\d{2}$/.test(s.to) && s.pct !== 0)
+          .slice(0, 6);
+      }
+    } catch {
+      return { error: "The seasons didn't save. Check the dates and try again." };
+    }
+  }
+
   const price_breakdown: PriceBreakdown = lines?.length
     ? {
         // The four slots stay zero on a line-item price; every reader now asks
@@ -125,6 +151,7 @@ export function parseExperienceForm(
         fund_pct: 0.03,
         lines,
         days,
+        ...(seasons.length ? { seasons } : {}),
       }
     : {
         guide_fee_total_usd_cents: usd("guide_fee_usd"),

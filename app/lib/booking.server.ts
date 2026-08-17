@@ -51,7 +51,7 @@ export async function quote(
   const pb = (o as any).price_breakdown as ExperienceBreakdown | null;
   if (hasBreakdown(pb)) {
     // v3: charge exactly what the page displayed — derive from the breakdown.
-    const a = partyAmounts(pb, partySize);
+    const a = partyAmounts(pb, partySize, startDate);
     const guideReceives = a.guideUsdCents;
     logisticsUsdCents = a.logisticsUsdCents;
     fundUsdCents = a.fundUsdCents;

@@ -53,6 +53,46 @@ export interface PriceBreakdown {
   lines?: PriceLine[];
   /** Trip length, needed to resolve cadence:"day" lines. */
   days?: number;
+  /** Dates that cost more or less than the rest of the year. */
+  seasons?: PriceSeason[];
+}
+
+/**
+ * A stretch of the year priced differently.
+ *
+ * Stored as month-day, not full dates, because a season recurs: October is
+ * peak every October, and a guide should not have to re-enter their pricing
+ * each January. A range whose end falls before its start wraps the year end,
+ * which is how a December-to-February season is written.
+ */
+export interface PriceSeason {
+  id: string;
+  label: string;
+  /** "MM-DD" */
+  from: string;
+  to: string;
+  /** 0.2 = a fifth more; -0.25 = a quarter less. */
+  pct: number;
+}
+
+const md = (iso: string) => iso.slice(5, 10);
+
+/** The season a date falls in, or null. First match wins. */
+export function seasonFor(
+  bd: PriceBreakdown | null | undefined,
+  dateIso: string | null | undefined,
+): PriceSeason | null {
+  if (!bd?.seasons?.length || !dateIso) return null;
+  const d = md(dateIso);
+  if (!/^\d{2}-\d{2}$/.test(d)) return null;
+  return (
+    bd.seasons.find((s) =>
+      s.from <= s.to
+        ? d >= s.from && d <= s.to
+        : // Wraps the year end: Dec 15 → Feb 10 is "late in the year or early".
+          d >= s.from || d <= s.to,
+    ) ?? null
+  );
 }
 
 /**
@@ -99,6 +139,8 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
 export function computeExperiencePricing(
   bd: PriceBreakdown,
   groupSize: number,
+  /** The date the trip starts, so a season can be applied. */
+  startDate?: string | null,
 ): ExperiencePricing {
   const g = Math.max(1, Math.floor(groupSize));
 
@@ -119,9 +161,26 @@ export function computeExperiencePricing(
       amountUsdCents: linePerPerson(l, g, days),
       bucket: l.bucket,
     }));
-    const base = own.reduce((s, l) => s + l.amountUsdCents, 0);
+    const subtotal = own.reduce((s, l) => s + l.amountUsdCents, 0);
+    // A season is its own line, never folded into the numbers above it: a
+    // reader who is paying a fifth more in October is entitled to see that
+    // said, and to see the same base figures a June trekker sees.
+    const season = seasonFor(bd, startDate);
+    const uplift = season ? Math.round(subtotal * season.pct) : 0;
+    const base = subtotal + uplift;
     lines = [
       ...own,
+      ...(season && uplift !== 0
+        ? [
+            {
+              key: `season:${season.id}`,
+              label: `${season.label} (${season.pct > 0 ? "+" : ""}${Math.round(season.pct * 100)}%)`,
+              amountUsdCents: uplift,
+              // The uplift belongs to whoever the trip belongs to.
+              bucket: "guide" as PriceBucket,
+            },
+          ]
+        : []),
       { key: "trek", label: `Trek fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
       { key: "fund", label: `The Fund (${pct(bd.fund_pct)})`, amountUsdCents: Math.round(base * bd.fund_pct) },
     ];
@@ -197,7 +256,16 @@ export function fromPerPersonUsdCents(bd: PriceBreakdown, maxParty?: number | nu
   // 4-person price). Capped at 4 so tiny per-person figures for huge groups
   // don't set an unrealistic anchor.
   const group = Math.max(1, Math.min(maxParty ?? 4, 4));
-  return computeExperiencePricing(bd, group).perPersonUsdCents;
+  const base = computeExperiencePricing(bd, group).perPersonUsdCents;
+  // "From" has to mean it: if a season is cheaper than the rest of the year,
+  // that is the number, not the one somebody pays in October.
+  const cheapest = (bd.seasons ?? [])
+    .filter((s) => s.pct < 0)
+    .reduce((lo, s) => {
+      const p = computeExperiencePricing(bd, group, `2000-${s.from}`).perPersonUsdCents;
+      return Math.min(lo, p);
+    }, base);
+  return cheapest;
 }
 
 export interface PartyAmounts {
@@ -215,9 +283,13 @@ export interface PartyAmounts {
  * exactly (per-person price × party) and the sub-amounts sum to it. Used to
  * reconcile the server quote/booking snapshot with what the page displayed.
  */
-export function partyAmounts(bd: PriceBreakdown, groupSize: number): PartyAmounts {
+export function partyAmounts(
+  bd: PriceBreakdown,
+  groupSize: number,
+  startDate?: string | null,
+): PartyAmounts {
   const g = Math.max(1, Math.floor(groupSize));
-  const pp = computeExperiencePricing(bd, g);
+  const pp = computeExperiencePricing(bd, g, startDate);
   // Summed by bucket, not by position: a line-item breakdown has as many lines
   // as the trip needs, and reading index 3 for "logistics" would silently
   // record the wrong number against a booking.

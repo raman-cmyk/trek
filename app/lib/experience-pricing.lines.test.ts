@@ -3,8 +3,10 @@ import {
   addOns,
   computeExperiencePricing,
   hasBreakdown,
+  fromPerPersonUsdCents,
   partyAmounts,
   recompose,
+  seasonFor,
   type PriceBreakdown,
   type PriceLine,
 } from "./experience-pricing";
@@ -187,5 +189,105 @@ describe("budget levers on a line-item price", () => {
     expect(porter.amountUsdCents).toBe(0);
     // The guide's fee is untouched by a teahouse choice.
     expect(basic.lines!.find((l) => l.id === "guide")!.amountUsdCents).toBe(4000);
+  });
+});
+
+/** A season recurs, so it is stored as month-day and matched that way. */
+const seasonal: PriceBreakdown = {
+  ...trek,
+  seasons: [
+    { id: "peak", label: "October peak", from: "10-01", to: "11-15", pct: 0.2 },
+    { id: "monsoon", label: "Monsoon", from: "06-01", to: "08-31", pct: -0.25 },
+    { id: "winter", label: "Deep winter", from: "12-15", to: "02-10", pct: -0.1 },
+  ],
+};
+
+describe("seasonal pricing", () => {
+  it("matches a date to its season, in any year", () => {
+    expect(seasonFor(seasonal, "2026-10-20")?.id).toBe("peak");
+    expect(seasonFor(seasonal, "2031-10-20")?.id).toBe("peak");
+    expect(seasonFor(seasonal, "2026-07-04")?.id).toBe("monsoon");
+    expect(seasonFor(seasonal, "2026-04-15")).toBeNull();
+  });
+
+  it("matches a season that wraps the year end", () => {
+    expect(seasonFor(seasonal, "2026-12-28")?.id).toBe("winter");
+    expect(seasonFor(seasonal, "2027-01-30")?.id).toBe("winter");
+    expect(seasonFor(seasonal, "2026-11-30")).toBeNull();
+  });
+
+  it("takes the boundary days themselves", () => {
+    expect(seasonFor(seasonal, "2026-10-01")?.id).toBe("peak");
+    expect(seasonFor(seasonal, "2026-11-15")?.id).toBe("peak");
+    expect(seasonFor(seasonal, "2026-11-16")).toBeNull();
+  });
+
+  it("shows the uplift as its own line and never inside another", () => {
+    const off = computeExperiencePricing(seasonal, 2);
+    const peak = computeExperiencePricing(seasonal, 2, "2026-10-20");
+    const named = peak.lines.find((l) => l.key === "season:peak");
+    expect(named?.label).toBe("October peak (+20%)");
+    // Every line the guide wrote is unchanged; only the new line differs.
+    for (const l of off.lines.filter((x) => x.key.startsWith("line:"))) {
+      expect(peak.lines.find((x) => x.key === l.key)!.amountUsdCents).toBe(l.amountUsdCents);
+    }
+    const ownTotal = off.lines
+      .filter((l) => l.key.startsWith("line:"))
+      .reduce((s, l) => s + l.amountUsdCents, 0);
+    expect(named!.amountUsdCents).toBe(Math.round(ownTotal * 0.2));
+  });
+
+  it("prices a discount season down", () => {
+    const wet = computeExperiencePricing(seasonal, 2, "2026-07-04");
+    const off = computeExperiencePricing(seasonal, 2);
+    expect(wet.perPersonUsdCents).toBeLessThan(off.perPersonUsdCents);
+    expect(wet.lines.find((l) => l.key === "season:monsoon")!.amountUsdCents).toBeLessThan(0);
+  });
+
+  it("charges our percentages on the seasonal price, not the base", () => {
+    const peak = computeExperiencePricing(seasonal, 2, "2026-10-20");
+    const base = peak.lines
+      .filter((l) => l.key.startsWith("line:") || l.key.startsWith("season:"))
+      .reduce((s, l) => s + l.amountUsdCents, 0);
+    expect(peak.lines.find((l) => l.key === "trek")!.amountUsdCents).toBe(Math.round(base * 0.1));
+    expect(peak.lines.find((l) => l.key === "fund")!.amountUsdCents).toBe(Math.round(base * 0.03));
+  });
+
+  it("the total is still exactly the sum of the lines shown", () => {
+    for (const d of ["2026-10-20", "2026-07-04", "2026-04-15", "2027-01-30"]) {
+      for (const g of [1, 2, 4]) {
+        const p = computeExperiencePricing(seasonal, g, d);
+        expect(p.perPersonUsdCents).toBe(p.lines.reduce((s, l) => s + l.amountUsdCents, 0));
+      }
+    }
+  });
+
+  it("a booking records the seasonal amounts, and they still reconcile", () => {
+    for (const d of ["2026-10-20", "2026-07-04", null]) {
+      const a = partyAmounts(seasonal, 3, d);
+      const parts =
+        a.guideUsdCents + a.permitsUsdCents + a.portersUsdCents +
+        a.logisticsUsdCents + a.trekUsdCents + a.fundUsdCents;
+      expect(parts).toBe(a.totalUsdCents);
+      expect(a.totalUsdCents).toBe(computeExperiencePricing(seasonal, 3, d).perPersonUsdCents * 3);
+    }
+    // And peak really does cost the party more than the shoulder.
+    expect(partyAmounts(seasonal, 3, "2026-10-20").totalUsdCents).toBeGreaterThan(
+      partyAmounts(seasonal, 3, "2026-04-15").totalUsdCents,
+    );
+  });
+
+  it("'from' quotes the cheapest the year offers, not the shoulder price", () => {
+    const from = fromPerPersonUsdCents(seasonal, 4);
+    const monsoon = computeExperiencePricing(seasonal, 4, "2026-07-04").perPersonUsdCents;
+    expect(from).toBe(monsoon);
+  });
+
+  it("leaves an offering with no seasons exactly as it was", () => {
+    for (const g of [1, 2, 4]) {
+      expect(computeExperiencePricing(trek, g, "2026-10-20").perPersonUsdCents).toBe(
+        computeExperiencePricing(trek, g).perPersonUsdCents,
+      );
+    }
   });
 });

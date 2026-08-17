@@ -16,7 +16,7 @@ export async function fundCollected(
 ): Promise<{ collected: number; trips: number }> {
   let q = admin
     .from("bookings")
-    .select("fund_usd_cents, party_size, status, offering:offerings(price_breakdown)")
+    .select("fund_usd_cents, party_size, start_date, status, offering:offerings(price_breakdown)")
     .not("deposit_paid_at", "is", null)
     .not("status", "like", "cancelled%");
   if (opts.sinceStartDate) q = q.gte("start_date", opts.sinceStartDate);
@@ -29,7 +29,9 @@ export async function fundCollected(
     if (!fund) {
       const bd = ((b as any).offering?.price_breakdown ?? null) as PriceBreakdown | null;
       if (!hasBreakdown(bd)) continue;
-      fund = partyAmounts(bd, (b as any).party_size).fundUsdCents;
+      // Only a fallback for bookings taken before fund_usd_cents was
+      // snapshotted; still priced on their own dates.
+      fund = partyAmounts(bd, (b as any).party_size, (b as any).start_date).fundUsdCents;
     }
     collected += fund;
     trips += 1;

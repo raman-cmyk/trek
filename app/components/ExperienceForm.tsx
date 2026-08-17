@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Form } from "react-router";
 import { Button } from "~/components/Button";
 import { type PriceBreakdown } from "~/lib/experience-pricing";
-import { PriceBuilder, toDraft } from "~/components/PriceBuilder";
+import { PriceBuilder, toDraft, toSeasonDraft } from "~/components/PriceBuilder";
 import { PhotoGallery, type GalleryPhoto } from "~/components/PhotoGallery";
 
 /**
@@ -70,6 +70,7 @@ export function ExperienceForm({
     values?.days ?? ((values?.kind ?? "trek") === "trek" ? 12 : 1),
   );
   const [draft] = useState(() => toDraft(values?.price_breakdown ?? null));
+  const [seasonDraft] = useState(() => toSeasonDraft(values?.price_breakdown ?? null));
   const [routeId, setRouteId] = useState(values?.route_id ?? "");
   const chosen = routes.find((r) => r.id === routeId);
   return (
@@ -212,7 +213,7 @@ export function ExperienceForm({
       </div>
 
       {/* ── The money. A library of lines, and the arithmetic done for them. */}
-      <PriceBuilder kind={kind} days={days} initial={draft} />
+      <PriceBuilder kind={kind} days={days} initial={draft} initialSeasons={seasonDraft} />
 
       {/* ── The photographs. The cover is simply the first of them. */}
       <PhotoGallery initial={values?.photos ?? []} guideId={guideId} />

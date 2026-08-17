@@ -152,9 +152,10 @@ export async function recomputeShares(admin: SupabaseClient, groupId: string) {
       .maybeSingle();
     const bd = offering?.price_breakdown as PriceBreakdown | null;
     if (hasBreakdown(bd)) {
-      // The whole trip for this many people — the same number the
-      // booking would charge, so the shares add up to the real bill.
-      total = partyAmounts(bd, party).totalUsdCents;
+      // The whole trip for this many people, on the group's own dates — the
+      // same number the booking would charge, so the shares add up to the
+      // real bill rather than to a shoulder-season version of it.
+      total = partyAmounts(bd, party, (group as any).start_date).totalUsdCents;
     } else if (offering?.price_usd_cents) {
       total = offering.price_usd_cents * party;
     }
