@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The photographs for an experience.
@@ -23,15 +23,19 @@ export function PhotoGallery({
   initial,
   guideId,
   min = 3,
+  onCount,
 }: {
   initial: GalleryPhoto[];
   guideId: string;
   min?: number;
+  /** So the review step can say how many there are without owning the list. */
+  onCount?: (n: number) => void;
 }) {
   const [photos, setPhotos] = useState<GalleryPhoto[]>(initial);
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
+  useEffect(() => onCount?.(photos.length), [photos.length, onCount]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function take(files: FileList) {

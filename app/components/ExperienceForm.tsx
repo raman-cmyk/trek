@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form } from "react-router";
 import { Button } from "~/components/Button";
 import { type PriceBreakdown } from "~/lib/experience-pricing";
-import { PriceBuilder, toDraft, toSeasonDraft } from "~/components/PriceBuilder";
+import { PriceBuilder, toDraft, toSeasonDraft, type DraftLine } from "~/components/PriceBuilder";
 import { PhotoGallery, type GalleryPhoto } from "~/components/PhotoGallery";
 
 /**
@@ -72,11 +72,102 @@ export function ExperienceForm({
   const [draft] = useState(() => toDraft(values?.price_breakdown ?? null));
   const [seasonDraft] = useState(() => toSeasonDraft(values?.price_breakdown ?? null));
   const [routeId, setRouteId] = useState(values?.route_id ?? "");
+  const [photoCount, setPhotoCount] = useState(values?.photos?.length ?? 0);
+  const [step, setStep] = useState(1);
+  const formRef = useRef<HTMLFormElement>(null);
   const chosen = routes.find((r) => r.id === routeId);
+
+  // A guide filling this in is on a phone in a lodge. Every keystroke is kept
+  // locally, so closing the tab, losing signal or a browser deciding to
+  // reclaim memory does not cost them the twenty minutes they just spent.
+  // Local, not the server: the server is exactly what is unreachable when this
+  // matters most.
+  const key = `trek:experience:${values?.id ?? "new"}`;
+  useEffect(() => {
+    const f = formRef.current;
+    if (!f) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) ?? "null");
+      if (saved && typeof saved === "object") {
+        const skip = ["price_lines", "price_seasons", "photos", "kind", "days", "route_id"];
+        for (const [name, v] of Object.entries(saved as Record<string, string>)) {
+          const el = f.elements.namedItem(name) as HTMLInputElement | null;
+          // The JSON blobs are owned by their own components, and the three
+          // controlled fields below are owned by React — writing to their DOM
+          // node would be undone on the next render, which is how a restored
+          // draft silently reverted to "Multi-day trek".
+          if (el && "value" in el && !skip.includes(name)) el.value = v;
+        }
+        // Restored into state, after hydration, so the server and the first
+        // client render still agree.
+        if (typeof saved.kind === "string") setKind(saved.kind);
+        if (saved.days) setDays(Math.max(1, Number(saved.days) || 1));
+        if (typeof saved.route_id === "string") setRouteId(saved.route_id);
+      }
+    } catch {
+      /* a corrupt draft is not worth a broken form */
+    }
+  }, [key]);
+
+  const remember = () => {
+    const f = formRef.current;
+    if (!f) return;
+    const out: Record<string, string> = {};
+    for (const [k2, v] of new FormData(f).entries()) {
+      if (typeof v === "string") out[k2] = v;
+    }
+    try {
+      localStorage.setItem(key, JSON.stringify(out));
+    } catch {
+      /* private mode, quota — losing autosave is not losing the form */
+    }
+  };
+
+  const STEPS = ["What it is", "Route", "Details", "Photos", "Check"];
+  /** Reveal whichever step holds the first field the browser is unhappy with,
+      or the form would refuse to submit for a reason nobody can see. */
+  const revealInvalid = () => {
+    const f = formRef.current;
+    if (!f || f.checkValidity()) return true;
+    const bad = f.querySelector(":invalid") as HTMLElement | null;
+    const holder = bad?.closest("[data-step]");
+    if (holder) setStep(Number(holder.getAttribute("data-step")));
+    return false;
+  };
+
   return (
-    <Form method="post" className="space-y-4">
+    <Form
+      method="post"
+      ref={formRef}
+      onChange={remember}
+      onSubmit={() => localStorage.removeItem(key)}
+      className="space-y-4"
+    >
+      {/* Where you are. Five short steps instead of one long scroll, and the
+          fields of every step stay mounted so one submit still posts the lot —
+          and so the whole thing still works if the JavaScript never arrives. */}
+      <ol className="flex gap-1">
+        {STEPS.map((t, i) => (
+          <li key={t} className="flex-1">
+            <button
+              type="button"
+              onClick={() => setStep(i + 1)}
+              className={`w-full border-t-2 pt-1.5 text-left text-[11px] ${
+                step === i + 1
+                  ? "border-moss text-ink"
+                  : step > i + 1
+                    ? "border-sage text-muted"
+                    : "border-line text-muted"
+              }`}
+            >
+              {t}
+            </button>
+          </li>
+        ))}
+      </ol>
       {values?.id && <input type="hidden" name="experience_id" value={values.id} />}
 
+      <Step n={1} at={step} title="What it is">
       <label className={label}>
         What kind of trip is it?
         <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className={field}>
@@ -112,6 +203,9 @@ export function ExperienceForm({
         />
       </label>
 
+      </Step>
+
+      <Step n={2} at={step} title="The route">
       {kind === "trek" && (
         <div>
           <label className={label}>
@@ -197,6 +291,9 @@ export function ExperienceForm({
         </div>
       )}
 
+      </Step>
+
+      <Step n={3} at={step} title="How long, how many, how much">
       <div className="grid grid-cols-3 gap-3">
         <label className={label}>
           Days
@@ -215,12 +312,48 @@ export function ExperienceForm({
       {/* ── The money. A library of lines, and the arithmetic done for them. */}
       <PriceBuilder kind={kind} days={days} initial={draft} initialSeasons={seasonDraft} />
 
-      {/* ── The photographs. The cover is simply the first of them. */}
-      <PhotoGallery initial={values?.photos ?? []} guideId={guideId} />
+      </Step>
 
-      <Button type="submit" disabled={busy}>
-        {busy ? "Saving…" : submitLabel}
-      </Button>
+      <Step n={4} at={step} title="Photographs">
+        {/* The cover is simply the first of them. */}
+        <PhotoGallery
+          initial={values?.photos ?? []}
+          guideId={guideId}
+          onCount={setPhotoCount}
+        />
+      </Step>
+
+      <Step n={5} at={step} title="Check it over">
+        <Review values={values} kind={kind} days={days} draft={draft} photosLen={photoCount} routeName={chosen?.name} />
+      </Step>
+
+      <div className="flex items-center gap-2">
+        {step > 1 && (
+          <button
+            type="button"
+            onClick={() => setStep((n) => n - 1)}
+            className="rounded-button border border-line px-4 py-2.5 text-sm text-ink"
+          >
+            Back
+          </button>
+        )}
+        {step < 5 ? (
+          <button
+            type="button"
+            onClick={() => revealInvalid() && setStep((n) => n + 1)}
+            className="flex-1 rounded-button bg-pine px-4 py-2.5 text-sm font-medium text-paper"
+          >
+            Next
+          </button>
+        ) : (
+          <Button type="submit" disabled={busy}>
+            {busy ? "Saving…" : submitLabel}
+          </Button>
+        )}
+      </div>
+      <p className="text-caption text-muted">
+        Saved on this phone as you type. Losing signal won&rsquo;t lose your work.
+      </p>
     </Form>
   );
 }
@@ -259,5 +392,85 @@ function AltitudeProfile({
       <path d={`${d} L100,30 L0,30 Z`} fill="currentColor" className="text-mist" />
       <path d={d} fill="none" stroke="currentColor" strokeWidth="1" className="text-moss" />
     </svg>
+  );
+}
+
+/**
+ * One step of the form. Hidden, not unmounted: every field stays in the DOM so
+ * a single submit still posts the whole trip, and so the form degrades to one
+ * long page if the JavaScript never arrives.
+ */
+function Step({
+  n,
+  at,
+  title,
+  children,
+}: {
+  n: number;
+  at: number;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section data-step={n} hidden={n !== at} className="space-y-4">
+      <h2 className="font-display text-xl text-ink">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+/** The last step: what the guide is about to send, in plain rows. */
+function Review({
+  values,
+  kind,
+  days,
+  draft,
+  photosLen,
+  routeName,
+}: {
+  values?: Partial<ExperienceValues>;
+  kind: string;
+  days: number;
+  draft: DraftLine[];
+  photosLen: number;
+  routeName?: string;
+}) {
+  const kindLabel = KINDS.find(([v]) => v === kind)?.[1] ?? kind;
+  const missing: string[] = [];
+  if (photosLen < 3) missing.push(`${3 - photosLen} more photograph${3 - photosLen === 1 ? "" : "s"}`);
+  if (kind === "trek" && !routeName) missing.push("a route");
+  if (!draft.some((l) => !l.optional && Number(l.amountUsd) > 0)) missing.push("a price");
+
+  return (
+    <div className="space-y-3">
+      <dl className="rounded-md border border-line bg-card p-4 text-sm">
+        <Row k="Kind" v={kindLabel} />
+        {routeName && <Row k="Route" v={routeName} />}
+        <Row k="Length" v={kind === "trek" ? `${days} days` : "One day"} />
+        <Row k="Photographs" v={`${photosLen}`} />
+        <Row k="Price lines" v={`${draft.filter((l) => !l.optional).length}`} />
+        {draft.some((l) => l.optional) && (
+          <Row k="Optional extras" v={`${draft.filter((l) => l.optional).length}`} />
+        )}
+      </dl>
+      {missing.length > 0 ? (
+        <p className="rounded-button bg-ember/10 px-3 py-2 text-sm text-ember">
+          Still needed: {missing.join(", ")}.
+        </p>
+      ) : (
+        <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Ready to send. The office checks it once, then it is on your page.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-3 py-0.5">
+      <dt className="text-ink-soft">{k}</dt>
+      <dd className="text-ink">{v}</dd>
+    </div>
   );
 }
