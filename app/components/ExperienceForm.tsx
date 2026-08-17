@@ -50,7 +50,15 @@ export function ExperienceForm({
   busy,
 }: {
   values?: Partial<ExperienceValues>;
-  routes: Array<{ id: string; name: string }>;
+  routes: Array<{
+    id: string;
+    name: string;
+    status?: string;
+    typical_days?: number | null;
+    max_altitude_m?: number | null;
+    day_stops?: Array<{ day: number; place: string; altitude_m: number | null }> | null;
+    permits?: Array<{ name: string; cost_usd_cents: number }>;
+  }>;
   guideId: string;
   submitLabel: string;
   busy?: boolean;
@@ -62,6 +70,8 @@ export function ExperienceForm({
     values?.days ?? ((values?.kind ?? "trek") === "trek" ? 12 : 1),
   );
   const [draft] = useState(() => toDraft(values?.price_breakdown ?? null));
+  const [routeId, setRouteId] = useState(values?.route_id ?? "");
+  const chosen = routes.find((r) => r.id === routeId);
   return (
     <Form method="post" className="space-y-4">
       {values?.id && <input type="hidden" name="experience_id" value={values.id} />}
@@ -102,19 +112,88 @@ export function ExperienceForm({
       </label>
 
       {kind === "trek" && (
-        <label className={label}>
-          Which route
-          <select name="route_id" defaultValue={values?.route_id ?? ""} className={field} required>
-            <option value="" disabled>
-              — pick the route —
-            </option>
-            {routes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
+        <div>
+          <label className={label}>
+            Which route
+            <select
+              name="route_id"
+              value={routeId}
+              onChange={(e) => setRouteId(e.target.value)}
+              className={field}
+              required
+            >
+              <option value="" disabled>
+                — pick the route —
               </option>
-            ))}
-          </select>
-        </label>
+              {routes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                  {r.status && r.status !== "live" ? " — waiting for the office" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <a
+            href="/g/routes/new"
+            className="mt-1.5 inline-block text-caption text-moss underline underline-offset-4"
+          >
+            My route isn&rsquo;t listed →
+          </a>
+
+          {/* What you picked, shown. Choosing a route used to change a dropdown
+              and nothing else, so a guide had no way to check they had chosen
+              the right one — or to see what the trekker would be reading. */}
+          {chosen && (
+            <div className="mt-3 rounded-md border border-line bg-card p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-medium text-ink">{chosen.name}</p>
+                <p className="font-mono text-caption text-muted">
+                  {chosen.typical_days ? `${chosen.typical_days} days · ` : ""}
+                  {chosen.max_altitude_m
+                    ? `${chosen.max_altitude_m.toLocaleString("en-US")} m`
+                    : ""}
+                </p>
+              </div>
+              {chosen.status && chosen.status !== "live" && (
+                <p className="mt-1.5 rounded bg-ember/10 px-2 py-1 text-caption text-ember">
+                  The office hasn&rsquo;t checked this route yet. You can build the
+                  trip now, but it can&rsquo;t go live until they have.
+                </p>
+              )}
+              {chosen.day_stops?.length ? (
+                <>
+                  <AltitudeProfile stops={chosen.day_stops} />
+                  <ol className="mt-2 space-y-0.5 text-caption text-ink-soft">
+                    {chosen.day_stops.map((s) => (
+                      <li key={`${s.day}-${s.place}`} className="flex justify-between gap-3">
+                        <span>
+                          <span className="font-mono text-muted">Day {s.day}</span> {s.place}
+                        </span>
+                        {s.altitude_m ? (
+                          <span className="font-mono text-muted">
+                            {s.altitude_m.toLocaleString("en-US")} m
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : null}
+              {chosen.permits?.length ? (
+                <ul className="mt-3 border-t border-line pt-2 text-caption text-ink-soft">
+                  {chosen.permits.map((p) => (
+                    <li key={p.name} className="flex justify-between gap-3">
+                      <span>{p.name}</span>
+                      <span className="font-mono text-muted">
+                        ${(p.cost_usd_cents / 100).toFixed(0)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-3 gap-3">
@@ -142,5 +221,42 @@ export function ExperienceForm({
         {busy ? "Saving…" : submitLabel}
       </Button>
     </Form>
+  );
+}
+
+/**
+ * The climb, drawn from the altitudes the route already carries. A line is the
+ * only honest way to show "day nine is where it gets high" — a column of
+ * numbers is not read, and a guide picking a route needs to recognise it at a
+ * glance.
+ */
+function AltitudeProfile({
+  stops,
+}: {
+  stops: Array<{ day: number; place: string; altitude_m: number | null }>;
+}) {
+  const pts = stops.filter((s) => s.altitude_m);
+  if (pts.length < 2) return null;
+  const hi = Math.max(...pts.map((s) => s.altitude_m!));
+  const lo = Math.min(...pts.map((s) => s.altitude_m!));
+  const span = Math.max(1, hi - lo);
+  const d = pts
+    .map((s, i) => {
+      const x = (i / (pts.length - 1)) * 100;
+      const y = 28 - ((s.altitude_m! - lo) / span) * 24;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg
+      viewBox="0 0 100 30"
+      preserveAspectRatio="none"
+      className="mt-2.5 h-12 w-full"
+      role="img"
+      aria-label={`Climbs to ${hi.toLocaleString("en-US")} metres`}
+    >
+      <path d={`${d} L100,30 L0,30 Z`} fill="currentColor" className="text-mist" />
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1" className="text-moss" />
+    </svg>
   );
 }

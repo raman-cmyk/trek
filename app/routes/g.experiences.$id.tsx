@@ -22,7 +22,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const [{ data: offering }, { data: routes }] = await Promise.all([
     admin.from("offerings").select("*").eq("id", params.id).eq("guide_id", user.id).maybeSingle(),
-    admin.from("routes").select("id, name").order("name"),
+    admin
+      .from("routes")
+      .select("id, name, status, typical_days, max_altitude_m, day_stops, permits(name, cost_usd_cents)")
+      .or(`status.eq.live,created_by_guide_id.eq.${user.id}`)
+      .order("name"),
   ]);
   if (!offering) throw new Response("Not found", { status: 404 });
   // The gallery has to arrive with the form, or saving would post an empty

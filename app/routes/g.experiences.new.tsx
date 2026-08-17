@@ -18,7 +18,11 @@ import {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
-  const { data: routes } = await admin.from("routes").select("id, name").order("name");
+  const { data: routes } = await admin
+      .from("routes")
+      .select("id, name, status, typical_days, max_altitude_m, day_stops, permits(name, cost_usd_cents)")
+      .or(`status.eq.live,created_by_guide_id.eq.${user.id}`)
+      .order("name");
   return data({ routes: routes ?? [], guideId: user.id }, { headers });
 }
 

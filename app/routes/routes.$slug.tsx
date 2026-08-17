@@ -99,7 +99,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   const { data: route } = await client
     .from("routes")
     .select(
-      "id, slug, name, region, typical_days, max_altitude_m, difficulty, season_months, distance_km, summary, start_point, end_point, hero_photo_url, day_stops, month_profile, faq",
+      "id, slug, name, region, typical_days, max_altitude_m, difficulty, season_months, distance_km, summary, start_point, end_point, hero_photo_url, day_stops, month_profile, faq, status, created_by_guide_id, guide:guides!routes_created_by_guide_id_fkey(slug, users(full_name))",
     )
     .eq("slug", params.slug)
     .maybeSingle();
@@ -244,6 +244,22 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
             <h1 className="mt-1 max-w-[18ch] font-display text-4xl leading-[1.05] text-white sm:text-6xl">
               {route.name}
             </h1>
+            {/* Somebody who has walked a route often enough to write it up is
+                exactly the person a reader wants to hear it from, so the guide
+                who proposed it is named on it. */}
+            {(route as any).guide?.users?.full_name && (
+              <p className="mt-2 text-sm text-white/85">
+                Added by{" "}
+                <Link
+                  to={`/guides/${(route as any).guide.slug}`}
+                  prefetch="intent"
+                  className="underline underline-offset-4"
+                >
+                  {(route as any).guide.users.full_name.split(" ")[0]}
+                </Link>
+                , who walks it
+              </p>
+            )}
             <p className="mt-3 font-mono text-caption text-white/85 sm:text-sm">
               {route.typical_days} days · {fmtMetres(route.max_altitude_m)}
               {route.distance_km ? ` · ${route.distance_km} km` : ""} · {route.difficulty}

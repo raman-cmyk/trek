@@ -65,6 +65,7 @@ export default [
     route("g/experiences", "routes/g.experiences.tsx"),
     route("g/experiences/new", "routes/g.experiences.new.tsx"),
     route("g/experiences/:id", "routes/g.experiences.$id.tsx"),
+    route("g/routes/new", "routes/g.routes.new.tsx"),
     route("g/reviews", "routes/g.reviews.tsx"),
     route("g/journals", "routes/g.journals.tsx"),
     route("g/journals/:id", "routes/g.journals.$id.tsx"),
@@ -96,6 +97,7 @@ export default [
   layout("routes/ops.tsx", [
     route("ops", "routes/ops._index.tsx"),
     route("ops/experiences", "routes/ops.experiences.tsx"),
+    route("ops/routes", "routes/ops.routes.tsx"),
     route("ops/experiences/:id", "routes/ops.experiences.$id.tsx"),
     route("ops/data", "routes/ops.data.tsx"),
     route("ops/search", "routes/ops.search.tsx"),
