@@ -96,6 +96,12 @@ export default [
   route("ops/login", "routes/ops.login.tsx"),
   layout("routes/ops.tsx", [
     route("ops", "routes/ops._index.tsx"),
+    // The directory: everybody, and one page per person holding all of it.
+    route("ops/people", "routes/ops.people.tsx"),
+    route("ops/people/:id", "routes/ops.people.$id.tsx"),
+    // Signed-URL redirect for a private document (guide papers or a
+    // trekker's passport). Never renders the URL.
+    route("ops/doc/:kind/:docId", "routes/ops.doc.$kind.$docId.tsx"),
     route("ops/experiences", "routes/ops.experiences.tsx"),
     route("ops/routes", "routes/ops.routes.tsx"),
     route("ops/experiences/:id", "routes/ops.experiences.$id.tsx"),

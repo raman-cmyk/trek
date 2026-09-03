@@ -63,6 +63,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 const NAV = [
   { group: "", items: [{ to: "/ops", label: "Today", badge: null, end: true }] },
   {
+    group: "People",
+    items: [{ to: "/ops/people", label: "Guides & trekkers", badge: null }],
+  },
+  {
     group: "Work",
     items: [
       { to: "/ops/verifications", label: "Verifications", badge: "verifications" },
