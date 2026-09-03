@@ -44,6 +44,7 @@ import {
   type PublicJournal,
 } from "~/lib/journals";
 import { fmtDate } from "~/lib/format";
+import { PROFICIENCY_PUBLIC, type Proficiency } from "~/lib/guide-languages";
 import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
@@ -245,22 +246,40 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     }
   }
 
-  // Routes he actually runs, with how many times he has led each — counted
-  // from journals (real trips) and topped up from what he currently offers.
+  // Routes he actually runs, with how many times he has led each.
+  //
+  // The count used to be "journals written up", which measured our content
+  // rather than his life — a guide with forty Manaslu crossings and two
+  // write-ups showed ×2. It is now what he declared on his application,
+  // falling back to the journal count where he declared nothing, and marked
+  // as checked once the office confirms it.
   const routeCounts = new Map<
     string,
-    { slug: string; name: string; region: string | null; count: number }
+    {
+      slug: string;
+      name: string;
+      region: string | null;
+      count: number;
+      journals: number;
+      declared: boolean;
+      confirmed: boolean;
+    }
   >();
   for (const j of js) {
     if (!j.route_slug || !j.route_name) continue;
     const cur = routeCounts.get(j.route_slug);
-    if (cur) cur.count += 1;
-    else
+    if (cur) {
+      cur.count += 1;
+      cur.journals += 1;
+    } else
       routeCounts.set(j.route_slug, {
         slug: j.route_slug,
         name: j.route_name,
         region: (j as any).route_region ?? null,
         count: 1,
+        journals: 1,
+        declared: false,
+        confirmed: false,
       });
   }
   const { data: offeredRoutes } = await client
@@ -276,6 +295,36 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         name: r.name,
         region: r.region ?? null,
         count: 0,
+        journals: 0,
+        declared: false,
+        confirmed: false,
+      });
+    }
+  }
+
+  // What he declared himself. This wins over the journal count — it is the
+  // real number, and it is the one he is accountable for.
+  const { data: declaredRoutes } = await client
+    .from("guide_route_experience")
+    .select("times_walked, verified_at, route:routes(slug, name, region)")
+    .eq("guide_id", guide.user_id);
+  for (const d of (declaredRoutes ?? []) as any[]) {
+    const r = d.route;
+    if (!r?.slug) continue;
+    const cur = routeCounts.get(r.slug);
+    if (cur) {
+      cur.count = d.times_walked;
+      cur.declared = true;
+      cur.confirmed = !!d.verified_at;
+    } else {
+      routeCounts.set(r.slug, {
+        slug: r.slug,
+        name: r.name,
+        region: r.region ?? null,
+        count: d.times_walked,
+        journals: 0,
+        declared: true,
+        confirmed: !!d.verified_at,
       });
     }
   }
@@ -636,7 +685,20 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   <FactRow icon="speech">
                     Speaks{" "}
                     <span className="text-ink">
-                      {languages.map((l: any) => l.language).join(", ")}
+                      {languages
+                        .map((l: any) =>
+                          // A guide who is native in Sherpa and has a little
+                          // German is not "speaks Sherpa, German". The
+                          // proficiency was always collected and always thrown
+                          // away here.
+                          l.proficiency && l.proficiency !== "conversational"
+                            ? `${l.language} (${
+                                PROFICIENCY_PUBLIC[l.proficiency as Proficiency] ??
+                                l.proficiency
+                              })`
+                            : l.language,
+                        )
+                        .join(", ")}
                     </span>
                   </FactRow>
                 )}
@@ -666,8 +728,9 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                 )}
               </ul>
 
-              {/* ── Route stamps: where {first} has actually walked, with the
-                 write-ups to prove each count. Our travel stamps. */}
+              {/* ── Route stamps: where {first} has actually walked. The
+                 count is his own — what he told us when he applied — with a
+                 tick where our office has checked it. Our travel stamps. */}
               {routeChips.length > 0 && (
                 <div className="mt-6">
                   <p className="label text-muted">Routes {first} has walked</p>
@@ -692,9 +755,25 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                         </span>
                         {r.count > 0 && (
                           <span className="mt-0.5 block pl-6 text-caption text-muted">
-                            {r.count === 1
-                              ? "written up once"
-                              : `written up ${r.count} times`}
+                            {r.declared
+                              ? r.confirmed
+                                ? r.count === 1
+                                  ? "walked once — checked by us"
+                                  : `walked ${r.count} times — checked by us`
+                                : r.count === 1
+                                  ? "walked once"
+                                  : `walked ${r.count} times`
+                              : r.count === 1
+                                ? "written up once"
+                                : `written up ${r.count} times`}
+                            {r.declared && r.journals > 0 && (
+                              <>
+                                {" · "}
+                                {r.journals === 1
+                                  ? "1 write-up"
+                                  : `${r.journals} write-ups`}
+                              </>
+                            )}
                           </span>
                         )}
                       </Link>

@@ -6,6 +6,14 @@ import { requireUser } from "~/lib/auth.server";
 import { Button } from "~/components/Button";
 import { formatUsd } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
+import {
+  LANGUAGES,
+  PROFICIENCIES,
+  PROFICIENCY_LABELS,
+  isLanguage,
+  isProficiency,
+  type Proficiency,
+} from "~/lib/guide-languages";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -154,18 +162,19 @@ export async function action({ request, context }: Route.ActionArgs) {
         .eq("language", language);
       return data({ ok: `Removed ${language}.` }, { headers });
     }
-    if (!language) return data({ error: "Type a language first." }, { status: 400, headers });
-    const proficiency = String(form.get("proficiency") ?? "conversational");
+    // Only a language we know, spelled the way we spell it. The old code
+    // capitalised the first letter of whatever was typed, so "german" and
+    // "German" became two rows and the browse filter — built from the distinct
+    // values in this table — grew a duplicate entry for every variant.
+    if (!isLanguage(language)) {
+      return data({ error: "Pick a language from the list." }, { status: 400, headers });
+    }
+    const raw = String(form.get("proficiency") ?? "conversational");
+    const proficiency: Proficiency = isProficiency(raw) ? raw : "conversational";
     // Upsert, so adding a language you already have changes how well you speak
     // it rather than failing on the primary key.
     await admin.from("guide_languages").upsert(
-      {
-        guide_id: user.id,
-        language: language[0].toUpperCase() + language.slice(1),
-        proficiency: ["basic", "conversational", "fluent", "native"].includes(proficiency)
-          ? proficiency
-          : "conversational",
-      },
+      { guide_id: user.id, language, proficiency },
       { onConflict: "guide_id,language" },
     );
     return data({ ok: `Added ${language}.` }, { headers });
@@ -297,6 +306,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function GuideProfile({ loaderData, actionData }: Route.ComponentProps) {
   const { guide, languages, photos, canned } = loaderData as any;
+  const spoken = new Set<string>(languages.map((l: any) => l.language));
   const nav = useNavigation();
   const busy = nav.state !== "idle";
 
@@ -409,7 +419,9 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
                   <input type="hidden" name="intent" value="language" />
                   <input type="hidden" name="language" value={l.language} />
                   <span className="text-ink">{l.language}</span>
-                  <span className="text-xs text-ink-soft">{l.proficiency}</span>
+                  <span className="text-xs text-ink-soft">
+                    {PROFICIENCY_LABELS[l.proficiency as Proficiency] ?? l.proficiency}
+                  </span>
                   <button
                     name="delete"
                     value="1"
@@ -427,14 +439,23 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         )}
         <Form method="post" className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="intent" value="language" />
+          {/* A list, not a text box. Typed languages produced "german" here
+              and "German" from the application form — two rows against a
+              (guide_id, language) primary key, and a browse filter built from
+              the distinct values that inherited every typo. */}
           <label className="flex-1 text-sm text-ink-soft">
             Add a language
-            <input
+            <select
               name="language"
               required
-              placeholder="German"
               className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
-            />
+            >
+              {LANGUAGES.filter((l) => !spoken.has(l)).map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-sm text-ink-soft">
             How well
@@ -443,10 +464,11 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
               defaultValue="conversational"
               className="mt-1 block rounded-button border border-border px-3 py-2 text-base text-ink"
             >
-              <option value="basic">A little</option>
-              <option value="conversational">Enough to guide</option>
-              <option value="fluent">Fluent</option>
-              <option value="native">First language</option>
+              {PROFICIENCIES.map((p) => (
+                <option key={p} value={p}>
+                  {PROFICIENCY_LABELS[p]}
+                </option>
+              ))}
             </select>
           </label>
           <Button type="submit" size="sm" loading={busy}>

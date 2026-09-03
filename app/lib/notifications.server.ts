@@ -271,3 +271,52 @@ export async function notifyListingEdited(
     );
   }
 }
+
+/**
+ * The first thing a new guide hears from us.
+ *
+ * Their application ends on a page saying "our team will review your licence",
+ * and then nothing — no link, no account details, no idea that they can sign
+ * in today and that the profile they write is what actually gets them booked.
+ * Guides were being told to wait for a verification that only matters once
+ * there is a profile behind it.
+ *
+ * Sent by email rather than SMS because it has to carry a URL and a list, and
+ * because by this point we have an address they just signed up with.
+ */
+export async function notifyGuideWelcome(
+  env: Env,
+  args: { name: string; email: string; phone?: string | null },
+) {
+  const first = args.name.trim().split(/\s+/)[0] || "there";
+  const site = env.SITE_URL ?? "";
+  await sendEmail(
+    env,
+    args.email,
+    "Your Trek account is open — here's how to set it up",
+    [
+      `${first}, your application is in. Your account is already open, so you can start now rather than waiting on us.`,
+      ``,
+      `SIGN IN`,
+      `${site}/g/login`,
+      `Use ${args.email} and the password you just chose.`,
+      ``,
+      `DO THESE FOUR THINGS — they are what get you booked`,
+      `1. Add your photograph. A face gets more enquiries than anything else on the page.`,
+      `2. Write your story in your own words. Not a CV — what a week with you is actually like.`,
+      `3. Record a voice note. Thirty seconds. Trekkers play it before they book.`,
+      `4. Add your first trip, with your own price. You set the rate and keep all of it; our 10% is added on top and paid by the trekker.`,
+      ``,
+      `WHAT WE ARE DOING MEANWHILE`,
+      `We check your licence and your ID against the documents you sent, call your reference, and confirm your payout account. It usually takes a few days. We will message you the moment you are verified — that is when your profile goes live and trekkers can find you.`,
+      ``,
+      `If anything is wrong or you are stuck, just reply to this email.`,
+    ].join("\n"),
+  );
+  // A guide who gave a phone but rarely opens email still gets pointed at it.
+  await sendGuideSms(
+    env,
+    args.phone,
+    `Trek: your account is open. Sign in at ${site}/g/login and add your photo and story — that is what gets you booked. We are checking your licence now.`,
+  );
+}

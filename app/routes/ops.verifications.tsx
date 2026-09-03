@@ -73,7 +73,7 @@ export default function OpsVerifications({ loaderData }: Route.ComponentProps) {
                   </td>
                   <td className="py-3 text-right">
                     <Link
-                      to={`/ops/verifications/${r.userId}`}
+                      to={`/ops/people/${r.userId}?t=verification`}
                       className="font-medium text-primary hover:underline"
                     >
                       Review →

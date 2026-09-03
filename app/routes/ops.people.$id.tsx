@@ -15,6 +15,8 @@ import {
   uploadGuideDocument,
   verifyDocument,
 } from "~/lib/documents.server";
+import { CHECK_LABELS, CHECK_TYPES, checkLabel } from "~/lib/guide-checks";
+import { PROFICIENCY_LABELS, type Proficiency } from "~/lib/guide-languages";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 
 /**
@@ -28,18 +30,6 @@ import { getEnv, requireOps } from "~/lib/supabase.server";
  * beside the thing being edited rather than on some other screen.
  */
 
-const CHECK_LABELS: Record<string, string> = {
-  licence: "Trekking licence",
-  id_match: "Government ID matches licence",
-  phone: "Phone verified",
-  payout_account: "Payout account",
-  reference_1: "Reference call 1",
-  reference_2: "Reference call 2",
-  police_cert: "Police clearance",
-  first_aid: "Wilderness first-aid cert",
-  altitude_training: "Altitude training",
-  insurance: "Insurance",
-};
 
 const LIVE = ["deposit_paid", "docs_pending", "confirmed", "active"];
 
@@ -86,6 +76,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     bookingDocsRes,
     paymentsRes,
     incidentsRes,
+    routeExpRes,
   ] = await Promise.all([
     isGuide
       ? admin
@@ -191,6 +182,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           .in("booking_id", bookingIds)
           .order("opened_at", { ascending: false })
       : Promise.resolve({ data: [] }),
+    // What they say they have walked. A claim until the office ticks it.
+    isGuide
+      ? admin
+          .from("guide_route_experience")
+          .select("route_id, times_walked, verified_at, route:routes(name, region, slug)")
+          .eq("guide_id", id)
+          .order("times_walked", { ascending: false })
+      : Promise.resolve({ data: [] }),
   ]);
 
   const guide: any = (guideRes as any).data ?? null;
@@ -237,6 +236,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       bookings: bookings ?? [],
       payments: (paymentsRes as any).data ?? [],
       incidents: (incidentsRes as any).data ?? [],
+      routeExperience: (routeExpRes as any).data ?? [],
       accessLog,
       availability: {
         open: avail.filter((a: any) => a.status === "open").length,
@@ -325,7 +325,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   if (intent === "add_check") {
     const checkType = str("check_type");
-    if (!CHECK_LABELS[checkType]) {
+    if (!(CHECK_TYPES as readonly string[]).includes(checkType)) {
       return data({ error: "Pick a check to add." }, { status: 400, headers });
     }
     await admin
@@ -375,6 +375,59 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "verify_booking_doc") {
     await verifyDocument(admin, str("document_id"), user.id);
     return data({ ok: "Document verified." }, { headers });
+  }
+
+  // The decision. It lived on /ops/verifications/:id, which is now a redirect
+  // here — two screens judging the same guide had already drifted apart, and
+  // only one of them could see the documents the judgement rests on.
+  if (intent === "approve") {
+    const { data: g } = await admin
+      .from("guides")
+      .select("tier")
+      .eq("user_id", id)
+      .maybeSingle();
+    // Verified means at least T1. Approving a tier-0 guide and leaving them
+    // tier 0 puts them live with no badge at all.
+    const tier = (g?.tier ?? 0) < 1 ? 1 : g!.tier;
+    await admin.from("guides").update({ status: "verified", tier }).eq("user_id", id);
+    const { notifyGuideVerification } = await import("~/lib/notifications.server");
+    await notifyGuideVerification(env, admin, id, true);
+    return data({ ok: "Approved. They are live and have been told." }, { headers });
+  }
+
+  if (intent === "reject") {
+    await admin.from("guides").update({ status: "removed" }).eq("user_id", id);
+    const { notifyGuideVerification } = await import("~/lib/notifications.server");
+    await notifyGuideVerification(env, admin, id, false);
+    return data({ ok: "Rejected, and they have been told." }, { headers });
+  }
+
+  if (intent === "start_review") {
+    await admin.from("guides").update({ status: "in_review" }).eq("user_id", id);
+    return data({ ok: "Marked in review." }, { headers });
+  }
+
+  if (intent === "tier") {
+    const tier = Math.max(0, Math.min(3, Number(form.get("tier")) || 0));
+    await admin.from("guides").update({ tier }).eq("user_id", id);
+    return data({ ok: `Tier set to ${tier}.` }, { headers });
+  }
+
+  // Ops confirming a guide's claim about a route. The count shows publicly
+  // either way; this is what marks it as checked rather than claimed.
+  if (intent === "verify_route") {
+    const routeId = str("route_id");
+    const already = form.get("undo") ? true : false;
+    await admin
+      .from("guide_route_experience")
+      .update(
+        already
+          ? { verified_by: null, verified_at: null }
+          : { verified_by: user.id, verified_at: new Date().toISOString() },
+      )
+      .eq("guide_id", id)
+      .eq("route_id", routeId);
+    return data({ ok: already ? "Unconfirmed." : "Route confirmed." }, { headers });
   }
 
   if (intent === "strike") {
@@ -431,6 +484,8 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
   const openIncidents = d.incidents.filter((i: any) => i.status !== "closed");
   const payable = d.payouts.filter((x: any) => x.status === "payable");
   const unverifiedDocs = d.bookingDocs.filter((x: any) => !x.verified_at);
+  const passedCount = d.checks.filter((c: any) => c.status === "passed").length;
+  const allPassed = d.checks.length > 0 && passedCount === d.checks.length;
   const expiringDocs = d.docs.filter(
     (x: any) => x.expires_on && new Date(x.expires_on) < new Date(Date.now() + 60 * 864e5),
   );
@@ -511,8 +566,8 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
               </Link>
             )}
             {g && (
-              <Link to={`/ops/verifications/${p.id}`} className="text-primary hover:underline">
-                Verification queue view →
+              <Link to="/ops/verifications" className="text-primary hover:underline">
+                Verification queue →
               </Link>
             )}
           </div>
@@ -775,7 +830,70 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="space-y-4 lg:col-span-2">
             {d.isGuide ? (
-              <GuideDocuments docs={d.docs} checks={d.checks} busy={busy} />
+              <>
+                <GuideDocuments docs={d.docs} checks={d.checks} busy={busy} />
+
+                <Panel title="What they say they have walked">
+                  {d.routeExperience.length === 0 ? (
+                    <EmptyRow>They claimed no routes on their application.</EmptyRow>
+                  ) : (
+                    <ul className="divide-y divide-border text-sm">
+                      {d.routeExperience.map((r: any) => (
+                        <li
+                          key={r.route_id}
+                          className="flex flex-wrap items-center gap-3 py-2.5"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium">{r.route?.name ?? "—"}</p>
+                            <p className="text-xs text-ink-soft">
+                              {r.route?.region ?? ""}
+                            </p>
+                          </div>
+                          <span className="font-mono text-sm">×{r.times_walked}</span>
+                          {r.verified_at ? (
+                            <Badge tone="green">confirmed</Badge>
+                          ) : (
+                            <Badge tone="neutral">their claim</Badge>
+                          )}
+                          <Form method="post">
+                            <input type="hidden" name="intent" value="verify_route" />
+                            <input type="hidden" name="route_id" value={r.route_id} />
+                            {r.verified_at && <input type="hidden" name="undo" value="1" />}
+                            <button className="text-xs font-medium text-primary hover:underline">
+                              {r.verified_at ? "Unconfirm" : "Confirm"}
+                            </button>
+                          </Form>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-3 text-xs text-ink-soft">
+                    The count shows on their public profile either way. Confirming
+                    is what puts a mark next to it.
+                  </p>
+                </Panel>
+
+                <Panel title="Languages">
+                  {d.languages.length === 0 ? (
+                    <EmptyRow>None listed.</EmptyRow>
+                  ) : (
+                    <ul className="divide-y divide-border text-sm">
+                      {d.languages.map((l: any) => (
+                        <li
+                          key={l.language}
+                          className="flex items-center justify-between py-2"
+                        >
+                          <span className="font-medium">{l.language}</span>
+                          <span className="text-ink-soft">
+                            {PROFICIENCY_LABELS[l.proficiency as Proficiency] ??
+                              l.proficiency}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Panel>
+              </>
             ) : (
               <Panel title="Documents they gave us">
                 {d.bookingDocs.length === 0 ? (
@@ -830,6 +948,75 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
           </div>
 
           <div className="space-y-4">
+            {d.isGuide && g && (
+              <Panel title="Decision">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-ink-soft">Now</span>
+                    <Badge
+                      tone={
+                        g.status === "verified"
+                          ? "green"
+                          : g.status === "suspended" || g.status === "removed"
+                            ? "red"
+                            : "amber"
+                      }
+                    >
+                      {g.status.replace("_", " ")}
+                    </Badge>
+                  </div>
+                  {!allPassed && g.status !== "verified" && (
+                    <p className="text-xs text-ink-soft">
+                      {passedCount} of {d.checks.length} checks pass. Approving
+                      overrides the rest.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {g.status === "applied" && (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="start_review" />
+                        <Button size="sm" variant="secondary" type="submit">
+                          Start review
+                        </Button>
+                      </Form>
+                    )}
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="approve" />
+                      <Button size="sm" type="submit" loading={busy}>
+                        Approve → verified
+                      </Button>
+                    </Form>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="reject" />
+                      <Button size="sm" variant="danger" type="submit">
+                        Reject
+                      </Button>
+                    </Form>
+                  </div>
+                  <p className="text-xs text-ink-soft">
+                    Either one texts them. Changing the status under Edit
+                    profile does not — use these buttons for a real decision.
+                  </p>
+                  <Form method="post" className="flex items-center gap-2 border-t border-border pt-3">
+                    <input type="hidden" name="intent" value="tier" />
+                    <select
+                      name="tier"
+                      defaultValue={g.tier}
+                      className="rounded border border-border bg-surface px-2 py-1 text-sm"
+                    >
+                      <option value={0}>0 — none</option>
+                      <option value={1}>1 — Verified</option>
+                      <option value={2}>2 — Trusted</option>
+                      <option value={3}>3 — Elite</option>
+                    </select>
+                    <Button size="sm" variant="secondary" type="submit">
+                      Set tier
+                    </Button>
+                  </Form>
+                </div>
+              </Panel>
+            )}
+
             {d.isGuide && (
               <Panel title="Verification checklist">
                 <ul className="divide-y divide-border">
@@ -837,7 +1024,7 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                     <li key={c.id} className="py-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium">
-                          {CHECK_LABELS[c.check_type] ?? c.check_type}
+                          {checkLabel(c.check_type)}
                         </p>
                         <Badge
                           tone={
@@ -890,9 +1077,9 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                     name="check_type"
                     className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1.5 text-sm"
                   >
-                    {Object.entries(CHECK_LABELS).map(([k, v]) => (
+                    {CHECK_TYPES.map((k) => (
                       <option key={k} value={k}>
-                        {v}
+                        {CHECK_LABELS[k]}
                       </option>
                     ))}
                   </select>
@@ -1328,7 +1515,7 @@ function GuideDocuments({
             <option value="">Not tied to one</option>
             {checks.map((c: any) => (
               <option key={c.id} value={c.id}>
-                {CHECK_LABELS[c.check_type] ?? c.check_type}
+                {checkLabel(c.check_type)}
               </option>
             ))}
           </select>
