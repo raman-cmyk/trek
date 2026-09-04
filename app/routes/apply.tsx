@@ -3,11 +3,6 @@ import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/apply";
 import { Button } from "~/components/Button";
 import { GuideLanguages } from "~/components/GuideLanguages";
-import {
-  RouteExperience,
-  parseRoutesWalked,
-  type RouteWalk,
-} from "~/components/RouteExperience";
 import { PENDING_CHECKS } from "~/lib/guide-checks";
 import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
@@ -22,20 +17,8 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   });
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
-  const env = getEnv(context);
-  // The route list the applicant picks their experience from. Public-read, so
-  // the anon client would do; the admin client is already here for the action.
-  const { data: routes } = await createAdminClient(env)
-    .from("routes")
-    .select("id, name, region")
-    .eq("status", "live")
-    .order("sort")
-    .order("name");
-  return {
-    canonical: absoluteUrl(env.SITE_URL, "/apply"),
-    routes: routes ?? [],
-  };
+export function loader({ context }: Route.LoaderArgs) {
+  return { canonical: absoluteUrl(getEnv(context).SITE_URL, "/apply") };
 }
 
 function slugify(s: string) {
@@ -133,15 +116,10 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
-  // Languages and route experience arrive as JSON from the two pickers. Both
-  // parsers drop anything they don't recognise rather than let a bad row fail
-  // an insert halfway through an application.
+  // Languages arrive as JSON from the picker. The parser drops anything it
+  // does not recognise rather than let a bad row fail an insert halfway
+  // through an application.
   const languages = parseLanguages(form.get("languages"));
-  const { data: liveRoutes } = await admin.from("routes").select("id").eq("status", "live");
-  const routesWalked = parseRoutesWalked(
-    form.get("routes_walked"),
-    new Set((liveRoutes ?? []).map((r: any) => r.id)),
-  );
 
   // 1) Auth user with a credential the guide can actually sign in with
   // (email + password, same as trekkers). Phone is stored for SMS notices.
@@ -161,7 +139,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
   const userId = created.user.id;
 
-  // 2) Profile + guide (applied) + languages + route record + checklist.
+  // 2) Profile + guide (applied) + languages + checklist.
   await admin.from("users").insert({
     id: userId,
     role: "guide",
@@ -199,16 +177,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       })),
     );
   }
-  if (routesWalked.length) {
-    await admin.from("guide_route_experience").insert(
-      routesWalked.map((r) => ({
-        guide_id: userId,
-        route_id: r.routeId,
-        times_walked: r.timesWalked,
-      })),
-    );
-  }
-
   const { data: checks } = await admin
     .from("guide_verifications")
     .insert(
@@ -250,43 +218,36 @@ export async function action({ request, context }: Route.ActionArgs) {
   return data({ ok: true, name: fullName });
 }
 
-export default function Apply({ loaderData, actionData }: Route.ComponentProps) {
+export default function Apply({ actionData }: Route.ComponentProps) {
   const nav = useNavigation();
   const busy = nav.state !== "idle";
   const formRef = useRef<HTMLFormElement>(null);
   const [saved, setSaved] = useState(false);
   const KEY = "guide-application";
 
-  // The two pickers are React state, so the autosave has to be told about them
-  // rather than reading them off the DOM like the plain inputs.
-  const [languages, setLanguages] = useState<LanguageRow[] | null>(null);
-  const [routesWalked, setRoutesWalked] = useState<RouteWalk[] | null>(null);
-  const [restored, setRestored] = useState<{
-    languages?: LanguageRow[];
-    routesWalked?: RouteWalk[];
-  } | null>(null);
-  const [ready, setReady] = useState(false);
+  // The page owns the language rows so the picker can be controlled, which is
+  // what lets it render complete on the server. It used to hold its own state
+  // and read `initial` at mount, which forced this page to delay mounting it
+  // until the saved draft had been read — and a guide on a slow phone saw a
+  // heading with an empty box under it until React caught up.
+  const [languages, setLanguages] = useState<LanguageRow[]>([
+    { language: "Nepali", proficiency: "native" },
+  ]);
 
   // Autosave to localStorage (docs/04 §Interaction rules: never lose input).
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw && formRef.current) {
-        const vals = JSON.parse(raw) as Record<string, any>;
-        for (const [k, v] of Object.entries(vals)) {
-          if (k === "languages" || k === "routes_walked") continue;
-          const el = formRef.current.elements.namedItem(k) as HTMLInputElement | null;
-          if (el && el.type !== "file") el.value = String(v);
-        }
-        setRestored({
-          languages: Array.isArray(vals.languages) ? vals.languages : undefined,
-          routesWalked: Array.isArray(vals.routes_walked) ? vals.routes_walked : undefined,
-        });
+      if (!raw || !formRef.current) return;
+      const vals = JSON.parse(raw) as Record<string, any>;
+      for (const [k, v] of Object.entries(vals)) {
+        if (k === "languages") continue;
+        const el = formRef.current.elements.namedItem(k) as HTMLInputElement | null;
+        if (el && el.type !== "file") el.value = String(v);
       }
+      const drafted = parseLanguages(JSON.stringify(vals.languages ?? []));
+      if (drafted.length) setLanguages(drafted);
     } catch {}
-    // The pickers only mount once this has run, so a restored draft is their
-    // initial state rather than something that fights their own.
-    setReady(true);
   }, []);
 
   const persist = useCallback(() => {
@@ -298,24 +259,26 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
       // which would silently poison the draft and, on restore, be written into
       // a text field as that literal.
       if (k === "password" || v instanceof File) return;
-      if (k === "languages" || k === "routes_walked") return;
+      // Kept as a real array below rather than the stringified hidden field.
+      if (k === "languages") return;
       obj[k] = String(v);
     });
-    if (languages) obj.languages = languages;
-    if (routesWalked) obj.routes_walked = routesWalked;
+    obj.languages = languages;
     try {
       localStorage.setItem(KEY, JSON.stringify(obj));
       setSaved(true);
     } catch {
       /* private mode or full quota — losing the draft beats throwing here */
     }
-  }, [languages, routesWalked]);
+  }, [languages]);
 
-  // The pickers change without firing the form's onChange, so save on their
+  // The picker changes without firing the form's onChange, so save on its
   // updates too.
   useEffect(() => {
-    if (ready && (languages || routesWalked)) persist();
-  }, [languages, routesWalked, ready, persist]);
+    persist();
+    // Only when the rows move — persist itself changes identity with them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [languages]);
 
   if (actionData && "ok" in actionData && actionData.ok) {
     if (typeof document !== "undefined") localStorage.removeItem(KEY);
@@ -327,9 +290,8 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
           have to wait for us to start. We’ve emailed you what to do first.
         </p>
         <p className="mt-3 text-ink-soft">
-          Our team in Kathmandu will check your licence and your ID against the
-          photos you sent, and call your reference. We’ll message you the day
-          you’re verified.
+          Our team in Kathmandu will check your licence and your ID against
+          the photos you sent. We’ll message you the day you’re verified.
         </p>
         <div className="mt-6">
           <Link to="/g/login">
@@ -339,8 +301,6 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
       </main>
     );
   }
-
-  const routes = loaderData.routes as any[];
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10">
@@ -429,29 +389,7 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
               And how well — trekkers search on this.
             </span>
             <div className="mt-1">
-              {ready && (
-                <GuideLanguages initial={restored?.languages} onChange={setLanguages} />
-              )}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-sm text-ink">
-              Routes you have walked
-              <span className="ml-1.5 text-xs text-ink-soft">optional</span>
-            </span>
-            <span className="mt-0.5 block text-xs text-ink-soft">
-              Add each one and how many times you have led it. This is the line
-              trekkers read first.
-            </span>
-            <div className="mt-1">
-              {ready && (
-                <RouteExperience
-                  routes={routes}
-                  initial={restored?.routesWalked}
-                  onChange={setRoutesWalked}
-                />
-              )}
+              <GuideLanguages value={languages} onChange={setLanguages} />
             </div>
           </div>
 
@@ -489,9 +427,9 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
 }
 
 /**
- * A numbered step. Still one page rather than a wizard — though the two
- * pickers in step 3 do need JavaScript, so this is no longer a form that
- * completes with scripting off.
+ * A numbered step. Still one page rather than a wizard, and it renders whole
+ * on the server — adding a second language needs JavaScript, but the first
+ * one is there in the HTML, so the form submits either way.
  */
 function Group({
   n,

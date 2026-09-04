@@ -15,8 +15,18 @@ import {
   uploadGuideDocument,
   verifyDocument,
 } from "~/lib/documents.server";
-import { CHECK_LABELS, CHECK_TYPES, checkLabel } from "~/lib/guide-checks";
+import {
+  CHECK_LABELS,
+  CHECK_STATUSES,
+  CHECK_STATUS_LABELS,
+  CHECK_TYPES,
+  checkLabel,
+  isCleared,
+  isSettled,
+  type CheckStatus,
+} from "~/lib/guide-checks";
 import { PROFICIENCY_LABELS, type Proficiency } from "~/lib/guide-languages";
+import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 
 /**
@@ -310,10 +320,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "check") {
+    const status = str("status");
+    if (!(CHECK_STATUSES as readonly string[]).includes(status)) {
+      return data({ error: "That isn't a check outcome." }, { status: 400, headers });
+    }
     await admin
       .from("guide_verifications")
       .update({
-        status: str("status"),
+        status,
         notes: nul("notes"),
         verified_by: user.id,
         verified_at: new Date().toISOString(),
@@ -417,17 +431,29 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // either way; this is what marks it as checked rather than claimed.
   if (intent === "verify_route") {
     const routeId = str("route_id");
-    const already = form.get("undo") ? true : false;
+    if (form.get("undo")) {
+      await admin
+        .from("guide_route_experience")
+        .update({ verified_by: null, verified_at: null })
+        .eq("guide_id", id)
+        .eq("route_id", routeId);
+      return data({ ok: "Unconfirmed." }, { headers });
+    }
+    // Confirming can also correct. If the reference call says twelve and the
+    // guide claimed forty, the office needs to be able to write twelve — the
+    // alternative is confirming a number we know is wrong or leaving it
+    // unconfirmed forever.
+    const times = parseTimesWalked(form.get("times_walked"));
     await admin
       .from("guide_route_experience")
-      .update(
-        already
-          ? { verified_by: null, verified_at: null }
-          : { verified_by: user.id, verified_at: new Date().toISOString() },
-      )
+      .update({
+        ...(times === null ? {} : { times_walked: times }),
+        verified_by: user.id,
+        verified_at: new Date().toISOString(),
+      })
       .eq("guide_id", id)
       .eq("route_id", routeId);
-    return data({ ok: already ? "Unconfirmed." : "Route confirmed." }, { headers });
+    return data({ ok: "Route confirmed." }, { headers });
   }
 
   if (intent === "strike") {
@@ -484,8 +510,11 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
   const openIncidents = d.incidents.filter((i: any) => i.status !== "closed");
   const payable = d.payouts.filter((x: any) => x.status === "payable");
   const unverifiedDocs = d.bookingDocs.filter((x: any) => !x.verified_at);
-  const passedCount = d.checks.filter((c: any) => c.status === "passed").length;
+  // A check marked "not needed" is dealt with. Counting it as outstanding
+  // would leave a fully-checked guide permanently short of the line.
+  const passedCount = d.checks.filter((c: any) => isCleared(c.status)).length;
   const allPassed = d.checks.length > 0 && passedCount === d.checks.length;
+  const outstanding = d.checks.filter((c: any) => !isSettled(c.status)).length;
   const expiringDocs = d.docs.filter(
     (x: any) => x.expires_on && new Date(x.expires_on) < new Date(Date.now() + 60 * 864e5),
   );
@@ -849,27 +878,45 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                               {r.route?.region ?? ""}
                             </p>
                           </div>
-                          <span className="font-mono text-sm">×{r.times_walked}</span>
                           {r.verified_at ? (
                             <Badge tone="green">confirmed</Badge>
                           ) : (
                             <Badge tone="neutral">their claim</Badge>
                           )}
-                          <Form method="post">
+                          <Form method="post" className="flex items-center gap-2">
                             <input type="hidden" name="intent" value="verify_route" />
                             <input type="hidden" name="route_id" value={r.route_id} />
-                            {r.verified_at && <input type="hidden" name="undo" value="1" />}
+                            <input
+                              name="times_walked"
+                              type="number"
+                              min={1}
+                              max={MAX_TIMES_WALKED}
+                              defaultValue={r.times_walked}
+                              aria-label="Times walked"
+                              className="w-20 rounded border border-border bg-surface px-2 py-1 text-sm"
+                            />
                             <button className="text-xs font-medium text-primary hover:underline">
-                              {r.verified_at ? "Unconfirm" : "Confirm"}
+                              {r.verified_at ? "Re-confirm" : "Confirm"}
                             </button>
                           </Form>
+                          {r.verified_at && (
+                            <Form method="post">
+                              <input type="hidden" name="intent" value="verify_route" />
+                              <input type="hidden" name="route_id" value={r.route_id} />
+                              <input type="hidden" name="undo" value="1" />
+                              <button className="text-xs text-ink-soft hover:underline">
+                                Unconfirm
+                              </button>
+                            </Form>
+                          )}
                         </li>
                       ))}
                     </ul>
                   )}
                   <p className="mt-3 text-xs text-ink-soft">
-                    The count shows on their public profile either way. Confirming
-                    is what puts a mark next to it.
+                    The count shows on their public profile either way.
+                    Confirming puts a mark next to it — and if the number is
+                    wrong, correct it here and confirm the real one.
                   </p>
                 </Panel>
 
@@ -967,8 +1014,9 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                   </div>
                   {!allPassed && g.status !== "verified" && (
                     <p className="text-xs text-ink-soft">
-                      {passedCount} of {d.checks.length} checks pass. Approving
-                      overrides the rest.
+                      {passedCount} of {d.checks.length} checks clear
+                      {outstanding > 0 ? `, ${outstanding} not looked at yet` : ""}.
+                      Approving overrides the rest.
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2">
@@ -1037,7 +1085,7 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                                   : "neutral"
                           }
                         >
-                          {c.status}
+                          {CHECK_STATUS_LABELS[c.status as CheckStatus] ?? c.status}
                         </Badge>
                       </div>
                       {c.notes && <p className="text-xs text-ink-soft">{c.notes}</p>}
@@ -1063,6 +1111,16 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                           className="rounded border border-border px-2 py-1 text-xs hover:bg-red-50"
                         >
                           Fail
+                        </button>
+                        {/* Not every check applies to every guide. Without
+                            this, one that simply does not apply sits pending
+                            forever and a fully-checked guide never looks it. */}
+                        <button
+                          name="status"
+                          value="not_required"
+                          className="rounded border border-border px-2 py-1 text-xs text-ink-soft hover:bg-black/5"
+                        >
+                          Not needed
                         </button>
                       </Form>
                     </li>

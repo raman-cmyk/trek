@@ -227,14 +227,13 @@ insert into public.guide_verifications (guide_id, check_type, status, notes) val
   ('11111111-1111-1111-1111-000000000013','id_match','pending',null),
   ('11111111-1111-1111-1111-000000000013','phone','passed','OTP confirmed'),
   ('11111111-1111-1111-1111-000000000013','payout_account','pending',null),
-  ('11111111-1111-1111-1111-000000000013','reference_1','pending',null),
+  ('11111111-1111-1111-1111-000000000013','pan_card','pending',null),
   ('11111111-1111-1111-1111-000000000013','first_aid','pending',null),
   ('11111111-1111-1111-1111-000000000014','licence','passed','Licence verified against TAAN registry'),
   ('11111111-1111-1111-1111-000000000014','id_match','passed','Citizenship matches licence'),
   ('11111111-1111-1111-1111-000000000014','phone','passed','OTP confirmed'),
   ('11111111-1111-1111-1111-000000000014','payout_account','pending',null),
-  ('11111111-1111-1111-1111-000000000014','reference_1','passed','Called; strong reference'),
-  ('11111111-1111-1111-1111-000000000014','reference_2','pending',null),
+  ('11111111-1111-1111-1111-000000000014','pan_card','passed','PAN checked'),
   ('11111111-1111-1111-1111-000000000014','first_aid','failed','WFA cert expired — asked to renew');
 
 -- Bookings spread across the pipeline so the kanban has a card in each column.
@@ -352,7 +351,7 @@ where o.id = l.offering_id;
 update public.guide_verifications gv set status='passed'
   from public.guides g
   where g.user_id=gv.guide_id and g.status='verified'
-    and gv.check_type in ('licence','id_match','phone','reference_1');
+    and gv.check_type in ('licence','id_match','phone','pan_card');
 update public.guide_verifications gv
   set verified_at = g.created_at + interval '3 days',
       expires_at = case when gv.check_type in ('licence','first_aid')
@@ -366,7 +365,7 @@ select g.user_id, ct.check_type, 'passed',
        case when ct.check_type in ('licence','first_aid')
             then g.created_at + interval '3 days' + interval '2 years' end
 from public.guides g
-cross join (values ('licence'),('id_match'),('phone'),('reference_1'),('first_aid')) as ct(check_type)
+cross join (values ('licence'),('id_match'),('phone'),('pan_card'),('first_aid')) as ct(check_type)
 where g.status = 'verified'
   and not exists (select 1 from public.guide_verifications gv
                   where gv.guide_id = g.user_id and gv.check_type = ct.check_type);

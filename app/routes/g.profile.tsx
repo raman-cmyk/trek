@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Form, data, useNavigation } from "react-router";
+import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/g.profile";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
@@ -14,11 +14,13 @@ import {
   isProficiency,
   type Proficiency,
 } from "~/lib/guide-languages";
+import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
-  const [{ data: guide }, { data: langs }, { data: photos }] = await Promise.all([
+  const [{ data: guide }, { data: langs }, { data: photos }, { data: walked }, { data: routes }] =
+    await Promise.all([
     admin
       .from("guides")
       .select(
@@ -36,6 +38,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .select("id, url, kind, alt_text, sort")
       .eq("guide_id", user.id)
       .order("sort"),
+    // The trails they have walked, and how many times. Nothing let a guide
+    // record this after applying, so a profile's most-read line could only
+    // ever be set once, or never.
+    admin
+      .from("guide_route_experience")
+      .select("route_id, times_walked, verified_at, route:routes(name, region)")
+      .eq("guide_id", user.id)
+      .order("times_walked", { ascending: false }),
+    admin
+      .from("routes")
+      .select("id, name, region")
+      .eq("status", "live")
+      .order("sort")
+      .order("name"),
   ]);
   const { data: canned } = await admin
     .from("canned_replies")
@@ -48,6 +64,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       languages: langs ?? [],
       photos: photos ?? [],
       canned: canned ?? [],
+      walked: walked ?? [],
+      routes: routes ?? [],
     },
     { headers },
   );
@@ -182,6 +200,73 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // Photographs. The upload itself happens at /api/journal-photo (which strips
   // the GPS out of the EXIF first); this only records the row.
+  // Routes walked. The public profile leads with this number, so it is the
+  // guide's to state and the office's to check.
+  if (intent === "route") {
+    const routeId = String(form.get("route_id") ?? "").trim();
+    if (!routeId) {
+      return data({ error: "Pick a route first." }, { status: 400, headers });
+    }
+    if (form.get("delete")) {
+      await admin
+        .from("guide_route_experience")
+        .delete()
+        .eq("guide_id", user.id)
+        .eq("route_id", routeId);
+      return data({ ok: "Removed." }, { headers });
+    }
+    // A route we actually list. Guides may propose routes, but a claim can
+    // only hang off one that exists and is live.
+    const { data: route } = await admin
+      .from("routes")
+      .select("id, name")
+      .eq("id", routeId)
+      .eq("status", "live")
+      .maybeSingle();
+    if (!route) {
+      return data({ error: "That route isn't one of ours." }, { status: 400, headers });
+    }
+    const times = parseTimesWalked(form.get("times_walked"));
+    if (times === null) {
+      return data(
+        { error: `How many times have you walked ${route.name}? A whole number, 1 or more.` },
+        { status: 400, headers },
+      );
+    }
+    // Whether the office had already checked this number.
+    const { data: existing } = await admin
+      .from("guide_route_experience")
+      .select("times_walked, verified_at")
+      .eq("guide_id", user.id)
+      .eq("route_id", routeId)
+      .maybeSingle();
+    const wasConfirmed = !!existing?.verified_at && existing.times_walked !== times;
+
+    // Upsert: the primary key is (guide_id, route_id), so adding a route you
+    // already listed changes the count rather than failing.
+    //
+    // Changing a checked number clears the check. The public profile prints
+    // "checked by us" next to it — a guide must not be able to have 12
+    // confirmed and then quietly make it 200 under the same tick.
+    await admin.from("guide_route_experience").upsert(
+      {
+        guide_id: user.id,
+        route_id: routeId,
+        times_walked: times,
+        ...(wasConfirmed ? { verified_by: null, verified_at: null } : {}),
+      },
+      { onConflict: "guide_id,route_id" },
+    );
+    return data(
+      {
+        ok: wasConfirmed
+          ? `${route.name} updated — our office will check the new number.`
+          : `${route.name} saved.`,
+      },
+      { headers },
+    );
+  }
+
   if (intent === "photo") {
     const id = String(form.get("photo_id") ?? "");
     if (form.get("delete")) {
@@ -305,8 +390,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideProfile({ loaderData, actionData }: Route.ComponentProps) {
-  const { guide, languages, photos, canned } = loaderData as any;
+  const { guide, languages, photos, canned, walked, routes } = loaderData as any;
   const spoken = new Set<string>(languages.map((l: any) => l.language));
+  const claimed = new Set<string>(walked.map((w: any) => w.route_id));
+  const spareRoutes = routes.filter((r: any) => !claimed.has(r.id));
   const nav = useNavigation();
   const busy = nav.state !== "idle";
 
@@ -475,6 +562,121 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
             Add
           </Button>
         </Form>
+      </section>
+
+      {/* ── Routes walked. The number the public profile leads with, and until
+         now a guide had no way to set it after applying. */}
+      <section className="space-y-3 rounded-card border border-border bg-card p-4">
+        <div>
+          <p className="text-sm font-medium text-ink">Routes you have walked</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            And how many times you have led each one. This is the first thing a
+            trekker reads on your page.
+          </p>
+        </div>
+
+        {walked.length > 0 ? (
+          <ul className="space-y-2">
+            {walked.map((w: any) => (
+              <li key={w.route_id}>
+                <Form
+                  method="post"
+                  className="flex flex-wrap items-end gap-2 rounded-button border border-border p-3"
+                >
+                  <input type="hidden" name="intent" value="route" />
+                  <input type="hidden" name="route_id" value={w.route_id} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-ink">{w.route?.name ?? "This route"}</p>
+                    <p className="text-xs text-ink-soft">
+                      {w.route?.region ?? ""}
+                      {w.verified_at && (
+                        <span className="ml-1.5 text-moss">· checked by us</span>
+                      )}
+                    </p>
+                  </div>
+                  <label className="text-sm text-ink-soft">
+                    Times
+                    <input
+                      name="times_walked"
+                      type="number"
+                      min={1}
+                      max={MAX_TIMES_WALKED}
+                      defaultValue={w.times_walked}
+                      className="mt-1 block w-24 rounded-button border border-border px-3 py-2 text-base text-ink"
+                    />
+                  </label>
+                  <Button type="submit" size="sm" variant="secondary">
+                    Save
+                  </Button>
+                  <button
+                    name="delete"
+                    value="1"
+                    className="rounded-button px-3 py-2 text-sm text-ember hover:bg-mist"
+                  >
+                    Remove
+                  </button>
+                </Form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-soft">
+            None yet. Add the trek you have led most — it is what people book.
+          </p>
+        )}
+
+        {spareRoutes.length > 0 ? (
+          <Form
+            method="post"
+            className="flex flex-wrap items-end gap-2 rounded-button border border-dashed border-border p-3"
+          >
+            <input type="hidden" name="intent" value="route" />
+            <label className="flex-1 text-sm text-ink-soft">
+              Add a route
+              <select
+                name="route_id"
+                required
+                className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+              >
+                {spareRoutes.map((r: any) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                    {r.region ? ` — ${r.region}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-ink-soft">
+              Times
+              <input
+                name="times_walked"
+                type="number"
+                min={1}
+                max={MAX_TIMES_WALKED}
+                defaultValue={1}
+                className="mt-1 block w-24 rounded-button border border-border px-3 py-2 text-base text-ink"
+              />
+            </label>
+            <Button type="submit" size="sm" loading={busy}>
+              Add
+            </Button>
+          </Form>
+        ) : (
+          <p className="text-sm text-ink-soft">
+            Every route we list is on your page. Walked one we don't have?{" "}
+            <Link to="/g/routes/new" className="text-primary hover:underline">
+              Tell us about it
+            </Link>
+            .
+          </p>
+        )}
+
+        {walked.some((w: any) => w.verified_at) && (
+          <p className="text-xs text-ink-soft">
+            Changing a number our office has checked clears the tick until we
+            check it again.
+          </p>
+        )}
       </section>
 
       {/* ── The facts. Licence number, tier and status stay ops-controlled and

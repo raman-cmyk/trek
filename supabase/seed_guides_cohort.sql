@@ -385,7 +385,7 @@ select g.user_id, ct.check_type, 'passed',
        case when ct.check_type in ('licence','first_aid')
             then g.created_at + interval '3 days' + interval '2 years' end
 from public.guides g
-cross join (values ('licence'),('id_match'),('phone'),('reference_1'),('first_aid')) as ct(check_type)
+cross join (values ('licence'),('id_match'),('phone'),('pan_card'),('first_aid')) as ct(check_type)
 where g.status = 'verified'
   and not exists (select 1 from public.guide_verifications gv
                   where gv.guide_id = g.user_id and gv.check_type = ct.check_type);

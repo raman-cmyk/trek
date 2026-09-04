@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   LANGUAGES,
   PROFICIENCIES,
@@ -15,6 +14,12 @@ import {
  * matcher's "speaks it fluently" branch has never once fired. A guide who is
  * a native Sherpa speaker and has enough German to run a teahouse can now say
  * exactly that, and it is the thing a German trekker searches on.
+ *
+ * Fully controlled. It held its own state once, reading `initial` at mount,
+ * which forced the page to delay mounting it until a saved draft had been
+ * read — and that meant the server rendered a heading with an empty box under
+ * it. On a cheap phone over 3G the picker simply was not there for seconds.
+ * The page owns the rows now, so this renders complete on the server.
  */
 
 const field =
@@ -22,34 +27,27 @@ const field =
 
 export function GuideLanguages({
   name = "languages",
-  initial,
+  value,
   onChange,
 }: {
   /** The hidden field the server reads. */
   name?: string;
-  initial?: LanguageRow[];
-  /** So a parent can autosave the draft without owning the list. */
-  onChange?: (rows: LanguageRow[]) => void;
+  value: LanguageRow[];
+  onChange: (rows: LanguageRow[]) => void;
 }) {
-  const [rows, setRows] = useState<LanguageRow[]>(
-    initial?.length ? initial : [{ language: "Nepali", proficiency: "native" }],
-  );
-
-  useEffect(() => onChange?.(rows), [rows, onChange]);
-
   // A language already claimed is not offered again: the table's primary key
   // is (guide_id, language), so a duplicate would reject the whole insert.
-  const taken = new Set(rows.map((r) => r.language));
+  const taken = new Set(value.map((r) => r.language));
   const spare = LANGUAGES.find((l) => !taken.has(l));
 
   const set = (i: number, patch: Partial<LanguageRow>) =>
-    setRows((all) => all.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+    onChange(value.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   return (
     <div>
-      <input type="hidden" name={name} value={JSON.stringify(rows)} />
+      <input type="hidden" name={name} value={JSON.stringify(value)} />
       <ul className="space-y-2">
-        {rows.map((r, i) => (
+        {value.map((r, i) => (
           <li key={r.language} className="flex flex-wrap items-center gap-2">
             <select
               aria-label="Language"
@@ -75,10 +73,10 @@ export function GuideLanguages({
                 </option>
               ))}
             </select>
-            {rows.length > 1 && (
+            {value.length > 1 && (
               <button
                 type="button"
-                onClick={() => setRows((all) => all.filter((_, j) => j !== i))}
+                onClick={() => onChange(value.filter((_, j) => j !== i))}
                 className="shrink-0 px-1 text-sm text-ink-soft hover:text-danger"
                 aria-label={`Remove ${r.language}`}
               >
@@ -91,9 +89,7 @@ export function GuideLanguages({
       {spare && (
         <button
           type="button"
-          onClick={() =>
-            setRows((all) => [...all, { language: spare, proficiency: "conversational" }])
-          }
+          onClick={() => onChange([...value, { language: spare, proficiency: "conversational" }])}
           className="mt-2 text-sm font-medium text-primary hover:underline"
         >
           + Add a language

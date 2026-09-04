@@ -5,6 +5,7 @@ import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
 import { cn } from "~/lib/cn";
 import { escapeLike } from "~/lib/browse";
+import { PENDING_CHECKS } from "~/lib/guide-checks";
 import { fmtDate } from "~/lib/format";
 import { formatUsd } from "~/lib/pricing";
 import { createAdminClient, getEnv, requireOps } from "~/lib/supabase.server";
@@ -35,16 +36,6 @@ function slugify(s: string) {
       .replace(/^-|-$/g, "") || "guide"
   );
 }
-
-/** The six checks a new guide starts with (same set the public form seeds). */
-const PENDING_CHECKS = [
-  "licence",
-  "id_match",
-  "phone",
-  "payout_account",
-  "reference_1",
-  "first_aid",
-] as const;
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);

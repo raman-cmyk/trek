@@ -1,6 +1,7 @@
 import { Link, data } from "react-router";
 import type { Route } from "./+types/g._index";
 import { getEnv } from "~/lib/supabase.server";
+import { checkLabel } from "~/lib/guide-checks";
 import { requireUser } from "~/lib/auth.server";
 import { cn } from "~/lib/cn";
 import { CheckinButton } from "~/components/guide/CheckinButton";
@@ -8,18 +9,6 @@ import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
 
-const CHECK_LABELS: Record<string, string> = {
-  licence: "Trekking licence",
-  id_match: "ID match",
-  phone: "Phone",
-  payout_account: "Payout account",
-  reference_1: "Reference call",
-  reference_2: "Reference call 2",
-  police_cert: "Police clearance",
-  first_aid: "First-aid cert",
-  altitude_training: "Altitude training",
-  insurance: "Insurance",
-};
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -136,8 +125,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // First-run: what a new guide still has to do before their page can sell.
   // Read from the same rows the public page renders, so a step goes green
   // because the thing is actually true, not because a flag was set.
-  const [{ data: me }, { count: langCount }, { count: offeringCount }, { count: journalCount }] =
-    await Promise.all([
+  const [
+    { data: me },
+    { count: langCount },
+    { count: offeringCount },
+    { count: journalCount },
+    { count: routeCount },
+  ] = await Promise.all([
       admin
         .from("guides")
         .select("only_with_me, bio, day_rate_usd_cents, users(avatar_url)")
@@ -155,6 +149,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       admin
         .from("journals")
         .select("id", { count: "exact", head: true })
+        .eq("guide_id", user.id),
+      admin
+        .from("guide_route_experience")
+        .select("route_id", { count: "exact", head: true })
         .eq("guide_id", user.id),
     ]);
 
@@ -185,6 +183,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       done: (langCount ?? 0) > 0,
       label: "List your languages",
       note: "It is how people filter. Missing here means missing from the search.",
+      to: "/g/profile",
+    },
+    {
+      key: "routes",
+      done: (routeCount ?? 0) > 0,
+      label: "Add the routes you've walked",
+      note: "How many times you have led each one. It is the first line trekkers read.",
       to: "/g/profile",
     },
     {
@@ -533,7 +538,7 @@ function StatusView({ name, guide, status }: { name: string; guide: any; status:
           <ul className="space-y-1.5 text-sm">
             {checks.map((c: any) => (
               <li key={c.check_type} className="flex items-center justify-between">
-                <span>{CHECK_LABELS[c.check_type] ?? c.check_type}</span>
+                <span>{checkLabel(c.check_type)}</span>
                 <span
                   className={cn(
                     "text-xs",
