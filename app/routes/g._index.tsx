@@ -1,7 +1,11 @@
 import { Link, data } from "react-router";
 import type { Route } from "./+types/g._index";
 import { getEnv } from "~/lib/supabase.server";
-import { checkLabel } from "~/lib/guide-checks";
+import {
+  CHECK_STATUS_LABELS,
+  checkLabel,
+  type CheckStatus,
+} from "~/lib/guide-checks";
 import { requireUser } from "~/lib/auth.server";
 import { cn } from "~/lib/cn";
 import { CheckinButton } from "~/components/guide/CheckinButton";
@@ -266,7 +270,8 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
 
-  if (status !== "verified") return <StatusView name={first} guide={guide} status={status} />;
+  if (status !== "verified")
+    return <StatusView name={first} guide={guide} status={status} setup={setup} />;
 
   const dayNum = active
     ? Math.max(
@@ -495,7 +500,17 @@ function Tile({
   );
 }
 
-function StatusView({ name, guide, status }: { name: string; guide: any; status: string }) {
+function StatusView({
+  name,
+  guide,
+  status,
+  setup,
+}: {
+  name: string;
+  guide: any;
+  status: string;
+  setup: Array<{ key: string; done: boolean; label: string; note: string; to: string }>;
+}) {
   const rejected = status === "removed" || status === "suspended";
   const activeIdx = STEPS.indexOf(status as any);
   const checks = guide?.guide_verifications ?? [];
@@ -532,6 +547,11 @@ function StatusView({ name, guide, status }: { name: string; guide: any; status:
           })}
         </ol>
       )}
+      {/* Waiting on us is not the same as having nothing to do. The welcome
+          email tells a new guide to start straight away — this is where they
+          see what "start" means, and it is what gets them booked the day they
+          are verified rather than a fortnight later. */}
+      {!rejected && <SetupChecklist steps={setup} />}
       {checks.length > 0 && (
         <div className="rounded-card border border-border bg-card p-4">
           <p className="mb-2 text-sm font-medium text-ink">Verification checklist</p>
@@ -549,7 +569,7 @@ function StatusView({ name, guide, status }: { name: string; guide: any; status:
                         : "text-ink-soft",
                   )}
                 >
-                  {c.status}
+                  {CHECK_STATUS_LABELS[c.status as CheckStatus] ?? c.status}
                 </span>
               </li>
             ))}
