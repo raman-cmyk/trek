@@ -3,8 +3,10 @@ import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/apply";
 import { Button } from "~/components/Button";
 import { GuideLanguages } from "~/components/GuideLanguages";
+import { GuideRegions } from "~/components/GuideRegions";
 import { PENDING_CHECKS } from "~/lib/guide-checks";
 import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
+import { parseRegions } from "~/lib/guide-regions";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 
@@ -120,6 +122,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   // does not recognise rather than let a bad row fail an insert halfway
   // through an application.
   const languages = parseLanguages(form.get("languages"));
+  // Checkbox group, so getAll: anything we do not recognise is dropped.
+  const regions = parseRegions(form.getAll("regions"));
 
   // 1) Auth user with a credential the guide can actually sign in with
   // (email + password, same as trekkers). Phone is stored for SMS notices.
@@ -157,6 +161,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     licence_no: licenceNo,
     licence_expiry: licenceExpiry,
     home_district: district,
+    regions,
     years_experience: years,
     day_rate_usd_cents: Math.round(dayRateUsd * 100) || null,
     hook_line: hook,
@@ -390,6 +395,20 @@ export default function Apply({ actionData }: Route.ComponentProps) {
             </span>
             <div className="mt-1">
               <GuideLanguages value={languages} onChange={setLanguages} />
+            </div>
+          </div>
+
+          <div>
+            <span className="text-sm text-ink">
+              Where you work
+              <span className="ml-1.5 text-xs text-ink-soft">optional</span>
+            </span>
+            <span className="mt-0.5 block text-xs text-ink-soft">
+              The areas you actually take people to — not just where you are
+              from. Tick as many as you like.
+            </span>
+            <div className="mt-2">
+              <GuideRegions />
             </div>
           </div>
 

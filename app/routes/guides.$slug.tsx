@@ -704,6 +704,12 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                 {guide.home_district && (
                   <FactRow icon="pin">Lives in {guide.home_district}</FactRow>
                 )}
+                {guide.regions?.length > 0 && (
+                  <FactRow icon="pin">
+                    Guides in{" "}
+                    <span className="text-ink">{guide.regions.join(", ")}</span>
+                  </FactRow>
+                )}
                 {receiptBy.id_match && (
                   <FactRow icon="shield">
                     Identity verified {fmtDate(receiptBy.id_match.verified_at)}

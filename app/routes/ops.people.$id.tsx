@@ -92,7 +92,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       ? admin
           .from("guides")
           .select(
-            "user_id, slug, status, tier, licence_no, licence_expiry, home_district, years_experience, day_rate_usd_cents, bio, hook_line, voice_intro_url, payout_method, payout_account, payout_account_name, response_rate, median_response_mins, treks_completed_platform, created_at",
+            "user_id, slug, status, tier, licence_no, licence_expiry, home_district, regions, years_experience, day_rate_usd_cents, bio, hook_line, voice_intro_url, payout_method, payout_account, payout_account_name, response_rate, median_response_mins, treks_completed_platform, created_at",
           )
           .eq("user_id", id)
           .maybeSingle()
@@ -771,6 +771,10 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                 <dl className="space-y-1 text-sm">
                   <Row label="Day rate" value={g.day_rate_usd_cents ? formatUsd(g.day_rate_usd_cents) : "—"} />
                   <Row label="Experience" value={g.years_experience ? `${g.years_experience} yrs` : "—"} />
+                  <Row
+                    label="Works in"
+                    value={g.regions?.length ? g.regions.join(", ") : null}
+                  />
                   <Row label="Licence" value={g.licence_no} />
                   <Row label="Licence expiry" value={g.licence_expiry ? fmtDate(g.licence_expiry) : "—"} />
                   <Row label="Treks on Trek" value={String(g.treks_completed_platform ?? 0)} />

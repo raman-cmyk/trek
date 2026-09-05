@@ -15,6 +15,8 @@ import {
   type Proficiency,
 } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
+import { parseRegions } from "~/lib/guide-regions";
+import { GuideRegions } from "~/components/GuideRegions";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -24,7 +26,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("guides")
       .select(
-        "slug, hook_line, bio, only_with_me, home_district, years_experience, gender, licence_no, licence_expiry, porter_welfare, voice_intro_url, day_rate_usd_cents, payout_method, payout_account, payout_account_name, tier, status",
+        "slug, hook_line, bio, only_with_me, home_district, regions, years_experience, gender, licence_no, licence_expiry, porter_welfare, voice_intro_url, day_rate_usd_cents, payout_method, payout_account, payout_account_name, tier, status",
       )
       .eq("user_id", user.id)
       .single(),
@@ -262,6 +264,19 @@ export async function action({ request, context }: Route.ActionArgs) {
         ok: wasConfirmed
           ? `${route.name} updated — our office will check the new number.`
           : `${route.name} saved.`,
+      },
+      { headers },
+    );
+  }
+
+  if (intent === "regions") {
+    const regions = parseRegions(form.getAll("regions"));
+    await admin.from("guides").update({ regions }).eq("user_id", user.id);
+    return data(
+      {
+        ok: regions.length
+          ? `Saved — you work in ${regions.join(", ")}.`
+          : "Cleared. Tick the areas you take people to.",
       },
       { headers },
     );
@@ -563,6 +578,22 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
           </Button>
         </Form>
       </section>
+
+      {/* ── Where they work, as opposed to where they are from. */}
+      <Form method="post" className="space-y-3 rounded-card border border-border bg-card p-4">
+        <input type="hidden" name="intent" value="regions" />
+        <div>
+          <p className="text-sm font-medium text-ink">Where you work</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            The areas you actually take people to. Your home district says where
+            you are from; this says where you guide.
+          </p>
+        </div>
+        <GuideRegions selected={guide?.regions ?? []} />
+        <Button type="submit" size="sm" loading={busy}>
+          Save
+        </Button>
+      </Form>
 
       {/* ── Routes walked. The number the public profile leads with, and until
          now a guide had no way to set it after applying. */}
