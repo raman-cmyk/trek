@@ -54,6 +54,20 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const isMember = !!me && me.status !== "removed" && me.status !== "declined";
   const isOrganiser = group.organiser_id === user.id;
 
+  // Opening the group page is reading the group chat, and the inbox counts
+  // unread against the same key it writes here — otherwise a group thread
+  // would sit bolded in /messages forever, because the chat is read on this
+  // page and nowhere else.
+  if (isMember) {
+    await admin
+      .from("thread_reads")
+      .upsert({
+        user_id: user.id,
+        thread_key: `g:${group.id}`,
+        last_read_at: new Date().toISOString(),
+      });
+  }
+
   const [{ data: messages }, { data: offering }, { data: booking }, { data: guide }, { data: profiles }] =
     await Promise.all([
     isMember

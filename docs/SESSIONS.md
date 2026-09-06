@@ -1007,3 +1007,36 @@ local. 111 tests green. Live: https://trek.raman-7d9.workers.dev
 
 **🙋 Founder still needed:** unchanged — real domain + Resend key, real Stripe
 keys, an ops phone number, and the first real journals from three guides.
+
+## Session — group trips in the inbox (2026-09-06)
+
+**The bug the founder saw:** a trip group is a real conversation — four
+friends deciding whether to add a rest day — but `/messages` never mentioned
+it. Group chat lives in its own table (`trip_group_messages`, migration 0039)
+and only ever rendered on `/groups/<slug>`, so the inbox and the header dot
+were built from conversations and booking threads alone. If you did not
+remember the group's URL, the conversation was gone.
+
+**The fix is in the two places the inbox is assembled**, not a new screen:
+
+- `listThreads()` now carries a third thread kind, `"group"`. Membership
+  (`groupIdsFor`) is the access rule — these queries run on an admin client
+  that bypasses RLS, so that lookup is what keeps someone else's trip out of
+  your inbox. The thread shows the group name, the offering title underneath,
+  the trek's cover photo as its avatar, and links to `/groups/<slug>`, which
+  is where the chat actually lives alongside the roster and the money.
+- `countUnread()` counts group messages the same way, so the envelope in the
+  header stops under-reporting.
+- Unread is tracked under `thread_reads` key `g:<group_id>`, and the group
+  page stamps it on load for members — the chat is read there and nowhere
+  else, so without that write a group thread would sit bolded forever.
+- A cancelled group with nothing said in it stays out of the list; one that
+  was talked in stays, because a trip falling apart is exactly what people go
+  back and read.
+
+Guides are not group members, so a guide's inbox is unchanged — the group
+chat is deliberately not a moderated trekker-to-guide thread.
+
+New `app/lib/threads.test.ts` runs the inbox against a small fake Supabase
+builder: the group appears, someone else's does not, and unread counts only
+what other people said since you last opened it. 258 tests green, build green.

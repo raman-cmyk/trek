@@ -1,15 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { groupIdsFor } from "~/lib/threads.server";
 
 /**
- * Unread message count for a user across both thread kinds (conversations and
- * booking threads), compared against thread_reads. Used by the guide nav badge
- * and the site header dot — kept cheap: two id queries plus one message scan.
+ * Unread message count for a user across all three thread kinds
+ * (conversations, booking threads and trip-group chats), compared against
+ * thread_reads. Used by the guide nav badge and the site header dot — kept
+ * cheap: id queries plus one message scan per kind.
  */
 export async function countUnread(
   admin: SupabaseClient,
   userId: string,
 ): Promise<{ unreadTotal: number }> {
-  const [{ data: convs }, { data: bookings }, { data: reads }] = await Promise.all([
+  const [{ data: convs }, { data: bookings }, groupIds, { data: reads }] = await Promise.all([
     admin
       .from("conversations")
       .select("id")
@@ -20,16 +22,17 @@ export async function countUnread(
       .select("id")
       .or(`trekker_id.eq.${userId},guide_id.eq.${userId}`)
       .limit(100),
+    groupIdsFor(admin, userId),
     admin.from("thread_reads").select("thread_key, last_read_at").eq("user_id", userId),
   ]);
 
   const convIds = (convs ?? []).map((c) => c.id);
   const bookingIds = (bookings ?? []).map((b) => b.id);
-  if (!convIds.length && !bookingIds.length) return { unreadTotal: 0 };
+  if (!convIds.length && !bookingIds.length && !groupIds.length) return { unreadTotal: 0 };
 
   const readAt = new Map((reads ?? []).map((r) => [r.thread_key, r.last_read_at]));
 
-  const [{ data: cm }, { data: bm }] = await Promise.all([
+  const [{ data: cm }, { data: bm }, { data: gm }] = await Promise.all([
     convIds.length
       ? admin
           .from("messages")
@@ -46,6 +49,14 @@ export async function countUnread(
           .neq("sender_id", userId)
           .limit(500)
       : Promise.resolve({ data: [] as any[] }),
+    groupIds.length
+      ? admin
+          .from("trip_group_messages")
+          .select("group_id, author_id, created_at")
+          .in("group_id", groupIds)
+          .neq("author_id", userId)
+          .limit(500)
+      : Promise.resolve({ data: [] as any[] }),
   ]);
 
   let unreadTotal = 0;
@@ -55,6 +66,10 @@ export async function countUnread(
   }
   for (const m of bm ?? []) {
     const since = readAt.get(`b:${m.booking_id}`);
+    if (!since || m.created_at > since) unreadTotal++;
+  }
+  for (const m of gm ?? []) {
+    const since = readAt.get(`g:${m.group_id}`);
     if (!since || m.created_at > since) unreadTotal++;
   }
   return { unreadTotal };
