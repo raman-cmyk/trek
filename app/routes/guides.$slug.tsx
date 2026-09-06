@@ -49,6 +49,15 @@ import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
 
+/**
+ * Anonymous visitors get the edge cache; anyone signed in gets nothing
+ * shared. That second case is load-bearing here: a guide previewing their own
+ * unverified page is signed in, and this response must never be stored and
+ * handed to the next visitor.
+ */
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
+
+
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Guide not found" }];
   const g = data.guide;

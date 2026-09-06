@@ -15,9 +15,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   });
 }
 
-export function headers() {
-  return { "Cache-Control": "public, max-age=300" };
-}
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
 const SEASONS: Record<string, number[]> = {
   Spring: [3, 4, 5],

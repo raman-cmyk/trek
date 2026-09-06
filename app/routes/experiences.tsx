@@ -7,6 +7,9 @@ import { BrowseSearch } from "~/components/public/BrowseSearch";
 import { escapeLike, openRunsByGuide, parseRange } from "~/lib/browse.server";
 import { fmtDateShort } from "~/lib/format";
 
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
+
+
 const CATEGORIES = [
   { kind: "", label: "All" },
   { kind: "trek", label: "Treks" },

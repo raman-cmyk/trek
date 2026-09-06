@@ -8,6 +8,9 @@ import { monthName } from "~/lib/match";
 import { useMoney } from "~/lib/currency-context";
 import { SmartImage } from "~/components/SmartImage";
 
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
+
+
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return [
     ...pageMeta({

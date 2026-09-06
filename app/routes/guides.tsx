@@ -15,6 +15,9 @@ import {
 import { findIntent, matchesKeywords } from "~/lib/intents";
 import { fmtDateShort } from "~/lib/format";
 
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
+
+
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Find your trekking guide in Nepal",

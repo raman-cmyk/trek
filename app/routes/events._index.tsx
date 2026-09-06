@@ -15,9 +15,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   });
 }
 
-export function headers() {
-  return { "Cache-Control": "public, max-age=300" };
-}
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);

@@ -27,10 +27,11 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   });
 }
 
-export function headers() {
-  // Results move slowly (availability + ratings) — brief edge cache.
-  return { "Cache-Control": "public, max-age=300" };
-}
+// Results move slowly (availability + ratings) — brief edge cache. Shared
+// only for anonymous visitors: this page renders inside the public layout,
+// whose header carries the signed-in customer's name and unread count, so an
+// unconditional `public` would have served one person's header to the next.
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);

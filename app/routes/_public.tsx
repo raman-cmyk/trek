@@ -1,4 +1,4 @@
-import { Outlet } from "react-router";
+import { Outlet, data } from "react-router";
 import { organizationLd } from "~/lib/seo";
 import type { Route } from "./+types/_public";
 import { Header } from "~/components/public/Header";
@@ -44,21 +44,40 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       };
     }
   }
-  return {
-    origin: new URL(request.url).origin,
-    routes: routes ?? [],
-    footer: {
-      faces: (faces ?? []).map((g) => ({
-        slug: g.slug,
-        name: g.full_name,
-        avatar_url: g.avatar_url,
-      })),
-      guideCount: (faces ?? []).length,
-      journalCount: journalCount ?? 0,
-      routeCount: (routes ?? []).length,
+  // Whether this document is personalised. Every public page renders inside
+  // this layout, and the header shows the signed-in customer's name, trips
+  // and unread count — so a page cached as `public` would hand one person's
+  // header to the next visitor. Leaf routes read this to decide whether they
+  // may be shared-cached at all.
+  return data(
+    {
+      origin: new URL(request.url).origin,
+      routes: routes ?? [],
+      footer: {
+        faces: (faces ?? []).map((g) => ({
+          slug: g.slug,
+          name: g.full_name,
+          avatar_url: g.avatar_url,
+        })),
+        guideCount: (faces ?? []).length,
+        journalCount: journalCount ?? 0,
+        routeCount: (routes ?? []).length,
+      },
+      account,
     },
-    account,
-  };
+    { headers: { "x-personalised": account ? "1" : "0" } },
+  );
+}
+
+
+/**
+ * Pass the personalised flag down. A child route's `parentHeaders` is the
+ * parent's `headers()` return value — not its loader headers — so without
+ * this the flag never reached the pages that depend on it and a signed-in
+ * document was being labelled `public`.
+ */
+export function headers({ loaderHeaders }: Route.HeadersArgs) {
+  return { "x-personalised": loaderHeaders.get("x-personalised") ?? "0" };
 }
 
 export default function PublicLayout({ loaderData }: Route.ComponentProps) {

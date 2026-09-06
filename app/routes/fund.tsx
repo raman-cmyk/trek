@@ -16,9 +16,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
 
 // Public, slow-moving number — cache at the edge (the loader also sets this,
 // but document responses need the route-level headers export).
-export function headers() {
-  return { "Cache-Control": "public, max-age=900" };
-}
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -29,7 +27,6 @@ export async function loader({ context }: Route.LoaderArgs) {
 
   return data(
     { collected, trips, canonical: absoluteUrl(env.SITE_URL, "/fund") },
-    { headers: { "Cache-Control": "public, max-age=900" } },
   );
 }
 

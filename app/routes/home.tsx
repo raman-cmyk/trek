@@ -27,6 +27,9 @@ import { openRunsByGuide } from "~/lib/browse.server";
 import { JournalCard } from "~/components/public/JournalCard";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 
+export { publicCacheHeaders as headers } from "~/lib/cache-headers";
+
+
 export function meta({ loaderData: data }: Route.MetaArgs) {
   const canonical = data?.canonical ?? "";
   const tags = [
