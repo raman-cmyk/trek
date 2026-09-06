@@ -52,6 +52,7 @@ export async function notifyEnquiryAccepted(env: Env, admin: SupabaseClient, boo
     c.trekkerEmail,
     `${c.guideName} accepted — pay your deposit to lock it in`,
     `Good news: ${c.guideName} accepted your request for ${c.title} (${c.startDate}).\n\nPay your deposit within 24 hours to hold the dates:\n${env.SITE_URL}/checkout/${bookingId}`,
+    { kind: "enquiry_accepted" },
   );
 }
 
@@ -69,6 +70,7 @@ export async function notifyDepositPaid(env: Env, admin: SupabaseClient, booking
       c.trekkerEmail,
       "Deposit received — you're booked",
       `Your deposit for ${c.title} is in. Next: upload documents and check your trip page.\n${env.SITE_URL}/trips/${bookingId}`,
+      { kind: "deposit_paid", about: { type: "booking", id: bookingId } },
     ),
   ]);
 }
@@ -92,6 +94,7 @@ export async function notifyNewMessage(
       u.email,
       `New message from ${args.fromName}`,
       `${args.fromName} sent you a message on Trek.\n${env.SITE_URL}${args.threadPath}`,
+      { kind: "new_message" },
     );
   }
 }
@@ -109,6 +112,7 @@ export async function notifyInstalmentCharged(
     c.trekkerEmail,
     "Instalment charged",
     `We charged $${(amountUsdCents / 100).toFixed(2)} for ${c.title}, as scheduled. Full plan: ${env.SITE_URL}/trips/${bookingId}`,
+    { kind: "instalment_charged" },
   );
 }
 
@@ -125,6 +129,7 @@ export async function notifyBalanceCharged(
     c.trekkerEmail,
     "Balance charged — see you on the trail",
     `We charged your remaining balance of $${(amountUsdCents / 100).toFixed(2)} for ${c.title} (14 days before departure, as agreed).\n${env.SITE_URL}/trips/${bookingId}`,
+    { kind: "balance_charged" },
   );
 }
 
@@ -145,6 +150,7 @@ export async function notifyBookingCancelled(
         (refundUsdCents > 0
           ? ` A refund of $${(refundUsdCents / 100).toFixed(2)} is on its way to your card.`
           : ""),
+      { kind: "booking_cancelled", about: { type: "booking", id: bookingId } },
     ),
     sendGuideSms(env, c.guidePhone, `Trek: booking cancelled — ${c.title}, ${c.startDate}. Your calendar is open again.`),
   ]);
@@ -158,6 +164,7 @@ export async function notifyTimsIssued(env: Env, admin: SupabaseClient, bookingI
     c.trekkerEmail,
     "Your TIMS card is ready",
     `Your blue TIMS card for ${c.title} has been issued. Download the PDF from your trip page:\n${env.SITE_URL}/trips/${bookingId}`,
+    { kind: "tims_issued" },
   );
 }
 
@@ -236,6 +243,7 @@ export async function notifyQuestionAnswered(
       "",
       `It is on his profile now: ${env.SITE_URL ?? ""}/guides/${slug}#ask`,
     ].join("\n"),
+    { kind: "question_answered" },
   );
 }
 
@@ -268,6 +276,7 @@ export async function notifyListingEdited(
       g.email,
       `We updated your listing: ${args.title}`,
       `Our office made a change to "${args.title}".\n\nWhat changed: ${args.fields.join(", ")}.\n\nHave a look, and tell us if any of it is wrong:\n${env.SITE_URL}/g/experiences/${args.offeringId}`,
+      { kind: "listing_edited" },
     );
   }
 }
@@ -312,6 +321,7 @@ export async function notifyGuideWelcome(
       ``,
       `If anything is wrong or you are stuck, just reply to this email.`,
     ].join("\n"),
+    { kind: "guide_welcome" },
   );
   // A guide who gave a phone but rarely opens email still gets pointed at it.
   await sendGuideSms(

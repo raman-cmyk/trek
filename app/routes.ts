@@ -84,6 +84,10 @@ export default [
   route("signup", "routes/signup.tsx"),
   route("logout", "routes/logout.tsx"),
 
+  // One-click unsubscribe. Outside every layout: it has to work signed out,
+  // and Gmail POSTs to it directly without ever loading the page.
+  route("email/unsubscribe/:token", "routes/email.unsubscribe.$token.tsx"),
+
   // SEO resource routes.
   route("sitemap.xml", "routes/sitemap.xml.tsx"),
   route("robots.txt", "routes/robots.txt.tsx"),
