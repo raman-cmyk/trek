@@ -414,7 +414,17 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
 
   return (
     <div className="space-y-5">
-      <h1 className="font-display text-2xl text-ink">Your profile</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="font-display text-2xl text-ink">Your profile</h1>
+        {guide?.slug && (
+          <Link
+            to={`/guides/${guide.slug}`}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            See your page →
+          </Link>
+        )}
+      </div>
 
       {actionData && "ok" in actionData && (
         <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">

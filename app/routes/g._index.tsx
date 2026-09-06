@@ -21,7 +21,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const { data: guide } = await admin
     .from("guides")
-    .select("status, tier, guide_verifications(check_type, status)")
+    .select("slug, status, tier, guide_verifications(check_type, status)")
     .eq("user_id", user.id)
     .single();
 
@@ -464,8 +464,15 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         />
       )}
 
-      <Link to="/g/profile" className="block text-center text-sm text-primary">
-        View my profile
+      {/* This went to the edit form, so "View my profile" showed a guide the
+          same boxes they had just filled in. It now opens the page a trekker
+          actually sees — and that page works before verification too, so a
+          guide can look at what they are building. */}
+      <Link
+        to={guide?.slug ? `/guides/${guide.slug}` : "/g/profile"}
+        className="block rounded-card border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
+      >
+        See your page the way trekkers see it →
       </Link>
     </div>
   );
@@ -552,6 +559,16 @@ function StatusView({
           see what "start" means, and it is what gets them booked the day they
           are verified rather than a fortnight later. */}
       {!rejected && <SetupChecklist steps={setup} />}
+      {/* The preview matters most here: this guide is being asked to fill in
+          a page they have never been allowed to look at. */}
+      {!rejected && guide?.slug && (
+        <Link
+          to={`/guides/${guide.slug}`}
+          className="block rounded-card border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
+        >
+          See your page the way trekkers will see it →
+        </Link>
+      )}
       {checks.length > 0 && (
         <div className="rounded-card border border-border bg-card p-4">
           <p className="mb-2 text-sm font-medium text-ink">Verification checklist</p>

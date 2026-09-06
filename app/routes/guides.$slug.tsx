@@ -129,14 +129,28 @@ function dedupeQuestions(qs: PublicQuestion[]): PublicQuestion[] {
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const client = createPublicClient(env);
+  let client = createPublicClient(env);
 
-  const { data: guide } = await client
+  let { data: guide } = await client
     .from("public_guides")
     .select("*")
     .eq("slug", params.slug)
-    .single();
-  if (!guide) throw new Response("Guide not found", { status: 404 });
+    .maybeSingle();
+
+  // Not live. It might still be the guide themselves, looking at the page we
+  // keep asking them to finish — they were shown a 404 until now.
+  let preview = false;
+  if (!guide) {
+    const { guidePreviewForOwner } = await import("~/lib/guide-preview.server");
+    const own = await guidePreviewForOwner(request, env, params.slug!);
+    if (!own) throw new Response("Guide not found", { status: 404 });
+    guide = own.guide as any;
+    // The public views all require a verified guide, so the preview reads the
+    // base tables. Otherwise a guide would preview their page and find the
+    // trips they had just listed missing from it.
+    client = own.admin;
+    preview = true;
+  }
 
   const today = new Date();
   const monthAnchor = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-01`;
@@ -160,12 +174,20 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .from("guide_languages")
       .select("language, proficiency")
       .eq("guide_id", guide.user_id),
-    client
-      .from("public_offerings")
-      .select(
-        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
-      )
-      .eq("guide_id", guide.user_id),
+    preview
+      ? client
+          .from("offerings")
+          .select(
+            "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, route:routes(slug, name)",
+          )
+          .eq("guide_id", guide.user_id)
+          .eq("status", "live")
+      : client
+          .from("public_offerings")
+          .select(
+            "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
+          )
+          .eq("guide_id", guide.user_id),
     client
       .from("availability")
       .select("day")
@@ -383,8 +405,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     0,
   );
 
+  // Counted here rather than during render. It used to read Date.now() inside
+  // the component, so the server and the browser could land on different days
+  // and React threw a hydration mismatch on every guide profile — the most
+  // important page on the site.
+  const in90 = new Date(Date.parse(todayIso) + 90 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const openIn90 = (avail ?? [])
+    .map((a: { day: string }) => a.day)
+    .filter((d: string) => d <= in90).length;
+
   return {
     guide,
+    preview,
+    openIn90,
     photos: (photos ?? []) as Array<{
       url: string;
       alt_text: string;
@@ -516,6 +551,8 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     usesPorters,
     maxAltitude,
     monthAnchor,
+    preview,
+    openIn90,
   } = loaderData as any;
   const { m, mr } = useMoney();
   const first = guide.full_name.split(" ")[0];
@@ -549,10 +586,6 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   // The rail's availability summary: the next stretch of ≥3 open days, and
   // how much of the next three months is open at all.
   const nextWindow = firstRun(openDays, 3);
-  const in90 = new Date(Date.now() + 90 * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-  const openIn90 = openDays.filter((d: string) => d <= in90).length;
 
   const messageForm = (label: string, cls: string) => (
     <Form method="post" action="/conversations">
@@ -564,6 +597,27 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="pb-28">
+      {/* The guide's own preview of a page that is not live yet. Said plainly
+          at the top, because the worst version of this is a guide who thinks
+          trekkers can already see them. */}
+      {preview && (
+        <div className="border-b border-line bg-mist">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
+            <span className="font-medium text-ink">
+              This is your page. Only you can see it.
+            </span>
+            <span className="text-muted">
+              It goes live for trekkers the day we verify you.
+            </span>
+            <Link
+              to="/g/profile"
+              className="ml-auto font-medium text-moss hover:underline"
+            >
+              Edit it →
+            </Link>
+          </div>
+        </div>
+      )}
       {/* ── 1. HEADER — the card is the whole introduction ───────────────
           The guide's promise used to run above the card at display size and
           the card restated the name underneath it. One introduction, not two:
@@ -599,7 +653,8 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                       <TierBadge tier={guide.tier} />
                     </div>
                     <p className="mt-0.5 text-sm text-ink-soft">
-                      Trekking guide · {guide.home_district}, Nepal
+                      Trekking guide ·{" "}
+                      {guide.home_district ? `${guide.home_district}, Nepal` : "Nepal"}
                     </p>
                     {/* The promise, in the guide's own words — the one thing on
                       this page no agency template could produce, so it is set
@@ -1209,7 +1264,14 @@ function GuidePortrait({
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-4 rounded-md border border-line bg-card p-5">
-      <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">{children}</p>
+      {/* A div, not a p. Several of these empty states end with a "message
+          them" button, and a <form> inside a <p> is invalid HTML: the parser
+          closes the paragraph early, so the browser's DOM stopped matching
+          what the server rendered and React threw a hydration error on every
+          guide who had not written a journal yet — which is most of them. */}
+      <div className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">
+        {children}
+      </div>
     </div>
   );
 }
