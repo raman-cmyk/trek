@@ -19,11 +19,64 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { user, profile, admin, headers } = await requireUser(request, env, "guide");
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: guide } = await admin
-    .from("guides")
-    .select("slug, status, tier, guide_verifications(check_type, status)")
-    .eq("user_id", user.id)
-    .single();
+  // One batch. This loader used to run eighteen queries with six of them
+  // stacked one behind the other — including three separate trips for the
+  // same guides row — so the page took two and a half to three seconds every
+  // load and eventually exceeded the Worker's CPU budget (Error 1102).
+  // Nothing below depends on anything else here, so nothing waits.
+  const [
+    { data: guide },
+    { data: backupFor },
+    { data: duePayouts },
+    { count: langCount },
+    { count: offeringCount },
+    { count: journalCount },
+    { count: routeCount },
+  ] = await Promise.all([
+    // Every column any part of this page wants from the guide's own row,
+    // fetched once.
+    admin
+      .from("guides")
+      .select(
+        "slug, status, tier, median_response_mins, only_with_me, bio, day_rate_usd_cents, guide_verifications(check_type, status), users(avatar_url)",
+      )
+      .eq("user_id", user.id)
+      .single(),
+    // Treks where this guide is the named backup — a promise Trek makes to
+    // trekkers that the guide could never see before (audit).
+    admin
+      .from("offerings")
+      .select("id, slug, title, guide:guides!offerings_guide_id_fkey(slug, users(full_name))")
+      .eq("backup_guide_id", user.id)
+      .eq("status", "live")
+      .limit(10),
+    // Money owed but not yet paid out.
+    admin
+      .from("payouts")
+      .select("amount_npr_paisa, status")
+      .eq("guide_id", user.id)
+      .eq("status", "payable"),
+    admin
+      .from("guide_languages")
+      .select("language", { count: "exact", head: true })
+      .eq("guide_id", user.id),
+    admin
+      .from("offerings")
+      .select("id", { count: "exact", head: true })
+      .eq("guide_id", user.id)
+      .eq("status", "live"),
+    admin
+      .from("journals")
+      .select("id", { count: "exact", head: true })
+      .eq("guide_id", user.id),
+    admin
+      .from("guide_route_experience")
+      .select("route_id", { count: "exact", head: true })
+      .eq("guide_id", user.id),
+  ]);
+
+  const me = guide as any;
+  const payableNprPaisa = (duePayouts ?? []).reduce((s, p) => s + p.amount_npr_paisa, 0);
 
   let active: any = null;
   let nextBooking: any = null;
@@ -34,7 +87,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     null;
 
   if (guide?.status === "verified") {
-    const [{ data: act }, { data: next }, { count }] = await Promise.all([
+    // The second and last batch. Only the check-in below genuinely depends on
+    // anything here, so it is the only thing left waiting.
+    const in90 = new Date(Date.parse(today) + 90 * 86_400_000).toISOString().slice(0, 10);
+    const [
+      { data: act },
+      { data: next },
+      { count },
+      { count: qCount },
+      { count: openDays },
+      { count: unreplied },
+    ] = await Promise.all([
       admin
         .from("bookings")
         .select("id, start_date, offering:offerings(title)")
@@ -56,23 +119,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .select("id", { count: "exact", head: true })
         .eq("guide_id", user.id)
         .eq("status", "open"),
-    ]);
-    active = act;
-    nextBooking = next;
-    enquiries = count ?? 0;
-    // People waiting on a public answer. Surfaced on Home rather than as a
-    // sixth tab — five is the 360px ceiling for the bar.
-    const { count: qCount } = await admin
-      .from("guide_questions")
-      .select("id", { count: "exact", head: true })
-      .eq("guide_id", user.id)
-      .eq("status", "pending");
-    unansweredQuestions = qCount ?? 0;
-
-    // The levers that decide whether the next booking comes. Each is a real
-    // number the guide can move today, not a score.
-    const in90 = new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10);
-    const [{ count: openDays }, { count: unreplied }, { data: gRow }] = await Promise.all([
+      // People waiting on a public answer. Surfaced on Home rather than as a
+      // sixth tab — five is the 360px ceiling for the bar.
+      admin
+        .from("guide_questions")
+        .select("id", { count: "exact", head: true })
+        .eq("guide_id", user.id)
+        .eq("status", "pending"),
+      // The levers that decide whether the next booking comes. Each is a real
+      // number the guide can move today, not a score.
       admin
         .from("availability")
         .select("day", { count: "exact", head: true })
@@ -87,16 +142,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .eq("direction", "trekker_to_guide")
         .not("published_at", "is", null)
         .is("guide_reply", null),
-      admin
-        .from("guides")
-        .select("median_response_mins")
-        .eq("user_id", user.id)
-        .maybeSingle(),
     ]);
+    active = act;
+    nextBooking = next;
+    enquiries = count ?? 0;
+    unansweredQuestions = qCount ?? 0;
     work = {
       openDays: openDays ?? 0,
       unrepliedReviews: unreplied ?? 0,
-      responseMins: gRow?.median_response_mins ?? null,
+      responseMins: guide?.median_response_mins ?? null,
     };
     if (active) {
       const { data: ci } = await admin
@@ -108,57 +162,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       checkedInToday = !!ci;
     }
   }
-
-  // Treks where this guide is the named backup — a promise Trek makes to
-  // trekkers that the guide could never see before (audit).
-  const { data: backupFor } = await admin
-    .from("offerings")
-    .select("id, slug, title, guide:guides!offerings_guide_id_fkey(slug, users(full_name))")
-    .eq("backup_guide_id", user.id)
-    .eq("status", "live")
-    .limit(10);
-
-  // Money owed but not yet paid out.
-  const { data: duePayouts } = await admin
-    .from("payouts")
-    .select("amount_npr_paisa, status")
-    .eq("guide_id", user.id)
-    .eq("status", "payable");
-  const payableNprPaisa = (duePayouts ?? []).reduce((s, p) => s + p.amount_npr_paisa, 0);
-
-  // First-run: what a new guide still has to do before their page can sell.
-  // Read from the same rows the public page renders, so a step goes green
-  // because the thing is actually true, not because a flag was set.
-  const [
-    { data: me },
-    { count: langCount },
-    { count: offeringCount },
-    { count: journalCount },
-    { count: routeCount },
-  ] = await Promise.all([
-      admin
-        .from("guides")
-        .select("only_with_me, bio, day_rate_usd_cents, users(avatar_url)")
-        .eq("user_id", user.id)
-        .single(),
-      admin
-        .from("guide_languages")
-        .select("language", { count: "exact", head: true })
-        .eq("guide_id", user.id),
-      admin
-        .from("offerings")
-        .select("id", { count: "exact", head: true })
-        .eq("guide_id", user.id)
-        .eq("status", "live"),
-      admin
-        .from("journals")
-        .select("id", { count: "exact", head: true })
-        .eq("guide_id", user.id),
-      admin
-        .from("guide_route_experience")
-        .select("route_id", { count: "exact", head: true })
-        .eq("guide_id", user.id),
-    ]);
 
   const setup = [
     {

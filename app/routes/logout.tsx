@@ -9,6 +9,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   return redirect("/", { headers });
 }
 
-export function loader() {
-  return redirect("/");
+// A GET here used to bounce home without signing anybody out, so typing
+// /logout, following a plain link or hitting a bookmark left the person
+// signed in while looking like it had worked.
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const { supabase, headers } = createSupabaseServerClient(request, getEnv(context));
+  await supabase.auth.signOut();
+  return redirect("/", { headers });
 }

@@ -13,5 +13,13 @@
 export function publicCacheHeaders({ parentHeaders }: { parentHeaders: Headers }) {
   return parentHeaders.get("x-personalised") === "1"
     ? { "Cache-Control": "private, no-store" }
-    : { "Cache-Control": "public, max-age=300, stale-while-revalidate=600" };
+    : {
+        // s-maxage, not max-age. `max-age` applies to the visitor's own
+        // browser, so after signing in or out they were shown the page from
+        // the other side of that change for the next five minutes — which
+        // reads exactly like "I signed out and it signed me back in".
+        // Shared caches (the Worker's own) still hold it for 300s; the
+        // browser always checks in first.
+        "Cache-Control": "public, s-maxage=300, max-age=0, must-revalidate",
+      };
 }

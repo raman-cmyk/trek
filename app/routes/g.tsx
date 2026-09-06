@@ -12,15 +12,18 @@ export function meta() {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, profile, admin, headers } = await requireUser(request, env, "guide");
-  const [{ data: guide }, { count: enquiryCount }] = await Promise.all([
+  // The unread count used to run after this batch rather than inside it,
+  // which put a whole extra round trip on the critical path of every page in
+  // the guide area. It depends on nothing above it.
+  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }] = await Promise.all([
     admin.from("guides").select("status, slug").eq("user_id", user.id).single(),
     admin
       .from("enquiries")
       .select("id", { count: "exact", head: true })
       .eq("guide_id", user.id)
       .eq("status", "open"),
+    countUnread(admin, user.id),
   ]);
-  const { unreadTotal } = await countUnread(admin, user.id);
   return data(
     {
       name: profile.full_name,
