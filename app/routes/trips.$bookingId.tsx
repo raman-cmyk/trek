@@ -16,17 +16,8 @@ import { useMoney } from "~/lib/currency-context";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
-import { cn } from "~/lib/cn";
+import { TripPipeline } from "~/components/TripPipeline";
 import { firstName } from "~/lib/names";
-
-const STEPS = [
-  ["pending_deposit", "Deposit due"],
-  ["deposit_paid", "Deposit paid"],
-  ["docs_pending", "Documents"],
-  ["confirmed", "Confirmed"],
-  ["active", "On the trail"],
-  ["completed", "Completed"],
-] as const;
 
 export function meta() {
   return [{ title: "Your trip" }, { name: "robots", content: "noindex" }];
@@ -203,7 +194,6 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
   const nav = useNavigation();
   const { m } = useMoney();
   const cancelled = b.status.startsWith("cancelled");
-  const activeIdx = STEPS.findIndex((s) => s[0] === b.status);
   const isTrek = b.offering?.kind === "trek";
   const canComplete =
     b.status === "active" ||
@@ -273,28 +263,15 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         </section>
       )}
 
-      {/* Status timeline */}
+      {/* Where this trip is. The steps are the ones this kind of trip really
+          has — a food tour was being shown "Documents" and a permit step it
+          would never reach, and a step nobody can ever take is noise. */}
       {!cancelled ? (
-        <ol className="mt-6 space-y-3">
-          {STEPS.map(([key, label], i) => {
-            const done = activeIdx >= 0 && i <= activeIdx;
-            return (
-              <li key={key} className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "flex h-6 w-6 items-center justify-center rounded-full text-xs",
-                    done ? "bg-accent text-white" : "bg-border text-ink-soft",
-                  )}
-                >
-                  {done ? "✓" : i + 1}
-                </span>
-                <span className={cn("text-sm", i === activeIdx && "font-medium text-ink")}>
-                  {label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <TripPipeline
+          className="mt-6"
+          kind={b.offering?.kind}
+          bookingStatus={b.status}
+        />
       ) : (
         <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">
           This booking was cancelled.

@@ -52,3 +52,17 @@ than inventing a taxonomy first and asking guides to squeeze into it.
 Also deferred with it: the `region` facet on an intent runs a second query per
 request (`guideIdsMatchingText`), which is fine at 48 guides and wants a
 materialised guide↔region view at 4,800.
+
+## Notify a trip group when somebody posts in it (2026-09-06)
+
+Group chat now appears in the inbox and the guide is in the room, but posting
+notifies nobody: a group message reaches you when you next open the site.
+Every other thread notifies (`notifyNewMessage` — SMS to guides via Sparrow,
+email to trekkers via Resend), and the reason this one does not is cost, not
+plumbing: one message from one member fans out to the whole roster plus the
+guide, and Sparrow is metered per SMS.
+
+What it probably wants: email the members, SMS the guide only (they are the
+one who cannot be expected to keep a tab open), collapse a burst into one
+digest, and let a member mute a group. Decide the fan-out rule before
+building it, not after the first month's bill.

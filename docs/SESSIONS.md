@@ -1040,3 +1040,54 @@ chat is deliberately not a moderated trekker-to-guide thread.
 New `app/lib/threads.test.ts` runs the inbox against a small fake Supabase
 builder: the group appears, someone else's does not, and unread counts only
 what other people said since you last opened it. 258 tests green, build green.
+
+## Session — the guide joins the group, and every trip gets a track (2026-09-06)
+
+Three things the founder asked for, in one pass.
+
+**The guide is in the group chat.** Migration 0056 adds `is_group_guide()` and
+widens the group's read policies plus the chat's insert policy to the guide
+the group is planning with. `groupIdsFor()` now resolves both halves of "who
+is in the room" — the roster, and the guide, who is never on it. The guide
+talks and changes nothing: no invite, no remove, no payment mode, no cancel,
+and no join (joining would give them a seat and a share of the bill). They see
+who is coming; they do not see anyone's share or what they still owe, and that
+section is not rendered for them rather than hidden with CSS.
+
+**The chat is in the inbox, with a composer.** `/messages/g/:groupId` is the
+group conversation inside the messages shell: attributed lines, runs collapsed,
+the guide's lines marked, system lines centred, and the same Composer every
+other thread uses. The rail now opens it instead of bouncing to the trip page.
+The trip page keeps its own copy of the chat — that is the planning room, next
+to the roster and the money — and both mark the thread read under
+`thread_reads` key `g:<group_id>`.
+
+**The pipeline** (`app/lib/pipeline.ts`) is the trip's own progress track, one
+per kind of experience, not to be confused with `/ops/pipeline`. A trek runs
+through passports, insurance and permits; a day hike gets a meeting point; a
+food tour gets an address and an appetite. Stages are pinned to the booking
+statuses we already store, so a shorter track skips positions instead of
+falling off the end: a day hike sitting at `docs_pending` reads as "Paid".
+A finished trip has no pulsing "current" dot; a cancelled one stops rather
+than pretending the rest is still coming.
+
+It shows on the group page, in the group chat, on `/groups` (compact — a list
+where every row says "Planning" tells you nothing), on the guide's trip list,
+and on `/trips/:id`, where it replaced a six-step ops timeline that told a food
+tour it was waiting on "Documents". Rendered in `/_dev/primitives` and checked
+at 360px.
+
+Not built, deliberately: notifying a group when somebody posts. Every other
+thread notifies, and fanning that out to a whole roster plus the guide is a
+metered-SMS decision, not a plumbing one — see BACKLOG. Trip groups are still
+absent from `supabase/seed.sql`, so a fresh clone cannot demo this; the local
+container had no database to verify new seed SQL against, so it is written up
+rather than guessed at.
+
+271 tests green (new: the pipeline's stage maths, group access rules, and the
+inbox carrying group threads for members and the guide), build green.
+Migration 0056 needs applying — see below.
+
+**🙋 Founder needed:** apply migration 0056 to the cloud database (`supabase db
+push`, or the SQL editor) — until it runs, the guide's group thread will list
+in their inbox but the group page will not open for them.

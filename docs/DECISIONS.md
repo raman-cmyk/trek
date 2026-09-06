@@ -226,3 +226,44 @@ names. Guide profile URLs keep their existing slugs (changing them would
 break every link and ranking the pages have). Person JSON-LD now carries the
 first name only — accepted cost: "Pemba Sherpa" as a search phrase will not
 match the structured data, but the rule outranks the ranking.
+
+## The guide is in the group chat; the group's money is not their business (2026-09-06)
+
+Migration 0039 made a trip group private to its members on purpose: four
+friends deciding whether to add a rest day is not a conversation the guide
+needs. In practice the first thing a group does is ask a question only the
+guide can answer, and the organiser ends up relaying it through the booking
+thread. So the guide the group is planning with (`trip_groups.guide_id`) now
+reads the group and posts in its chat (migration 0056).
+
+Where the line is: the guide talks, and changes nothing. No inviting, no
+removing, no payment mode, no cancelling, no joining (joining would put them
+on the roster and hand them a share of the bill). They see who is coming,
+because that is the party they are guiding — but not each person's share or
+what they still owe. Who owes their friend $40 is not a fact a guide needs
+in order to guide, and putting it in front of them changes the trip for
+everybody.
+
+Not built with it: notifying a group when somebody posts. Every other thread
+notifies by SMS to guides and email to trekkers, and fanning that out to a
+whole group is a per-message cost decision (Sparrow SMS is metered) rather
+than a technical one. Logged in BACKLOG.
+
+## The pipeline is per experience, and it is not the ops board (2026-09-06)
+
+"Pipeline" already meant one thing here — `/ops/pipeline`, a kanban of
+booking statuses for the office. This is the other thing it should mean: the
+trip's own progress track, for the people on the trip.
+
+One track per kind of experience (`app/lib/pipeline.ts`), because the trips
+differ. A trek runs through passports, insurance and permits; a food tour has
+a table and an address. The trip page used to show all six ops statuses to
+everyone, so a half-day food tour was told it was waiting on "Documents" and
+had a permit step it would never reach — a step nobody can take is noise, and
+noise in a status track is what makes people stop reading it.
+
+The stages are pinned to the booking statuses we already store rather than a
+new column, so nothing can drift: a shorter track just skips positions, and a
+day hike sitting at `docs_pending` reads as "Paid" instead of falling off the
+end of its own track. Pure and tested, so the group page, the chat, the trip
+page and the guide's list cannot disagree about where a trip is.

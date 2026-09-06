@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Route } from "./+types/_dev.primitives";
 import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
+import { TripPipeline } from "~/components/TripPipeline";
 import { SmartImage } from "~/components/SmartImage";
 import {
   CardGridSkeleton,
@@ -159,6 +160,28 @@ export default function Primitives() {
 
       <Section title="Grid loader — staggered entrance wave (§3.3)">
         <CardGridSkeleton count={8} variant="offering" />
+      </Section>
+
+      <Section title="Trip pipeline — one track per kind of experience">
+        <div className="grid gap-6 sm:grid-cols-3">
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Trek · deposit paid</p>
+            <TripPipeline className="mt-3" kind="trek" groupStatus="booked" bookingStatus="deposit_paid" />
+          </div>
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Day hike · forming</p>
+            <TripPipeline className="mt-3" kind="day_hike" groupStatus="forming" />
+          </div>
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Food tour · finished</p>
+            <TripPipeline className="mt-3" kind="food_culture" bookingStatus="completed" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <TripPipeline compact kind="trek" bookingStatus="docs_pending" />
+          <TripPipeline compact kind="city" bookingStatus="active" />
+          <TripPipeline compact kind="trek" bookingStatus="cancelled_trekker" />
+        </div>
       </Section>
     </main>
   );

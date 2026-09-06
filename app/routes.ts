@@ -78,6 +78,10 @@ export default [
     route("messages", "routes/messages._index.tsx"),
     route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
     route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),
+    // A trip group's chat. The group page has the same conversation next to
+    // the roster and the money; this is the copy you find when you check your
+    // messages rather than the trip.
+    route("messages/g/:groupId", "routes/messages.g.$groupId.tsx"),
   ]),
 
   // Immersive full-screen trekker onboarding (no header/footer chrome).

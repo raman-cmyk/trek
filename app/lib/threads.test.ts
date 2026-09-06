@@ -47,14 +47,16 @@ function fakeAdmin(tables: Record<string, any[]>) {
 
 const ME = "user-me";
 const FRIEND = "user-friend";
+const GUIDE = "user-guide";
 
-const tables = () => ({
+const tables = (): Record<string, any[]> => ({
   conversations: [],
   bookings: [],
   messages: [],
   users: [
     { id: ME, full_name: "Me", avatar_url: null },
     { id: FRIEND, full_name: "Yuki", avatar_url: null },
+    { id: GUIDE, full_name: "Pemba Sherpa", avatar_url: null },
   ],
   offerings: [{ id: "off-1", title: "Manaslu Circuit", cover_photo_url: "/manaslu.jpg" }],
   trip_groups: [
@@ -63,6 +65,7 @@ const tables = () => ({
       slug: "manaslu-in-may-ab12",
       name: "Manaslu in May",
       offering_id: "off-1",
+      guide_id: GUIDE,
       status: "forming",
       created_at: "2026-09-01T09:00:00Z",
     },
@@ -72,6 +75,7 @@ const tables = () => ({
       slug: "someone-else-cd34",
       name: "Not my trip",
       offering_id: null,
+      guide_id: null,
       status: "forming",
       created_at: "2026-09-01T09:00:00Z",
     },
@@ -99,16 +103,25 @@ describe("the inbox carries trip-group chats", () => {
     const threads = await listThreads(fakeAdmin(tables()), ME);
     const group = threads.find((t) => t.kind === "group");
     expect(group).toBeDefined();
-    expect(group!.to).toBe("/groups/manaslu-in-may-ab12");
+    expect(group!.to).toBe("/messages/g/grp-1");
     expect(group!.withName).toBe("Manaslu in May");
     expect(group!.about).toBe("Manaslu Circuit");
     expect(group!.snippet).toBe("Yes."); // newest message wins
     expect(group!.at).toBe("2026-09-05T11:00:00Z");
   });
 
+  it("puts the guide of the trip in the thread too", async () => {
+    // The guide is not on the roster — they are who the group is planning
+    // with — so membership alone would have left them out of their own trip.
+    const threads = await listThreads(fakeAdmin(tables()), GUIDE);
+    const group = threads.find((t) => t.kind === "group");
+    expect(group?.to).toBe("/messages/g/grp-1");
+    expect(threads.some((t) => t.to.includes("grp-2"))).toBe(false);
+  });
+
   it("never shows somebody else's group", async () => {
     const threads = await listThreads(fakeAdmin(tables()), ME);
-    expect(threads.some((t) => t.to.includes("someone-else"))).toBe(false);
+    expect(threads.some((t) => t.to.includes("grp-2"))).toBe(false);
   });
 
   it("counts only what other people said since I last opened the group", async () => {

@@ -18,24 +18,35 @@ export interface ThreadSummary {
 }
 
 /**
- * The trip groups a person is in.
+ * The trip groups a person is in — as a member, or as the guide they are
+ * planning it with.
  *
- * Membership is the whole access rule for a group chat, and these queries run
- * on an admin client that bypasses RLS, so this lookup is what keeps someone
- * else's group out of your inbox. The organiser has a member row too, so one
- * query covers both.
+ * Being in the room is the whole access rule for a group chat, and these
+ * queries run on an admin client that bypasses RLS, so this lookup is what
+ * keeps someone else's group out of your inbox. The organiser has a member
+ * row too, so the first query covers them as well.
  */
 export async function groupIdsFor(
   admin: SupabaseClient,
   userId: string,
 ): Promise<string[]> {
-  const { data } = await admin
-    .from("trip_group_members")
-    .select("group_id")
-    .eq("user_id", userId)
-    .in("status", ["invited", "joined"])
-    .limit(100);
-  return [...new Set((data ?? []).map((m) => m.group_id as string))];
+  const [{ data: mine }, { data: guiding }] = await Promise.all([
+    admin
+      .from("trip_group_members")
+      .select("group_id")
+      .eq("user_id", userId)
+      .in("status", ["invited", "joined"])
+      .limit(100),
+    // The guide the group is planning with is in the room too (0056) — they
+    // are not on the roster, so this is the second half of "who is in it".
+    admin.from("trip_groups").select("id").eq("guide_id", userId).limit(100),
+  ]);
+  return [
+    ...new Set([
+      ...(mine ?? []).map((m) => m.group_id as string),
+      ...(guiding ?? []).map((g) => g.id as string),
+    ]),
+  ];
 }
 
 export async function listThreads(
@@ -203,7 +214,7 @@ export async function listThreads(
         const last = lastByGroup.get(g.id);
         return {
           key: `g-${g.id}`,
-          to: `/groups/${g.slug}`,
+          to: `/messages/g/${g.id}`,
           withName: g.name,
           avatar: g.offering_id ? (coverOf.get(g.offering_id) ?? null) : null,
           about: g.offering_id ? (titleOf.get(g.offering_id) ?? null) : null,

@@ -39,12 +39,14 @@ export default function GuideMessages({ loaderData }: Route.ComponentProps) {
                   <img src={t.avatar} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
                 ) : (
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-mist font-medium text-moss">
-                    {firstName(t.withName).slice(0, 1)}
+                    {(t.kind === "group" ? t.withName : firstName(t.withName)).slice(0, 1)}
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
                   <span className={cn("block truncate text-sm", t.unread ? "font-semibold text-ink" : "font-medium text-ink")}>
-                    {firstName(t.withName)}
+                    {/* A group is called what the group called it — first-naming
+                        "Manaslu in May" gives you "Manaslu". */}
+                    {t.kind === "group" ? t.withName : firstName(t.withName)}
                     {t.about && <span className="font-normal text-ink-soft"> · {t.about}</span>}
                   </span>
                   <span className="block truncate text-xs text-ink-soft">{t.snippet}</span>
