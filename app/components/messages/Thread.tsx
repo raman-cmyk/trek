@@ -7,6 +7,7 @@ import type { PriceBreakdown, PriceLine } from "~/lib/experience-pricing";
 import { SmartImage } from "~/components/SmartImage";
 import { TierBadge } from "~/components/public/bits";
 import { Composer } from "./Composer";
+import { MessageBody } from "./MessageBody";
 import { cn } from "~/lib/cn";
 
 export interface ThreadMessage {
@@ -360,7 +361,6 @@ function Bubble({
   pendingLabel?: string;
   showStatus?: boolean;
 }) {
-  const isPhoto = /^https?:\/\/\S+\.(jpe?g|png|webp)(\?|$)/i.test(m.text.trim());
   return (
     <li className={cn("flex flex-col", m.mine ? "items-end" : "items-start")}>
       <div
@@ -373,16 +373,7 @@ function Bubble({
         )}
       >
         {m.aboutOffering && <AboutChip title={m.aboutOffering} />}
-        {isPhoto ? (
-          <img
-            src={m.text.trim()}
-            alt="Shared photo"
-            className="max-h-72 rounded-lg"
-            loading="lazy"
-          />
-        ) : (
-          <p className="whitespace-pre-wrap break-words">{m.text}</p>
-        )}
+        <MessageBody body={m.text} />
       </div>
       <span className="mt-0.5 px-1 font-mono text-[10px] text-muted">
         {pendingLabel ? (

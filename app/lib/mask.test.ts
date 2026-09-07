@@ -64,3 +64,26 @@ describe("containsContactInfo", () => {
     expect(containsContactInfo("Looking forward to trekking with you in October!")).toBe(false);
   });
 });
+
+describe("maskMessage — links", () => {
+  const photo =
+    "https://bcdgmxpwqhghheppvwhm.supabase.co/storage/v1/object/public/journal-photos/9f2b/1757148900123-msg.webp";
+
+  it("leaves a photo link whole — masking its digits broke every picture", () => {
+    const r = maskMessage(photo);
+    expect(r.rendered).toBe(photo);
+    expect(r.flaggedReason).toBeNull();
+  });
+
+  it("still masks a number written beside a link", () => {
+    const r = maskMessage(`here it is ${photo} call me on +977 9812345678`);
+    expect(r.rendered).toContain(photo);
+    expect(r.rendered).toContain("[number hidden]");
+    expect(r.flaggedReason).toBe("phone");
+  });
+
+  it("still flags a link that is an off-platform pitch", () => {
+    const r = maskMessage("ping me https://wa.me/9779812345678 on whatsapp");
+    expect(r.flaggedReason).toBe("platform_bypass");
+  });
+});

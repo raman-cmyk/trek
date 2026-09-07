@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link, useFetcher } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { Composer } from "./Composer";
+import { MessageBody } from "./MessageBody";
 import { TripPipeline } from "~/components/TripPipeline";
 import { cn } from "~/lib/cn";
 
@@ -150,9 +151,12 @@ export function GroupThread({
                           )}
                         </p>
                       )}
-                      <p
+                      {/* A div, not a p: a message can carry a picture now,
+                          and an <img> inside a <p> is markup a browser will
+                          quietly rearrange. */}
+                      <div
                         className={cn(
-                          "mt-0.5 inline-block whitespace-pre-line rounded-lg px-3 py-2 text-left text-[15px] leading-relaxed",
+                          "mt-0.5 inline-block rounded-lg px-3 py-2 text-left text-[15px] leading-relaxed",
                           m.mine
                             ? "bg-pine text-paper"
                             : m.fromGuide
@@ -160,8 +164,8 @@ export function GroupThread({
                               : "bg-mist text-ink",
                         )}
                       >
-                        {m.text}
-                      </p>
+                        <MessageBody body={m.text} />
+                      </div>
                     </div>
                   </li>
                 );

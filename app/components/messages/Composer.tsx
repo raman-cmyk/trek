@@ -46,6 +46,10 @@ export function Composer({
   const [value, setValue] = useState("");
   const [attaching, setAttaching] = useState(false);
   const [attachMsg, setAttachMsg] = useState<string | null>(null);
+  // Photos waiting to go with this message. They used to be pasted into the
+  // box as raw URLs, which read as gibberish and could be half-deleted by
+  // anyone who typed after them.
+  const [photos, setPhotos] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const busy = fetcher.state !== "idle";
 
@@ -76,15 +80,21 @@ export function Composer({
 
   // Clear only after the server confirms, so a failed send keeps the text.
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok) setValue("");
+    if (fetcher.state === "idle" && fetcher.data?.ok) {
+      setValue("");
+      setPhotos([]);
+    }
   }, [fetcher.state, fetcher.data]);
 
   function send() {
     const text = value.trim();
-    if (!text || busy || disabled) return;
-    onOptimistic?.(text);
+    // A photo on its own is a message. The old rule — text required — meant
+    // an attached photo could not be sent without typing something first.
+    if ((!text && photos.length === 0) || busy || disabled) return;
+    const body = [text, ...photos].filter(Boolean).join("\n");
+    onOptimistic?.(body);
     fetcher.submit(
-      { intent: "send", body: text, ...(extraFields ?? {}) },
+      { intent: "send", body, ...(extraFields ?? {}) },
       { method: "post", action },
     );
   }
@@ -100,7 +110,7 @@ export function Composer({
       const res = await fetch("/api/message-photo", { method: "POST", body });
       const json: any = await res.json();
       if (!res.ok) setAttachMsg(json?.error ?? "That photo didn't send.");
-      else setValue((v) => (v ? v + "\n" : "") + json.url);
+      else setPhotos((p) => [...p, json.url as string]);
     } catch {
       setAttachMsg("No connection — try again when you have signal.");
     }
@@ -108,7 +118,7 @@ export function Composer({
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  const canSend = value.trim().length > 0 && !busy && !disabled;
+  const canSend = (value.trim().length > 0 || photos.length > 0) && !busy && !disabled;
 
   return (
     <div className="border-t border-line bg-card">
@@ -146,6 +156,28 @@ export function Composer({
         <p className="px-3 pt-2 text-caption text-ember sm:px-4">
           {fetcher.data?.error ?? attachMsg}
         </p>
+      )}
+
+      {photos.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-3 pt-2 sm:px-4">
+          {photos.map((url) => (
+            <span key={url} className="relative">
+              <img
+                src={url}
+                alt=""
+                className="h-16 w-16 rounded-lg border border-line object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setPhotos((p) => p.filter((u) => u !== url))}
+                aria-label="Remove photo"
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-ink px-1.5 text-caption leading-5 text-paper"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
       )}
 
       <div className="flex items-end gap-2 p-3 sm:p-4">

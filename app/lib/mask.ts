@@ -16,6 +16,12 @@ const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
 // digits, so dates/prices ("14 Oct", "$360") aren't masked.
 const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/g;
 
+// A whole http(s) link, so it can be stepped over rather than masked. A photo
+// shared in a thread is a link whose path is a user id and a timestamp — all
+// digits — and masking those digits did not hide a phone number, it destroyed
+// the picture. Nobody could send or receive one.
+const URL_RE = /https?:\/\/\S+/g;
+
 // Off-platform solicitation keywords.
 const BYPASS_RE =
   /\b(whats\s?app|viber|telegram|signal|wechat|imo|line app|off[-\s]?platform|directly|cash only)\b/i;
@@ -40,18 +46,32 @@ export function maskMessage(body: string): MaskResult {
   let sawEmail = false;
   let sawPhone = false;
 
-  let rendered = body.replace(EMAIL_RE, () => {
-    sawEmail = true;
-    return "[email hidden]";
-  });
+  const maskRun = (run: string) => {
+    let out = run.replace(EMAIL_RE, () => {
+      sawEmail = true;
+      return "[email hidden]";
+    });
+    out = out.replace(PHONE_RE, (m) => {
+      if (digitCount(m) >= 8) {
+        sawPhone = true;
+        return "[number hidden]";
+      }
+      return m;
+    });
+    return out;
+  };
 
-  rendered = rendered.replace(PHONE_RE, (m) => {
-    if (digitCount(m) >= 8) {
-      sawPhone = true;
-      return "[number hidden]";
-    }
-    return m;
-  });
+  // Mask the prose between the links, and copy the links through untouched.
+  // A link is not a way to leak a number that the bypass flag below does not
+  // already catch, and it is the only way to send a photo.
+  let rendered = "";
+  let last = 0;
+  URL_RE.lastIndex = 0;
+  for (let m = URL_RE.exec(body); m; m = URL_RE.exec(body)) {
+    rendered += maskRun(body.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  rendered += maskRun(body.slice(last));
 
   const sawBypass = BYPASS_RE.test(body);
 
