@@ -176,7 +176,12 @@ export function ExperienceForm({
       method="post"
       ref={formRef}
       onChange={remember}
-      onSubmit={() => localStorage.removeItem(key)}
+      onSubmit={() => {
+        // The photographs are remembered under their own key (they are a list,
+        // not a form field); a sent form should forget both.
+        localStorage.removeItem(key);
+        localStorage.removeItem(`${key}:photos`);
+      }}
       className="space-y-4"
     >
       {/* Where you are. Five short steps instead of one long scroll, and the
@@ -398,6 +403,7 @@ export function ExperienceForm({
             initial={values?.photos ?? []}
             guideId={owner}
             onCount={setPhotoCount}
+            draftKey={key}
           />
         )}
       </Step>

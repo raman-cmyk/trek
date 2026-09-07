@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isJpeg, stripGps } from "./exif";
+import { isJpeg, stripGps , sniffImage } from "./exif";
 
 /**
  * Builds a minimal but structurally real JPEG: SOI, an APP1/Exif segment with
@@ -80,5 +80,38 @@ describe("stripGps", () => {
     const { bytes } = jpegWithExif({ gps: true });
     const cut = bytes.slice(0, 12);
     expect(() => stripGps(cut)).not.toThrow();
+  });
+});
+
+describe("what a file actually is", () => {
+  const bytes = (...b: number[]) => new Uint8Array([...b, ...new Array(24).fill(0)]);
+  const ascii = (s: string, pad = 0) =>
+    new Uint8Array([...new Array(pad).fill(0), ...[...s].map((c) => c.charCodeAt(0)), ...new Array(24).fill(0)]);
+
+  it("reads the format from the bytes, not the browser's guess", () => {
+    expect(sniffImage(bytes(0xff, 0xd8, 0xff, 0xe0))).toBe("jpeg");
+    expect(sniffImage(bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))).toBe("png");
+    expect(sniffImage(bytes(0x47, 0x49, 0x46, 0x38, 0x39, 0x61))).toBe("gif");
+  });
+
+  it("knows a WebP from the RIFF container it lives in", () => {
+    const b = new Uint8Array(32);
+    b.set([...("RIFF")].map((c) => c.charCodeAt(0)), 0);
+    b.set([...("WEBP")].map((c) => c.charCodeAt(0)), 8);
+    expect(sniffImage(b)).toBe("webp");
+  });
+
+  it("names HEIC rather than calling an iPhone photo unreadable", () => {
+    for (const brand of ["heic", "heix", "mif1"]) {
+      const b = new Uint8Array(32);
+      b.set([...("ftyp")].map((c) => c.charCodeAt(0)), 4);
+      b.set([...brand].map((c) => c.charCodeAt(0)), 8);
+      expect(sniffImage(b)).toBe("heic");
+    }
+  });
+
+  it("does not mistake a text file for a photograph", () => {
+    expect(sniffImage(ascii("Dear Pemba, about October"))).toBe("unknown");
+    expect(sniffImage(new Uint8Array(0))).toBe("unknown");
   });
 });

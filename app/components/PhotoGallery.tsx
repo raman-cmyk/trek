@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLightbox } from "~/components/public/Lightbox";
 
 /**
  * The photographs for an experience.
@@ -24,12 +25,20 @@ export function PhotoGallery({
   guideId,
   min = 3,
   onCount,
+  draftKey,
 }: {
   initial: GalleryPhoto[];
   guideId: string;
   min?: number;
   /** So the review step can say how many there are without owning the list. */
   onCount?: (n: number) => void;
+  /**
+   * Where to keep the list between visits. The rest of the form is remembered
+   * on the phone as it is typed; the photographs were not, so a guide who
+   * uploaded six, backed out to fix the price and came back found an empty
+   * box — the files were safely in storage, and the page had forgotten them.
+   */
+  draftKey?: string;
 }) {
   const [photos, setPhotos] = useState<GalleryPhoto[]>(initial);
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
@@ -37,6 +46,37 @@ export function PhotoGallery({
   const [drag, setDrag] = useState<number | null>(null);
   useEffect(() => onCount?.(photos.length), [photos.length, onCount]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const restored = useRef(false);
+
+  // Restored after hydration, not during render, so the server and the first
+  // client render still agree about an empty gallery.
+  useEffect(() => {
+    if (!draftKey || restored.current) return;
+    restored.current = true;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`${draftKey}:photos`) ?? "null");
+      if (Array.isArray(saved) && saved.length && photos.length === 0) {
+        setPhotos(saved.filter((p: any) => typeof p?.url === "string"));
+      }
+    } catch {
+      /* a corrupt draft is not worth an empty page */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || !restored.current) return;
+    try {
+      localStorage.setItem(`${draftKey}:photos`, JSON.stringify(photos));
+    } catch {
+      /* private mode, full disk — the upload itself is already safe */
+    }
+  }, [draftKey, photos]);
+
+  // Tapping a thumbnail opens it full-size. A guide uploading from a phone is
+  // choosing between four near-identical shots of the same ridge, and a 80px
+  // crop is not enough to tell them apart.
+  const viewer = useLightbox(photos.map((p) => ({ url: p.url, alt: p.alt })));
 
   async function take(files: FileList) {
     const list = Array.from(files);
@@ -97,9 +137,16 @@ export function PhotoGallery({
               className="flex gap-2 rounded border border-line bg-paper p-2"
             >
               <div className="relative shrink-0">
-                <img src={p.url} alt="" className="h-16 w-20 rounded object-cover" />
+                <button
+                  type="button"
+                  onClick={() => viewer.open(i)}
+                  aria-label={`View photo ${i + 1} full size`}
+                  className="block rounded ring-offset-1 hover:ring-2 hover:ring-moss"
+                >
+                  <img src={p.url} alt="" className="h-16 w-20 rounded object-cover" />
+                </button>
                 {i === 0 && (
-                  <span className="absolute left-0.5 top-0.5 rounded bg-pine px-1 text-[10px] font-semibold text-paper">
+                  <span className="pointer-events-none absolute left-0.5 top-0.5 rounded bg-pine px-1 text-[10px] font-semibold text-paper">
                     Cover
                   </span>
                 )}
@@ -148,6 +195,8 @@ export function PhotoGallery({
           ))}
         </ul>
       )}
+
+      {viewer.node}
 
       <label className="mt-3 block cursor-pointer rounded-md border border-dashed border-line bg-paper p-4 text-center text-sm text-ink-soft hover:border-sage">
         {busy ? `Sending ${busy.done} of ${busy.total}…` : "Add photos — you can pick several"}

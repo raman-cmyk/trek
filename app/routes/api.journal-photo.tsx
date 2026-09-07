@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.journal-photo";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
-import { isJpeg, stripGps } from "~/lib/exif";
+import { sniffImage, stripGps } from "~/lib/exif";
 
 /**
  * Journal photo upload.
@@ -44,7 +44,28 @@ export async function action({ request, context }: Route.ActionArgs) {
   let body: Uint8Array<ArrayBuffer> = bytes;
   let strippedGps = false;
 
-  if (isJpeg(bytes)) {
+  // What it is, from the bytes. `file.type` is the operating system's guess
+  // and is routinely empty for a photo shared out of another app — trusting it
+  // was rejecting real photographs with "Photos only".
+  const kind = sniffImage(bytes);
+
+  if (kind === "heic") {
+    return Response.json(
+      {
+        error:
+          "That is an iPhone HEIC photo, which most browsers cannot show. On your iPhone: Settings → Camera → Formats → Most Compatible, then take it again — or send it to yourself on WhatsApp and upload the copy.",
+      },
+      { status: 400, headers },
+    );
+  }
+  if (kind === "unknown") {
+    return Response.json(
+      { error: "That file is not a photo we can read. JPEG, PNG, WebP or GIF." },
+      { status: 400, headers },
+    );
+  }
+
+  if (kind === "jpeg") {
     const r = stripGps(bytes);
     if (!r.understood) {
       return Response.json(
@@ -54,21 +75,19 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     body = r.bytes;
     strippedGps = r.strippedGps;
-  } else if (file.type !== "image/png" && file.type !== "image/webp") {
-    return Response.json(
-      { error: "Photos only — JPEG, PNG or WebP." },
-      { status: 400, headers },
-    );
   }
 
   // Deterministic-ish name without Math.random (workerd-friendly) — the guide
   // folder is what the storage policy checks.
-  const ext = isJpeg(bytes) ? "jpg" : file.type === "image/png" ? "png" : "webp";
+  // Named from what it is, not from what the browser called it, so the stored
+  // file and its content type always agree.
+  const ext = kind === "jpeg" ? "jpg" : kind;
+  const contentType = kind === "jpeg" ? "image/jpeg" : `image/${kind}`;
   const path = `${guideId}/${Date.now()}-${file.name.replace(/[^\w.-]/g, "_").slice(-40)}.${ext}`;
 
   const { error } = await admin.storage
     .from("journal-photos")
-    .upload(path, body, { contentType: file.type || "image/jpeg", upsert: false });
+    .upload(path, body, { contentType, upsert: false });
   if (error) {
     return Response.json({ error: error.message }, { status: 400, headers });
   }

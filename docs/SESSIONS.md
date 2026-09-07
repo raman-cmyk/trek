@@ -1352,3 +1352,35 @@ Rendered all five states side by side to check, because "which class won" is
 not a question code review answers.
 
 293 tests green, build green.
+
+## Session — the photographs (2026-09-06)
+
+"The pics are not being saved… need to be able to view images too."
+
+**Why an upload was refused.** The endpoint decided what a file was from
+`file.type` — the operating system's guess, which arrives empty often enough
+(a photo shared out of another app, a file with no extension) that real
+photographs were being turned away with "Photos only — JPEG, PNG or WebP".
+It now reads the first bytes: JPEG, PNG, WebP and GIF are accepted on their
+signatures, whatever the browser called them.
+
+HEIC gets its own answer. It is what every iPhone shoots by default, browsers
+cannot display it, and "Photos only" is a useless thing to say to somebody
+holding one. The message now names it and says exactly what to do — Settings →
+Camera → Formats → Most Compatible, or send it to yourself and upload the copy.
+Six tests on the sniffer, including that a text file is not a photograph.
+
+**Why they were "not saved".** The rest of the form is kept on the phone as it
+is typed; the photo list was not — it was explicitly skipped by the draft
+restore. A guide who uploaded six, went back to fix the price and returned
+found an empty box, with the files sitting safely in storage. The gallery now
+keeps its own list under `<draft>:photos`, restores after hydration, and both
+keys are cleared when the form is finally sent.
+
+**Viewing them.** Tapping a thumbnail opens the full-size viewer the journals
+already use — arrows, a counter, a filmstrip. A guide choosing between four
+near-identical shots of the same ridge cannot do it from an 80px crop.
+
+Driven in a browser: uploaded state restored across a reload (2 photos, and the
+hidden field that carries them into the submit), and the viewer opened from a
+thumbnail.

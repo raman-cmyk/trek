@@ -90,3 +90,38 @@ export function stripGps(input: Uint8Array<ArrayBuffer>): StripResult {
 export function isJpeg(bytes: Uint8Array): boolean {
   return bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8;
 }
+
+/**
+ * What a file actually is, read from its first bytes.
+ *
+ * The browser's `file.type` is a hint, not a fact: it comes from the operating
+ * system's idea of the extension, and it arrives empty often enough — a photo
+ * shared from another app, a file with no extension, an Android gallery in a
+ * hurry — that trusting it rejects real photographs. The bytes cannot lie.
+ *
+ * HEIC is named rather than lumped in with "unknown" because it is what every
+ * iPhone shoots by default, and "Photos only — JPEG, PNG or WebP" is a useless
+ * thing to tell somebody holding one.
+ */
+export type ImageKind = "jpeg" | "png" | "webp" | "gif" | "heic" | "unknown";
+
+export function sniffImage(bytes: Uint8Array): ImageKind {
+  const at = (i: number) => bytes[i] ?? -1;
+  const ascii = (start: number, text: string) =>
+    [...text].every((ch, k) => at(start + k) === ch.charCodeAt(0));
+
+  if (isJpeg(bytes)) return "jpeg";
+  // \x89 P N G \r \n \x1a \n
+  if (at(0) === 0x89 && ascii(1, "PNG") && at(4) === 0x0d && at(5) === 0x0a) return "png";
+  // RIFF....WEBP
+  if (ascii(0, "RIFF") && ascii(8, "WEBP")) return "webp";
+  if (ascii(0, "GIF8")) return "gif";
+  // ISO base media: ....ftyp<brand>. heic/heix/hevc/mif1 are all iPhone photos.
+  if (ascii(4, "ftyp")) {
+    const brand = String.fromCharCode(at(8), at(9), at(10), at(11));
+    if (["heic", "heix", "hevc", "hevx", "mif1", "msf1", "heim", "heis"].includes(brand)) {
+      return "heic";
+    }
+  }
+  return "unknown";
+}
