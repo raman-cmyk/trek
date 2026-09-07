@@ -48,6 +48,7 @@ import { PROFICIENCY_PUBLIC, type Proficiency } from "~/lib/guide-languages";
 import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
+import { skillLabel } from "~/lib/guide-skills";
 
 /**
  * Anonymous visitors get the edge cache; anyone signed in gets nothing
@@ -173,6 +174,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     { data: reviews },
     { data: receipts },
     { data: journals },
+    { data: skillRows },
   ] = await Promise.all([
     client
       .from("guide_photos")
@@ -222,6 +224,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .select(JOURNAL_COLS)
       .eq("guide_id", guide.user_id)
       .order("start_date", { ascending: false }),
+    // What this guide is interesting for (0062).
+    client.from("guide_skills").select("skill").eq("guide_id", guide.user_id),
   ]);
 
   const js = (journals ?? []) as PublicJournal[];
@@ -434,6 +438,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       alt_text: string;
       kind: string;
     }>,
+    skills: ((skillRows ?? []) as any[]).map((r) => r.skill as string),
     languages: (langs ?? []) as Array<{
       language: string;
       proficiency: string;
@@ -547,6 +552,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     photos,
     gallery,
     languages,
+    skills,
     offerings,
     journals,
     routeChips,
@@ -738,6 +744,27 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                     name={guide.full_name}
                   />
                 </div>
+              )}
+
+              {/* What they are interesting for. Chips rather than a sentence:
+                  a reader is scanning four profiles for the one who knows the
+                  birds, and each of these is a filter they can follow. */}
+              {skills.length > 0 && (
+                <ul className="mt-6 flex flex-wrap gap-1.5">
+                  {skills.map((k: string) => {
+                    const label = skillLabel(k);
+                    return label ? (
+                      <li key={k}>
+                        <Link
+                          to={`/guides?skill=${encodeURIComponent(k)}`}
+                          className="inline-block rounded-pill border border-line bg-card px-3 py-1 text-caption text-ink hover:border-sage hover:bg-mist"
+                        >
+                          {label}
+                        </Link>
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
               )}
 
               {/* ── Fact rows: trust facts in the open, not behind a

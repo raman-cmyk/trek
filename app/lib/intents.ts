@@ -3,11 +3,11 @@
  * that they link to. Every row is a real search, so a row and its "see all"
  * link can never disagree.
  *
- * The keyword lists are honest scaffolding, not the end state. Properly this
- * is a tag table (`guide_tags`), so a guide picks "I host in my village" and
- * we filter on a column. Until guides have written enough `only_with_me`
- * lines to know what the real tags are, matching their own words is better
- * than making them choose from tags we invented. Noted in docs/BACKLOG.md.
+ * Most rows now filter on a skill a guide ticked (`guide_skills`, 0062) —
+ * "I host you in my village" is a box, not a substring search for "aunty".
+ * The keyword lists stay as the fallback: a guide who has claimed nothing can
+ * still be found by their own words, which is better than being invisible
+ * until they fill in a form.
  */
 
 export interface Intent {
@@ -16,6 +16,11 @@ export interface Intent {
   label: string;
   /** One line under it. */
   blurb: string;
+  /**
+   * The skill a guide ticks for this row (0062). When present it is the whole
+   * filter: keywords stay only as the fallback for guides who claimed nothing.
+   */
+  skill?: string;
   /** Words to look for in the guide's own text. */
   keywords?: string[];
   /** Or a facet we can filter properly. */
@@ -28,12 +33,14 @@ export interface Intent {
 export const INTENTS: Intent[] = [
   {
     key: "village",
+    skill: "village_host",
     label: "Guides who host you in their village",
     blurb: "A night in a family house instead of a lodge.",
     keywords: ["family house", "my village", "my own village", "my home", "my town", "aunty"],
   },
   {
     key: "slow",
+    skill: "first_timers",
     label: "First-timer friendly — they go slow",
     blurb: "No hero pace. Nobody made to feel stupid for asking.",
     keywords: [
@@ -61,6 +68,7 @@ export const INTENTS: Intent[] = [
   },
   {
     key: "photographers",
+    skill: "photography",
     // Named for what the guides actually offer, not for the tag we wish we
     // had. One of them carries a camera; the others are the ones who will
     // wake you at four because the light is doing something.
@@ -70,6 +78,7 @@ export const INTENTS: Intent[] = [
   },
   {
     key: "medical",
+    skill: "first_aid",
     label: "Trained for when it goes wrong",
     blurb: "A nurse, a Gurkha, a guide who checks your oxygen nightly.",
     keywords: ["nurse", "medicine", "oxygen", "Gurkha", "helicopter"],

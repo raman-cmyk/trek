@@ -1440,3 +1440,32 @@ transaction: two likes stored, `like_count` reads 2 through the view, and the
 conflict clause holds.
 
 302 tests green, build green.
+
+## Session — what a guide is interesting for (2026-09-06)
+
+A licence says somebody may lead a trek. It says nothing about whether they
+know the birds, cook, carry a real camera, or are the person you want when a
+fourteen-year-old is struggling on day four — which is what a trekker is
+actually choosing between, and it had nowhere to live but a sentence of free
+text nobody could filter on.
+
+`guide_skills` (0062) with a closed vocabulary of 23 in
+`app/lib/guide-skills.ts`, grouped four ways: what you know, what you do on the
+trail, who you are good with, what you bring. Every label is a thing a guide
+could say out loud about themselves. Ticked in /g/profile, capped at eight —
+without a cap the honest guide ticks four, the optimistic one ticks everything,
+and the optimistic one wins every filter.
+
+They show as chips on the public profile, each one a link into `/guides?skill=`,
+so a reader scanning four profiles for the one who knows the birds can follow
+it straight to everyone else who does.
+
+**This closes the `guide_tags` backlog item.** The homepage intent rows matched
+keywords against the guide's own text — "Photographers" was a substring search
+for "camera", and a guide who phrased their promise differently was invisible
+to the row built for them. Four rows now filter on the skill. Keywords stay as
+the fallback for a guide who has claimed nothing, so nobody disappears from a
+row while the claims fill up.
+
+308 tests green, build green. 0062 applied and smoke-tested against the live
+database.

@@ -90,7 +90,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const totalGuides = (allGuides ?? []).length;
 
   const ids = rows.map((g) => g.user_id);
-  const [ratings, langMap, allLangs, freeRuns] = await Promise.all([
+  const [ratings, langMap, allLangs, freeRuns, skillMap] = await Promise.all([
     guideRatings(client, ids),
     (async () => {
       const map: Record<string, string[]> = {};
@@ -105,6 +105,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     })(),
     client.from("guide_languages").select("language"),
     range ? openRunsByGuide(client, range, ids) : Promise.resolve(null),
+    // What each of them has claimed to be good at (0062).
+    (async () => {
+      const map: Record<string, string[]> = {};
+      if (ids.length) {
+        const { data } = await client
+          .from("guide_skills")
+          .select("guide_id, skill")
+          .in("guide_id", ids);
+        for (const r of data ?? []) (map[r.guide_id] ??= []).push(r.skill);
+      }
+      return map;
+    })(),
   ]);
 
   if (fTier) rows = rows.filter((g) => String(g.tier) === fTier);
@@ -119,9 +131,23 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // so re-check each survivor against the same rule the union used.
   if (q) rows = rows.filter((g) => guideMatchesText(g, q) || viaTrips.has(g.user_id));
 
+  // A skill picked straight off a guide's profile chip.
+  const fSkill = p.get("skill");
+  if (fSkill) rows = rows.filter((g) => (skillMap[g.user_id] ?? []).includes(fSkill));
+
   if (intent) {
     if (intent.gender) rows = rows.filter((g) => g.gender === intent.gender);
-    if (intent.keywords) rows = rows.filter((g) => matchesKeywords(g, intent.keywords!));
+    // The row's skill is the filter where a guide has claimed anything at all;
+    // their own words are the fallback, so nobody disappears from a row they
+    // belong in just because they have not ticked a box yet.
+    if (intent.skill || intent.keywords) {
+      rows = rows.filter((g) => {
+        const claimed = skillMap[g.user_id] ?? [];
+        if (intent.skill && claimed.includes(intent.skill)) return true;
+        if (claimed.length > 0 && intent.skill) return false;
+        return intent.keywords ? matchesKeywords(g, intent.keywords) : false;
+      });
+    }
     if (intent.languages) {
       rows = rows.filter((g) =>
         (langMap[g.user_id] ?? []).some((l) => intent.languages!.includes(l)),

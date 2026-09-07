@@ -15,13 +15,14 @@ import {
   type Proficiency,
 } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
+import { MAX_SKILLS, SKILL_GROUPS, parseSkills } from "~/lib/guide-skills";
 import { parseRegions } from "~/lib/guide-regions";
 import { GuideRegions } from "~/components/GuideRegions";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
-  const [{ data: guide }, { data: langs }, { data: photos }, { data: walked }, { data: routes }] =
+  const [{ data: guide }, { data: langs }, { data: photos }, { data: walked }, { data: routes }, { data: skills }] =
     await Promise.all([
     admin
       .from("guides")
@@ -54,6 +55,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .eq("status", "live")
       .order("sort")
       .order("name"),
+    // What they are interesting for (0062).
+    admin.from("guide_skills").select("skill").eq("guide_id", user.id),
   ]);
   const { data: canned } = await admin
     .from("canned_replies")
@@ -67,6 +70,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       photos: photos ?? [],
       canned: canned ?? [],
       walked: walked ?? [],
+      skills: (skills ?? []).map((r: any) => r.skill),
       routes: routes ?? [],
     },
     { headers },
@@ -94,6 +98,20 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const form = await request.formData();
   const intent = String(form.get("intent"));
+
+  // What they are interesting for. Replaced wholesale rather than diffed: the
+  // form posts the complete set of ticks, and a checkbox that was cleared
+  // sends nothing at all.
+  if (intent === "skills") {
+    const chosen = parseSkills(form.getAll("skill"));
+    await admin.from("guide_skills").delete().eq("guide_id", user.id);
+    if (chosen.length) {
+      await admin
+        .from("guide_skills")
+        .insert(chosen.map((skill) => ({ guide_id: user.id, skill })));
+    }
+    return data({ ok: true }, { headers });
+  }
 
   if (intent === "commercial") {
     // Guide may edit only their own commercial fields (guard trigger + this
@@ -405,7 +423,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideProfile({ loaderData, actionData }: Route.ComponentProps) {
-  const { guide, languages, photos, canned, walked, routes } = loaderData as any;
+  const { guide, languages, photos, canned, walked, routes, skills } = loaderData as any;
   const spoken = new Set<string>(languages.map((l: any) => l.language));
   const claimed = new Set<string>(walked.map((w: any) => w.route_id));
   const spareRoutes = routes.filter((r: any) => !claimed.has(r.id));
@@ -601,6 +619,48 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         </div>
         <GuideRegions selected={guide?.regions ?? []} />
         <Button type="submit" size="sm" loading={busy}>
+          Save
+        </Button>
+      </Form>
+
+      {/* ── What you are interesting for. A licence says somebody may lead a
+         trek; it says nothing about whether they know the birds or are the
+         person you want when a fourteen-year-old is struggling on day four —
+         which is what a trekker is actually choosing between. */}
+      <Form method="post" className="space-y-3 rounded-card border border-border bg-card p-4">
+        <input type="hidden" name="intent" value="skills" />
+        <div>
+          <p className="text-sm font-medium text-ink">What you are good at</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            Tick what is true — up to {MAX_SKILLS}. These are what trekkers
+            filter by, so a tick you cannot back up costs you the booking when
+            they arrive.
+          </p>
+        </div>
+
+        {SKILL_GROUPS.map((group) => (
+          <fieldset key={group.key}>
+            <legend className="text-xs font-medium uppercase tracking-wide text-ink-soft">
+              {group.label}
+            </legend>
+            <div className="mt-1.5 space-y-1">
+              {group.skills.map((sk) => (
+                <label key={sk.key} className="flex items-start gap-2.5 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    name="skill"
+                    value={sk.key}
+                    defaultChecked={skills.includes(sk.key)}
+                    className="mt-0.5"
+                  />
+                  {sk.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+
+        <Button type="submit" size="sm">
           Save
         </Button>
       </Form>
