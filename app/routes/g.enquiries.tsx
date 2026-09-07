@@ -5,16 +5,10 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { firstName } from "~/lib/names";
 import { Button } from "~/components/Button";
-import { cn } from "~/lib/cn";
-import {
-  partyAmounts,
-  hasBreakdown,
-  type PriceBreakdown,
-  type PriceLine,
-} from "~/lib/experience-pricing";
-import { composePackage, optionsOf } from "~/lib/packages";
+import { hasBreakdown, type PriceBreakdown } from "~/lib/experience-pricing";
+import { optionsOf } from "~/lib/packages";
+import { PackageComposer } from "~/components/messages/PackageComposer";
 import { formatUsd } from "~/lib/pricing";
-import { computeDeposit } from "~/lib/pricing";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -53,9 +47,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (decision === "propose") {
     const { data: enq } = await admin
       .from("enquiries")
-      .select(
-        "id, trekker_id, guide_id, offering_id, start_date, party_size, status, offering:offerings(days, price_breakdown)",
-      )
+      .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status")
       .eq("id", id)
       .eq("guide_id", user.id)
       .in("status", ["open", "quoted"])
@@ -63,59 +55,21 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!enq) {
       return data({ error: "That request has expired or was already handled." }, { status: 409, headers });
     }
-    const base = (enq as any).offering?.price_breakdown as PriceBreakdown | null;
-    if (!hasBreakdown(base)) {
-      return data(
-        { error: "This trip has no itemised price yet — price it in Experiences first." },
-        { status: 400, headers },
-      );
-    }
 
-    const days = Math.max(1, Math.min(60, Number(form.get("days")) || (enq as any).offering?.days || 1));
-    const partySize = Math.max(1, Math.min(24, Number(form.get("party_size")) || enq.party_size));
-    const startDate = String(form.get("start_date") || enq.start_date);
-    const includedOptionIds = form.getAll("option").map(String);
-    const note = String(form.get("note") ?? "").trim().slice(0, 800) || null;
-
-    // One line the guide can write for this trip alone — a helicopter out, a
-    // night in Kathmandu. Anything more belongs in the listing.
-    const extraLabel = String(form.get("extra_label") ?? "").trim().slice(0, 60);
-    const extraUsd = Math.max(0, Number(form.get("extra_usd")) || 0);
-    const extraLines: PriceLine[] =
-      extraLabel && extraUsd > 0
-        ? [
-            {
-              id: `extra-${Date.now()}`,
-              label: extraLabel,
-              amountUsdCents: Math.round(extraUsd * 100),
-              basis: "person",
-              cadence: "trip",
-              optional: false,
-              bucket: "logistics",
-            },
-          ]
-        : [];
-
-    const composed = composePackage(base, { days, includedOptionIds, extraLines });
-    const amounts = partyAmounts(composed, partySize, startDate);
-    const daysUntil = Math.round(
-      (Date.parse(startDate) - Date.parse(new Date().toISOString().slice(0, 10))) / 86400000,
-    );
-    const deposit = computeDeposit(amounts.totalUsdCents, daysUntil);
-
-    const { error } = await admin.from("package_proposals").insert({
-      enquiry_id: enq.id,
-      guide_id: user.id,
-      trekker_id: enq.trekker_id,
-      start_date: startDate,
-      days,
-      party_size: partySize,
-      price_breakdown: composed,
-      total_usd_cents: amounts.totalUsdCents,
-      deposit_usd_cents: deposit,
-      note,
+    const { createProposal, clamp, extraLineFrom } = await import("~/lib/proposals.server");
+    const res = await createProposal(admin, {
+      guideId: user.id,
+      trekkerId: enq.trekker_id,
+      offeringId: enq.offering_id,
+      enquiryId: enq.id,
+      startDate: String(form.get("start_date") || enq.start_date),
+      days: clamp(form.get("days"), 1, 60, 1),
+      partySize: clamp(form.get("party_size"), 1, 24, enq.party_size),
+      includedOptionIds: form.getAll("option").map(String),
+      extraLines: extraLineFrom(form),
+      note: String(form.get("note") ?? "").trim().slice(0, 800) || null,
     });
-    if (error) return data({ error: "That didn't send. Try again." }, { status: 400, headers });
+    if (res.error) return data({ error: res.error }, { status: 400, headers });
 
     await admin.from("enquiries").update({ status: "quoted" }).eq("id", enq.id);
 
@@ -262,182 +216,24 @@ function EnquiryCard({ enquiry: e, sent }: { enquiry: any; sent: any[] }) {
           >
             {open ? "Close" : live ? "Propose something else" : "Suggest changes"}
           </button>
-          {open && <Proposer enquiry={e} base={base!} options={options} asked={asked} />}
+          {open && (
+            <div className="mt-3 border-t border-border pt-3">
+              <PackageComposer
+                base={base!}
+                options={options}
+                defaults={{
+                  days: e.offering?.days ?? base!.days ?? 1,
+                  partySize: e.party_size,
+                  startDate: e.start_date,
+                  optionIds: asked,
+                }}
+                hidden={{ id: e.id, decision: "propose" }}
+                onSent={() => setOpen(false)}
+              />
+            </div>
+          )}
         </>
       )}
     </li>
-  );
-}
-
-/**
- * The changes a guide actually makes: a day either way, a different group, the
- * extras in or out, and one line of their own. Priced live, because a guide
- * proposing a change should never have to wonder what they just charged.
- */
-function Proposer({
-  enquiry: e,
-  base,
-  options,
-  asked,
-}: {
-  enquiry: any;
-  base: PriceBreakdown;
-  options: PriceLine[];
-  asked: string[];
-}) {
-  const [days, setDays] = useState<number>(e.offering?.days ?? base.days ?? 1);
-  const [party, setParty] = useState<number>(e.party_size);
-  const [startDate, setStartDate] = useState<string>(e.start_date);
-  const [picked, setPicked] = useState<Set<string>>(new Set(asked));
-  const [extraLabel, setExtraLabel] = useState("");
-  const [extraUsd, setExtraUsd] = useState("");
-
-  const extraLines: PriceLine[] =
-    extraLabel.trim() && Number(extraUsd) > 0
-      ? [
-          {
-            id: "preview",
-            label: extraLabel.trim(),
-            amountUsdCents: Math.round(Number(extraUsd) * 100),
-            basis: "person",
-            cadence: "trip",
-            optional: false,
-            bucket: "logistics",
-          },
-        ]
-      : [];
-
-  const composed = composePackage(base, {
-    days,
-    includedOptionIds: [...picked],
-    extraLines,
-  });
-  const amounts = partyAmounts(composed, party, startDate);
-  const each = Math.round(amounts.totalUsdCents / Math.max(1, party));
-
-  const field =
-    "mt-1 w-full rounded border border-line bg-paper px-3 py-2 text-base text-ink outline-none focus:border-moss";
-
-  return (
-    <Form method="post" className="mt-3 space-y-3 border-t border-border pt-3">
-      <input type="hidden" name="id" value={e.id} />
-      <input type="hidden" name="decision" value="propose" />
-
-      <div className="grid grid-cols-3 gap-2">
-        <label className="block text-caption text-ink-soft">
-          Days
-          <input
-            type="number"
-            name="days"
-            min={1}
-            max={60}
-            value={days}
-            onChange={(ev) => setDays(Math.max(1, Number(ev.target.value) || 1))}
-            className={field}
-          />
-        </label>
-        <label className="block text-caption text-ink-soft">
-          People
-          <input
-            type="number"
-            name="party_size"
-            min={1}
-            max={24}
-            value={party}
-            onChange={(ev) => setParty(Math.max(1, Number(ev.target.value) || 1))}
-            className={field}
-          />
-        </label>
-        <label className="block text-caption text-ink-soft">
-          Starts
-          <input
-            type="date"
-            name="start_date"
-            value={startDate}
-            onChange={(ev) => setStartDate(ev.target.value)}
-            className={field}
-          />
-        </label>
-      </div>
-
-      {options.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-caption text-ink-soft">What is included</p>
-          {options.map((o) => (
-            <label key={o.id} className="flex items-center justify-between gap-3 text-sm text-ink">
-              <span>{o.label}</span>
-              <input
-                type="checkbox"
-                name="option"
-                value={o.id}
-                checked={picked.has(o.id)}
-                onChange={() =>
-                  setPicked((s) => {
-                    const n = new Set(s);
-                    n.has(o.id) ? n.delete(o.id) : n.add(o.id);
-                    return n;
-                  })
-                }
-              />
-            </label>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-[1fr_7rem] gap-2">
-        <label className="block text-caption text-ink-soft">
-          Add one more thing
-          <input
-            name="extra_label"
-            value={extraLabel}
-            onChange={(ev) => setExtraLabel(ev.target.value)}
-            placeholder="Helicopter out from Lukla"
-            maxLength={60}
-            className={field}
-          />
-        </label>
-        <label className="block text-caption text-ink-soft">
-          $ each
-          <input
-            name="extra_usd"
-            type="number"
-            min={0}
-            step="1"
-            value={extraUsd}
-            onChange={(ev) => setExtraUsd(ev.target.value)}
-            className={field}
-          />
-        </label>
-      </div>
-
-      <label className="block text-caption text-ink-soft">
-        Say why, in your words
-        <textarea
-          name="note"
-          rows={2}
-          maxLength={800}
-          placeholder="Two extra nights at Namche — you will walk it far better acclimatised."
-          className={field}
-        />
-      </label>
-
-      <div className={cn("rounded-md bg-mist p-3 text-sm")}>
-        <div className="flex justify-between">
-          <span className="text-ink-soft">They pay, each</span>
-          <span className="font-mono font-medium text-ink">{formatUsd(each)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-ink-soft">Whole trip</span>
-          <span className="font-mono text-ink">{formatUsd(amounts.totalUsdCents)}</span>
-        </div>
-      </div>
-
-      <Button type="submit" className="w-full">
-        Send this to them
-      </Button>
-      <p className="text-caption text-muted">
-        Nothing is booked until they approve it and pay the deposit.
-      </p>
-    </Form>
   );
 }

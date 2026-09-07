@@ -341,32 +341,37 @@ export async function notifyGuideWelcome(
 export async function notifyPackageProposed(
   env: Env,
   admin: SupabaseClient,
-  args: { enquiryId: string },
+  args: { enquiryId?: string; conversationId?: string },
 ) {
-  const { data: p } = await admin
+  let q = admin
     .from("package_proposals")
     .select(
-      "id, days, party_size, start_date, total_usd_cents, deposit_usd_cents, note, trekker_id, guide_id",
+      "id, days, party_size, start_date, total_usd_cents, deposit_usd_cents, note, trekker_id, guide_id, enquiry_id, offering_id",
     )
-    .eq("enquiry_id", args.enquiryId)
     .eq("status", "proposed")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  q = args.enquiryId
+    ? q.eq("enquiry_id", args.enquiryId)
+    : q.eq("conversation_id", args.conversationId ?? "");
+  const { data: p } = await q.maybeSingle();
   if (!p) return;
 
   const [{ data: trekker }, { data: guide }, { data: enq }] = await Promise.all([
     admin.from("users").select("email, full_name").eq("id", p.trekker_id).maybeSingle(),
     admin.from("users").select("full_name").eq("id", p.guide_id).maybeSingle(),
-    admin
-      .from("enquiries")
-      .select("offering:offerings(title)")
-      .eq("id", args.enquiryId)
-      .maybeSingle(),
+    // The trip's name, from the proposal itself or the enquiry behind it.
+    p.offering_id
+      ? admin.from("offerings").select("title").eq("id", p.offering_id).maybeSingle()
+      : admin
+          .from("enquiries")
+          .select("offering:offerings(title)")
+          .eq("id", p.enquiry_id ?? "")
+          .maybeSingle(),
   ]);
   const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
   const guideName = firstNameOf(guide?.full_name) || "Your guide";
-  const title = (enq as any)?.offering?.title ?? "your trip";
+  const title = (enq as any)?.title ?? (enq as any)?.offering?.title ?? "your trip";
 
   const { sendRichEmail } = await import("~/lib/notify.server");
   await sendRichEmail(env, admin, {

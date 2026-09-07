@@ -50,7 +50,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const [{ data: messages }, { data: guideRow }, { data: offerings }] = await Promise.all([
     admin
       .from("messages")
-      .select("id, sender_id, body_rendered, created_at, read_at")
+      .select("id, sender_id, body_rendered, created_at, read_at, offering_id, proposal_id")
       .eq("conversation_id", convo.id)
       .order("created_at"),
     admin
@@ -61,10 +61,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .eq("user_id", convo.guide_id)
       .maybeSingle(),
     admin
+      // The trips this guide sells: what a trekker points at when they say
+      // "this one", and what a guide builds a package from.
       .from("public_offerings")
-      .select("slug, kind, title, days")
+      .select("id, slug, kind, title, days, price_breakdown, min_party, max_party")
       .eq("guide_id", convo.guide_id)
-      .limit(3),
+      .limit(24),
   ]);
 
   const [{ data: guideUser }, { data: trekkerUser }] = await Promise.all([
@@ -75,6 +77,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .eq("id", convo.trekker_id)
       .maybeSingle(),
   ]);
+
+  // Packages sent in this thread, so their cards can be rendered where they
+  // were sent rather than only as a link somebody has to follow.
+  const { data: proposals } = await admin
+    .from("package_proposals")
+    .select(
+      "id, offering_id, days, party_size, start_date, total_usd_cents, deposit_usd_cents, note, status, booking_id, price_breakdown",
+    )
+    .eq("conversation_id", convo.id)
+    .order("created_at");
 
   const canned = isGuide
     ? (await admin
@@ -120,7 +132,40 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         text: m.body_rendered, // always masked pre-booking
         at: m.created_at,
         readAt: m.read_at,
+        // What the message points at: the trip being asked about, or the
+        // package being offered.
+        aboutOffering: m.offering_id
+          ? ((offerings ?? []).find((o: any) => o.id === m.offering_id)?.title ?? null)
+          : null,
+        proposalId: m.proposal_id ?? null,
       })),
+      packages: (proposals ?? []).map((p: any) => ({
+        id: p.id,
+        title: (offerings ?? []).find((o: any) => o.id === p.offering_id)?.title ?? null,
+        days: p.days,
+        partySize: p.party_size,
+        startDate: p.start_date,
+        totalUsdCents: p.total_usd_cents,
+        depositUsdCents: p.deposit_usd_cents,
+        note: p.note,
+        status: p.status,
+        bookingId: p.booking_id,
+        includes: ((p.price_breakdown?.lines ?? []) as any[])
+          .map((l) => l.label)
+          .filter(Boolean)
+          .slice(0, 6),
+      })),
+      trips: (offerings ?? []).map((o: any) => ({
+        id: o.id,
+        title: o.title,
+        days: o.days,
+        minParty: o.min_party ?? 1,
+        pricedByLine: Array.isArray(o.price_breakdown?.lines) && o.price_breakdown.lines.length > 0,
+        options: ((o.price_breakdown?.lines ?? []) as any[]).filter((l) => l.optional),
+        breakdown: o.price_breakdown ?? null,
+      })),
+      conversationOfferingId: (convo as any).offering_id ?? null,
+      userId: user.id,
       partner,
       bookPath: isGuide ? null : bookPath || (guideRow?.slug ? `/guides/${guideRow.slug}` : null),
       canned,
@@ -132,10 +177,79 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
 export async function action({ request, params, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  const { user, admin, convo, headers } = await loadConversation(request, env, params.conversationId);
+  const { user, admin, convo, headers, isGuide } = await loadConversation(
+    request,
+    env,
+    params.conversationId,
+  );
   const form = await request.formData();
+  const intent = String(form.get("intent") ?? "send");
+
+  // ── The guide builds a package, here, in the conversation ──────────────
+  if (intent === "propose") {
+    if (!isGuide) {
+      return data({ ok: false, error: "Only the guide can send a package." }, { status: 403, headers });
+    }
+    const offeringId = String(form.get("offering_id") ?? "");
+    if (!offeringId) {
+      return data({ ok: false, error: "Pick which trip it is." }, { status: 400, headers });
+    }
+    const { createProposal, clamp, extraLineFrom } = await import("~/lib/proposals.server");
+    const startDate = String(form.get("start_date") ?? "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      return data({ ok: false, error: "Pick a start date." }, { status: 400, headers });
+    }
+    const res = await createProposal(admin, {
+      guideId: convo.guide_id,
+      trekkerId: convo.trekker_id,
+      offeringId,
+      conversationId: convo.id,
+      startDate,
+      days: clamp(form.get("days"), 1, 60, 1),
+      partySize: clamp(form.get("party_size"), 1, 24, 1),
+      includedOptionIds: form.getAll("option").map(String),
+      extraLines: extraLineFrom(form),
+      note: String(form.get("note") ?? "").trim().slice(0, 800) || null,
+    });
+    if (res.error || !res.id) {
+      return data({ ok: false, error: res.error ?? "That didn't send." }, { status: 400, headers });
+    }
+
+    // The package lands in the thread as a message, so the conversation reads
+    // in one order and nothing important lives off to one side.
+    const line = "I've put a package together for you.";
+    await admin.from("messages").insert({
+      conversation_id: convo.id,
+      sender_id: user.id,
+      body: line,
+      body_rendered: line,
+      proposal_id: res.id,
+    });
+    await admin
+      .from("conversations")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", convo.id);
+
+    const { notifyPackageProposed } = await import("~/lib/notifications.server");
+    await notifyPackageProposed(env, admin, { conversationId: convo.id });
+    return data({ ok: true }, { headers });
+  }
+
   const body = String(form.get("body") ?? "").trim();
   if (!body) return data({ ok: false }, { headers });
+  // "This is the trip I mean." Checked against this guide's own trips, so a
+  // crafted post cannot attach somebody else's listing to the thread.
+  const aboutId = String(form.get("about_offering_id") ?? "").trim() || null;
+  let offeringId: string | null = null;
+  if (aboutId) {
+    const { data: own } = await admin
+      .from("offerings")
+      .select("id")
+      .eq("id", aboutId)
+      .eq("guide_id", convo.guide_id)
+      .maybeSingle();
+    offeringId = own?.id ?? null;
+  }
 
   // Pre-booking: contact info is always masked; bypass attempts flag to ops.
   const { rendered, flaggedReason } = maskMessage(body);
@@ -145,6 +259,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     body,
     body_rendered: rendered,
     flagged_reason: flaggedReason,
+    offering_id: offeringId,
   });
   if (insertErr) {
     return data({ ok: false, error: "Message didn't send — try again." }, { status: 500, headers });
@@ -166,15 +281,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Conversation({ loaderData }: Route.ComponentProps) {
-  const { messages, partner, bookPath, canned, isGuide } = loaderData as any;
+  const { messages, partner, bookPath, canned, isGuide, trips, packages, conversationOfferingId } =
+    loaderData as any;
   return (
     <Thread
       messages={messages}
       partner={partner}
-      backTo={isGuide ? "/messages" : "/messages"}
+      backTo="/messages"
       bookHref={bookPath}
       isGuide={isGuide}
       cannedReplies={canned}
+      trips={trips}
+      packages={packages}
+      defaultTripId={conversationOfferingId}
     />
   );
 }

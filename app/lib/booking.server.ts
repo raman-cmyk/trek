@@ -146,7 +146,8 @@ export async function acceptEnquiry(
 async function bookFromQuote(
   admin: SupabaseClient,
   enq: {
-    id: string;
+    /** Null when the package was agreed in a conversation, not an enquiry. */
+    id: string | null;
     trekker_id: string;
     guide_id: string;
     offering_id: string;
@@ -200,7 +201,9 @@ async function bookFromQuote(
     { onConflict: "guide_id,day" },
   );
 
-  await admin.from("enquiries").update({ status: "accepted" }).eq("id", enq.id);
+  if (enq.id) {
+    await admin.from("enquiries").update({ status: "accepted" }).eq("id", enq.id);
+  }
 
   // Auto-generate + auto-sign the Company↔Guide contract for this engagement.
   // Best-effort: never let contract generation block the booking itself.
@@ -685,32 +688,43 @@ export async function approveProposal(
 ): Promise<string | null> {
   const { data: p } = await admin
     .from("package_proposals")
-    .select("id, enquiry_id, guide_id, trekker_id, start_date, days, party_size, price_breakdown, status")
+    .select(
+      "id, enquiry_id, conversation_id, offering_id, guide_id, trekker_id, start_date, days, party_size, price_breakdown, status",
+    )
     .eq("id", proposalId)
     .eq("trekker_id", trekkerId)
     .eq("status", "proposed")
     .maybeSingle();
   if (!p) return null;
 
-  const { data: enq } = await admin
-    .from("enquiries")
-    .select("id, trekker_id, guide_id, offering_id, status")
-    .eq("id", p.enquiry_id)
-    .maybeSingle();
-  if (!enq) return null;
+  // A package agreed in a message thread has no enquiry behind it, so the
+  // proposal carries the trip itself; one that came from the booking form
+  // still reads it from there.
+  const { data: enq } = p.enquiry_id
+    ? await admin
+        .from("enquiries")
+        .select("id, trekker_id, guide_id, offering_id, status")
+        .eq("id", p.enquiry_id)
+        .maybeSingle()
+    : { data: null };
+  const offeringId = p.offering_id ?? enq?.offering_id;
+  if (!offeringId) return null;
+
   // A booking already out of this enquiry means approving a second proposal
   // would sell the same trip twice. Checked against the bookings themselves
   // rather than the enquiry's status, which is the thing that could drift.
-  const { data: already } = await admin
-    .from("bookings")
-    .select("id, status")
-    .eq("enquiry_id", enq.id)
-    .limit(5);
-  if ((already ?? []).some((b: any) => !String(b.status ?? "").startsWith("cancelled"))) {
-    return null;
+  if (enq) {
+    const { data: already } = await admin
+      .from("bookings")
+      .select("id, status")
+      .eq("enquiry_id", enq.id)
+      .limit(5);
+    if ((already ?? []).some((b: any) => !String(b.status ?? "").startsWith("cancelled"))) {
+      return null;
+    }
   }
 
-  const q = await quote(admin, enq.offering_id, p.party_size, p.start_date, {
+  const q = await quote(admin, offeringId, p.party_size, p.start_date, {
     breakdown: p.price_breakdown as ExperienceBreakdown,
     days: p.days,
   });
@@ -718,10 +732,10 @@ export async function approveProposal(
   const bookingId = await bookFromQuote(
     admin,
     {
-      id: enq.id,
-      trekker_id: enq.trekker_id,
-      guide_id: enq.guide_id,
-      offering_id: enq.offering_id,
+      id: enq?.id ?? null,
+      trekker_id: p.trekker_id,
+      guide_id: p.guide_id,
+      offering_id: offeringId,
       start_date: p.start_date,
       party_size: p.party_size,
     },
@@ -736,12 +750,14 @@ export async function approveProposal(
       responded_at: new Date().toISOString(),
     })
     .eq("id", p.id);
-  // Any other proposal on this enquiry is now moot.
-  await admin
+  // Any other open proposal in the same conversation or enquiry is now moot.
+  const sibling = admin
     .from("package_proposals")
     .update({ status: "superseded" })
-    .eq("enquiry_id", p.enquiry_id)
     .eq("status", "proposed");
+  await (p.enquiry_id
+    ? sibling.eq("enquiry_id", p.enquiry_id)
+    : sibling.eq("conversation_id", p.conversation_id));
 
   return bookingId;
 }

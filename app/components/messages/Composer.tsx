@@ -25,6 +25,7 @@ export function Composer({
   cannedReplies,
   onOptimistic,
   masked = true,
+  extraFields,
 }: {
   action?: string;
   disabled?: boolean;
@@ -37,6 +38,8 @@ export function Composer({
   onOptimistic?: (text: string) => void;
   /** Is contact masking actually active on this thread right now? */
   masked?: boolean;
+  /** Sent alongside the message — e.g. which trip it is about. */
+  extraFields?: Record<string, string>;
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -80,7 +83,10 @@ export function Composer({
     const text = value.trim();
     if (!text || busy || disabled) return;
     onOptimistic?.(text);
-    fetcher.submit({ intent: "send", body: text }, { method: "post", action });
+    fetcher.submit(
+      { intent: "send", body: text, ...(extraFields ?? {}) },
+      { method: "post", action },
+    );
   }
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {

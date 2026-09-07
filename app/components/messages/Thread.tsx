@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Form, Link } from "react-router";
+import { Sheet } from "~/components/Sheet";
+import { PackageComposer } from "./PackageComposer";
+import { PackageCard, type PackageCardData } from "./PackageCard";
+import type { PriceBreakdown, PriceLine } from "~/lib/experience-pricing";
 import { SmartImage } from "~/components/SmartImage";
 import { TierBadge } from "~/components/public/bits";
 import { Composer } from "./Composer";
@@ -12,6 +16,21 @@ export interface ThreadMessage {
   at: string;
   /** Server-side read receipt; only meaningful on your own messages. */
   readAt?: string | null;
+  /** "This is the trip I mean" — the listing this message points at. */
+  aboutOffering?: string | null;
+  /** A package sent in the thread; rendered as a card you can accept. */
+  proposalId?: string | null;
+}
+
+/** A trip the guide sells — what a message points at, or a package is built from. */
+export interface ThreadTrip {
+  id: string;
+  title: string;
+  days: number;
+  minParty: number;
+  pricedByLine: boolean;
+  options: PriceLine[];
+  breakdown: PriceBreakdown | null;
 }
 
 export interface ThreadPartner {
@@ -55,6 +74,9 @@ export function Thread({
   cannedReplies,
   action,
   masked = true,
+  trips = [],
+  packages = [],
+  defaultTripId = null,
 }: {
   messages: ThreadMessage[];
   partner: ThreadPartner;
@@ -66,8 +88,20 @@ export function Thread({
   action?: string;
   /** False once the deposit is paid and contact details flow freely. */
   masked?: boolean;
+  /** The guide's trips — the picker above the composer, and the package base. */
+  trips?: ThreadTrip[];
+  /** Packages already sent in this thread, by id. */
+  packages?: PackageCardData[];
+  /** The trip this conversation started from, pre-selected. */
+  defaultTripId?: string | null;
 }) {
   const [prefill, setPrefill] = useState<string | null>(null);
+  // Which trip the next message is about. A conversation opened from a listing
+  // starts on that one.
+  const [about, setAbout] = useState<string>(defaultTripId ?? "");
+  const [building, setBuilding] = useState(false);
+  const byId = new Map(packages.map((p) => [p.id, p]));
+  const buildFrom = trips.find((t) => t.id === (about || trips[0]?.id));
   // Optimistic tail: what you just sent, before the server has answered.
   const [pending, setPending] = useState<{ id: string; text: string }[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -105,9 +139,25 @@ export function Thread({
           />
         ) : (
           <ul className="mx-auto flex max-w-2xl flex-col gap-2">
-            {messages.map((m, i) => (
-              <Bubble key={m.id} m={m} showStatus={m.mine && i === lastMineIndex(messages)} />
-            ))}
+            {messages.map((m, i) => {
+              // A package is not a sentence in a bubble — it is the thing the
+              // conversation was for, so it renders as itself.
+              const pkg = m.proposalId ? byId.get(m.proposalId) : null;
+              if (pkg) {
+                return (
+                  <li key={m.id} className={cn("max-w-[85%]", m.mine && "self-end")}>
+                    <PackageCard p={pkg} isTrekker={!isGuide} />
+                  </li>
+                );
+              }
+              return (
+                <Bubble
+                  key={m.id}
+                  m={m}
+                  showStatus={m.mine && i === lastMineIndex(messages)}
+                />
+              );
+            })}
             {pending.map((p) => (
               <Bubble
                 key={p.id}
@@ -121,8 +171,69 @@ export function Thread({
         <div ref={endRef} />
       </div>
 
+      {/* What this is about, and — for a guide — the package itself. Both sit
+          on the composer because that is where the conversation is: making
+          somebody leave the thread to point at a trip is how a thread ends up
+          full of "the 14 day one".
+
+          Stacked rather than side by side: at 360px — the screen a guide is
+          holding — a select and a button on one row clipped the button. */}
+      {trips.length > 0 && (
+        <div className="space-y-1.5 border-t border-line bg-card px-3 pt-2 sm:px-4">
+          <label className="flex min-w-0 items-center gap-2 text-caption text-muted">
+            <span className="shrink-0">About</span>
+            <select
+              value={about}
+              onChange={(e) => setAbout(e.target.value)}
+              className="min-w-0 flex-1 truncate rounded border border-line bg-paper px-2 py-1.5 text-caption text-ink"
+              aria-label="Which trip this message is about"
+            >
+              <option value="">No particular trip</option>
+              {trips.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          {isGuide && (
+            <button
+              type="button"
+              onClick={() => setBuilding(true)}
+              disabled={!buildFrom?.pricedByLine}
+              title={
+                buildFrom?.pricedByLine
+                  ? "Build a package for this trekker"
+                  : "Price this trip line by line first"
+              }
+              className="w-full rounded-button border border-moss px-3 py-2 text-caption font-medium text-moss disabled:opacity-40"
+            >
+              Send a package
+            </button>
+          )}
+        </div>
+      )}
+
+      {buildFrom?.breakdown && (
+        <Sheet open={building} onClose={() => setBuilding(false)} title={`Package — ${buildFrom.title}`}>
+          <PackageComposer
+            base={buildFrom.breakdown}
+            options={buildFrom.options}
+            defaults={{
+              days: buildFrom.days || 1,
+              partySize: Math.max(1, buildFrom.minParty),
+              startDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+            }}
+            hidden={{ intent: "propose", offering_id: buildFrom.id }}
+            action={action}
+            onSent={() => setBuilding(false)}
+          />
+        </Sheet>
+      )}
+
       <Composer
         action={action}
+        extraFields={about ? { about_offering_id: about } : undefined}
         masked={masked}
         prefill={prefill}
         onPrefillConsumed={() => setPrefill(null)}
@@ -231,6 +342,15 @@ function fmtMins(mins: number) {
   return mins < 60 ? `${mins} min` : `${Math.round(mins / 60)} hour${Math.round(mins / 60) > 1 ? "s" : ""}`;
 }
 
+/** The trip a message pointed at, above what was said. */
+function AboutChip({ title }: { title: string }) {
+  return (
+    <span className="mb-1 block truncate rounded bg-mist px-2 py-1 text-caption text-moss">
+      About: {title}
+    </span>
+  );
+}
+
 function Bubble({
   m,
   pendingLabel,
@@ -252,6 +372,7 @@ function Bubble({
           pendingLabel && "opacity-70",
         )}
       >
+        {m.aboutOffering && <AboutChip title={m.aboutOffering} />}
         {isPhoto ? (
           <img
             src={m.text.trim()}

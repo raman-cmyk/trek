@@ -1241,3 +1241,40 @@ in a rolled-back transaction. 293 tests green, build green.
 through against real data — this environment cannot hold the service-role key,
 so the guide's proposer and the approval page have been driven only by types,
 tests and SQL. The first real proposal is the test.
+
+## Session — packages, agreed in the conversation (2026-09-06)
+
+Most trips do not begin with the booking form. They begin with "is Manaslu
+doable in October?" in a message thread, and by the time the two of them have
+agreed what the trip is, the conversation is the only place it exists. Sending
+them back to a listing to press "Request to book", so the guide can propose the
+thing they already agreed, is a step for nobody.
+
+Migration 0059 lets a proposal hang off a conversation as well as an enquiry
+(`enquiry_id` nullable, `conversation_id` and `offering_id` added, a check that
+it has one home or the other), and lets a message carry something:
+`messages.offering_id` for "this is the trip I mean", `messages.proposal_id`
+for a package.
+
+In the thread now:
+
+- **An "About" picker** above the composer, defaulting to the trip the
+  conversation was opened from. What a trekker picks rides with the message and
+  shows as a chip on it, so a thread stops filling up with "the 14 day one".
+- **"Send a package"**, for the guide, opening the same composer their request
+  list uses — days, party, date, extras, one line of their own, priced live.
+- **The package renders as a card in the thread**, and the trekker's answer is
+  one button: *Approve and pay $368*. Approving creates the booking and goes
+  to checkout; approving and paying are one decision, and splitting them over
+  two screens is where people go away to think about it.
+
+One implementation, three surfaces: `createProposal` (server) and
+`PackageComposer`/`PackageCard` (components) are shared by the request list,
+the thread and `/proposals/:id`, so a package agreed in conversation is the
+same object as one agreed through the booking form — same snapshot, same
+arithmetic, same approval path.
+
+Checked by rendering the thread at 380px from both sides: the guide's button
+and the picker were on one row and the button clipped, so they stack.
+
+293 tests green, build green, 0059 applied to the live database.
