@@ -361,6 +361,23 @@ export const TEAHOUSE_LABEL: Record<TeahouseTier, string> = {
   basic: "Basic teahouses",
 };
 
+/**
+ * What the porters on this trip cost, per person, however the price is shaped.
+ *
+ * Zero means this trip has no porter to decide about — a day hike, a food
+ * tour, a trek the guide prices without one — and the tick box for it is not
+ * shown at all rather than shown at $0.
+ */
+export function porterCostOf(bd: PriceBreakdown | null | undefined): number {
+  if (!bd) return 0;
+  if (bd.lines?.length) {
+    return bd.lines
+      .filter((l) => l.bucket === "porters" && !l.optional)
+      .reduce((sum, l) => sum + linePerPerson(l, 1, bd.days ?? 1), 0);
+  }
+  return bd.porters_usd_cents ?? 0;
+}
+
 /** Apply the budget levers to the breakdown (teahouse tier + porter on/off). */
 export function recompose(
   bd: PriceBreakdown,

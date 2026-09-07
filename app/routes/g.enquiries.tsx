@@ -213,7 +213,13 @@ function EnquiryCard({ enquiry: e, sent }: { enquiry: any; sent: any[] }) {
         <p className="mt-2 text-sm text-ink">
           Wants:{" "}
           {asked
-            .map((id) => options.find((o) => o.id === id)?.label ?? null)
+            .map((id) =>
+              // "no_porter" is not one of the guide's lines — it is the porter
+              // tick box on the trip page, turned off.
+              id === "no_porter"
+                ? "no porter"
+                : (options.find((o) => o.id === id)?.label ?? null),
+            )
             .filter(Boolean)
             .join(", ") || "—"}
         </p>

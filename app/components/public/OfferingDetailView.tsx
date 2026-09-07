@@ -9,9 +9,7 @@ import { ExperienceSplit } from "~/components/Split";
 import {
   computeExperiencePricing,
   recompose,
-  budgetConfigs,
-  pickConfig,
-  TEAHOUSE_LABEL,
+  porterCostOf,
   hasBreakdown,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
@@ -25,18 +23,27 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const showBreakdown = hasBreakdown(breakdown);
   const [party, setParty] = useState(o.min_party || 1);
   const [day, setDay] = useState(availableDays[0] ?? "");
-  const [budgetTarget, setBudgetTarget] = useState<number | null>(null); // null = full package
   const [addons, setAddons] = useState<Set<string>>(new Set());
+  // A porter is the one part of a listed trek people genuinely decide about,
+  // so it is a tick box rather than a position on a slider. On by default:
+  // it is in the price the guide listed.
+  const [porter, setPorter] = useState(true);
 
-  // Budget recomposer (v3 §1c): the slider hits a target by swapping teahouse
-  // tier / porter; the package (and the fee that follows it) recomposes live.
-  const configs = showBreakdown ? budgetConfigs(breakdown!, party) : [];
-  const minP = configs[0]?.perPersonUsdCents ?? 0;
-  const maxP = configs[configs.length - 1]?.perPersonUsdCents ?? 0;
-  const target = budgetTarget == null ? maxP : Math.min(Math.max(budgetTarget, minP), maxP);
-  const selected = showBreakdown ? pickConfig(configs, target) : null;
-  const effBreakdown = selected
-    ? recompose(breakdown!, { tier: selected.tier, porter: selected.porter })
+  /**
+   * The trip as it is currently ticked.
+   *
+   * This replaced a budget slider. The slider moved two hidden levers at once
+   * — teahouse tier and porter — to hit a number, so a reader watched a price
+   * change without being told what they had just given up, and no answer it
+   * produced was written down anywhere: the enquiry sent the listed package
+   * regardless. Tick boxes say what is in the trip, and what is ticked is what
+   * gets sent.
+   */
+  const porterUsdCents = porterCostOf(breakdown);
+  const effBreakdown = showBreakdown
+    ? porter
+      ? breakdown!
+      : recompose(breakdown!, { tier: "comfort", porter: false })
     : null;
   // Priced on the date the widget will actually book, so the itemised list a
   // reader is looking at is the one they will be charged — including any
@@ -59,17 +66,6 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
     .filter((a) => addons.has(a.id))
     .reduce((sum, a) => sum + a.perPersonUsdCents, 0);
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
-  // Exact, sequential per-lever deltas vs the full comfort package (they sum).
-  const afterTeahouse =
-    selected && showBreakdown
-      ? computeExperiencePricing(
-          recompose(breakdown!, { tier: selected.tier, porter: true }),
-          party,
-          day || null,
-        ).perPersonUsdCents
-      : 0;
-  const teahouseDelta = afterTeahouse - maxP;
-  const porterDelta = selected ? selected.perPersonUsdCents - afterTeahouse : 0;
   const toggleAddon = (k: string) =>
     setAddons((s) => {
       const n = new Set(s);
@@ -268,48 +264,29 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 </p>
               )}
 
-              {/* Budget recomposer (§1c): drag to a budget; the package
-                  recomposes to hit it, showing exactly what changed. */}
-              {selected && maxP > minP && (
+              {/* What is optional, as boxes. Everything ticked here is in the
+                  price above and travels with the request. */}
+              {porterUsdCents > 0 && (
                 <div className="mt-5 border-t border-line pt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-ink">Set your budget</span>
-                    <span className="font-mono text-sm text-ink">
-                      {m(selected.perPersonUsdCents)}/person
+                  <p className="mb-2 text-sm font-medium text-ink">What is included</p>
+                  <label className="flex cursor-pointer items-start justify-between gap-3">
+                    <span>
+                      <span className="text-sm text-ink">Porter</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Carries your bag between teahouses. Without one you walk
+                        with everything you brought.
+                      </span>
                     </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={minP}
-                    max={maxP}
-                    step={100}
-                    value={target}
-                    onChange={(e) => setBudgetTarget(Number(e.target.value))}
-                    className="mt-2 w-full accent-moss"
-                    aria-label="Budget per person"
-                  />
-                  <div className="mt-1 flex justify-between text-xs text-muted">
-                    <span className="font-mono">{m(minP)}</span>
-                    <span className="font-mono">{m(maxP)}</span>
-                  </div>
-                  <p className="mt-2 text-sm text-ink">
-                    {TEAHOUSE_LABEL[selected.tier]} · {selected.porter ? "with porter" : "no porter"}
-                  </p>
-                  {(teahouseDelta < 0 || porterDelta < 0) && (
-                    <ul className="mt-1 space-y-0.5 text-xs text-muted">
-                      {teahouseDelta < 0 && (
-                        <li>
-                          {TEAHOUSE_LABEL[selected.tier].toLowerCase()}{" "}
-                          <span className="font-mono text-pine">−{m(-teahouseDelta)}</span>
-                        </li>
-                      )}
-                      {porterDelta < 0 && (
-                        <li>
-                          no porter <span className="font-mono text-pine">−{m(-porterDelta)}</span>
-                        </li>
-                      )}
-                    </ul>
-                  )}
+                    <span className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="font-mono text-sm text-ink">{m(porterUsdCents)}</span>
+                      <input
+                        type="checkbox"
+                        checked={porter}
+                        onChange={() => setPorter((v) => !v)}
+                        aria-label="Include a porter"
+                      />
+                    </span>
+                  </label>
                 </div>
               )}
 
@@ -462,7 +439,12 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           }}
           priceBreakdown={effBreakdown ?? breakdown}
           addonsPerPerson={addonsPP}
-          selectedOptions={options.filter((a) => addons.has(a.id)).map((a) => a.id)}
+          selectedOptions={[
+            ...options.filter((a) => addons.has(a.id)).map((a) => a.id),
+            // Dropping the porter is a decision about the trip, so it goes
+            // with the request rather than only changing a number on screen.
+            ...(porterUsdCents > 0 && !porter ? ["no_porter"] : []),
+          ]}
           party={party}
           setParty={setParty}
           day={day}

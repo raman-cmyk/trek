@@ -99,7 +99,12 @@ export function ExperienceSplit({
 
       {showAmounts && (
         <dl className="mt-4 space-y-2 text-sm">
-          {order.map((k) => (
+          {/* A line worth nothing is not a line. Unticking the porter used to
+              leave "Porters $0.00" sitting in the list as if it were still
+              part of the trip. */}
+          {order
+            .filter((k) => (amounts[k] || 0) > 0)
+            .map((k) => (
             <div key={k} className="flex items-center justify-between gap-3">
               <dt className="flex items-center gap-2 text-ink">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: SLICE[k].color }} />
@@ -110,7 +115,7 @@ export function ExperienceSplit({
               </dt>
               <dd className="font-mono text-ink">{fmtMinor(toMinor(amounts[k] || 0))}</dd>
             </div>
-          ))}
+            ))}
           <div className="mt-1 flex items-center justify-between border-t border-line pt-2 font-medium">
             <dt>Total</dt>
             <dd className={cn("font-mono", mismatch ? "text-ember" : "text-ink")}>
