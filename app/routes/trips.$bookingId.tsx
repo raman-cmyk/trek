@@ -20,6 +20,8 @@ import { TripPipeline } from "~/components/TripPipeline";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
+import { EmergencyFields } from "~/components/EmergencyFields";
+import { emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
 
 export function meta() {
   return [{ title: "Your trip" }, { name: "robots", content: "noindex" }];
@@ -39,6 +41,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!b) throw new Response("Not found", { status: 404 });
 
   const today = new Date().toISOString().slice(0, 10);
+  // Their own next of kin, asked for alongside the documents (0063).
+  const { data: me } = await admin
+    .from("users")
+    .select(
+      "emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email",
+    )
+    .eq("id", user.id)
+    .maybeSingle();
   const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }, { data: instalments }] =
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
@@ -86,6 +96,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return data(
     {
       booking: b,
+      me: me ?? {},
       group: group ?? null,
       payments: payments ?? [],
       documents: docs ?? [],
@@ -125,6 +136,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const form = await request.formData();
   const intent = String(form.get("intent"));
+
+  // Who to ring when it goes wrong. On the trekker's own row, not the
+  // booking's: a next of kin is a fact about a person, and somebody booking
+  // their second trek should not have to type it again.
+  if (intent === "emergency") {
+    const parsed = parseEmergency(form);
+    if (!parsed.ok) return data({ error: parsed.error }, { status: 400 });
+    await admin.from("users").update(emergencyPatch(parsed.value)).eq("id", user.id);
+    return data({ ok: "Saved — your guide and our office can see this." }, { headers });
+  }
 
   if (intent === "upload") {
     const file = form.get("file");
@@ -270,13 +291,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
+  const { booking: b, me, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
   const cancelled = b.status.startsWith("cancelled");
   const docError = actionData && "error" in actionData ? (actionData as any).error : null;
   const isTrek = b.offering?.kind === "trek";
+  const emergencyOnFile = hasEmergency(me);
   const canComplete =
     b.status === "active" ||
     (["confirmed", "active"].includes(b.status) && daysUntil < 0);
@@ -358,6 +380,51 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">
           This booking was cancelled.
         </p>
+      )}
+
+      {/* Emergency contact — asked for alongside the documents, because this
+          is the same errand: the things we need before you walk. It is not
+          gated on the trip being a multi-day trek. People turn an ankle on a
+          day hike too, and the guide standing over them has the same
+          question. */}
+      {!cancelled && b.status !== "pending_deposit" && (
+        <section className="mt-6 space-y-3">
+          <h2 className="font-display text-xl">Emergency contact</h2>
+          <p className="text-sm text-ink-soft">
+            One person at home we can call if something happens to you on the
+            trail. Your guide carries this number and so does our office in
+            Kathmandu. Nobody else sees it.
+          </p>
+
+          <Form method="post" className="rounded-card border border-border bg-card p-4">
+            <input type="hidden" name="intent" value="emergency" />
+            {emergencyOnFile ? (
+              <p className="mb-3 text-sm text-accent">
+                On file — {me.emergency_contact_name}
+                {me.emergency_contact_relationship
+                  ? ` (${me.emergency_contact_relationship.toLowerCase()})`
+                  : ""}.
+                Change it below if you need to.
+              </p>
+            ) : (
+              <p className="mb-3 text-sm text-ink-soft">
+                We need this before you set off.
+              </p>
+            )}
+            <EmergencyFields
+              defaults={me}
+              phoneHint="With the country code — the phone has to work from Nepal."
+            />
+            {docError && (
+              <p role="alert" className="mt-2 text-sm text-danger">
+                {docError}
+              </p>
+            )}
+            <Button type="submit" size="sm" className="mt-3" loading={nav.state !== "idle"}>
+              {emergencyOnFile ? "Update" : "Save"}
+            </Button>
+          </Form>
+        </section>
       )}
 
       {/* Documents — two things, asked for one at a time. The old form was a

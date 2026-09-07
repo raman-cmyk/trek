@@ -4,6 +4,7 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
+import { dialable } from "~/lib/emergency";
 import { cn } from "~/lib/cn";
 
 /**
@@ -22,7 +23,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, trekker:users(full_name, phone), offering:offerings(title, itinerary, route:routes(day_stops))",
+      "id, start_date, end_date, party_size, trekker:users(full_name, phone, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone), offering:offerings(title, itinerary, route:routes(day_stops))",
     )
     .eq("guide_id", user.id)
     .eq("status", "active")
@@ -153,6 +154,36 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
         <Link to="/g/messages" className="mt-2 inline-block text-primary hover:underline">
           Message the office →
         </Link>
+
+        {/* The number the guide would otherwise be looking for at the worst
+            possible moment. A tel: link, so it is one tap and not a number to
+            copy off a screen with cold hands. */}
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="font-medium text-ink">Their emergency contact</p>
+          {b.trekker?.emergency_contact_phone ? (
+            <>
+              <p className="mt-0.5 text-ink-soft">
+                {b.trekker.emergency_contact_name}
+                {b.trekker.emergency_contact_relationship
+                  ? ` · ${b.trekker.emergency_contact_relationship.toLowerCase()}`
+                  : ""}
+              </p>
+              <a
+                href={`tel:${dialable(b.trekker.emergency_contact_phone)}`}
+                className="mt-1 inline-block font-mono text-base text-primary hover:underline"
+              >
+                {b.trekker.emergency_contact_phone}
+              </a>
+              <p className="mt-1 text-xs text-ink-soft">
+                Call the office first if you can. This is for when you cannot.
+              </p>
+            </>
+          ) : (
+            <p className="mt-0.5 text-ink-soft">
+              Not given yet — tell the office, they will ask for it.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* The one button, at the bottom, where the thumb is. */}

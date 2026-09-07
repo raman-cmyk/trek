@@ -15,14 +15,17 @@ import {
   type Proficiency,
 } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
-import { MAX_SKILLS, SKILL_GROUPS, parseSkills } from "~/lib/guide-skills";
+import { MAX_SKILLS, parseSkills } from "~/lib/guide-skills";
 import { parseRegions } from "~/lib/guide-regions";
+import { GuideSkills } from "~/components/GuideSkills";
+import { EmergencyFields } from "~/components/EmergencyFields";
+import { emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
 import { GuideRegions } from "~/components/GuideRegions";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
-  const [{ data: guide }, { data: langs }, { data: photos }, { data: walked }, { data: routes }, { data: skills }] =
+  const [{ data: guide }, { data: langs }, { data: photos }, { data: walked }, { data: routes }, { data: skills }, { data: me }] =
     await Promise.all([
     admin
       .from("guides")
@@ -57,6 +60,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .order("name"),
     // What they are interesting for (0062).
     admin.from("guide_skills").select("skill").eq("guide_id", user.id),
+    // Their own next of kin (0063) — on the user row, same columns a trekker
+    // fills in, so the office has one place to look.
+    admin
+      .from("users")
+      .select(
+        "emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email",
+      )
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
   const { data: canned } = await admin
     .from("canned_replies")
@@ -71,6 +83,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       canned: canned ?? [],
       walked: walked ?? [],
       skills: (skills ?? []).map((r: any) => r.skill),
+      me: me ?? {},
       routes: routes ?? [],
     },
     { headers },
@@ -110,6 +123,15 @@ export async function action({ request, context }: Route.ActionArgs) {
         .from("guide_skills")
         .insert(chosen.map((skill) => ({ guide_id: user.id, skill })));
     }
+    return data({ ok: true }, { headers });
+  }
+
+  // The guide's own next of kin. Every guide who applied before this existed
+  // has an empty one, which is why it is editable here and not only at apply.
+  if (intent === "emergency") {
+    const parsed = parseEmergency(form);
+    if (!parsed.ok) return data({ error: parsed.error }, { status: 400, headers });
+    await admin.from("users").update(emergencyPatch(parsed.value)).eq("id", user.id);
     return data({ ok: true }, { headers });
   }
 
@@ -423,7 +445,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideProfile({ loaderData, actionData }: Route.ComponentProps) {
-  const { guide, languages, photos, canned, walked, routes, skills } = loaderData as any;
+  const { guide, languages, photos, canned, walked, routes, skills, me } = loaderData as any;
   const spoken = new Set<string>(languages.map((l: any) => l.language));
   const claimed = new Set<string>(walked.map((w: any) => w.route_id));
   const spareRoutes = routes.filter((r: any) => !claimed.has(r.id));
@@ -623,6 +645,30 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         </Button>
       </Form>
 
+      {/* ── Someone we can call. Not a profile field — nobody but the office
+         sees it — but this is the only page a guide ever opens, so it lives
+         here rather than in a settings screen nobody would find. */}
+      <Form method="post" className="space-y-3 rounded-card border border-border bg-card p-4">
+        <input type="hidden" name="intent" value="emergency" />
+        <div>
+          <p className="text-sm font-medium text-ink">Someone we can call</p>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            If anything happens to you on a trek, this is who we ring. Only our
+            office sees it — never trekkers, never your profile.
+          </p>
+        </div>
+        {!hasEmergency(me) && (
+          <p className="text-sm text-danger">Not filled in yet. Please add it.</p>
+        )}
+        <EmergencyFields
+          defaults={me}
+          phoneHint="A Nepal number is fine — 98… — or with the country code."
+        />
+        <Button type="submit" size="sm">
+          Save
+        </Button>
+      </Form>
+
       {/* ── What you are interesting for. A licence says somebody may lead a
          trek; it says nothing about whether they know the birds or are the
          person you want when a fourteen-year-old is struggling on day four —
@@ -638,27 +684,7 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
           </p>
         </div>
 
-        {SKILL_GROUPS.map((group) => (
-          <fieldset key={group.key}>
-            <legend className="text-xs font-medium uppercase tracking-wide text-ink-soft">
-              {group.label}
-            </legend>
-            <div className="mt-1.5 space-y-1">
-              {group.skills.map((sk) => (
-                <label key={sk.key} className="flex items-start gap-2.5 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    name="skill"
-                    value={sk.key}
-                    defaultChecked={skills.includes(sk.key)}
-                    className="mt-0.5"
-                  />
-                  {sk.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ))}
+        <GuideSkills selected={skills} />
 
         <Button type="submit" size="sm">
           Save

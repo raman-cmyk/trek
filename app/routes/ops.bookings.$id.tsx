@@ -1,6 +1,7 @@
 import { Form, Link, data } from "react-router";
 import type { Route } from "./+types/ops.bookings.$id";
 import { getEnv } from "~/lib/supabase.server";
+import { emergencyLine } from "~/lib/emergency";
 import { requireOps } from "~/lib/supabase.server";
 import { verifyDocument, signedDocumentUrl } from "~/lib/documents.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
@@ -15,7 +16,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users(full_name, email), guide:guides(users(full_name))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -127,6 +128,12 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             <Row label="Dates" value={`${b.start_date} → ${b.end_date}`} />
             <Row label="Party" value={`${b.party_size}`} />
             <Row label="Total" value={formatUsd(b.total_usd_cents)} />
+            {/* The number an incident call needs, on the page an incident
+                call is already open. */}
+            <Row
+              label="In an emergency"
+              value={emergencyLine(b.trekker ?? {}) ?? "nothing on file"}
+            />
           </dl>
         </Panel>
 

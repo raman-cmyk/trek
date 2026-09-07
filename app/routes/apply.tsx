@@ -9,6 +9,8 @@ import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
 import { parseRegions } from "~/lib/guide-regions";
 import { parseRoutesWalked } from "~/lib/guide-routes";
 import { RoutesWalked } from "~/components/RoutesWalked";
+import { EmergencyFields } from "~/components/EmergencyFields";
+import { emergencyPatch, parseEmergency } from "~/lib/emergency";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 
@@ -81,6 +83,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const years = Number(form.get("years_experience") ?? 0) || null;
   const dayRateUsd = Number(form.get("day_rate_usd") ?? 0);
   const hook = str("hook_line") || null;
+  // Our own guide's next of kin. Asked at application because the day we need
+  // it is never a day anybody is filling in forms.
+  const emergency = parseEmergency(form);
 
   // ---- everything is checked before anything is created -------------------
   // A rejected application must not leave an auth user behind, and a guide who
@@ -102,6 +107,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
   if (!district) {
     return data({ error: "Tell us the district you are from." }, { status: 400 });
+  }
+  if (!emergency.ok) {
+    return data({ error: emergency.error }, { status: 400 });
   }
 
   const licenceShot = checkFile(form.get("licence_photo"), "licence");
@@ -167,6 +175,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     full_name: fullName,
     email,
     phone,
+    ...emergencyPatch(emergency.value),
   });
 
   const slug = `${slugify(fullName)}-${Math.floor(Math.random() * 9000 + 1000)}`;
@@ -415,7 +424,22 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
           </p>
         </Group>
 
-        <Group n={3} title="Your work" note="You can change all of this later.">
+        {/* His own next of kin. The office has had to find a guide's brother
+            through three phone calls and a teahouse before; asking here costs
+            a guide thirty seconds and costs us nothing. */}
+        <Group
+          n={3}
+          title="Someone we can call"
+          note="If anything happens to you on a trek, this is who we ring."
+        >
+          <EmergencyFields phoneHint="A Nepal number is fine — 98… — or with the country code." />
+          <p className="text-xs text-ink-soft">
+            Office only. It is never shown on your profile and never given to
+            trekkers.
+          </p>
+        </Group>
+
+        <Group n={4} title="Your work" note="You can change all of this later.">
           <div className="grid grid-cols-2 gap-4">
             <Field name="years_experience" label="Years guiding" type="number" />
             <Field

@@ -51,7 +51,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: person } = await admin
     .from("users")
     .select(
-      "id, role, full_name, email, phone, country_code, avatar_url, emergency_contact_name, emergency_contact_phone, created_at",
+      "id, role, full_name, email, phone, country_code, avatar_url, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -281,7 +281,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         country_code: nul("country_code"),
         avatar_url: nul("avatar_url"),
         emergency_contact_name: nul("emergency_contact_name"),
+        emergency_contact_relationship: nul("emergency_contact_relationship"),
         emergency_contact_phone: nul("emergency_contact_phone"),
+        emergency_contact_email: nul("emergency_contact_email"),
       })
       .eq("id", id);
     // Keep the sign-in credential in step with the profile, or a corrected
@@ -792,19 +794,23 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
               </Panel>
             )}
 
-            {!d.isGuide && (
-              <Panel title="In an emergency">
-                <dl className="space-y-1 text-sm">
-                  <Row label="Contact" value={p.emergency_contact_name} />
-                  <Row label="Phone" value={p.emergency_contact_phone} />
-                </dl>
-                {!p.emergency_contact_name && (
-                  <p className="mt-2 text-xs text-ink-soft">
-                    Nothing on file. Ask for it before their first trek starts.
-                  </p>
-                )}
-              </Panel>
-            )}
+            {/* Guides have one of these now too (0063) — the office had no way
+                to reach a guide's family when the guide was the casualty. */}
+            <Panel title="In an emergency">
+              <dl className="space-y-1 text-sm">
+                <Row label="Contact" value={p.emergency_contact_name} />
+                <Row label="Relationship" value={p.emergency_contact_relationship} />
+                <Row label="Phone" value={p.emergency_contact_phone} />
+                <Row label="Email" value={p.emergency_contact_email} />
+              </dl>
+              {!p.emergency_contact_name && (
+                <p className="mt-2 text-xs text-ink-soft">
+                  {d.isGuide
+                    ? "Nothing on file. Ask for it before you verify them."
+                    : "Nothing on file. Ask for it before their first trek starts."}
+                </p>
+              )}
+            </Panel>
 
             {openIncidents.length > 0 && (
               <Panel title="Open incidents">
@@ -1354,9 +1360,19 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                 defaultValue={p.emergency_contact_name}
               />
               <TextField
+                label="Who they are"
+                name="emergency_contact_relationship"
+                defaultValue={p.emergency_contact_relationship}
+              />
+              <TextField
                 label="Emergency phone"
                 name="emergency_contact_phone"
                 defaultValue={p.emergency_contact_phone}
+              />
+              <TextField
+                label="Emergency email"
+                name="emergency_contact_email"
+                defaultValue={p.emergency_contact_email}
               />
               <div className="sm:col-span-2">
                 <Button size="sm" type="submit" loading={busy}>

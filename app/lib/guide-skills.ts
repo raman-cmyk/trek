@@ -33,6 +33,8 @@ export const SKILL_GROUPS: SkillGroup[] = [
       { key: "monasteries", label: "Monasteries, festivals and what they mean" },
       { key: "history", label: "The history of the villages you pass" },
       { key: "night_sky", label: "The night sky" },
+      { key: "weather", label: "Reading the weather off the ridge" },
+      { key: "tracks", label: "Animal tracks and where to look" },
     ],
   },
   {
@@ -40,11 +42,13 @@ export const SKILL_GROUPS: SkillGroup[] = [
     label: "What you do on the trail",
     skills: [
       { key: "photography", label: "Photography — you carry a real camera" },
+      { key: "video", label: "Filming — people go home with a film" },
       { key: "cooking", label: "Cooking, and where to eat well" },
       { key: "music", label: "Songs and stories in the evening" },
       { key: "climbing", label: "Technical climbing and peaks" },
       { key: "rivers", label: "Rivers and rafting" },
       { key: "yoga", label: "Yoga and meditation" },
+      { key: "foraging", label: "Wild food — what you can pick and eat" },
     ],
   },
   {
@@ -57,6 +61,21 @@ export const SKILL_GROUPS: SkillGroup[] = [
       { key: "older", label: "Trekkers over sixty" },
       { key: "nervous", label: "People frightened of the altitude" },
       { key: "fast", label: "Fit trekkers who want a hard itinerary" },
+      { key: "vegetarian", label: "Vegetarians and vegans" },
+      { key: "big_groups", label: "Big groups — eight and up" },
+      { key: "students", label: "Students and small budgets" },
+    ],
+  },
+  {
+    key: "how",
+    label: "How you work",
+    skills: [
+      { key: "plain_english", label: "Plain, slow English — nobody left guessing" },
+      { key: "family_updates", label: "A message home to their family each night" },
+      { key: "quiet", label: "Quiet walking — you know when not to talk" },
+      { key: "winter", label: "Winter and the shoulder seasons" },
+      { key: "monsoon", label: "Monsoon trekking — you know where it still works" },
+      { key: "long_days", label: "Long days, early starts" },
     ],
   },
   {
@@ -68,6 +87,9 @@ export const SKILL_GROUPS: SkillGroup[] = [
       { key: "altitude_medicine", label: "High-altitude medicine" },
       { key: "porters", label: "Porters you have worked with for years" },
       { key: "off_route", label: "Trails that are not on the map" },
+      { key: "gear_lending", label: "Gear to lend — jackets, bags, poles" },
+      { key: "own_transport", label: "Your own jeep or driver" },
+      { key: "teahouse_ties", label: "Teahouses that keep a room for you" },
     ],
   },
 ];
