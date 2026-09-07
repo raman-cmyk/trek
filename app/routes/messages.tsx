@@ -131,7 +131,16 @@ function ThreadRail({ threads }: { threads: ThreadSummary[] }) {
                   />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2">
-                      <span className="truncate font-medium text-ink">{t.withName}</span>
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate font-medium text-ink">{t.withName}</span>
+                        {/* A group thread opens the group page, not a chat
+                            pane — say so before the tap, not after it. */}
+                        {t.kind === "group" && (
+                          <span className="shrink-0 rounded-full bg-mist px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-moss">
+                            Group
+                          </span>
+                        )}
+                      </span>
                       <span className="shrink-0 font-mono text-[10px] text-muted">
                         {timeAgo(t.at)}
                       </span>

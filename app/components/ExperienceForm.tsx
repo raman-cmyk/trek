@@ -30,6 +30,24 @@ export interface ExperienceValues {
   status: string;
 }
 
+/**
+ * What a trip of each kind usually is, so the form starts where the guide
+ * already lives rather than at "12 days" — which is what a day hike inherited
+ * from the trek the form was written for.
+ */
+export const KIND_DEFAULT_DAYS: Record<string, number> = {
+  trek: 12,
+  day_hike: 1,
+  food_culture: 1,
+  city: 1,
+  adventure: 1,
+};
+
+/** Only a multi-day trek runs a named route with permits and day stops. */
+export function needsRoute(kind: string): boolean {
+  return kind === "trek";
+}
+
 export const KINDS = [
   ["trek", "Multi-day trek"],
   ["day_hike", "Day hike"],
@@ -46,6 +64,7 @@ export function ExperienceForm({
   values,
   routes,
   guideId,
+  guides,
   submitLabel,
   busy,
 }: {
@@ -60,14 +79,24 @@ export function ExperienceForm({
     permits?: Array<{ name: string; cost_usd_cents: number }>;
   }>;
   guideId: string;
+  /**
+   * Whose trip it is, when the person filling this in is not the guide.
+   * The office lists trips for guides who phoned them — the concierge half
+   * of the model — and until this existed the only way an experience could
+   * be created at all was a guide typing it himself.
+   */
+  guides?: Array<{ user_id: string; full_name: string; status?: string }>;
   submitLabel: string;
   busy?: boolean;
 }) {
   const [kind, setKind] = useState(values?.kind ?? "trek");
+  // Photos upload into the guide's own folder, so the picker has to be
+  // answered before the gallery knows where to put them.
+  const [owner, setOwner] = useState(guideId);
   // Days is mirrored in state because per-day price lines multiply by it — a
   // guide changing 10 days to 14 must see the price move.
   const [days, setDays] = useState<number>(
-    values?.days ?? ((values?.kind ?? "trek") === "trek" ? 12 : 1),
+    values?.days ?? KIND_DEFAULT_DAYS[values?.kind ?? "trek"] ?? 1,
   );
   const [draft] = useState(() => toDraft(values?.price_breakdown ?? null));
   const [seasonDraft] = useState(() => toSeasonDraft(values?.price_breakdown ?? null));
@@ -123,7 +152,14 @@ export function ExperienceForm({
     }
   };
 
-  const STEPS = ["What it is", "Route", "Details", "Photos", "Check"];
+  // A day hike has no route, so it has no route step. Showing one — headed
+  // "The route", containing nothing — was the clearest signal that this form
+  // was written for treks and everything else was squeezed in after.
+  const STEPS = needsRoute(kind)
+    ? ["What it is", "Route", "Details", "Photos", "Check"]
+    : ["What it is", "Details", "Photos", "Check"];
+  const stepNo = (name: string) => STEPS.indexOf(name) + 1;
+  const lastStep = STEPS.length;
   /** Reveal whichever step holds the first field the browser is unhappy with,
       or the form would refuse to submit for a reason nobody can see. */
   const revealInvalid = () => {
@@ -167,10 +203,47 @@ export function ExperienceForm({
       </ol>
       {values?.id && <input type="hidden" name="experience_id" value={values.id} />}
 
-      <Step n={1} at={step} title="What it is">
+      <Step n={stepNo("What it is")} at={step} title="What it is">
+      {guides && (
+        <label className={label}>
+          Whose trip is it?
+          <select
+            name="guide_id"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            className={field}
+            required
+          >
+            <option value="" disabled>
+              — pick the guide —
+            </option>
+            {guides.map((g) => (
+              <option key={g.user_id} value={g.user_id}>
+                {g.full_name}
+                {g.status && g.status !== "verified" ? ` — ${g.status.replace("_", " ")}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <label className={label}>
         What kind of trip is it?
-        <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className={field}>
+        <select
+          name="kind"
+          value={kind}
+          onChange={(e) => {
+            const next = e.target.value;
+            setKind(next);
+            // A day hike is one day. Leaving 12 there — inherited from the
+            // trek this form was written for — is how a guide ends up
+            // listing a "12 day" walk to a waterfall.
+            setDays(KIND_DEFAULT_DAYS[next] ?? 1);
+            // Losing the route step must not strand them past the end.
+            setStep((n) => Math.min(n, needsRoute(next) ? 5 : 4));
+          }}
+          className={field}
+        >
           {KINDS.map(([v, l]) => (
             <option key={v} value={v}>
               {l}
@@ -205,8 +278,8 @@ export function ExperienceForm({
 
       </Step>
 
-      <Step n={2} at={step} title="The route">
-      {kind === "trek" && (
+      {needsRoute(kind) && (
+      <Step n={stepNo("Route")} at={step} title="The route">
         <div>
           <label className={label}>
             Which route
@@ -289,11 +362,10 @@ export function ExperienceForm({
             </div>
           )}
         </div>
+      </Step>
       )}
 
-      </Step>
-
-      <Step n={3} at={step} title="How long, how many, how much">
+      <Step n={stepNo("Details")} at={step} title="How long, how many, how much">
       <div className="grid grid-cols-3 gap-3">
         <label className={label}>
           Days
@@ -314,16 +386,23 @@ export function ExperienceForm({
 
       </Step>
 
-      <Step n={4} at={step} title="Photographs">
+      <Step n={stepNo("Photos")} at={step} title="Photographs">
         {/* The cover is simply the first of them. */}
-        <PhotoGallery
-          initial={values?.photos ?? []}
-          guideId={guideId}
-          onCount={setPhotoCount}
-        />
+        {guides && !owner ? (
+          <p className="rounded bg-mist px-3 py-2 text-sm text-ink-soft">
+            Pick whose trip it is first — photographs are filed under the
+            guide they belong to.
+          </p>
+        ) : (
+          <PhotoGallery
+            initial={values?.photos ?? []}
+            guideId={owner}
+            onCount={setPhotoCount}
+          />
+        )}
       </Step>
 
-      <Step n={5} at={step} title="Check it over">
+      <Step n={stepNo("Check")} at={step} title="Check it over">
         <Review values={values} kind={kind} days={days} draft={draft} photosLen={photoCount} routeName={chosen?.name} />
       </Step>
 
@@ -337,7 +416,7 @@ export function ExperienceForm({
             Back
           </button>
         )}
-        {step < 5 ? (
+        {step < lastStep ? (
           <button
             type="button"
             onClick={() => revealInvalid() && setStep((n) => n + 1)}
@@ -446,7 +525,7 @@ function Review({
       <dl className="rounded-md border border-line bg-card p-4 text-sm">
         <Row k="Kind" v={kindLabel} />
         {routeName && <Row k="Route" v={routeName} />}
-        <Row k="Length" v={kind === "trek" ? `${days} days` : "One day"} />
+        <Row k="Length" v={days === 1 ? "One day" : `${days} days`} />
         <Row k="Photographs" v={`${photosLen}`} />
         <Row k="Price lines" v={`${draft.filter((l) => !l.optional).length}`} />
         {draft.some((l) => l.optional) && (

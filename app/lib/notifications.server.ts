@@ -330,3 +330,108 @@ export async function notifyGuideWelcome(
     `Trek: your account is open. Sign in at ${site}/g/login and add your photo and story — that is what gets you booked. We are checking your licence now.`,
   );
 }
+
+/**
+ * The guide has proposed a different package.
+ *
+ * The email is the whole navigation: a trekker who is not sitting on the site
+ * gets the change, the price and one button. Everything else about this flow
+ * can be found from there.
+ */
+export async function notifyPackageProposed(
+  env: Env,
+  admin: SupabaseClient,
+  args: { enquiryId: string },
+) {
+  const { data: p } = await admin
+    .from("package_proposals")
+    .select(
+      "id, days, party_size, start_date, total_usd_cents, deposit_usd_cents, note, trekker_id, guide_id",
+    )
+    .eq("enquiry_id", args.enquiryId)
+    .eq("status", "proposed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!p) return;
+
+  const [{ data: trekker }, { data: guide }, { data: enq }] = await Promise.all([
+    admin.from("users").select("email, full_name").eq("id", p.trekker_id).maybeSingle(),
+    admin.from("users").select("full_name").eq("id", p.guide_id).maybeSingle(),
+    admin
+      .from("enquiries")
+      .select("offering:offerings(title)")
+      .eq("id", args.enquiryId)
+      .maybeSingle(),
+  ]);
+  const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
+  const guideName = firstNameOf(guide?.full_name) || "Your guide";
+  const title = (enq as any)?.offering?.title ?? "your trip";
+
+  const { sendRichEmail } = await import("~/lib/notify.server");
+  await sendRichEmail(env, admin, {
+    kind: "package_proposed",
+    to: trekker?.email,
+    userId: p.trekker_id,
+    subject: `${guideName} has suggested a change to ${title}`,
+    category: "transactional",
+    about: { type: "package_proposal", id: p.id },
+    content: {
+      preheader: `${p.days} days for ${p.party_size} — see what changed and approve it.`,
+      heading: `${guideName} suggests a different trip`,
+      blocks: [
+        ...(p.note ? [{ p: `“${p.note}”` }] : []),
+        {
+          facts: [
+            ["Trip", title],
+            ["Starts", String(p.start_date)],
+            ["Length", `${p.days} ${p.days === 1 ? "day" : "days"}`],
+            ["People", String(p.party_size)],
+            ["Whole trip", `$${(p.total_usd_cents / 100).toFixed(2)}`],
+            ["Deposit to confirm", `$${(p.deposit_usd_cents / 100).toFixed(2)}`],
+          ],
+        },
+        { p: "Nothing is booked and nothing is charged until you approve it." },
+        { button: { label: "See it and decide", url: `${site}/proposals/${p.id}` } },
+      ],
+    },
+  });
+}
+
+/** The trekker approved it — the guide needs to know the trip is on. */
+export async function notifyProposalApproved(
+  env: Env,
+  admin: SupabaseClient,
+  args: { proposalId: string; bookingId: string },
+) {
+  const { data: p } = await admin
+    .from("package_proposals")
+    .select("guide_id, days, party_size, start_date, total_usd_cents")
+    .eq("id", args.proposalId)
+    .maybeSingle();
+  if (!p) return;
+  const { data: g } = await admin
+    .from("users")
+    .select("phone, email, full_name")
+    .eq("id", p.guide_id)
+    .maybeSingle();
+
+  // A guide is reached by SMS — this is the message that says a trip is real.
+  await sendGuideSms(
+    env,
+    g?.phone,
+    `Trek: they approved your ${p.days}-day plan for ${p.party_size} on ${p.start_date}. Deposit next — see your dashboard.`,
+  );
+  await sendEmail(
+    env,
+    g?.email,
+    "They approved your plan",
+    `Your ${p.days}-day plan for ${p.party_size} starting ${p.start_date} was approved. They pay the deposit next.\n${(env.SITE_URL ?? "").replace(/\/$/, "")}/g/bookings`,
+    { kind: "proposal_approved", userId: p.guide_id, about: { type: "booking", id: args.bookingId } },
+  );
+}
+
+/** Local first-name helper — the display rule, without importing the route's. */
+function firstNameOf(full: string | null | undefined): string {
+  return (full ?? "").trim().split(/\s+/)[0] || "";
+}

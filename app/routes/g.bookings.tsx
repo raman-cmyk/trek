@@ -5,6 +5,7 @@ import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { submitReview } from "~/lib/reviews.server";
 import { firstName } from "~/lib/names";
+import { TripPipeline } from "~/components/TripPipeline";
 import { Badge } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
 
@@ -22,7 +23,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, status, trekker_id, offering:offerings(title), trekker:users(full_name, country_code, phone)",
+      "id, start_date, end_date, party_size, status, trekker_id, offering:offerings(title, kind), trekker:users(full_name, country_code, phone)",
     )
     .eq("guide_id", user.id)
     .not("status", "in", "(cancelled_trekker,cancelled_guide,cancelled_force_majeure)")
@@ -95,6 +96,14 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   {firstName(b.trekker?.full_name)}{b.trekker?.country_code ? ` · ${b.trekker.country_code}` : ""} · {b.party_size}p
                 </p>
                 <p className="text-sm text-ink-soft">{fmtDateRange(b.start_date, b.end_date)}</p>
+                {/* The status badge says "docs pending"; this says what that
+                    means and what is next, in the steps this kind of trip has. */}
+                <TripPipeline
+                  compact
+                  className="mt-1.5"
+                  kind={b.offering?.kind}
+                  bookingStatus={b.status}
+                />
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {b.trekker?.phone && b.status !== "deposit_paid" && (
                     <a href={`tel:${b.trekker.phone}`} className="text-sm font-medium text-primary">

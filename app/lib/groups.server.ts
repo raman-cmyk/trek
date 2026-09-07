@@ -323,3 +323,117 @@ export async function groupForBooking(
   }
   return null;
 }
+
+/**
+ * Who is allowed in a group, and what they may do.
+ *
+ * Three roles, not two. The organiser owns the trip; members are on the
+ * roster; and the guide the group is planning with can now read the room and
+ * answer in it (migration 0056) — but changes nothing about the trip, because
+ * the roster, the money and the dates are the organiser's to move.
+ */
+export interface GroupAccess {
+  isMember: boolean;
+  isOrganiser: boolean;
+  isGuide: boolean;
+  canRead: boolean;
+  canPost: boolean;
+}
+
+export function groupAccess(
+  group: { organiser_id: string; guide_id: string | null },
+  members: { user_id: string | null; status: string }[],
+  userId: string,
+): GroupAccess {
+  const mine = members.find((m) => m.user_id === userId);
+  const isMember = !!mine && (mine.status === "joined" || mine.status === "invited");
+  const isOrganiser = group.organiser_id === userId;
+  const isGuide = !!group.guide_id && group.guide_id === userId;
+  return {
+    isMember,
+    isOrganiser,
+    isGuide,
+    canRead: isMember || isOrganiser || isGuide,
+    canPost: isMember || isOrganiser || isGuide,
+  };
+}
+
+/**
+ * A group chat, loaded for the messages pane: the room, who is in it, and
+ * what has been said. Returns null when the person has no business here —
+ * the caller turns that into a 404 rather than leaking that the group exists.
+ */
+export async function loadGroupThread(
+  admin: SupabaseClient,
+  groupId: string,
+  userId: string,
+) {
+  const { data: group } = await admin
+    .from("trip_groups")
+    .select("id, slug, name, organiser_id, guide_id, offering_id, start_date, party_target, status, booking_id")
+    .eq("id", groupId)
+    .maybeSingle();
+  if (!group) return null;
+
+  const { data: memberRows } = await admin
+    .from("trip_group_members")
+    .select("id, user_id, display_name, role, status")
+    .eq("group_id", group.id)
+    .order("created_at");
+  const members = memberRows ?? [];
+
+  const access = groupAccess(group as any, members as any, userId);
+  if (!access.canRead) return null;
+
+  const [{ data: messages }, { data: people }, { data: offering }, { data: booking }, { data: guide }] =
+    await Promise.all([
+      admin
+        .from("trip_group_messages")
+        .select("id, author_id, body, kind, created_at")
+        .eq("group_id", group.id)
+        .order("created_at")
+        .limit(300),
+      admin
+        .from("users")
+        .select("id, full_name, avatar_url")
+        .in(
+          "id",
+          [
+            ...members.map((m) => m.user_id).filter(Boolean),
+            group.guide_id,
+          ].filter(Boolean) as string[],
+        ),
+      group.offering_id
+        ? admin
+            .from("public_offerings")
+            .select("id, slug, kind, title, cover_photo_url")
+            .eq("id", group.offering_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      group.booking_id
+        ? admin
+            .from("bookings")
+            .select("id, status")
+            .eq("id", group.booking_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      group.guide_id
+        ? admin
+            .from("public_guides")
+            .select("user_id, slug, full_name, avatar_url")
+            .eq("user_id", group.guide_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+  return {
+    group,
+    members,
+    messages: messages ?? [],
+    people: people ?? [],
+    offering: offering ?? null,
+    booking: booking ?? null,
+    guide: guide ?? null,
+    access,
+  };
+}

@@ -45,6 +45,15 @@ export async function action({ request, context }: Route.ActionArgs) {
 /**
  * Five tabs is the 360px ceiling — Earnings lives as a quick link on Home.
  *
+ * The bar used to appear only once a guide was verified, which meant a guide
+ * who had just applied had no navigation at all: the one screen they could
+ * reach told them to list their trips, and there was no way to get to the
+ * page that lists them. Waiting on us is not the same as having nothing to
+ * do — an unverified guide can build everything, and publishing is gated by
+ * ops anyway, so the bar is now always there. Requests and Calendar are
+ * simply empty until the first booking, which reads as "nothing yet" rather
+ * than as a locked door.
+ *
  * Each carries an icon as well as a word. A row of five words in the same
  * weight and size is not a tab bar; it is a sentence you have to read every
  * time, and at a glance nothing tells you where you are. The icon is what
@@ -60,8 +69,7 @@ const TABS = [
 ];
 
 export default function GuideLayout({ loaderData }: Route.ComponentProps) {
-  const { status, enquiryCount, unreadTotal } = loaderData;
-  const verified = status === "verified";
+  const { enquiryCount, unreadTotal } = loaderData;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -72,64 +80,62 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
         </Form>
       </header>
 
-      <div className={cn("flex-1 p-4", verified && "pb-24")}>
+      <div className="flex-1 p-4 pb-24">
         <Outlet />
       </div>
 
-      {verified && (
-        <nav
-          className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-line bg-paper/95 backdrop-blur-md"
-          // The home-indicator strip on an iPhone sits over the bottom of the
-          // screen; without this the last row of a tab bar is under it.
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-        >
-          {TABS.map((t) => {
-            const badge =
-              t.badge === "enquiryCount"
-                ? enquiryCount
-                : t.badge === "unreadTotal"
-                  ? unreadTotal
-                  : 0;
-            const Icon = t.icon;
-            return (
-              <NavLink
-                key={t.to}
-                to={t.to}
-                end={t.end}
-                prefetch="intent"
-                className={({ isActive }) =>
-                  cn(
-                    "group relative flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] transition-colors",
-                    isActive ? "text-moss" : "text-muted hover:text-ink",
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      className={cn(
-                        "relative grid h-7 w-12 place-items-center rounded-full transition-colors",
-                        isActive && "bg-mist",
-                      )}
-                    >
-                      <Icon active={isActive} />
-                      {badge > 0 && (
-                        <span
-                          aria-label={`${badge} waiting`}
-                          className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-ember px-1 text-center font-mono text-[10px] leading-4 text-white ring-2 ring-paper"
-                        >
-                          {badge > 9 ? "9+" : badge}
-                        </span>
-                      )}
-                    </span>
-                    <span className={cn(isActive && "font-medium")}>{t.label}</span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
-        </nav>
-      )}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-line bg-paper/95 backdrop-blur-md"
+        // The home-indicator strip on an iPhone sits over the bottom of the
+        // screen; without this the last row of a tab bar is under it.
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {TABS.map((t) => {
+          const badge =
+            t.badge === "enquiryCount"
+              ? enquiryCount
+              : t.badge === "unreadTotal"
+                ? unreadTotal
+                : 0;
+          const Icon = t.icon;
+          return (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              end={t.end}
+              prefetch="intent"
+              className={({ isActive }) =>
+                cn(
+                  "group relative flex flex-1 flex-col items-center gap-1 pb-2 pt-2.5 text-[11px] transition-colors",
+                  isActive ? "text-moss" : "text-muted hover:text-ink",
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span
+                    className={cn(
+                      "relative grid h-7 w-12 place-items-center rounded-full transition-colors",
+                      isActive && "bg-mist",
+                    )}
+                  >
+                    <Icon active={isActive} />
+                    {badge > 0 && (
+                      <span
+                        aria-label={`${badge} waiting`}
+                        className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-ember px-1 text-center font-mono text-[10px] leading-4 text-white ring-2 ring-paper"
+                      >
+                        {badge > 9 ? "9+" : badge}
+                      </span>
+                    )}
+                  </span>
+                  <span className={cn(isActive && "font-medium")}>{t.label}</span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+      </nav>
     </div>
   );
 }

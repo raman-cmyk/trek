@@ -17,6 +17,7 @@ import { joinGroup, recomputeShares, systemLine } from "~/lib/groups.server";
 import { cn } from "~/lib/cn";
 import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
+import { TripPipeline } from "~/components/TripPipeline";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -53,10 +54,28 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // in rather than a 404 that reads like a broken link.
   const isMember = !!me && me.status !== "removed" && me.status !== "declined";
   const isOrganiser = group.organiser_id === user.id;
+  // The guide the group is planning with is in the room too (0056): they read
+  // the trip and answer in the chat, and change nothing about it.
+  const isGuide = !!group.guide_id && group.guide_id === user.id;
+  const canRead = isMember || isGuide;
+
+  // Opening the group page is reading the group chat, and the inbox counts
+  // unread against the same key it writes here — otherwise a group thread
+  // would sit bolded in /messages forever, because the chat is read on this
+  // page and nowhere else.
+  if (canRead) {
+    await admin
+      .from("thread_reads")
+      .upsert({
+        user_id: user.id,
+        thread_key: `g:${group.id}`,
+        last_read_at: new Date().toISOString(),
+      });
+  }
 
   const [{ data: messages }, { data: offering }, { data: booking }, { data: guide }, { data: profiles }] =
     await Promise.all([
-    isMember
+    canRead
       ? admin
           .from("trip_group_messages")
           .select("id, author_id, body, kind, created_at")
@@ -108,6 +127,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       me,
       isMember,
       isOrganiser,
+      isGuide,
       userId: user.id,
       inviteUrl: `${origin}/groups/${group.slug}`,
     },
@@ -135,6 +155,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const profile = await getProfile(env, user.id);
   const myName = firstName(profile?.full_name) || "Someone";
   const isOrganiser = group.organiser_id === user.id;
+  const isGuide = !!group.guide_id && group.guide_id === user.id;
 
   const { data: memberRows } = await admin
     .from("trip_group_members")
@@ -146,15 +167,22 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const iAmIn = !!me && (me.status === "joined" || me.status === "invited");
 
   if (intent === "join") {
+    if (isGuide) {
+      // The guide does not take a seat on the trip they are guiding — they
+      // are already in the chat, and joining would put them on the roster and
+      // give them a share of the bill.
+      return data({ error: "You are the guide on this trip." }, { status: 400, headers });
+    }
     const err = await joinGroup(admin, group, { id: user.id, email: profile?.email }, myName);
     return err ? data({ error: err }, { status: 400, headers }) : data({ ok: true }, { headers });
   }
 
-  if (!iAmIn && !isOrganiser) {
-    return data({ error: "Join the trip first." }, { status: 403, headers });
-  }
-
+  // Talking is the one thing the guide can do here. Everything below changes
+  // the trip, and the trip is the organiser's.
   if (intent === "message") {
+    if (!iAmIn && !isOrganiser && !isGuide) {
+      return data({ error: "Join the trip first." }, { status: 403, headers });
+    }
     const body = String(form.get("body") ?? "").trim();
     if (!body) return data({ error: "Type something first." }, { status: 400, headers });
     const { error } = await admin.from("trip_group_messages").insert({
@@ -162,9 +190,18 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       author_id: user.id,
       body: body.slice(0, 4000),
     });
-    return error
-      ? data({ error: error.message }, { status: 400, headers })
-      : data({ ok: true }, { headers });
+    if (error) return data({ error: error.message }, { status: 400, headers });
+
+    // The same fan-out as the inbox composer — the group hears about a
+    // message wherever it was typed.
+    const { notifyGroupMessage } = await import("~/lib/group-notify.server");
+    await notifyGroupMessage(env, admin, { groupId: group.id, authorId: user.id });
+
+    return data({ ok: true }, { headers });
+  }
+
+  if (!iAmIn && !isOrganiser) {
+    return data({ error: "Join the trip first." }, { status: 403, headers });
   }
 
   if (intent === "leave") {
@@ -266,7 +303,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function GroupPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { group, members, messages, offering, booking, guide, me, isMember, isOrganiser, userId, inviteUrl } =
+  const { group, members, messages, offering, booking, guide, me, isMember, isOrganiser, isGuide, userId, inviteUrl } =
     loaderData as any;
   const { m: money } = useMoney();
   const nav = useNavigation();
@@ -288,7 +325,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [messages.length]);
 
-  if (!isMember) {
+  if (!isMember && !isGuide) {
     return (
       <JoinInvite
         group={group}
@@ -354,7 +391,10 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
       <div className="mt-7 grid gap-8 lg:grid-cols-[1fr_20rem]">
         {/* ── Left: money, roster, chat ─────────────────────────────────── */}
         <div className="min-w-0 space-y-8">
-          {/* What it costs and who has paid. The bar is the whole story. */}
+          {/* What it costs and who has paid. The bar is the whole story —
+              for the people paying. The guide sees the party and the plan,
+              not who among their guests still owes their friend $40. */}
+          {!isGuide && (
           <section className="rounded-md border border-line bg-card p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-display text-xl text-ink">
@@ -433,6 +473,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               </>
             )}
           </section>
+          )}
 
           {/* Who is coming */}
           <section>
@@ -461,11 +502,13 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                         <p className="font-mono text-caption text-muted">
                           {x.status === "invited"
                             ? "invited — not accepted yet"
-                            : x.share_usd_cents === 0
-                              ? "nothing to pay"
-                              : owes === 0
-                                ? `${money(x.share_usd_cents)} · paid`
-                                : `${money(x.share_usd_cents)} · ${money(owes)} to go`}
+                            : isGuide
+                              ? "coming"
+                              : x.share_usd_cents === 0
+                                ? "nothing to pay"
+                                : owes === 0
+                                  ? `${money(x.share_usd_cents)} · paid`
+                                  : `${money(x.share_usd_cents)} · ${money(owes)} to go`}
                         </p>
                       </div>
                       {isOrganiser && x.role !== "organiser" && (
@@ -522,6 +565,9 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               )}
               {messages.map((msg: any) => {
                 const author = members.find((x: any) => x.user_id === msg.author_id);
+                // The guide is in the chat but not on the roster, so a member
+                // lookup alone labels their messages "Someone".
+                const fromGuide = !!guide && msg.author_id === guide.user_id;
                 if (msg.kind === "system") {
                   return (
                     <p key={msg.id} className="text-center text-caption text-muted">
@@ -533,15 +579,24 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 return (
                   <div key={msg.id} className={cn("flex gap-2.5", isMe && "flex-row-reverse")}>
                     <SmartImage
-                      src={author?.avatar_url ?? ""}
-                      alt={author?.display_name ?? ""}
+                      src={(fromGuide ? guide.avatar_url : author?.avatar_url) ?? ""}
+                      alt=""
                       width={32}
                       height={32}
                       className="h-7 w-7 shrink-0 rounded-full"
                     />
                     <div className={cn("max-w-[80%]", isMe && "text-right")}>
                       <p className="text-caption text-muted">
-                        {isMe ? "You" : (author?.display_name ?? "Someone")}
+                        {isMe
+                          ? "You"
+                          : fromGuide
+                            ? firstName(guide.full_name)
+                            : (author?.display_name ?? "Someone")}
+                        {fromGuide && !isMe && (
+                          <span className="ml-1 rounded-pill bg-mist px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-moss">
+                            Guide
+                          </span>
+                        )}
                       </p>
                       <p
                         className={cn(
@@ -562,7 +617,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 name="body"
                 required
                 maxLength={4000}
-                placeholder="Say something…"
+                placeholder={isGuide ? "Answer the group…" : "Say something…"}
                 className="min-w-0 flex-1 rounded border border-line bg-paper px-3 py-2.5 text-base text-ink outline-none focus:border-moss"
               />
               <button
@@ -577,6 +632,19 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
 
         {/* ── Right: the trip, and the button that ends the planning ────── */}
         <aside className="space-y-4">
+          {/* Where the trip is, in the steps this kind of trip actually has.
+              "docs_pending" is an ops word; this is the same fact in the
+              words the group and the guide would use. */}
+          <div className="rounded-md border border-line bg-card p-4">
+            <p className="label text-muted">Where this trip is</p>
+            <TripPipeline
+              className="mt-3"
+              kind={offering?.kind}
+              groupStatus={group.status}
+              bookingStatus={booking?.status ?? null}
+            />
+          </div>
+
           {offering && (
             <div className="overflow-hidden rounded-md border border-line bg-card">
               <SmartImage
@@ -722,7 +790,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
             </details>
           )}
 
-          {!isOrganiser && group.status === "forming" && (
+          {isMember && !isOrganiser && group.status === "forming" && (
             <Form method="post">
               <input type="hidden" name="intent" value="leave" />
               <button className="text-caption text-muted hover:text-ember">

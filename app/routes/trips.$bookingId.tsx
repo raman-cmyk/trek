@@ -1,4 +1,4 @@
-import { Form, Link, data, useNavigation } from "react-router";
+import { Form, Link, data, useFetcher, useNavigation } from "react-router";
 import type { Route } from "./+types/trips.$bookingId";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
@@ -16,17 +16,10 @@ import { useMoney } from "~/lib/currency-context";
 import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
-import { cn } from "~/lib/cn";
+import { TripPipeline } from "~/components/TripPipeline";
 import { firstName } from "~/lib/names";
-
-const STEPS = [
-  ["pending_deposit", "Deposit due"],
-  ["deposit_paid", "Deposit paid"],
-  ["docs_pending", "Documents"],
-  ["confirmed", "Confirmed"],
-  ["active", "On the trail"],
-  ["completed", "Completed"],
-] as const;
+import { altitudeThresholdM } from "~/lib/insurance";
+import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
 
 export function meta() {
   return [{ title: "Your trip" }, { name: "robots", content: "noindex" }];
@@ -38,7 +31,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point, route:routes(max_altitude_m)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -60,6 +53,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         .maybeSingle(),
       admin.from("instalments").select("seq, amount_usd_cents, due_date, status").eq("booking_id", b.id).order("seq"),
     ]);
+
+  // Have they already asked us to sort their insurance? The button says so
+  // rather than letting somebody press it every time they visit.
+  const { alreadySent } = await import("~/lib/email/send.server");
+  const insuranceInterestSent = await alreadySent(admin, {
+    userId: user.id,
+    kind: "insurance_interest",
+    subjectId: b.id,
+  });
 
   const phoneUnlocked = guidePhoneUnlocked(b.start_date, today);
   // Refund preview for the cancel confirm step — same policy math the real
@@ -98,6 +100,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       today,
       insuranceAttested: !!b.insurance_attested_at,
       insuranceVerified: !!b.insurance_verified_at,
+      insuranceInterestSent,
+      // What the policy has to reach. The trek's own maximum where we know
+      // it, so the number on screen is this trek's, not a generic one.
+      altitudeM: altitudeThresholdM((b as any).offering?.route?.max_altitude_m),
       isTrek: (b as any).offering?.kind === "trek",
       paidSoFar,
       refundPreview: cancelPreview.refundToTrekkerUsdCents,
@@ -139,6 +145,72 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       await admin.from("bookings").update({ status: "docs_pending" }).eq("id", b.id);
     }
     return data({ ok: "Uploaded — our team will verify it." }, { headers });
+  }
+
+  // Not a purchase — we do not sell insurance yet. It is a request for help
+  // that reaches a human, and a demand signal in email_log for whether the
+  // real product is worth building.
+  if (intent === "insurance_interest") {
+    const { sendRichEmail } = await import("~/lib/notify.server");
+    const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
+    const { data: booking } = await admin
+      .from("bookings")
+      .select("start_date, party_size, offering:offerings(title)")
+      .eq("id", b.id)
+      .maybeSingle();
+    const title = (booking as any)?.offering?.title ?? "your trek";
+
+    await sendRichEmail(env, admin, {
+      kind: "insurance_interest",
+      to: user.email,
+      userId: user.id,
+      subject: "We will sort your trekking insurance",
+      category: "transactional",
+      about: { type: "booking", id: b.id },
+      content: {
+        preheader: "A real person is on this — we will come back with cover that qualifies.",
+        heading: "Leave the insurance with us",
+        blocks: [
+          { p: `You asked us to arrange travel insurance for ${title}.` },
+          {
+            p:
+              "Someone from our team will email you with cover that actually " +
+              "qualifies for this trek — high-altitude trekking and emergency " +
+              "helicopter evacuation included. Most ordinary travel policies " +
+              "stop below the altitude you are walking to.",
+          },
+          { p: "Nothing is charged, and you are free to use your own policy instead." },
+          { button: { label: "Your trip page", url: `${site}/trips/${b.id}` } },
+        ],
+      },
+    });
+    await sendRichEmail(env, admin, {
+      kind: "insurance_interest_ops",
+      to: "hello@guidesofnepal.com",
+      userId: null,
+      subject: `Insurance wanted — ${title}`,
+      category: "transactional",
+      about: { type: "booking", id: b.id },
+      content: {
+        preheader: "A trekker has asked us to arrange their insurance.",
+        heading: "Insurance requested",
+        blocks: [
+          {
+            facts: [
+              ["Trek", title],
+              ["Starts", String((booking as any)?.start_date ?? "—")],
+              ["Party", String((booking as any)?.party_size ?? "—")],
+              ["Trekker", user.email ?? "—"],
+            ],
+          },
+          { button: { label: "Open the booking", url: `${site}/ops/bookings/${b.id}` } },
+        ],
+      },
+    });
+    return data(
+      { ok: "Asked. We'll email you with cover that qualifies for this trek." },
+      { headers },
+    );
   }
 
   if (intent === "complete") {
@@ -198,12 +270,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, paidSoFar, refundPreview } =
+  const { booking: b, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
   const cancelled = b.status.startsWith("cancelled");
-  const activeIdx = STEPS.findIndex((s) => s[0] === b.status);
+  const docError = actionData && "error" in actionData ? (actionData as any).error : null;
   const isTrek = b.offering?.kind === "trek";
   const canComplete =
     b.status === "active" ||
@@ -273,83 +345,73 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         </section>
       )}
 
-      {/* Status timeline */}
+      {/* Where this trip is. The steps are the ones this kind of trip really
+          has — a food tour was being shown "Documents" and a permit step it
+          would never reach, and a step nobody can ever take is noise. */}
       {!cancelled ? (
-        <ol className="mt-6 space-y-3">
-          {STEPS.map(([key, label], i) => {
-            const done = activeIdx >= 0 && i <= activeIdx;
-            return (
-              <li key={key} className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "flex h-6 w-6 items-center justify-center rounded-full text-xs",
-                    done ? "bg-accent text-white" : "bg-border text-ink-soft",
-                  )}
-                >
-                  {done ? "✓" : i + 1}
-                </span>
-                <span className={cn("text-sm", i === activeIdx && "font-medium text-ink")}>
-                  {label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <TripPipeline
+          className="mt-6"
+          kind={b.offering?.kind}
+          bookingStatus={b.status}
+        />
       ) : (
         <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">
           This booking was cancelled.
         </p>
       )}
 
-      {/* Documents (treks) */}
+      {/* Documents — two things, asked for one at a time. The old form was a
+          name box and a dropdown, so "passport or insurance?" was a decision
+          you had to make before you could do either, and both slots looked
+          like one job. They are two jobs, and one of them people cannot do at
+          all until they have bought something. */}
       {isTrek && !cancelled && b.status !== "pending_deposit" && (
-        <section className="mt-6">
-          <h2 className="mb-2 font-display text-xl">Documents</h2>
-          <p className="mb-3 text-sm text-ink-soft">
-            Upload a passport and insurance certificate for each trekker. Required
-            before your trek is confirmed.
+        <section className="mt-6 space-y-3">
+          <h2 className="font-display text-xl">Documents</h2>
+          <p className="text-sm text-ink-soft">
+            Two per trekker: the photo page of their passport, and a travel
+            insurance certificate. Both have to be in before we can file your
+            permits.
           </p>
-          {documents.length > 0 && (
-            <ul className="mb-3 space-y-1 text-sm">
-              {documents.map((d: any) => (
-                <li key={d.id} className="flex items-center justify-between">
-                  <a
-                    href={`/trips/${b.id}/doc/${d.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {d.type} — {d.person_name}
-                  </a>
-                  <Badge tone={d.verified_at ? "green" : "amber"}>
-                    {d.verified_at ? "verified" : "pending"}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Form method="post" encType="multipart/form-data" className="space-y-2 rounded-card border border-border bg-card p-3">
-            <input type="hidden" name="intent" value="upload" />
-            <input
-              name="person_name"
-              placeholder="Trekker name (as on passport)"
-              required
-              className="w-full rounded-button border border-border px-3 py-2 text-sm"
-            />
-            <div className="flex gap-2">
-              <select name="type" className="rounded-button border border-border px-2 py-2 text-sm">
-                <option value="passport">Passport</option>
-                <option value="insurance">Insurance</option>
-              </select>
-              <input type="file" name="file" accept="image/*,application/pdf" required className="flex-1 text-sm" />
-            </div>
-            {actionData && "error" in actionData && (actionData as any).error && (
-              <p className="text-sm text-danger">{(actionData as any).error}</p>
-            )}
-            <Button type="submit" size="sm" loading={nav.state !== "idle"}>
-              Upload
-            </Button>
-          </Form>
+
+          <DocumentSlot
+            title="Passport"
+            blurb="The photo page — a photo of it is fine. One for each person going."
+            type="passport"
+            docs={documents.filter((d: any) => d.type === "passport")}
+            bookingId={b.id}
+            error={docError}
+            busy={nav.state !== "idle"}
+          />
+
+          <DocumentSlot
+            title="Travel insurance"
+            blurb={`The certificate has to cover trekking to ${altitudeM.toLocaleString()}m and emergency helicopter evacuation.`}
+            type="insurance"
+            docs={documents.filter((d: any) => d.type === "insurance")}
+            bookingId={b.id}
+            error={docError}
+            busy={nav.state !== "idle"}
+            status={
+              insuranceVerified ? (
+                <p className="mt-2 text-sm text-accent">
+                  Verified — high altitude and helicopter evacuation are covered.
+                </p>
+              ) : insuranceAttested ? (
+                <p className="mt-2 text-sm text-ink-soft">
+                  You have checked your policy — our team is verifying the certificate.
+                </p>
+              ) : null
+            }
+            footer={
+              <NoInsuranceYet
+                bookingId={b.id}
+                altitudeM={altitudeM}
+                asked={insuranceInterestSent}
+                attested={insuranceAttested}
+              />
+            }
+          />
         </section>
       )}
 
@@ -370,31 +432,12 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         </section>
       )}
 
-      {/* Insurance + blue TIMS card (2026 rule) */}
+      {/* The blue TIMS card (2026 rule). Insurance used to sit here too, in a
+          second box that asked for the same thing the Documents section asks
+          for — so it moved up to live beside its own upload. */}
       {isTrek && !cancelled && (
         <section className="mt-6">
-          <h2 className="mb-2 font-display text-xl">Insurance &amp; TIMS</h2>
-          <div className="rounded-card border border-border bg-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium text-ink">Travel insurance</p>
-                <p className="text-sm text-ink-soft">
-                  {insuranceVerified
-                    ? "Verified — high-altitude + helicopter evacuation ✓"
-                    : insuranceAttested
-                      ? "Checked — our team will verify your certificate."
-                      : "Required before we can issue your permits & TIMS card."}
-                </p>
-              </div>
-              <Link
-                to={`/insurance?bookingId=${b.id}`}
-                className="rounded-button border border-border px-3 py-1.5 text-sm text-primary"
-              >
-                {insuranceAttested ? "Re-check policy" : "Check my policy"}
-              </Link>
-            </div>
-          </div>
-
+          <h2 className="mb-2 font-display text-xl">TIMS card</h2>
           {tims ? (
             <div className="mt-4">
               <TimsCard tims={tims} />

@@ -14,6 +14,21 @@ export async function action({ request, context }: Route.ActionArgs) {
   const startDate = String(form.get("start_date"));
   const partySize = Number(form.get("party_size") ?? 1);
   const message = String(form.get("message") ?? "").trim() || null;
+  // The optional lines they ticked on the offering page. Parsed defensively —
+  // it arrives as JSON in a form field — and capped, because it is a list of
+  // ids, not an essay.
+  let selectedOptions: string[] = [];
+  try {
+    const raw = JSON.parse(String(form.get("selected_options") ?? "[]"));
+    if (Array.isArray(raw)) {
+      selectedOptions = raw
+        .filter((v) => typeof v === "string")
+        .map((v: string) => v.slice(0, 60))
+        .slice(0, 20);
+    }
+  } catch {
+    // A malformed list is not a reason to lose the enquiry.
+  }
 
   if (!user) {
     // Send them to sign in, then back to the offering.
@@ -62,6 +77,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       start_date: startDate,
       party_size: partySize,
       message,
+      selected_options: selectedOptions,
       status: "open",
       expires_at: new Date(Date.now() + ENQUIRY_TTL_HOURS * 3600_000).toISOString(),
     })

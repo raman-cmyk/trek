@@ -1007,3 +1007,237 @@ local. 111 tests green. Live: https://trek.raman-7d9.workers.dev
 
 **🙋 Founder still needed:** unchanged — real domain + Resend key, real Stripe
 keys, an ops phone number, and the first real journals from three guides.
+
+## Session — group trips in the inbox (2026-09-06)
+
+**The bug the founder saw:** a trip group is a real conversation — four
+friends deciding whether to add a rest day — but `/messages` never mentioned
+it. Group chat lives in its own table (`trip_group_messages`, migration 0039)
+and only ever rendered on `/groups/<slug>`, so the inbox and the header dot
+were built from conversations and booking threads alone. If you did not
+remember the group's URL, the conversation was gone.
+
+**The fix is in the two places the inbox is assembled**, not a new screen:
+
+- `listThreads()` now carries a third thread kind, `"group"`. Membership
+  (`groupIdsFor`) is the access rule — these queries run on an admin client
+  that bypasses RLS, so that lookup is what keeps someone else's trip out of
+  your inbox. The thread shows the group name, the offering title underneath,
+  the trek's cover photo as its avatar, and links to `/groups/<slug>`, which
+  is where the chat actually lives alongside the roster and the money.
+- `countUnread()` counts group messages the same way, so the envelope in the
+  header stops under-reporting.
+- Unread is tracked under `thread_reads` key `g:<group_id>`, and the group
+  page stamps it on load for members — the chat is read there and nowhere
+  else, so without that write a group thread would sit bolded forever.
+- A cancelled group with nothing said in it stays out of the list; one that
+  was talked in stays, because a trip falling apart is exactly what people go
+  back and read.
+
+Guides are not group members, so a guide's inbox is unchanged — the group
+chat is deliberately not a moderated trekker-to-guide thread.
+
+New `app/lib/threads.test.ts` runs the inbox against a small fake Supabase
+builder: the group appears, someone else's does not, and unread counts only
+what other people said since you last opened it. 258 tests green, build green.
+
+## Session — the guide joins the group, and every trip gets a track (2026-09-06)
+
+Three things the founder asked for, in one pass.
+
+**The guide is in the group chat.** Migration 0056 adds `is_group_guide()` and
+widens the group's read policies plus the chat's insert policy to the guide
+the group is planning with. `groupIdsFor()` now resolves both halves of "who
+is in the room" — the roster, and the guide, who is never on it. The guide
+talks and changes nothing: no invite, no remove, no payment mode, no cancel,
+and no join (joining would give them a seat and a share of the bill). They see
+who is coming; they do not see anyone's share or what they still owe, and that
+section is not rendered for them rather than hidden with CSS.
+
+**The chat is in the inbox, with a composer.** `/messages/g/:groupId` is the
+group conversation inside the messages shell: attributed lines, runs collapsed,
+the guide's lines marked, system lines centred, and the same Composer every
+other thread uses. The rail now opens it instead of bouncing to the trip page.
+The trip page keeps its own copy of the chat — that is the planning room, next
+to the roster and the money — and both mark the thread read under
+`thread_reads` key `g:<group_id>`.
+
+**The pipeline** (`app/lib/pipeline.ts`) is the trip's own progress track, one
+per kind of experience, not to be confused with `/ops/pipeline`. A trek runs
+through passports, insurance and permits; a day hike gets a meeting point; a
+food tour gets an address and an appetite. Stages are pinned to the booking
+statuses we already store, so a shorter track skips positions instead of
+falling off the end: a day hike sitting at `docs_pending` reads as "Paid".
+A finished trip has no pulsing "current" dot; a cancelled one stops rather
+than pretending the rest is still coming.
+
+It shows on the group page, in the group chat, on `/groups` (compact — a list
+where every row says "Planning" tells you nothing), on the guide's trip list,
+and on `/trips/:id`, where it replaced a six-step ops timeline that told a food
+tour it was waiting on "Documents". Rendered in `/_dev/primitives` and checked
+at 360px.
+
+Not built, deliberately: notifying a group when somebody posts. Every other
+thread notifies, and fanning that out to a whole roster plus the guide is a
+metered-SMS decision, not a plumbing one — see BACKLOG. Trip groups are still
+absent from `supabase/seed.sql`, so a fresh clone cannot demo this; the local
+container had no database to verify new seed SQL against, so it is written up
+rather than guessed at.
+
+271 tests green (new: the pipeline's stage maths, group access rules, and the
+inbox carrying group threads for members and the guide), build green.
+Migration 0056 needs applying — see below.
+
+**🙋 Founder needed:** apply migration 0056 to the cloud database (`supabase db
+push`, or the SQL editor) — until it runs, the guide's group thread will list
+in their inbox but the group page will not open for them.
+
+## Session — group chat learns to send email (2026-09-06)
+
+The fan-out that was logged in BACKLOG last session is built, on top of the
+email foundation from 0055 rather than beside it: `sendRichEmail`, so every
+group email is consent-aware, skips blocked addresses, retries once, and
+lands a row in `email_log`.
+
+**`app/lib/group-notify.ts`** is the pure half — who is mailed, whether they
+were mailed too recently, and what they missed — so the rules that decide
+whether somebody's evening gets interrupted are tested rather than trusted.
+**`group-notify.server.ts`** does the IO. It fires from both places a group
+message can be typed: the inbox composer and the trip page.
+
+The rules: never the author; at most one email per person per group per 30
+minutes; catch-up starts at the later of their last read and their last
+email, so nothing quotes lines they have already seen; system lines alone
+never earn an email. The guide gets email like everyone else here — the one
+place in the app where a guide is not texted, because a group of six typing
+would be five SMS a message.
+
+**Muting** is `trip_group_mutes` (migration 0057), keyed on (group, user) so
+it covers the guide, who is in the chat but not on the roster. The toggle is
+in the chat header — a fetcher, so muting mid-read does not move the page —
+and the email footnote points at it.
+
+`email_log` is now browsable in `/ops/data` under Messaging, which answers the
+only question anyone asks about a notification: did it go, and if not, why.
+
+283 tests green (12 new on recipients, the burst window and the digest), build
+green.
+
+**🙋 Founder needed:** migrations 0056 and 0057 still have to be applied — this
+container has no database credentials, so I could not run them. See the next
+session note or ask Claude to run them once a connection string is available.
+
+## Session — two document slots, and a place to buy insurance (2026-09-06)
+
+The Documents section on a trip asked for a name, then made you pick
+"Passport or Insurance" from a dropdown before you could do either. Two
+different jobs behind one form, and one of them — insurance — is a job half
+the people on that page cannot do at all, because they have not bought any.
+
+Now it is two cards, each asking for one thing: **Passport** ("the photo
+page — a photo of it is fine") and **Travel insurance** ("has to cover
+trekking to 5,364m and emergency helicopter evacuation", the trek's own
+altitude from its route, not a generic number). Each lists what is already in
+with its own status, and each has its own upload button.
+
+Under the insurance card is **"Don't have insurance yet?"** — the area for
+the insurance we intend to sell. It sells nothing: no price, no checkout, no
+provider named, because none of that exists. The button emails a human, logs
+the request under `insurance_interest`, and tells the trekker we will come
+back with cover that qualifies. That is a working stub and a demand signal in
+the same click — `email_log` now answers "how many people actually want
+this?" before anyone negotiates with an underwriter. Full write-up of what the
+real product needs is in BACKLOG.
+
+The old "Insurance & TIMS" box below was asking for the same certificate a
+second time; the insurance half moved up beside its own upload and the section
+is now just the TIMS card.
+
+`DocumentSlot` and `NoInsuranceYet` live in `app/components/TripDocuments.tsx`
+and render in `/_dev/primitives`, so they can be looked at without a booking.
+Checked at 360px. 283 tests green, build green. No migration needed —
+`booking_documents.type` already allowed exactly these two.
+
+## Session — why nobody could create an experience (2026-09-06)
+
+Founder: "I am not being able to create dayhikes experiences and other stuff
+as well." Three causes, all real, none of them about day hikes.
+
+**The office could not create anything.** `/ops/experiences` could edit every
+experience and create none — the only path into the offerings table was a
+guide filling in the five-step form himself. The founder's own account is
+`ops`, so from where they were sitting there was no button at all. Now there
+is: `/ops/experiences/new`, the same `ExperienceForm` with a "whose trip is
+it?" picker in front of it, saving as a draft and dropping the office into the
+editor where the Live button already lives. One publish path, not two.
+Photographs are not demanded here the way they are of a guide (3 minimum) —
+the office is usually typing from a phone call and the pictures follow.
+
+**A guide who was not yet verified had no navigation.** The tab bar rendered
+only for `status === 'verified'`, so an applied or in-review guide landed on a
+status screen with no way to reach Experiences, Journals or anything else.
+Both of the founder's test guide accounts (`abc@gmail.com`, `xyz@gmail.com`)
+are in exactly that state. The bar is now always there: publishing is gated by
+ops regardless, so there is nothing an unverified guide can break by building
+their listings — and a guide who arrives on the day of verification with three
+trips already written is the whole point of the welcome email.
+
+**"List a trip" opened the profile page.** The one instruction on the
+unverified guide's screen led away from the thing it was asking for. It now
+opens the form.
+
+The database was never the problem: a day-hike insert with a realistic payload
+succeeds (tested against the live database inside a transaction, rolled back),
+and `booking_documents`/`offerings` constraints all allow every kind. What
+does not exist in production is a single offering that was created through the
+app — every row is seed data, `live` or `paused`, which is consistent with the
+create path having never worked for anyone.
+
+283 tests green, build green. Not verified in a live browser: writing the
+service-role key into `.dev.vars` is blocked in this environment, so the ops
+create page has not been clicked through against real data — the form
+component is the one the ops editor already uses in production, and the insert
+is proven, but the first click is the founder's.
+
+## Session — the package, negotiated (2026-09-06)
+
+Three asks, one thread running through them: the product assumed a trek that
+somebody either books or doesn't.
+
+**Optional extras are actually optional.** The guide's own "optional extra"
+lines are tick boxes on the offering page now, priced per person for the party
+on screen, and what gets ticked travels with the enquiry
+(`enquiries.selected_options`) and shows on the guide's request card — "Wants:
+Gear hire". The hardcoded `STANDARD_ADDONS` catalogue is gone: it moved the
+total and was never charged by anything downstream.
+
+**Custom packages** (`package_proposals`, migration 0058). The guide's request
+card has a third answer between yes and no: *Suggest changes* — days, party,
+start date, which options are in, one extra line of their own, and a note,
+priced live as they type. The trekker gets an email and a card at the top of
+My Trips, opens `/proposals/:id`, sees what moved in words and what it costs
+against what they asked for, and approves — which creates the booking and goes
+straight to the deposit, now **20%**.
+
+`composePackage` and `describeChanges` are pure and tested (10 new tests):
+what somebody is about to be charged, and the sentence explaining why, are not
+things to work out inside a route handler. The proposal stores its own price
+breakdown in the offering's shape, so `quote()` — one new optional argument —
+prices it with the same arithmetic, and checkout, contracts and payouts need
+no special case.
+
+**The guide form stopped being a trek form.** Steps come from the kind (no
+"The route" step containing nothing), length defaults to what that kind
+usually is (a day hike opens at 1 day, not 12), and the price preview no
+longer shows "Porters" and "Permits (TIMS + park)" at $0 to a food tour.
+Verified in a browser: switching to Day hike gives four steps, one day, and a
+day-hike price library.
+
+Migration 0058 is applied to the live database and verified (table, RLS, three
+policies, the enquiries column); a realistic proposal insert was smoke-tested
+in a rolled-back transaction. 293 tests green, build green.
+
+**Not done, and worth saying:** none of the new screens have been clicked
+through against real data — this environment cannot hold the service-role key,
+so the guide's proposer and the approval page have been driven only by types,
+tests and SQL. The first real proposal is the test.

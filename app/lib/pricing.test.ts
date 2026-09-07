@@ -6,6 +6,7 @@ import {
   formatUsd,
   formatNpr,
   PERMIT_HANDLING_USD_CENTS,
+  DEPOSIT_RATE,
 } from "./pricing";
 
 describe("computePricing — multi-day trek", () => {
@@ -120,8 +121,9 @@ describe("computePricing — validation", () => {
 });
 
 describe("deposit & balance", () => {
-  it("takes a 30% deposit when the trek is 30+ days out", () => {
-    expect(computeDeposit(46380, 45)).toBe(Math.round(46380 * 0.3));
+  it("takes the deposit rate when the trek is 30+ days out", () => {
+    expect(computeDeposit(46380, 45)).toBe(Math.round(46380 * DEPOSIT_RATE));
+    expect(DEPOSIT_RATE).toBe(0.2);
   });
   it("charges 100% upfront inside the 14-day window", () => {
     expect(computeDeposit(46380, 10)).toBe(46380);

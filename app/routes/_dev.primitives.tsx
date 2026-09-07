@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { Route } from "./+types/_dev.primitives";
 import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
+import { TripPipeline } from "~/components/TripPipeline";
+import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
 import { SmartImage } from "~/components/SmartImage";
 import {
   CardGridSkeleton,
@@ -159,6 +161,57 @@ export default function Primitives() {
 
       <Section title="Grid loader — staggered entrance wave (§3.3)">
         <CardGridSkeleton count={8} variant="offering" />
+      </Section>
+
+      <Section title="Trip documents — one slot per thing we ask for">
+        <div className="max-w-xl space-y-3">
+          <DocumentSlot
+            title="Passport"
+            blurb="The photo page — a photo of it is fine. One for each person going."
+            type="passport"
+            docs={[
+              { id: "1", person_name: "Tom Weber", verified_at: "2026-09-01" },
+              { id: "2", person_name: "Yuki Tanaka", verified_at: null },
+            ]}
+            bookingId="demo"
+            error={null}
+            busy={false}
+          />
+          <DocumentSlot
+            title="Travel insurance"
+            blurb="The certificate has to cover trekking to 5,364m and emergency helicopter evacuation."
+            type="insurance"
+            docs={[]}
+            bookingId="demo"
+            error={null}
+            busy={false}
+            footer={
+              <NoInsuranceYet bookingId="demo" altitudeM={5364} asked={false} attested={false} />
+            }
+          />
+        </div>
+      </Section>
+
+      <Section title="Trip pipeline — one track per kind of experience">
+        <div className="grid gap-6 sm:grid-cols-3">
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Trek · deposit paid</p>
+            <TripPipeline className="mt-3" kind="trek" groupStatus="booked" bookingStatus="deposit_paid" />
+          </div>
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Day hike · forming</p>
+            <TripPipeline className="mt-3" kind="day_hike" groupStatus="forming" />
+          </div>
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Food tour · finished</p>
+            <TripPipeline className="mt-3" kind="food_culture" bookingStatus="completed" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <TripPipeline compact kind="trek" bookingStatus="docs_pending" />
+          <TripPipeline compact kind="city" bookingStatus="active" />
+          <TripPipeline compact kind="trek" bookingStatus="cancelled_trekker" />
+        </div>
       </Section>
     </main>
   );

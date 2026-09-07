@@ -6,6 +6,7 @@ import { getSessionUser } from "~/lib/auth.server";
 import { createAdminClient } from "~/lib/supabase.server";
 import { useMoney } from "~/lib/currency-context";
 import { groupMoney, type GroupMember } from "~/lib/groups";
+import { TripPipeline } from "~/components/TripPipeline";
 
 export function meta() {
   return pageMeta({
@@ -45,7 +46,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = bookingIds.length
     ? await admin
         .from("bookings")
-        .select("id, total_usd_cents, party_size")
+        .select("id, total_usd_cents, party_size, status")
         .in("id", bookingIds)
     : { data: [] };
   const bookingById = new Map((bookings ?? []).map((b) => [b.id, b]));
@@ -68,6 +69,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         members: list,
         money: groupMoney(list, bk?.total_usd_cents, bk?.party_size),
         seats: bk?.party_size ?? g.party_target,
+        bookingStatus: bk?.status ?? null,
         offering: g.offering_id ? (offeringById.get(g.offering_id) ?? null) : null,
         youAreInvited: list.some((m) => m.user_id === user.id && m.status === "invited"),
       };
@@ -153,7 +155,17 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
                           : "Planning"}
                     </span>
                   </div>
-                  <p className="mt-3 font-mono text-caption text-muted">
+                  {/* The step this trip is on, in the steps this kind of trip
+                      has. A list of trips where every row says "Planning" is
+                      a list that tells you nothing. */}
+                  <TripPipeline
+                    compact
+                    className="mt-3"
+                    kind={g.offering?.kind}
+                    groupStatus={g.status}
+                    bookingStatus={g.bookingStatus}
+                  />
+                  <p className="mt-1.5 font-mono text-caption text-muted">
                     {joined}/{g.seats} in
                     {g.money.totalUsdCents > 0 && (
                       <>

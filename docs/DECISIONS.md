@@ -226,3 +226,125 @@ names. Guide profile URLs keep their existing slugs (changing them would
 break every link and ranking the pages have). Person JSON-LD now carries the
 first name only — accepted cost: "Pemba Sherpa" as a search phrase will not
 match the structured data, but the rule outranks the ranking.
+
+## The guide is in the group chat; the group's money is not their business (2026-09-06)
+
+Migration 0039 made a trip group private to its members on purpose: four
+friends deciding whether to add a rest day is not a conversation the guide
+needs. In practice the first thing a group does is ask a question only the
+guide can answer, and the organiser ends up relaying it through the booking
+thread. So the guide the group is planning with (`trip_groups.guide_id`) now
+reads the group and posts in its chat (migration 0056).
+
+Where the line is: the guide talks, and changes nothing. No inviting, no
+removing, no payment mode, no cancelling, no joining (joining would put them
+on the roster and hand them a share of the bill). They see who is coming,
+because that is the party they are guiding — but not each person's share or
+what they still owe. Who owes their friend $40 is not a fact a guide needs
+in order to guide, and putting it in front of them changes the trip for
+everybody.
+
+Not built with it: notifying a group when somebody posts. Every other thread
+notifies by SMS to guides and email to trekkers, and fanning that out to a
+whole group is a per-message cost decision (Sparrow SMS is metered) rather
+than a technical one. Logged in BACKLOG.
+
+## The pipeline is per experience, and it is not the ops board (2026-09-06)
+
+"Pipeline" already meant one thing here — `/ops/pipeline`, a kanban of
+booking statuses for the office. This is the other thing it should mean: the
+trip's own progress track, for the people on the trip.
+
+One track per kind of experience (`app/lib/pipeline.ts`), because the trips
+differ. A trek runs through passports, insurance and permits; a food tour has
+a table and an address. The trip page used to show all six ops statuses to
+everyone, so a half-day food tour was told it was waiting on "Documents" and
+had a permit step it would never reach — a step nobody can take is noise, and
+noise in a status track is what makes people stop reading it.
+
+The stages are pinned to the booking statuses we already store rather than a
+new column, so nothing can drift: a shorter track just skips positions, and a
+day hike sitting at `docs_pending` reads as "Paid" instead of falling off the
+end of its own track. Pure and tested, so the group page, the chat, the trip
+page and the guide's list cannot disagree about where a trip is.
+
+## Group chat notifies by email only, in bursts, and can be muted (2026-09-06)
+
+The reason group chat shipped silent was cost: every other thread texts the
+guide through Sparrow, which is metered per message, and one person typing
+"morning!" into a group of six is five texts. Email is not metered per
+recipient, so the fan-out is email for everybody — the guide included, who is
+the one exception to "guides get SMS" everywhere else in the app. A guide who
+misses a group message loses nothing urgent; the booking thread still texts
+them.
+
+Three rules keep it from becoming the thing people mute on day one:
+
+- **Never mail the person who just typed.** Obvious, and the bug every group
+  chat ships with once.
+- **One email per person per group per 30 minutes.** A group agreeing on a
+  date sends fifteen messages in four minutes. The window makes that one
+  email carrying the last five lines, not fifteen interruptions.
+- **Only what they have not seen.** The catch-up starts at the later of their
+  last read (`thread_reads`) and their last email, so an email never quotes
+  lines they read on the site an hour ago. System lines alone ("Marie
+  joined") never earn an email — they ride along inside one a real message
+  has already justified.
+
+Muting lives in its own table (`trip_group_mutes`, migration 0057) rather
+than a column on the roster, because the guide is in the chat without being
+on the roster. It is yours alone: no organiser and no ops policy touches it,
+and muting never removes you from the trip.
+
+These are transactional, not marketing: it is a message on a trip you joined,
+so it ignores marketing consent and honours the block list — which is exactly
+the line drawn in 0055.
+
+## A trip is a package that gets negotiated, not a listing you say yes to (2026-09-06)
+
+The booking flow had one shape: a trekker asked for a date and a party size,
+and the guide could answer yes or no. Every real conversation about a trek
+ends somewhere else — "add a day at Namche", "skip the flight, we'll bus it",
+"there are three of us now" — so the actual agreement happened on WhatsApp and
+the booking quietly stopped describing the trip.
+
+Three pieces, one idea:
+
+**Optional lines are choices now.** A guide has always been able to mark a
+price line "optional extra", and it did nothing: excluded from the headline,
+impossible to tick, never sent anywhere. They are tick boxes on the offering
+page, and what a trekker ticks travels with the enquiry
+(`enquiries.selected_options`), so the guide answers the trip somebody
+actually asked for.
+
+Removed with it: `STANDARD_ADDONS`, a hardcoded two-item catalogue (gear
+rental, airport hotel) that moved the total on screen and was never charged
+for by anything. A guide who rents gear can price a "Gear hire" line, which is
+the same feature without the lie.
+
+**A proposal is the negotiation, written down** (`package_proposals`, 0058).
+The guide adjusts days, party, which options are in, and can add one line of
+their own; it is priced live in front of them and sent. The trekker sees what
+changed in words ("2 days longer — 15 days instead of 13", "Added: gear
+hire"), what it costs against what they asked for, and one button that
+approves and pays. Approving is what creates the booking — nothing is held and
+no money moves before it.
+
+**The proposal snapshots its own price breakdown** in the same shape an
+offering carries, so `quote()` prices it with the identical function and every
+reader downstream — checkout, the contract, the payout — needs no special
+case. It is a snapshot rather than a reference on purpose: editing the listing
+next month must not change what somebody already agreed to.
+
+**Deposit is 20%**, down from 30% (founder's call). One constant,
+`DEPOSIT_RATE` in pricing.ts; docs/02 §Payment flow still says 30% and wants
+updating when the payment docs are next revised.
+
+## The guide form was a trek form with other kinds squeezed in (2026-09-06)
+
+Listing anything but a trek meant answering a step headed "The route" that
+contained nothing, starting from 12 days, and reading a price preview split
+into "Permits (TIMS + park)" and "Porters" — for a food tour. Steps are now
+derived from the kind (no route step where there is no route), the length
+defaults to what that kind usually is, and a price row worth nothing is not
+shown at all.

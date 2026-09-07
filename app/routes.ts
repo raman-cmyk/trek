@@ -33,6 +33,9 @@ export default [
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
     route("trips", "routes/trips._index.tsx"),
+    // A package the guide proposed: what changed, what it costs, approve and
+    // pay the deposit in one move.
+    route("proposals/:id", "routes/proposals.$id.tsx"),
     // Going together: the group is the container for everything that happens
     // before a booking — who is coming, the chat, and how the money splits.
     // Events: anyone proposes, the office accepts, the organiser fills it in.
@@ -78,6 +81,10 @@ export default [
     route("messages", "routes/messages._index.tsx"),
     route("messages/:bookingId", "routes/messages.$bookingId.tsx"),
     route("messages/c/:conversationId", "routes/messages.c.$conversationId.tsx"),
+    // A trip group's chat. The group page has the same conversation next to
+    // the roster and the money; this is the copy you find when you check your
+    // messages rather than the trip.
+    route("messages/g/:groupId", "routes/messages.g.$groupId.tsx"),
   ]),
 
   // Immersive full-screen trekker onboarding (no header/footer chrome).
@@ -107,6 +114,9 @@ export default [
     // trekker's passport). Never renders the URL.
     route("ops/doc/:kind/:docId", "routes/ops.doc.$kind.$docId.tsx"),
     route("ops/experiences", "routes/ops.experiences.tsx"),
+    // The office lists a trip for a guide who rang in — the console could
+    // edit every experience and create none.
+    route("ops/experiences/new", "routes/ops.experiences.new.tsx"),
     route("ops/routes", "routes/ops.routes.tsx"),
     route("ops/experiences/:id", "routes/ops.experiences.$id.tsx"),
     route("ops/data", "routes/ops.data.tsx"),

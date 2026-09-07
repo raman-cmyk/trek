@@ -48,11 +48,19 @@ export default function OpsExperiences({ loaderData }: Route.ComponentProps) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="font-display text-2xl text-ink">Experiences</h1>
-        {pending > 0 && (
-          <p className="text-sm text-ink-soft">
-            <span className="font-mono text-ember">{pending}</span> waiting on approval
-          </p>
-        )}
+        <div className="flex items-center gap-4">
+          {pending > 0 && (
+            <p className="text-sm text-ink-soft">
+              <span className="font-mono text-ember">{pending}</span> waiting on approval
+            </p>
+          )}
+          <Link
+            to="/ops/experiences/new"
+            className="rounded bg-pine px-3 py-1.5 text-sm font-medium text-paper hover:bg-moss"
+          >
+            + List a trip
+          </Link>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-md border border-line bg-card">
