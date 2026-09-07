@@ -239,7 +239,7 @@ insert into _seed_cohort values
  'Cheapest day rate on the platform and openly working his way up',
  'I am three years and five platform treks in. I charge less than everyone because I have less to show, and I would rather say that plainly than pretend. Book me now; I do not intend to stay this cheap.',
  array['Nepali','English','Rai'],'everest-base-camp',14,'ebc-with-aakash','Everest Base Camp on a budget',
- 'The classic fourteen days at the lowest guide rate on Trek, led by someone early in his career and visibly determined about it.');
+ 'The classic fourteen days at the lowest guide rate here, led by someone early in his career and visibly determined about it.');
 
 -- Auth rows (empty-string token columns — GoTrue's scanner errors on NULLs).
 insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
