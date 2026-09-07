@@ -1157,3 +1157,44 @@ is now just the TIMS card.
 and render in `/_dev/primitives`, so they can be looked at without a booking.
 Checked at 360px. 283 tests green, build green. No migration needed —
 `booking_documents.type` already allowed exactly these two.
+
+## Session — why nobody could create an experience (2026-09-06)
+
+Founder: "I am not being able to create dayhikes experiences and other stuff
+as well." Three causes, all real, none of them about day hikes.
+
+**The office could not create anything.** `/ops/experiences` could edit every
+experience and create none — the only path into the offerings table was a
+guide filling in the five-step form himself. The founder's own account is
+`ops`, so from where they were sitting there was no button at all. Now there
+is: `/ops/experiences/new`, the same `ExperienceForm` with a "whose trip is
+it?" picker in front of it, saving as a draft and dropping the office into the
+editor where the Live button already lives. One publish path, not two.
+Photographs are not demanded here the way they are of a guide (3 minimum) —
+the office is usually typing from a phone call and the pictures follow.
+
+**A guide who was not yet verified had no navigation.** The tab bar rendered
+only for `status === 'verified'`, so an applied or in-review guide landed on a
+status screen with no way to reach Experiences, Journals or anything else.
+Both of the founder's test guide accounts (`abc@gmail.com`, `xyz@gmail.com`)
+are in exactly that state. The bar is now always there: publishing is gated by
+ops regardless, so there is nothing an unverified guide can break by building
+their listings — and a guide who arrives on the day of verification with three
+trips already written is the whole point of the welcome email.
+
+**"List a trip" opened the profile page.** The one instruction on the
+unverified guide's screen led away from the thing it was asking for. It now
+opens the form.
+
+The database was never the problem: a day-hike insert with a realistic payload
+succeeds (tested against the live database inside a transaction, rolled back),
+and `booking_documents`/`offerings` constraints all allow every kind. What
+does not exist in production is a single offering that was created through the
+app — every row is seed data, `live` or `paused`, which is consistent with the
+create path having never worked for anyone.
+
+283 tests green, build green. Not verified in a live browser: writing the
+service-role key into `.dev.vars` is blocked in this environment, so the ops
+create page has not been clicked through against real data — the form
+component is the one the ops editor already uses in production, and the insert
+is proven, but the first click is the founder's.

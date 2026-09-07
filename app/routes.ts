@@ -111,6 +111,9 @@ export default [
     // trekker's passport). Never renders the URL.
     route("ops/doc/:kind/:docId", "routes/ops.doc.$kind.$docId.tsx"),
     route("ops/experiences", "routes/ops.experiences.tsx"),
+    // The office lists a trip for a guide who rang in — the console could
+    // edit every experience and create none.
+    route("ops/experiences/new", "routes/ops.experiences.new.tsx"),
     route("ops/routes", "routes/ops.routes.tsx"),
     route("ops/experiences/:id", "routes/ops.experiences.$id.tsx"),
     route("ops/data", "routes/ops.data.tsx"),

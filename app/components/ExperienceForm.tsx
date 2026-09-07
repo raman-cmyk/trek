@@ -46,6 +46,7 @@ export function ExperienceForm({
   values,
   routes,
   guideId,
+  guides,
   submitLabel,
   busy,
 }: {
@@ -60,10 +61,20 @@ export function ExperienceForm({
     permits?: Array<{ name: string; cost_usd_cents: number }>;
   }>;
   guideId: string;
+  /**
+   * Whose trip it is, when the person filling this in is not the guide.
+   * The office lists trips for guides who phoned them — the concierge half
+   * of the model — and until this existed the only way an experience could
+   * be created at all was a guide typing it himself.
+   */
+  guides?: Array<{ user_id: string; full_name: string; status?: string }>;
   submitLabel: string;
   busy?: boolean;
 }) {
   const [kind, setKind] = useState(values?.kind ?? "trek");
+  // Photos upload into the guide's own folder, so the picker has to be
+  // answered before the gallery knows where to put them.
+  const [owner, setOwner] = useState(guideId);
   // Days is mirrored in state because per-day price lines multiply by it — a
   // guide changing 10 days to 14 must see the price move.
   const [days, setDays] = useState<number>(
@@ -168,6 +179,29 @@ export function ExperienceForm({
       {values?.id && <input type="hidden" name="experience_id" value={values.id} />}
 
       <Step n={1} at={step} title="What it is">
+      {guides && (
+        <label className={label}>
+          Whose trip is it?
+          <select
+            name="guide_id"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            className={field}
+            required
+          >
+            <option value="" disabled>
+              — pick the guide —
+            </option>
+            {guides.map((g) => (
+              <option key={g.user_id} value={g.user_id}>
+                {g.full_name}
+                {g.status && g.status !== "verified" ? ` — ${g.status.replace("_", " ")}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <label className={label}>
         What kind of trip is it?
         <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className={field}>
@@ -316,11 +350,18 @@ export function ExperienceForm({
 
       <Step n={4} at={step} title="Photographs">
         {/* The cover is simply the first of them. */}
-        <PhotoGallery
-          initial={values?.photos ?? []}
-          guideId={guideId}
-          onCount={setPhotoCount}
-        />
+        {guides && !owner ? (
+          <p className="rounded bg-mist px-3 py-2 text-sm text-ink-soft">
+            Pick whose trip it is first — photographs are filed under the
+            guide they belong to.
+          </p>
+        ) : (
+          <PhotoGallery
+            initial={values?.photos ?? []}
+            guideId={owner}
+            onCount={setPhotoCount}
+          />
+        )}
       </Step>
 
       <Step n={5} at={step} title="Check it over">

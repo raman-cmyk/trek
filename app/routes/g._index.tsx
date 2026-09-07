@@ -204,7 +204,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       done: (offeringCount ?? 0) > 0,
       label: "List a trip",
       note: "The thing people book. Start with the trek you run most.",
-      to: "/g/profile",
+      // Straight to the form. This said "list a trip" and opened the profile
+      // page, which does not list trips — the one instruction on the screen
+      // led away from the thing it was asking for.
+      to: "/g/experiences/new",
     },
     {
       key: "journal",
