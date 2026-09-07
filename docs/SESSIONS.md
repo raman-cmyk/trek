@@ -1278,3 +1278,28 @@ Checked by rendering the thread at 380px from both sides: the guide's button
 and the picker were on one row and the button clipped, so they stack.
 
 293 tests green, build green, 0059 applied to the live database.
+
+## Session — a guide's work did not start the day they joined (2026-09-06)
+
+`/g/journals` could only write up a trek booked through Trek. A guide who
+joined last week — fifteen years of Manaslu behind them, no bookings here —
+had nothing they could write, and a journal is the one thing that makes a
+trekker choose them. The old empty state told them to message the office.
+
+The schema always allowed it: 0032 gave journals `pre_platform` and a
+constraint that a journal hangs off a booking *or* that flag. Nothing ever set
+it. Now the write-up card has two tabs — "A trek from Trek" (pick it, dates and
+route come with it) and "One of your own" (title, the day you set off, an
+optional route, and a note for the office). A guide with no bookings lands on
+the second tab, because it is the only one they can use.
+
+Honesty is the other half. `pre_platform` joins `public_journals` (0060) and
+the journal page carries a line — "Pemba led this trek on their own — it was
+not booked through Trek" — so a reader is never left to assume the stronger
+claim. The guide's own list marks them "your own trek" too.
+
+Migration 0060 had to append `pre_platform` after `comment_count`: `create or
+replace view` can only add columns at the end, and inserting one mid-list
+renames every column after it. Postgres said so, loudly, before anything ran.
+
+293 tests green, build green, 0060 applied to the live database.

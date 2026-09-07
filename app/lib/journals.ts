@@ -49,6 +49,8 @@ export interface PublicJournal {
   id: string;
   kind?: "journey" | "post" | "gallery";
   comment_count?: number;
+  /** True when the guide led this trek outside Trek — we did not arrange it. */
+  pre_platform?: boolean;
   slug: string;
   title: string;
   start_date: string;
@@ -78,7 +80,7 @@ export interface PublicJournal {
 }
 
 export const JOURNAL_COLS =
-  "id, slug, title, start_date, end_date, days, max_altitude_m, distance_km, pass_crossed, weather_note, cover_photo_url, guide_note, client_note, group_display, client_note_author, published_at, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_only_with_me, guide_district, route_id, route_slug, route_name, route_region, kind, comment_count";
+  "id, slug, title, start_date, end_date, days, max_altitude_m, distance_km, pass_crossed, weather_note, cover_photo_url, guide_note, client_note, group_display, client_note_author, published_at, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_only_with_me, guide_district, route_id, route_slug, route_name, route_region, kind, comment_count, pre_platform";
 
 /**
  * The one mono line under the cover:

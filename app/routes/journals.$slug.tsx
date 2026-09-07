@@ -441,6 +441,15 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
                   {j.guide_only_with_me}
                 </p>
               )}
+              {/* Which claim this page is making. A trek we arranged and a
+                  trek we did not are both true; only one of them is ours to
+                  vouch for, and a reader should not have to assume. */}
+              {j.pre_platform && (
+                <p className="mt-3 rounded bg-mist px-2.5 py-1.5 text-caption text-ink-soft">
+                  {j.guide_name} led this trek on their own — it was not booked
+                  through Trek.
+                </p>
+              )}
               <p className="mt-3 font-mono text-caption text-muted">
                 {photoCount} photos
                 {!isPost && ` · ${entries.length} days written up`}
