@@ -381,3 +381,26 @@ licence sentence moved to the welcome email, which has room.
 **Not renamed, deliberately:** the Cloudflare worker (`trek`), the repository,
 the package name, and the workers.dev subdomain. Renaming the worker changes
 the live URL, which is a deployment decision and not a branding one.
+
+## `cn` does not resolve Tailwind conflicts, and the calendar proved it (2026-09-06)
+
+A guide selected ten days on `/g/calendar` and saw two of them highlighted.
+The cause was not the colour: the day button stacked `st === "open" && "ring-1
+ring-inset ring-border"` with `picked && "ring-2 ring-accent"`, and `cn` is a
+six-line joiner that puts both in the class attribute. Two utilities setting
+the same property, equal specificity — the winner is whichever Tailwind emitted
+later in the stylesheet, not whichever was written last. Grey won.
+
+The fix is not to reach for tailwind-merge. It is that a thing with five
+mutually exclusive states should say so: `dayLook(state, picked)` returns one
+string, chosen by one branch, and the precedence — booked outranks selection,
+selection outranks blocked and free — is now readable in five lines instead of
+being an accident of CSS order.
+
+Selection is a green **outline** on a pale fill; booked stays a solid green
+fill. Two greens meaning different things was the other half of the confusion.
+
+Worth knowing for the rest of the app: any `cn(...)` that conditionally
+overrides a utility already in the base string has the same hazard. This was
+the only one stacking ring widths; the pattern to avoid is layering, not `cn`
+itself.

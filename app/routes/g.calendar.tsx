@@ -173,6 +173,7 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
         <Key className="bg-card ring-1 ring-inset ring-border">Free to book</Key>
         <Key className="bg-ink-soft/20 text-ink-soft line-through">You blocked it</Key>
         <Key className="bg-primary text-white">Booked — can't change</Key>
+        <Key className="bg-mist ring-2 ring-inset ring-moss">Chosen just now</Key>
       </ul>
 
       {fetcher.data?.error && (
@@ -219,7 +220,6 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
                 const day = iso(year, month, i + 1);
                 const st = stateOf(day);
                 const picked = chosenSet.has(day);
-                const isStart = pick && day === pick.from;
                 return (
                   <button
                     key={day}
@@ -238,14 +238,14 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
                     }`}
                     className={cn(
                       "relative w-full rounded py-2 tabular-nums transition-colors",
-                      st === "past" && "text-ink-soft/35",
-                      // Booked is the loudest thing on the grid: it is money,
-                      // and it is the one state a guide must never misread.
-                      st === "booked" && "bg-primary font-semibold text-white",
-                      st === "blocked" && "bg-ink-soft/20 text-ink-soft line-through",
-                      st === "open" && "bg-card text-ink ring-1 ring-inset ring-border",
-                      picked && st !== "booked" && st !== "past" && "ring-2 ring-accent",
-                      isStart && "ring-2 ring-moss",
+                      // One branch, not a stack of conditions. `cn` is a plain
+                      // joiner with no Tailwind conflict resolution, so a day
+                      // that was both "open" and "picked" carried ring-1
+                      // ring-border AND ring-2 ring-accent, and which one won
+                      // came down to the order those classes happen to sit in
+                      // the stylesheet. The grey one was winning: a guide
+                      // selected ten days and saw two of them highlighted.
+                      dayLook(st, picked),
                     )}
                   >
                     {i + 1}
@@ -320,6 +320,23 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
       )}
     </div>
   );
+}
+
+/**
+ * How one day looks, decided in one place.
+ *
+ * Selection outranks everything a guide can change — that is the whole point
+ * of having tapped it — but never outranks booked, which is money and cannot
+ * be selected at all. A green outline rather than a green fill: the fill means
+ * "already booked", and two greens that mean different things is the confusion
+ * this replaced.
+ */
+function dayLook(st: DayState, picked: boolean): string {
+  if (st === "past") return "text-ink-soft/35";
+  if (st === "booked") return "bg-primary font-semibold text-white";
+  if (picked) return "bg-mist font-medium text-ink ring-2 ring-inset ring-moss";
+  if (st === "blocked") return "bg-ink-soft/20 text-ink-soft line-through";
+  return "bg-card text-ink ring-1 ring-inset ring-border";
 }
 
 function Key({ className, children }: { className: string; children: React.ReactNode }) {

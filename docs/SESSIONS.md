@@ -1334,3 +1334,21 @@ The header needed work: at 1100px the longer wordmark pushed "Group trips" and
 checked at 360px and 1100px.
 
 293 tests green, build green.
+
+## Session — the calendar's selection was invisible (2026-09-06)
+
+"The dates that are selected should be green outlined, this is confusing
+people." They already were, in the code — `picked && "ring-2 ring-accent"` —
+and it did not render, because `cn` is a plain joiner and the "free to book"
+grey ring on the same button won on stylesheet order. A guide picked a
+ten-day stretch and saw the two ends lit.
+
+Each day's look now comes from one function with one branch per state, in
+precedence order: past, booked, chosen, blocked, free. Chosen is a green
+outline on a pale fill — distinct from booked, which is a solid green fill and
+the one state a guide must never misread. The legend gained the missing row.
+
+Rendered all five states side by side to check, because "which class won" is
+not a question code review answers.
+
+293 tests green, build green.
