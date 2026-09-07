@@ -15,7 +15,7 @@ import {
   hasBreakdown,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
-import { STANDARD_ADDONS, addonsTotalUsdCents } from "~/lib/addons";
+import { addOns } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
@@ -42,7 +42,22 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   // reader is looking at is the one they will be charged — including any
   // seasonal uplift, which moves the moment they change the date.
   const pricing = effBreakdown ? computeExperiencePricing(effBreakdown, party, day || null) : null;
-  const addonsPP = addonsTotalUsdCents(addons);
+  /**
+   * The extras this guide actually offers.
+   *
+   * These are the lines the guide marked "optional extra" when they priced the
+   * trip — gear hire, an extra acclimatisation day, a night in Kathmandu. They
+   * were being shown as prices and never as choices: excluded from the
+   * headline, impossible to tick, and never sent to anybody. Now they are the
+   * package a trekker composes, and what they tick travels with the enquiry.
+   *
+   * They replace a hardcoded two-item catalogue that changed the total on
+   * screen and was never charged for.
+   */
+  const options = addOns(effBreakdown ?? breakdown ?? ({} as PriceBreakdown), party);
+  const addonsPP = options
+    .filter((a) => addons.has(a.id))
+    .reduce((sum, a) => sum + a.perPersonUsdCents, 0);
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
   // Exact, sequential per-lever deltas vs the full comfort package (they sum).
   const afterTeahouse =
@@ -298,21 +313,38 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 </div>
               )}
 
-              {/* Add-ons — each is a line, nothing hidden (§1b). */}
-              <div className="mt-4 space-y-2 border-t border-line pt-4">
-                {STANDARD_ADDONS.map((a) => (
-                  <label key={a.key} className="flex cursor-pointer items-start justify-between gap-3">
-                    <span>
-                      <span className="text-sm font-medium text-ink">{a.label}</span>
-                      <span className="mt-0.5 block text-xs text-muted">{a.note}</span>
-                    </span>
-                    <span className="flex items-center gap-2 whitespace-nowrap">
-                      <span className="font-mono text-sm text-ink">+{m(a.amountUsdCents)}</span>
-                      <input type="checkbox" checked={addons.has(a.key)} onChange={() => toggleAddon(a.key)} />
-                    </span>
-                  </label>
-                ))}
-              </div>
+              {/* The extras, ticked on and off. Each is a line the guide
+                  wrote and priced — nothing hidden, nothing invented here. */}
+              {options.length > 0 && (
+                <div className="mt-4 border-t border-line pt-4">
+                  <p className="mb-2 text-sm font-medium text-ink">Add if you want it</p>
+                  <div className="space-y-2">
+                    {options.map((a) => (
+                      <label
+                        key={a.id}
+                        className="flex cursor-pointer items-start justify-between gap-3"
+                      >
+                        <span className="text-sm text-ink">{a.label}</span>
+                        <span className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="font-mono text-sm text-ink">
+                            +{m(a.perPersonUsdCents)}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={addons.has(a.id)}
+                            onChange={() => toggleAddon(a.id)}
+                            aria-label={`Add ${a.label}`}
+                          />
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-muted">
+                    Ticked extras go to {o.guide_first_name} with your dates. Nothing
+                    is charged until you both agree the trip.
+                  </p>
+                </div>
+              )}
 
               {/* Grand total — the one number, matching the booking box. */}
               <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
@@ -430,6 +462,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           }}
           priceBreakdown={effBreakdown ?? breakdown}
           addonsPerPerson={addonsPP}
+          selectedOptions={options.filter((a) => addons.has(a.id)).map((a) => a.id)}
           party={party}
           setParty={setParty}
           day={day}

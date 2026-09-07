@@ -33,6 +33,9 @@ export default [
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
     route("trips", "routes/trips._index.tsx"),
+    // A package the guide proposed: what changed, what it costs, approve and
+    // pay the deposit in one move.
+    route("proposals/:id", "routes/proposals.$id.tsx"),
     // Going together: the group is the container for everything that happens
     // before a booking — who is coming, the chat, and how the money splits.
     // Events: anyone proposes, the office accepts, the organiser fills it in.

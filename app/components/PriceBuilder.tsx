@@ -401,7 +401,11 @@ export function PriceBuilder({
             </div>
           ))}
           {quote.lines
-            .filter((l) => !l.key.startsWith("line:"))
+            // A trip with no lines yet showed the four trek buckets at $0 —
+            // "Porters", "Permits (TIMS + park)" — which is the wrong shape
+            // for a day hike and noise for everyone. A row worth nothing is
+            // not worth a row.
+            .filter((l) => !l.key.startsWith("line:") && l.amountUsdCents !== 0)
             .map((l) => (
               <div key={l.key} className="flex justify-between gap-3">
                 <dt className="text-muted">{l.label}</dt>

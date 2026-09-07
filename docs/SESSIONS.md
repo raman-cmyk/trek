@@ -1198,3 +1198,46 @@ service-role key into `.dev.vars` is blocked in this environment, so the ops
 create page has not been clicked through against real data — the form
 component is the one the ops editor already uses in production, and the insert
 is proven, but the first click is the founder's.
+
+## Session — the package, negotiated (2026-09-06)
+
+Three asks, one thread running through them: the product assumed a trek that
+somebody either books or doesn't.
+
+**Optional extras are actually optional.** The guide's own "optional extra"
+lines are tick boxes on the offering page now, priced per person for the party
+on screen, and what gets ticked travels with the enquiry
+(`enquiries.selected_options`) and shows on the guide's request card — "Wants:
+Gear hire". The hardcoded `STANDARD_ADDONS` catalogue is gone: it moved the
+total and was never charged by anything downstream.
+
+**Custom packages** (`package_proposals`, migration 0058). The guide's request
+card has a third answer between yes and no: *Suggest changes* — days, party,
+start date, which options are in, one extra line of their own, and a note,
+priced live as they type. The trekker gets an email and a card at the top of
+My Trips, opens `/proposals/:id`, sees what moved in words and what it costs
+against what they asked for, and approves — which creates the booking and goes
+straight to the deposit, now **20%**.
+
+`composePackage` and `describeChanges` are pure and tested (10 new tests):
+what somebody is about to be charged, and the sentence explaining why, are not
+things to work out inside a route handler. The proposal stores its own price
+breakdown in the offering's shape, so `quote()` — one new optional argument —
+prices it with the same arithmetic, and checkout, contracts and payouts need
+no special case.
+
+**The guide form stopped being a trek form.** Steps come from the kind (no
+"The route" step containing nothing), length defaults to what that kind
+usually is (a day hike opens at 1 day, not 12), and the price preview no
+longer shows "Porters" and "Permits (TIMS + park)" at $0 to a food tour.
+Verified in a browser: switching to Day hike gives four steps, one day, and a
+day-hike price library.
+
+Migration 0058 is applied to the live database and verified (table, RLS, three
+policies, the enquiries column); a realistic proposal insert was smoke-tested
+in a rolled-back transaction. 293 tests green, build green.
+
+**Not done, and worth saying:** none of the new screens have been clicked
+through against real data — this environment cannot hold the service-role key,
+so the guide's proposer and the approval page have been driven only by types,
+tests and SQL. The first real proposal is the test.

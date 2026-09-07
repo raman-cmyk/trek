@@ -299,3 +299,52 @@ and muting never removes you from the trip.
 These are transactional, not marketing: it is a message on a trip you joined,
 so it ignores marketing consent and honours the block list — which is exactly
 the line drawn in 0055.
+
+## A trip is a package that gets negotiated, not a listing you say yes to (2026-09-06)
+
+The booking flow had one shape: a trekker asked for a date and a party size,
+and the guide could answer yes or no. Every real conversation about a trek
+ends somewhere else — "add a day at Namche", "skip the flight, we'll bus it",
+"there are three of us now" — so the actual agreement happened on WhatsApp and
+the booking quietly stopped describing the trip.
+
+Three pieces, one idea:
+
+**Optional lines are choices now.** A guide has always been able to mark a
+price line "optional extra", and it did nothing: excluded from the headline,
+impossible to tick, never sent anywhere. They are tick boxes on the offering
+page, and what a trekker ticks travels with the enquiry
+(`enquiries.selected_options`), so the guide answers the trip somebody
+actually asked for.
+
+Removed with it: `STANDARD_ADDONS`, a hardcoded two-item catalogue (gear
+rental, airport hotel) that moved the total on screen and was never charged
+for by anything. A guide who rents gear can price a "Gear hire" line, which is
+the same feature without the lie.
+
+**A proposal is the negotiation, written down** (`package_proposals`, 0058).
+The guide adjusts days, party, which options are in, and can add one line of
+their own; it is priced live in front of them and sent. The trekker sees what
+changed in words ("2 days longer — 15 days instead of 13", "Added: gear
+hire"), what it costs against what they asked for, and one button that
+approves and pays. Approving is what creates the booking — nothing is held and
+no money moves before it.
+
+**The proposal snapshots its own price breakdown** in the same shape an
+offering carries, so `quote()` prices it with the identical function and every
+reader downstream — checkout, the contract, the payout — needs no special
+case. It is a snapshot rather than a reference on purpose: editing the listing
+next month must not change what somebody already agreed to.
+
+**Deposit is 20%**, down from 30% (founder's call). One constant,
+`DEPOSIT_RATE` in pricing.ts; docs/02 §Payment flow still says 30% and wants
+updating when the payment docs are next revised.
+
+## The guide form was a trek form with other kinds squeezed in (2026-09-06)
+
+Listing anything but a trek meant answering a step headed "The route" that
+contained nothing, starting from 12 days, and reading a price preview split
+into "Permits (TIMS + park)" and "Porters" — for a food tour. Steps are now
+derived from the kind (no route step where there is no route), the length
+defaults to what that kind usually is, and a price row worth nothing is not
+shown at all.

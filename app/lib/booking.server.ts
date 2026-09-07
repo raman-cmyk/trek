@@ -31,12 +31,20 @@ export interface Quote extends PriceBreakdown {
   fundUsdCents: number;
 }
 
-/** Build a quote from an offering + party size + start date (pricing.ts). */
+/**
+ * Build a quote from an offering + party size + start date (pricing.ts).
+ *
+ * `override` prices a package that is no longer the offering: a proposal the
+ * guide adjusted — a day added, an option the trekker ticked, a line written
+ * for this trip alone. It runs through the same arithmetic rather than beside
+ * it, so an agreed package cannot be priced differently from a listed one.
+ */
 export async function quote(
   admin: SupabaseClient,
   offeringId: string,
   partySize: number,
   startDate: string,
+  override?: { breakdown: ExperienceBreakdown; days: number },
 ): Promise<Quote> {
   const { data: o } = await admin
     .from("offerings")
@@ -48,7 +56,8 @@ export async function quote(
   let breakdown: PriceBreakdown;
   let logisticsUsdCents = 0;
   let fundUsdCents = 0;
-  const pb = (o as any).price_breakdown as ExperienceBreakdown | null;
+  const days = override ? Math.max(1, Math.round(override.days)) : o.days;
+  const pb = (override?.breakdown ?? (o as any).price_breakdown) as ExperienceBreakdown | null;
   if (hasBreakdown(pb)) {
     // v3: charge exactly what the page displayed — derive from the breakdown.
     const a = partyAmounts(pb, partySize, startDate);
@@ -84,14 +93,14 @@ export async function quote(
       isMultiDay: o.kind === "trek",
       partySize,
       fxRateNpr: FX_RATE_NPR,
-      days: o.days,
+      days,
       dayRateUsdCents: guide?.day_rate_usd_cents ?? 0,
       permitFeesPerPersonUsdCents: permitPp,
       offeringPriceUsdCents: o.price_usd_cents ?? 0,
     });
   }
 
-  const endDate = addDays(startDate, Math.max(0, o.days - 1));
+  const endDate = addDays(startDate, Math.max(0, days - 1));
   const daysUntil = daysBetween(new Date().toISOString().slice(0, 10), startDate);
   // Two-track (v3 §1e): day experiences are paid in full at checkout — no
   // deposit/balance split. Multi-day treks keep the 30% deposit flow.
@@ -100,7 +109,7 @@ export async function quote(
       ? computeDeposit(breakdown.totalUsdCents, daysUntil)
       : breakdown.totalUsdCents;
 
-  return { ...breakdown, depositUsdCents, endDate, days: o.days, logisticsUsdCents, fundUsdCents };
+  return { ...breakdown, depositUsdCents, endDate, days, logisticsUsdCents, fundUsdCents };
 }
 
 /**
@@ -123,7 +132,29 @@ export async function acceptEnquiry(
   if (!enq) return null;
 
   const q = await quote(admin, enq.offering_id, enq.party_size, enq.start_date);
+  return bookFromQuote(admin, enq, q);
+}
 
+/**
+ * Turn an agreed trip into a booking.
+ *
+ * Shared by the two ways a trip gets agreed: the guide accepting the enquiry
+ * as it was asked, and a trekker approving a package the guide proposed. One
+ * implementation, so an adjusted package cannot end up with a different hold,
+ * a different contract, or no group.
+ */
+async function bookFromQuote(
+  admin: SupabaseClient,
+  enq: {
+    id: string;
+    trekker_id: string;
+    guide_id: string;
+    offering_id: string;
+    start_date: string;
+    party_size: number;
+  },
+  q: Quote,
+): Promise<string> {
   const { data: booking, error } = await admin
     .from("bookings")
     .insert({
@@ -133,6 +164,8 @@ export async function acceptEnquiry(
       offering_id: enq.offering_id,
       start_date: enq.start_date,
       end_date: q.endDate,
+      // The party and the length come from what was agreed, which on an
+      // approved proposal is not what the offering says.
       party_size: enq.party_size,
       status: "pending_deposit",
       guide_fee_usd_cents: q.guideFeeUsdCents,
@@ -631,4 +664,84 @@ async function sweepInstalments(
       .is("balance_paid_at", null);
   }
   return n;
+}
+
+/**
+ * A trekker approves the package their guide proposed.
+ *
+ * This is the moment a negotiation becomes a trip: the proposal's own
+ * breakdown — the extra day, the option they ticked, the line the guide wrote
+ * — is what gets priced and what the deposit is taken against. The offering it
+ * started from is not consulted again, so editing the listing next month
+ * cannot change what somebody already agreed to.
+ *
+ * Returns the booking id, or null if the proposal is gone, already answered,
+ * or is not this person's to answer.
+ */
+export async function approveProposal(
+  admin: SupabaseClient,
+  proposalId: string,
+  trekkerId: string,
+): Promise<string | null> {
+  const { data: p } = await admin
+    .from("package_proposals")
+    .select("id, enquiry_id, guide_id, trekker_id, start_date, days, party_size, price_breakdown, status")
+    .eq("id", proposalId)
+    .eq("trekker_id", trekkerId)
+    .eq("status", "proposed")
+    .maybeSingle();
+  if (!p) return null;
+
+  const { data: enq } = await admin
+    .from("enquiries")
+    .select("id, trekker_id, guide_id, offering_id, status")
+    .eq("id", p.enquiry_id)
+    .maybeSingle();
+  if (!enq) return null;
+  // A booking already out of this enquiry means approving a second proposal
+  // would sell the same trip twice. Checked against the bookings themselves
+  // rather than the enquiry's status, which is the thing that could drift.
+  const { data: already } = await admin
+    .from("bookings")
+    .select("id, status")
+    .eq("enquiry_id", enq.id)
+    .limit(5);
+  if ((already ?? []).some((b: any) => !String(b.status ?? "").startsWith("cancelled"))) {
+    return null;
+  }
+
+  const q = await quote(admin, enq.offering_id, p.party_size, p.start_date, {
+    breakdown: p.price_breakdown as ExperienceBreakdown,
+    days: p.days,
+  });
+
+  const bookingId = await bookFromQuote(
+    admin,
+    {
+      id: enq.id,
+      trekker_id: enq.trekker_id,
+      guide_id: enq.guide_id,
+      offering_id: enq.offering_id,
+      start_date: p.start_date,
+      party_size: p.party_size,
+    },
+    q,
+  );
+
+  await admin
+    .from("package_proposals")
+    .update({
+      status: "approved",
+      booking_id: bookingId,
+      responded_at: new Date().toISOString(),
+    })
+    .eq("id", p.id);
+  // Any other proposal on this enquiry is now moot.
+  await admin
+    .from("package_proposals")
+    .update({ status: "superseded" })
+    .eq("enquiry_id", p.enquiry_id)
+    .eq("status", "proposed");
+
+  return bookingId;
 }

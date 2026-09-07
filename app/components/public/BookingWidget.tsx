@@ -79,6 +79,7 @@ function ConfigBody({
   o,
   breakdown,
   addonsPerPerson,
+  selectedOptions = [],
   availableDays,
   party,
   setParty,
@@ -89,6 +90,8 @@ function ConfigBody({
   o: BookingWidgetOffering;
   breakdown?: PB | null;
   addonsPerPerson?: number;
+  /** Ids of the guide's optional lines the trekker ticked. */
+  selectedOptions?: string[];
   availableDays: string[];
   party: number;
   setParty: (n: number) => void;
@@ -167,6 +170,13 @@ function ConfigBody({
           <input type="hidden" name="start_date" value={day} />
           <input type="hidden" name="party_size" value={party} />
           <input type="hidden" name="return_to" value={returnTo} />
+          {/* What they ticked travels with the request. The guide answers the
+              trip somebody actually asked for, not the listing's default. */}
+          <input
+            type="hidden"
+            name="selected_options"
+            value={JSON.stringify(selectedOptions)}
+          />
           <textarea
             name="message"
             rows={2}
@@ -208,6 +218,7 @@ export function BookingWidget({
   offering,
   priceBreakdown,
   addonsPerPerson = 0,
+  selectedOptions = [],
   party,
   setParty,
   day,
@@ -218,6 +229,8 @@ export function BookingWidget({
   offering: BookingWidgetOffering;
   priceBreakdown?: PB | null;
   addonsPerPerson?: number;
+  /** Ids of the guide's optional lines the trekker ticked. */
+  selectedOptions?: string[];
   party: number;
   setParty: (n: number) => void;
   /** Lifted, like the party size: the itemised breakdown on the page has to
@@ -250,6 +263,7 @@ export function BookingWidget({
           o={offering}
           breakdown={priceBreakdown}
           addonsPerPerson={addonsPerPerson}
+          selectedOptions={selectedOptions}
           availableDays={availableDays}
           party={party}
           setParty={setParty}
@@ -277,6 +291,7 @@ export function BookingWidget({
           o={offering}
           breakdown={priceBreakdown}
           addonsPerPerson={addonsPerPerson}
+          selectedOptions={selectedOptions}
           availableDays={availableDays}
           party={party}
           setParty={setParty}

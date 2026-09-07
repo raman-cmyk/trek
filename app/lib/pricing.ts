@@ -19,7 +19,7 @@
 
 export const SERVICE_FEE_RATE = 0.08;
 export const COMMISSION_RATE = 0.15;
-export const DEPOSIT_RATE = 0.3;
+export const DEPOSIT_RATE = 0.2;
 export const PERMIT_HANDLING_USD_CENTS = 2500; // $25 flat, multi-day only
 export const FULL_PAYMENT_WINDOW_DAYS = 14; // inside this → 100% upfront
 
@@ -132,7 +132,7 @@ export function computePricing(input: PricingInput): PriceBreakdown {
 
 /**
  * Deposit due now. Bookings starting inside the full-payment window are
- * charged 100% upfront; otherwise 30% deposit (docs/02 §Payment flow).
+ * charged 100% upfront; otherwise the deposit rate (docs/02 §Payment flow).
  */
 export function computeDeposit(
   totalUsdCents: number,
