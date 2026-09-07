@@ -80,8 +80,24 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // ── Accept exactly what was asked for ──────────────────────────────────
   if (decision === "accepted") {
-    const { acceptEnquiry } = await import("~/lib/booking.server");
-    const bookingId = await acceptEnquiry(admin, id, user.id);
+    const { acceptEnquiry, DaysTakenError } = await import("~/lib/booking.server");
+    let bookingId: string | null = null;
+    try {
+      bookingId = await acceptEnquiry(admin, id, user.id);
+    } catch (e) {
+      // The days went while the request sat waiting. Say which ones, so the
+      // guide can propose different dates instead of guessing what happened.
+      if (e instanceof DaysTakenError) {
+        const days = e.days.slice(0, 3).join(", ");
+        return data(
+          {
+            error: `You are already busy on ${days}${e.days.length > 3 ? " and more" : ""}. Propose different dates instead.`,
+          },
+          { status: 409, headers },
+        );
+      }
+      throw e;
+    }
     if (!bookingId) {
       return data({ error: "This request has expired or was already handled." }, { status: 409, headers });
     }

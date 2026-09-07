@@ -68,6 +68,26 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
+  // The same trip, the same date, asked twice. A trekker may absolutely have
+  // several requests open with one guide — different trips, different dates —
+  // but sending the identical one again is a double-tap or an impatient
+  // refresh, and it should not put two rows in a guide's list.
+  const { data: twin } = await admin
+    .from("enquiries")
+    .select("id")
+    .eq("trekker_id", user.id)
+    .eq("guide_id", guideId)
+    .eq("offering_id", offeringId)
+    .eq("start_date", startDate)
+    .in("status", ["open", "quoted"])
+    .maybeSingle();
+  if (twin) {
+    return data(
+      { ok: true, enquiryId: twin.id, already: true },
+      { headers },
+    );
+  }
+
   const { data: enq, error } = await admin
     .from("enquiries")
     .insert({

@@ -127,12 +127,63 @@ export async function acceptEnquiry(
     .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status")
     .eq("id", enquiryId)
     .eq("guide_id", guideId)
-    .eq("status", "open")
+    // 'quoted' too: a guide who proposed a different package and then thought
+    // better of it could not accept the original request at all — the button
+    // was there and answered "expired or already handled" every time.
+    .in("status", ["open", "quoted"])
     .maybeSingle();
   if (!enq) return null;
 
+  // A second booking must not be created out of one request. Guarded on the
+  // bookings themselves rather than the enquiry's status, which is the thing
+  // that can drift.
+  const { data: already } = await admin
+    .from("bookings")
+    .select("id, status")
+    .eq("enquiry_id", enq.id)
+    .limit(5);
+  if ((already ?? []).some((b: any) => !String(b.status ?? "").startsWith("cancelled"))) {
+    return null;
+  }
+
   const q = await quote(admin, enq.offering_id, enq.party_size, enq.start_date);
+  // Requests are not held while they wait, so by the time one is accepted the
+  // days may have gone to somebody else. Accepting anyway used to overwrite
+  // the other booking's calendar rows and double-book the guide in silence.
+  const clash = await clashingDays(admin, enq.guide_id, enq.start_date, q.endDate);
+  if (clash.length) throw new DaysTakenError(clash);
   return bookFromQuote(admin, enq, q);
+}
+
+/**
+ * Days in this span the guide is no longer free for.
+ *
+ * A day with no row at all counts as free: guides who never opened a calendar
+ * still take bookings, and a proposal's dates are typed by the guide, who is
+ * the authority on whether they are free that week.
+ */
+export async function clashingDays(
+  admin: SupabaseClient,
+  guideId: string,
+  startDate: string,
+  endDate: string,
+): Promise<string[]> {
+  const { data } = await admin
+    .from("availability")
+    .select("day, status")
+    .eq("guide_id", guideId)
+    .gte("day", startDate)
+    .lte("day", endDate)
+    .in("status", ["held", "booked", "blocked"]);
+  return (data ?? []).map((r: { day: string }) => r.day);
+}
+
+/** Thrown when the calendar moved under a request between asking and accepting. */
+export class DaysTakenError extends Error {
+  constructor(public readonly days: string[]) {
+    super(`days no longer free: ${days.join(", ")}`);
+    this.name = "DaysTakenError";
+  }
 }
 
 /**

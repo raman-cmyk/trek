@@ -3,15 +3,26 @@ import { cn } from "~/lib/cn";
 /**
  * Read-only month grid (docs/04 AvailabilityCalendar, trekker view). Open days
  * are highlighted; everything else is muted. Pure/SSR — takes a set of open
- * ISO-date strings and renders the next two months.
+ * ISO-date strings and renders the months from an anchor.
+ *
+ * Two shapes, one component: the wide one further down the page, and a single
+ * narrow month in the decision rail. Dates are the question every visitor
+ * actually has, and having to scroll past the whole profile to reach them was
+ * asking people to hunt for the one thing they came for.
  */
 export function AvailabilityCalendar({
   openDays,
   monthsFrom,
+  months: monthCount = 2,
+  compact = false,
 }: {
   openDays: string[];
   /** First-of-month ISO anchor (yyyy-mm-01) computed on the server. */
   monthsFrom: string;
+  /** How many months from the anchor. One fits the rail; two fit the page. */
+  months?: number;
+  /** Rail sizing: smaller type, months stacked, no legend of its own. */
+  compact?: boolean;
 }) {
   const open = new Set(openDays);
   // One class string, used by the grid AND the key, so the swatch can never
@@ -19,7 +30,7 @@ export function AvailabilityCalendar({
   const dayCls = (isOpen: boolean) =>
     cn("rounded py-1", isOpen ? "bg-accent/15 font-medium text-accent" : "text-ink-soft/40");
   const [y0, m0] = monthsFrom.split("-").map(Number);
-  const months = [0, 1].map((offset) => {
+  const months = Array.from({ length: Math.max(monthCount, 1) }, (_, offset) => {
     const d = new Date(Date.UTC(y0, m0 - 1 + offset, 1));
     return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
   });
@@ -28,22 +39,27 @@ export function AvailabilityCalendar({
     <div>
       {/* One tiny key. Colour alone is never a label — a green square and a
           grey square mean nothing until you say which is which. */}
-      <ul className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-caption text-muted">
+      <ul
+        className={cn(
+          "mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-caption text-muted",
+          compact && "gap-x-3",
+        )}
+      >
         <li className="flex items-center gap-2">
           <span aria-hidden="true" className={cn(dayCls(true), "w-7 text-center text-xs")}>
             12
           </span>
-          Free to book
+          Free{compact ? "" : " to book"}
         </li>
         <li className="flex items-center gap-2">
           <span aria-hidden="true" className={cn(dayCls(false), "w-7 text-center text-xs")}>
             12
           </span>
-          Already booked, or kept free
+          {compact ? "Taken" : "Already booked, or kept free"}
         </li>
       </ul>
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className={cn("grid gap-6", !compact && "sm:grid-cols-2")}>
       {months.map(({ year, month }) => {
         const first = new Date(Date.UTC(year, month, 1));
         const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();

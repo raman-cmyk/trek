@@ -160,8 +160,9 @@ function ConfigBody({
         </p>
       ) : sent ? (
         <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Request sent to {o.guide_first_name}. They have 24 hours to reply — we’ll
-          email you.
+          {fetcher.data?.already
+            ? `You already asked ${o.guide_first_name} about these dates — it is in My trips, waiting on them.`
+            : `Request sent to ${o.guide_first_name}. They have 24 hours to reply, and it is in My trips until they do.`}
         </p>
       ) : (
         <fetcher.Form method="post" action="/enquiry">

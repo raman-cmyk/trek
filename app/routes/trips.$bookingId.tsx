@@ -21,7 +21,8 @@ import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
 import { EmergencyFields } from "~/components/EmergencyFields";
-import { emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
+import { PreTrekBrief } from "~/components/PreTrekBrief";
+import { dialable, emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
 
 export function meta() {
   return [{ title: "Your trip" }, { name: "robots", content: "noindex" }];
@@ -33,7 +34,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point, route:routes(max_altitude_m)), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, days, meeting_point, route:routes(name, region, max_altitude_m)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -531,22 +532,65 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         </section>
       )}
 
-      {/* Pre-trek brief (T-7) */}
-      {isTrek && !cancelled && (
+      {/* Pre-trek brief.
+
+          The whole thing used to sit behind the T-7 unlock, which meant the
+          advice arrived a week before departure — after the boots were bought,
+          the insurance was chosen and the flight home was booked. The reading
+          is open from the day you pay; only the two things that are genuinely
+          last-minute — where to meet, and your guide's own number — still
+          wait, and they wait because they change. */}
+      {!cancelled && (
         <section className="mt-6">
-          <h2 className="mb-2 font-display text-xl">Pre-trek brief</h2>
-          {brief ? (
-            <div className="space-y-1 rounded-card border border-border bg-card p-4 text-sm text-ink">
-              <p><strong>Meeting point:</strong> {b.offering?.meeting_point ?? "TBC"}</p>
-              <p><strong>Packing:</strong> layers, broken-in boots, headlamp, sun protection, refillable bottle.</p>
-              <p><strong>Altitude:</strong> hydrate, ascend slowly, tell your guide about any headache early.</p>
-              {guidePhone && <p><strong>Your guide:</strong> {guidePhone}</p>}
-            </div>
-          ) : (
-            <p className="rounded-card bg-surface p-3 text-sm text-ink-soft">
-              Unlocks 7 days before you start ({daysUntil} days to go).
-            </p>
-          )}
+          <h2 className="mb-2 font-display text-xl">A few quick things before the trek</h2>
+          <p className="mb-3 text-sm text-ink-soft">
+            The questions {firstName(b.guide?.users?.full_name)} gets asked most,
+            answered for this trip. Ask anything that is not here — that is what
+            the messages are for.
+          </p>
+
+          <PreTrekBrief
+            trip={{
+              kind: b.offering?.kind ?? "trek",
+              days: b.offering?.days ?? Math.max(daysUntilStart(b.end_date, b.start_date), 1),
+              maxAltitudeM: b.offering?.route?.max_altitude_m ?? null,
+              region: b.offering?.route?.region ?? null,
+              startDate: b.start_date,
+              partySize: b.party_size,
+            }}
+          />
+
+          <div className="mt-3 rounded-card border border-border bg-card p-4">
+            <p className="font-medium text-ink">On the day</p>
+            {brief ? (
+              <dl className="mt-1.5 space-y-1 text-sm">
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-ink-soft">Meeting point</dt>
+                  <dd className="min-w-0 text-ink">{b.offering?.meeting_point ?? "Your guide will confirm this with you."}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-ink-soft">
+                    {firstName(b.guide?.users?.full_name)}&rsquo;s phone
+                  </dt>
+                  <dd className="min-w-0 text-ink">
+                    {guidePhone ? (
+                      <a href={`tel:${dialable(guidePhone)}`} className="font-mono text-primary hover:underline">
+                        {guidePhone}
+                      </a>
+                    ) : (
+                      "Two days before you start."
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-0.5 text-sm text-ink-soft">
+                Where to meet and {firstName(b.guide?.users?.full_name)}&rsquo;s own
+                number appear here a week before you start ({daysUntil} days to
+                go) — they are the two things that still change.
+              </p>
+            )}
+          </div>
         </section>
       )}
 

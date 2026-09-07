@@ -1127,12 +1127,24 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   </div>
                 )}
               </dl>
-              <a
-                href="#availability"
-                className="mt-3 inline-block text-sm text-moss underline underline-offset-4 hover:text-pine"
-              >
-                See the calendar ↓
-              </a>
+              {/* The dates, in the rail. This is the question every visitor
+                  has, and it used to be a scroll away past everything else —
+                  which also left the rail with nothing in it but a price and
+                  two numbers. One month here, the rest below. */}
+              <div className="mt-5 border-t border-line pt-4">
+                <AvailabilityCalendar
+                  openDays={openDays}
+                  monthsFrom={monthAnchor}
+                  months={1}
+                  compact
+                />
+                <a
+                  href="#availability"
+                  className="mt-3 inline-block text-sm text-moss underline underline-offset-4 hover:text-pine"
+                >
+                  More months ↓
+                </a>
+              </div>
             </div>
           </aside>
         </div>
