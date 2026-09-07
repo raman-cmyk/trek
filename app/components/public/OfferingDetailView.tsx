@@ -332,9 +332,9 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               </div>
 
               <p className="mt-2 text-xs text-muted">
-                This is the whole package. Permits, porters and logistics are
-                per person; the guide fee is shared across your group; add-ons are partner services
-                we take no cut of. The Fund line?{" "}
+                This is the whole package — everything ticked above is in that
+                number. Permits, porters and logistics are per person; the guide
+                fee is shared across your group. The Fund line?{" "}
                 <Link to="/fund" className="text-primary hover:underline">
                   See where it goes →
                 </Link>
