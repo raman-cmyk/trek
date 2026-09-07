@@ -1409,3 +1409,34 @@ Driven in a browser: added two routes, confirmed the picker stops offering them
 and the hidden field carries `[{routeId,times}]`.
 
 302 tests green, build green.
+
+## Session — likes, other guides' journeys, and a way back to your own page (2026-09-06)
+
+Three things off one screenshot of the guide's home.
+
+**"View my profile"** was a link at the very bottom, under everything. It now
+sits on the same line as the greeting, which is where a guide looks when they
+want to see the thing trekkers see.
+
+**Journeys from other guides.** A guide's home was entirely their own admin.
+It now carries four recent write-ups by other guides — cover, name, route, and
+what they have collected — because that is the half of the product they are
+competing in, and reading somebody else's is the fastest way to learn what a
+good one looks like.
+
+**Likes** (migration 0061). Journals have taken comments since 0038 — the
+expensive gesture, the one that needs you to have something to say. A like is
+the cheap one: one row per person per journal, so a double tap cannot inflate
+it and a person can take it back. `like_count` joins `public_journals`
+(appended last again — `create or replace view` only adds columns at the end),
+and the button holds its state optimistically, because on a 3G connection a
+count that waits for the round trip reads as a button that did not work.
+
+Signed out, the button becomes a sentence with a sign-in link and the count, so
+the page never shows a control that cannot do anything.
+
+Smoke-tested the whole path against the live database in a rolled-back
+transaction: two likes stored, `like_count` reads 2 through the view, and the
+conflict clause holds.
+
+302 tests green, build green.

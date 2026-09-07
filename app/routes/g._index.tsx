@@ -12,6 +12,7 @@ import { CheckinButton } from "~/components/guide/CheckinButton";
 import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
+import { SmartImage } from "~/components/SmartImage";
 
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -163,6 +164,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }
   }
 
+  // What other guides have written up lately. A guide's home screen was
+  // entirely about their own admin; this is the half of the product they are
+  // competing in, and the fastest way to learn what a good write-up looks like
+  // is to read somebody else's.
+  const { data: feed } = await admin
+    .from("public_journals")
+    .select(
+      "slug, title, cover_photo_url, guide_name, guide_slug, guide_avatar_url, route_name, days, like_count, comment_count, published_at",
+    )
+    .neq("guide_id", user.id)
+    .order("published_at", { ascending: false })
+    .limit(6);
+
   const setup = [
     {
       key: "photo",
@@ -232,6 +246,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       today,
       backupFor: backupFor ?? [],
       payableNprPaisa,
+      feed: feed ?? [],
     },
     { headers },
   );
@@ -271,7 +286,7 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, work, checkedInToday, today, backupFor, payableNprPaisa } =
+  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, work, checkedInToday, today, backupFor, payableNprPaisa, feed } =
     loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
@@ -290,7 +305,18 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="space-y-5">
-      <h1 className="font-display text-2xl text-ink">Namaste, {first}</h1>
+      {/* The page a trekker sees is the product, and a guide should be able to
+          open it from the first line of their own home screen — it was a link
+          at the very bottom, under everything. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="font-display text-2xl text-ink">Namaste, {first}</h1>
+        <Link
+          to={guide?.slug ? `/guides/${guide.slug}` : "/g/profile"}
+          className="rounded-pill border border-border px-3 py-1.5 text-sm font-medium text-primary hover:bg-mist"
+        >
+          View my profile →
+        </Link>
+      </div>
 
       <SetupChecklist steps={setup} />
 
@@ -468,6 +494,53 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           dayNumber={dayNum}
           alreadyToday={checkedInToday}
         />
+      )}
+
+      {/* Other guides' write-ups. The rest of this screen is a guide's own
+          admin; this is the product they are competing in, and reading three
+          of somebody else's is the fastest way to learn what a good one looks
+          like. */}
+      {feed.length > 0 && (
+        <section>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg text-ink">Journeys from other guides</h2>
+            <Link to="/journals" className="text-sm text-primary hover:underline">
+              See all →
+            </Link>
+          </div>
+          <ul className="space-y-2">
+            {feed.slice(0, 4).map((f: any) => (
+              <li key={f.slug}>
+                <Link
+                  to={`/journals/${f.slug}`}
+                  prefetch="intent"
+                  className="flex items-center gap-3 rounded-card border border-border bg-card p-2.5 hover:border-sage hover:bg-mist"
+                >
+                  <SmartImage
+                    src={f.cover_photo_url ?? ""}
+                    alt=""
+                    width={72}
+                    height={56}
+                    className="h-12 w-16 shrink-0 rounded object-cover"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-ink">{f.title}</span>
+                    <span className="block truncate text-xs text-ink-soft">
+                      {f.guide_name}
+                      {f.route_name ? ` · ${f.route_name}` : ""}
+                    </span>
+                    <span className="mt-0.5 block font-mono text-[11px] text-muted">
+                      {f.like_count > 0 && `${f.like_count} ♥`}
+                      {f.like_count > 0 && f.comment_count > 0 && " · "}
+                      {f.comment_count > 0 &&
+                        `${f.comment_count} ${f.comment_count === 1 ? "comment" : "comments"}`}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* This went to the edit form, so "View my profile" showed a guide the

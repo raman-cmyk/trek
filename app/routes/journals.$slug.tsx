@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Link, data } from "react-router";
+import { Form, Link, data, useFetcher } from "react-router";
 import type { Route } from "./+types/journals.$slug";
 import { pageMeta, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
@@ -134,6 +134,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("journal_id", j.id)
     .order("created_at");
 
+  // Whether this reader has already liked it, so the button says the truth on
+  // the first paint rather than after a round trip.
+  const { data: myLike } = user
+    ? await createAdminClient(env)
+        .from("journal_likes")
+        .select("user_id")
+        .eq("journal_id", j.id)
+        .eq("user_id", user.id)
+        .maybeSingle()
+    : { data: null };
+
   // This guide's other journals first; top up with the same route by others.
   const more = [...((byGuide ?? []) as PublicJournal[])];
   for (const o of (sameRoute ?? []) as PublicJournal[]) {
@@ -149,6 +160,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     more,
     offering: (offerings ?? [])[0] ?? null,
     comments: (comments ?? []) as PublicComment[],
+    liked: !!myLike,
     signedIn: !!user,
     canonical: absoluteUrl(env.SITE_URL, `/journals/${params.slug}`),
   };
@@ -162,16 +174,44 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 export async function action({ request, params, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const form = await request.formData();
-  if (String(form.get("intent")) !== "comment") {
+  const intent = String(form.get("intent"));
+  if (intent !== "comment" && intent !== "like") {
     return data({ error: "Unknown action." }, { status: 400 });
   }
 
   const { user, headers } = await getSessionUser(request, env);
   if (!user) {
     return data(
-      { error: "Sign in to comment — it takes a minute and it is free." },
+      {
+        error:
+          intent === "like"
+            ? "Sign in to say you liked it — it takes a minute and it is free."
+            : "Sign in to comment — it takes a minute and it is free.",
+      },
       { status: 401, headers },
     );
+  }
+
+  // A like is one row per person, so tapping twice takes it back rather than
+  // counting twice.
+  if (intent === "like") {
+    const admin = createAdminClient(env);
+    const { data: j } = await admin
+      .from("journals")
+      .select("id")
+      .eq("slug", params.slug)
+      .eq("status", "published")
+      .maybeSingle();
+    if (!j) return data({ error: "This journal is not live." }, { status: 404, headers });
+
+    if (String(form.get("liked")) === "1") {
+      await admin.from("journal_likes").delete().eq("journal_id", j.id).eq("user_id", user.id);
+    } else {
+      await admin
+        .from("journal_likes")
+        .upsert({ journal_id: j.id, user_id: user.id }, { onConflict: "journal_id,user_id" });
+    }
+    return data({ ok: true }, { headers });
   }
 
   const body = String(form.get("body") ?? "").trim();
@@ -214,7 +254,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
-  const { journal: j, entries, tags, route, more, offering, comments, signedIn } =
+  const { journal: j, entries, tags, route, more, offering, comments, liked, signedIn } =
     loaderData as any;
   const first = j.guide_name.split(" ")[0];
   const points = elevationPoints(entries);
@@ -456,6 +496,16 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
                 {comments.length > 0 &&
                   ` · ${comments.length} ${comments.length === 1 ? "comment" : "comments"}`}
               </p>
+
+              {/* The cheap gesture. Comments ask you to have something to say;
+                  most readers never will, and a guide who wrote this up at
+                  eleven at night still wants to know it was read. */}
+              <LikeButton
+                liked={liked}
+                count={j.like_count ?? 0}
+                signedIn={signedIn}
+                slug={j.slug}
+              />
             </div>
           </div>
         </aside>
@@ -590,5 +640,68 @@ function DayBlock({
         <MediaGrid media={media} alt={entry.title} onOpen={onOpen} />
       </div>
     </section>
+  );
+}
+
+/**
+ * "I liked this", in one tap.
+ *
+ * A fetcher rather than a navigation: liking something you are halfway down
+ * should not move the page. The count moves optimistically because the answer
+ * is never in doubt — the row either goes in or comes out — and a number that
+ * waits for a round trip on a 3G connection reads as a button that did not
+ * work.
+ */
+function LikeButton({
+  liked,
+  count,
+  signedIn,
+  slug,
+}: {
+  liked: boolean;
+  count: number;
+  signedIn: boolean;
+  slug: string;
+}) {
+  const fetcher = useFetcher<{ error?: string }>();
+  const pending = fetcher.formData?.get("liked");
+  const on = pending == null ? liked : pending !== "1";
+  const shown = count + (on === liked ? 0 : on ? 1 : -1);
+
+  if (!signedIn) {
+    return (
+      <p className="mt-3 text-caption text-muted">
+        <Link
+          to={`/login?next=${encodeURIComponent(`/journals/${slug}`)}`}
+          className="text-moss underline underline-offset-4"
+        >
+          Sign in
+        </Link>{" "}
+        to like this or leave a comment.
+        {count > 0 && ` ${count} ${count === 1 ? "person likes" : "people like"} it.`}
+      </p>
+    );
+  }
+
+  return (
+    <fetcher.Form method="post" className="mt-3">
+      <input type="hidden" name="intent" value="like" />
+      <input type="hidden" name="liked" value={on ? "1" : "0"} />
+      <button
+        className={cn(
+          "inline-flex items-center gap-2 rounded-pill border px-3 py-1.5 text-caption transition-colors",
+          on
+            ? "border-moss bg-mist font-medium text-moss"
+            : "border-line text-ink-soft hover:border-sage hover:text-ink",
+        )}
+        aria-pressed={on}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5">
+          <path d="M10 16.5S3.5 12.6 3.5 8.4A3.4 3.4 0 0110 6.3a3.4 3.4 0 016.5 2.1c0 4.2-6.5 8.1-6.5 8.1z" strokeLinejoin="round" />
+        </svg>
+        {on ? "Liked" : "Like"}
+        {shown > 0 && <span className="font-mono">{shown}</span>}
+      </button>
+    </fetcher.Form>
   );
 }
