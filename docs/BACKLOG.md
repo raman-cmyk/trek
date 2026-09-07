@@ -53,3 +53,29 @@ Also deferred with it: the `region` facet on an intent runs a second query per
 request (`guideIdsMatchingText`), which is fine at 48 guides and wants a
 materialised guide↔region view at 4,800.
 
+
+## Selling travel insurance (the real product behind the stub)
+
+The trip page now has the *place* where trekkers buy cover from us — the
+"Don't have insurance yet?" panel on the insurance document slot — but not the
+product. Pressing the button emails a human and logs the request under
+`insurance_interest` in `email_log`; nothing is quoted, sold, or charged, and
+no provider is named, because there is nothing to name yet.
+
+What the real thing needs, roughly in order:
+
+1. **An underwriter or affiliate** who will cover trekking to 5,000m+ with
+   helicopter evacuation, and who pays or bills in a way a US LLC can handle.
+   Everything below is guesswork until this exists.
+2. **A quote** — price by trip length, altitude, age and nationality. Whether
+   we can quote in-app or have to hand off to their site decides the whole UI.
+3. **Where the money goes.** An affiliate link is a referral fee and almost no
+   liability; selling a policy ourselves is regulated in most of the countries
+   our trekkers live in. This is a legal question before it is a code one.
+4. **The certificate comes back automatically** — a policy bought through us
+   should land in the insurance slot already verified, which is the actual
+   prize here: it removes the step people get stuck on.
+
+Read the demand first: `select count(*) from email_log where kind =
+'insurance_interest'` says how many people asked, before any of the above is
+worth paying for.

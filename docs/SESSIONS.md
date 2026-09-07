@@ -1126,3 +1126,34 @@ green.
 **🙋 Founder needed:** migrations 0056 and 0057 still have to be applied — this
 container has no database credentials, so I could not run them. See the next
 session note or ask Claude to run them once a connection string is available.
+
+## Session — two document slots, and a place to buy insurance (2026-09-06)
+
+The Documents section on a trip asked for a name, then made you pick
+"Passport or Insurance" from a dropdown before you could do either. Two
+different jobs behind one form, and one of them — insurance — is a job half
+the people on that page cannot do at all, because they have not bought any.
+
+Now it is two cards, each asking for one thing: **Passport** ("the photo
+page — a photo of it is fine") and **Travel insurance** ("has to cover
+trekking to 5,364m and emergency helicopter evacuation", the trek's own
+altitude from its route, not a generic number). Each lists what is already in
+with its own status, and each has its own upload button.
+
+Under the insurance card is **"Don't have insurance yet?"** — the area for
+the insurance we intend to sell. It sells nothing: no price, no checkout, no
+provider named, because none of that exists. The button emails a human, logs
+the request under `insurance_interest`, and tells the trekker we will come
+back with cover that qualifies. That is a working stub and a demand signal in
+the same click — `email_log` now answers "how many people actually want
+this?" before anyone negotiates with an underwriter. Full write-up of what the
+real product needs is in BACKLOG.
+
+The old "Insurance & TIMS" box below was asking for the same certificate a
+second time; the insurance half moved up beside its own upload and the section
+is now just the TIMS card.
+
+`DocumentSlot` and `NoInsuranceYet` live in `app/components/TripDocuments.tsx`
+and render in `/_dev/primitives`, so they can be looked at without a booking.
+Checked at 360px. 283 tests green, build green. No migration needed —
+`booking_documents.type` already allowed exactly these two.
