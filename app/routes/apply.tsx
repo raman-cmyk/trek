@@ -7,6 +7,8 @@ import { GuideRegions } from "~/components/GuideRegions";
 import { PENDING_CHECKS } from "~/lib/guide-checks";
 import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
 import { parseRegions } from "~/lib/guide-regions";
+import { parseRoutesWalked } from "~/lib/guide-routes";
+import { RoutesWalked } from "~/components/RoutesWalked";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 
@@ -19,8 +21,19 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   });
 }
 
-export function loader({ context }: Route.LoaderArgs) {
-  return { canonical: absoluteUrl(getEnv(context).SITE_URL, "/apply") };
+export async function loader({ context }: Route.LoaderArgs) {
+  const env = getEnv(context);
+  // The trails they can claim. Live routes only: a pending one is somebody
+  // else's proposal and not yet a thing to have walked thirty times.
+  const { data: routes } = await createAdminClient(env)
+    .from("routes")
+    .select("id, name, region")
+    .eq("status", "live")
+    .order("name");
+  return {
+    canonical: absoluteUrl(env.SITE_URL, "/apply"),
+    routes: routes ?? [],
+  };
 }
 
 function slugify(s: string) {
@@ -124,6 +137,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   const languages = parseLanguages(form.get("languages"));
   // Checkbox group, so getAll: anything we do not recognise is dropped.
   const regions = parseRegions(form.getAll("regions"));
+  // Which trails, and how many times each. The claim is theirs until the
+  // office checks it (0049) — the point is that the office can see it while
+  // deciding whether to verify them at all.
+  const walked = parseRoutesWalked(form.get("routes_walked"));
 
   // 1) Auth user with a credential the guide can actually sign in with
   // (email + password, same as trekkers). Phone is stored for SMS notices.
@@ -182,6 +199,26 @@ export async function action({ request, context }: Route.ActionArgs) {
       })),
     );
   }
+  if (walked.length) {
+    // Only routes that exist and are live — a crafted post cannot invent one.
+    const { data: real } = await admin
+      .from("routes")
+      .select("id")
+      .eq("status", "live")
+      .in("id", walked.map((w) => w.routeId));
+    const live = new Set((real ?? []).map((r) => r.id));
+    const rows = walked
+      .filter((w) => live.has(w.routeId))
+      .map((w) => ({ guide_id: userId, route_id: w.routeId, times_walked: w.times }));
+    if (rows.length) {
+      // Best-effort: an application must not fail over a route claim.
+      await admin.from("guide_route_experience").insert(rows).then(
+        () => {},
+        () => {},
+      );
+    }
+  }
+
   const { data: checks } = await admin
     .from("guide_verifications")
     .insert(
@@ -223,7 +260,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   return data({ ok: true, name: fullName });
 }
 
-export default function Apply({ actionData }: Route.ComponentProps) {
+export default function Apply({ loaderData, actionData }: Route.ComponentProps) {
+  const { routes } = loaderData as { routes: Array<{ id: string; name: string; region: string | null }> };
   const nav = useNavigation();
   const busy = nav.state !== "idle";
   const formRef = useRef<HTMLFormElement>(null);
@@ -409,6 +447,21 @@ export default function Apply({ actionData }: Route.ComponentProps) {
             </span>
             <div className="mt-2">
               <GuideRegions />
+            </div>
+          </div>
+
+          <div>
+            <span className="text-sm text-ink">
+              Treks you have led, and how many times
+              <span className="ml-1.5 text-xs text-ink-soft">optional</span>
+            </span>
+            <span className="mt-0.5 block text-xs text-ink-soft">
+              “Manaslu Circuit ×34” is the first thing a trekker reads, and the
+              thing an agency can never show them. It is also what the office
+              looks at when deciding to verify you.
+            </span>
+            <div className="mt-2">
+              <RoutesWalked routes={routes} />
             </div>
           </div>
 

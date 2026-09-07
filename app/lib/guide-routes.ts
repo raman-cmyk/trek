@@ -21,3 +21,39 @@ export function parseTimesWalked(v: unknown): number | null {
   if (!Number.isFinite(n) || n < 1) return null;
   return Math.min(MAX_TIMES_WALKED, n);
 }
+
+/** One route a guide says they have walked, and how many times. */
+export interface WalkedClaim {
+  routeId: string;
+  times: number;
+}
+
+/**
+ * The application's route claims, which arrive as JSON from a picker.
+ *
+ * Parsed defensively and deduplicated: the table's primary key is
+ * (guide_id, route_id), so a repeated route would fail the whole insert and
+ * lose an application over a double tap. The first claim for a route wins,
+ * which is the one they typed deliberately.
+ */
+export function parseRoutesWalked(raw: unknown): WalkedClaim[] {
+  let parsed: unknown;
+  try {
+    parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  const seen = new Set<string>();
+  const out: WalkedClaim[] = [];
+  for (const row of parsed) {
+    const routeId = typeof (row as any)?.routeId === "string" ? (row as any).routeId : "";
+    const times = parseTimesWalked((row as any)?.times);
+    if (!routeId || times === null || seen.has(routeId)) continue;
+    seen.add(routeId);
+    out.push({ routeId, times });
+    if (out.length >= 40) break; // there are two dozen routes; forty is a bug
+  }
+  return out;
+}

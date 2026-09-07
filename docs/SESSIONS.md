@@ -1384,3 +1384,28 @@ near-identical shots of the same ridge cannot do it from an 80px crop.
 Driven in a browser: uploaded state restored across a reload (2 photos, and the
 hidden field that carries them into the submit), and the viewer opened from a
 thumbnail.
+
+## Session — the treks a guide has actually walked (2026-09-06)
+
+Migration 0049 opens with "The application now asks them directly." It never
+did. The table has existed since then, `/g/profile` edits it, the public
+profile leads with it — and `/apply`, the one screen where the office decides
+whether somebody is worth verifying, collected years, a day rate, languages
+and a one-liner, and nothing about which trails they have walked.
+
+The application now asks. A route and a count, added a row at a time; a route
+already claimed drops out of the picker, and the whole list travels in one
+hidden field because there is no account yet to save rows against. On submit,
+the claims are checked against live routes — a crafted post cannot invent one —
+and written to `guide_route_experience` best-effort, because an application
+must not fail over a route claim.
+
+`parseRoutesWalked` is pure and tested (5 cases): it deduplicates, because the
+table's key is (guide, route) and a double tap would otherwise fail the insert
+and lose the application; it drops a row with no count rather than inventing a
+1; and it caps at the 500 the CHECK allows.
+
+Driven in a browser: added two routes, confirmed the picker stops offering them
+and the hidden field carries `[{routeId,times}]`.
+
+302 tests green, build green.
