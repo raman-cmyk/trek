@@ -11,8 +11,8 @@ import { computeDeposit } from "~/lib/pricing";
 /**
  * Making a package.
  *
- * Two places send one — the guide's request list, and a message thread — and
- * they must produce exactly the same thing: the offering's own breakdown with
+ * Three places send one — the guide's request list, a message thread, and a
+ * trip group's chat — and they must produce exactly the same thing: the offering's own breakdown with
  * this trip's changes applied, priced by the same arithmetic the listing uses,
  * snapshotted so a later edit to the listing cannot move a price somebody has
  * already been shown.
@@ -22,9 +22,11 @@ export interface ProposalInput {
   guideId: string;
   trekkerId: string;
   offeringId: string;
-  /** One of these; a proposal about neither is a proposal about nothing. */
+  /** One of these; a proposal about none of them is about nothing. */
   enquiryId?: string | null;
   conversationId?: string | null;
+  /** A package proposed to a whole group, in the group's own chat (0065). */
+  groupId?: string | null;
   startDate: string;
   days: number;
   partySize: number;
@@ -100,6 +102,7 @@ export async function createProposal(
     .insert({
       enquiry_id: input.enquiryId ?? null,
       conversation_id: input.conversationId ?? null,
+      group_id: input.groupId ?? null,
       offering_id: input.offeringId,
       guide_id: input.guideId,
       trekker_id: input.trekkerId,

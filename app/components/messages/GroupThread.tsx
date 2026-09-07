@@ -3,6 +3,9 @@ import { Link, useFetcher } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
+import { PackageCard, type PackageCardData } from "./PackageCard";
+import { PackageComposer } from "./PackageComposer";
+import type { PriceBreakdown } from "~/lib/experience-pricing";
 import { TripPipeline } from "~/components/TripPipeline";
 import { cn } from "~/lib/cn";
 
@@ -36,7 +39,13 @@ export function GroupThread({
   people,
   canPost,
   isGuide,
+  isOrganiser = false,
   muted,
+  proposals = [],
+  base = null,
+  baseDays = 1,
+  seats = 1,
+  startDate = "",
 }: {
   group: {
     id: string;
@@ -52,8 +61,17 @@ export function GroupThread({
   people: number;
   canPost: boolean;
   isGuide: boolean;
+  /** The organiser answers a package on the group's behalf. */
+  isOrganiser?: boolean;
   /** Emails about this trip are off for this person. */
   muted: boolean;
+  /** Packages proposed in this room (0065). */
+  proposals?: PackageCardData[];
+  /** The trip's own priced lines — what the guide builds a package from. */
+  base?: PriceBreakdown | null;
+  baseDays?: number;
+  seats?: number;
+  startDate?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -172,6 +190,36 @@ export function GroupThread({
               })}
             </ul>
           )}
+          {/* A package, in the room it was discussed in. Without this the
+              guide could type "we could add a day at Namche" and then had to
+              take the organiser off to a private thread to actually price it. */}
+          {proposals.length > 0 && (
+            <ul className="mt-3 space-y-3">
+              {proposals.map((p) => (
+                <li key={p.id}>
+                  <PackageCard p={p} isTrekker={isOrganiser} />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {isGuide && base && group.groupStatus !== "booked" && (
+            <details className="mt-3 rounded-md border border-line bg-card p-3">
+              <summary className="cursor-pointer text-sm font-medium text-moss">
+                Suggest a different plan
+              </summary>
+              <div className="mt-3">
+                <PackageComposer
+                  base={base}
+                  options={((base.lines ?? []) as any[]).filter((l) => l.optional)}
+                  defaults={{ days: baseDays, partySize: seats, startDate }}
+                  hidden={{ intent: "propose" }}
+                  submitLabel="Send it to the group"
+                />
+              </div>
+            </details>
+          )}
+
           <div ref={endRef} />
         </div>
       </div>

@@ -2,20 +2,25 @@ import { data, redirect } from "react-router";
 import type { Route } from "./+types/groups.$slug.enquire";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
-import { activeMembers, blockedFromBooking, type GroupMember, type TripGroup } from "~/lib/groups";
+import { activeMembers, blockedFromAsking, type GroupMember, type TripGroup } from "~/lib/groups";
 import { systemLine } from "~/lib/groups.server";
 import { ENQUIRY_TTL_HOURS } from "~/lib/config";
 import { firstName } from "~/lib/names";
 
 /**
- * A ready group asks the guide to hold the dates.
+ * The organiser asks the guide to take the group.
+ *
+ * This is the FIRST thing that happens, not the last. It used to sit behind a
+ * gate that wanted the whole roster joined and every share paid — money
+ * nobody could actually pay, because a share is paid into a booking and there
+ * was no booking until the guide agreed. So the sequence the page described
+ * could not be walked. Now: pick the trip, ask, and everything else waits on
+ * the answer.
  *
  * The group does not invent a second booking path — it produces one ordinary
  * enquiry, for the whole party, from the organiser. Everything downstream
  * (the guide's accept, the deposit, the permits, the contract) is the flow we
- * already have and already test. The only thing the group adds is that the
- * party size and the date came from several people agreeing rather than one
- * person guessing.
+ * already have and already test.
  */
 export async function action({ request, params, context }: Route.ActionArgs) {
   const env = getEnv(context);
@@ -45,10 +50,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   // The same gate the button is disabled by — re-checked here because a
   // disabled button is a hint, not a rule.
-  const blocked = blockedFromBooking(group, members);
+  const blocked = blockedFromAsking(group, members);
   if (blocked) return data({ error: blocked }, { status: 400, headers });
 
-  const party = activeMembers(members).length;
+  // The seats, not the roster: the others have not been invited yet, and the
+  // guide is being asked to hold a trek for the group's full size.
+  const party = Math.max(group.party_target, activeMembers(members).length);
   const { data: offering } = await admin
     .from("offerings")
     .select("id, title, guide_id, min_party, max_party")
@@ -85,7 +92,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       start_date: group.start_date,
       party_size: party,
       message:
-        `We are a group of ${party} — ${names}. ` +
+        `We are a group of ${party}${names ? ` — ${names} so far` : ""}. ` +
         (group.payment_mode === "organiser"
           ? "I am paying for everyone."
           : "We are splitting the cost between us.") +
@@ -99,12 +106,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ error: "Could not send it to the guide." }, { status: 400, headers });
   }
 
-  await admin.from("trip_groups").update({ status: "ready" }).eq("id", group.id);
+  await admin
+    .from("trip_groups")
+    .update({ status: "requested", enquiry_id: enq.id })
+    .eq("id", group.id);
   await systemLine(
     admin,
     group.id,
     user.id,
-    `${firstName(profile?.full_name) || "The organiser"} asked the guide to hold ${group.start_date} for ${party}.`,
+    `${firstName(profile?.full_name) || "The organiser"} asked the guide to hold ${group.start_date} for ${party}. Invites open once the guide says yes.`,
   );
 
   const { notifyNewEnquiry } = await import("~/lib/notifications.server");

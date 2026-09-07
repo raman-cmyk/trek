@@ -148,7 +148,24 @@ export async function loader({ context }: Route.LoaderArgs) {
     .sort((a, b) => b.guides - a.guides || a.name.localeCompare(b.name))
     .slice(0, 8);
 
-  const pick = (g: HomeGuide) => g; // rows carry whole guide rows; cards need them
+  // Only what a card renders. The rows used to carry the whole guide row —
+  // bio included — for every guide in every row, so a paragraph of prose per
+  // guide was serialised into the page and parsed again in the browser, to be
+  // read by nothing. The long text is needed here, for the keyword matching,
+  // and nowhere after it. (This page runs to the Worker's CPU limit; the
+  // cheapest millisecond is the one spent on something nobody reads.)
+  const pick = (g: HomeGuide) => ({
+    user_id: g.user_id,
+    slug: g.slug,
+    full_name: g.full_name,
+    avatar_url: g.avatar_url,
+    home_district: g.home_district,
+    tier: g.tier,
+    hook_line: g.hook_line,
+    only_with_me: g.only_with_me,
+    day_rate_usd_cents: g.day_rate_usd_cents,
+    median_response_mins: g.median_response_mins,
+  });
 
   const rows = INTENTS.map((intent) => {
     let matched = all;
@@ -215,7 +232,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   return {
     rows,
     experiences,
-    freeThisWeek: freeThisWeek.slice(0, 8),
+    freeThisWeek: freeThisWeek.slice(0, 8).map(pick),
     freeThisWeekTotal: freeThisWeek.length,
     freeRuns,
     pins,

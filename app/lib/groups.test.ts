@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   assignShares,
+  blockedFromAsking,
   blockedFromBooking,
   groupMoney,
+  groupStep,
+  guideHasAgreed,
+  membersWithoutAccounts,
   groupSlug,
   slugTail,
   splitEvenly,
@@ -97,7 +101,70 @@ describe("groupMoney", () => {
   });
 });
 
+describe("the order a group actually happens in", () => {
+  const base: TripGroup = {
+    id: "g",
+    slug: "manaslu-abc",
+    name: "Manaslu with the lads",
+    organiser_id: "a",
+    offering_id: "o",
+    guide_id: "gu",
+    start_date: "2099-10-12",
+    party_target: 2,
+    payment_mode: "split",
+    status: "forming",
+    booking_id: null,
+    note: null,
+  };
+  const roster = [
+    member({ id: "a", role: "organiser" }),
+    member({ id: "b" }),
+  ];
+
+  it("asks the guide before the roster or the money", () => {
+    // The old gate wanted every share paid before the organiser could ask —
+    // and a share is paid into a booking that does not exist until the guide
+    // says yes, so the sequence could not be walked at all.
+    expect(blockedFromAsking(base, [roster[0]])).toBeNull();
+  });
+
+  it("says what is still missing before it can be asked", () => {
+    expect(blockedFromAsking({ ...base, offering_id: null }, roster)).toContain("trip");
+    expect(blockedFromAsking({ ...base, start_date: null }, roster)).toContain("start date");
+    expect(blockedFromAsking({ ...base, start_date: "2020-01-01" }, roster)).toContain("future");
+    expect(blockedFromAsking({ ...base, status: "requested" }, roster)).toContain("waiting");
+  });
+
+  it("walks plan → asking → roster → paying → done", () => {
+    expect(groupStep(base, roster)).toBe("plan");
+    expect(groupStep({ ...base, status: "requested" }, roster)).toBe("asking");
+
+    const agreed = { ...base, status: "accepted" as const, guide_accepted_at: "2026-09-01T00:00:00Z" };
+    expect(groupStep(agreed, [roster[0]])).toBe("roster");
+    expect(groupStep(agreed, roster)).toBe("paying");
+    expect(groupStep({ ...agreed, status: "booked" }, roster)).toBe("done");
+  });
+
+  it("knows the guide has agreed once a booking exists, however it got there", () => {
+    expect(guideHasAgreed(base)).toBe(false);
+    expect(guideHasAgreed({ ...base, booking_id: "b1" })).toBe(true);
+    expect(guideHasAgreed({ ...base, guide_accepted_at: "2026-09-01T00:00:00Z" })).toBe(true);
+  });
+
+  it("finds the people who were invited and never signed in", () => {
+    const ghosts = membersWithoutAccounts([
+      roster[0],
+      { ...roster[1], user_id: null },
+      { ...roster[1], id: "c", user_id: null, status: "removed" as const },
+    ]);
+    // The removed one does not count — they are not going.
+    expect(ghosts).toHaveLength(1);
+  });
+});
+
 describe("blockedFromBooking", () => {
+  // A group the guide has already taken: everything after the guide's yes is
+  // what this gate is about, and until 0065 it was asked about first.
   const group: TripGroup = {
     id: "g",
     slug: "manaslu-abc",
@@ -108,9 +175,10 @@ describe("blockedFromBooking", () => {
     start_date: "2026-10-12",
     party_target: 3,
     payment_mode: "split",
-    status: "forming",
+    status: "accepted",
     booking_id: null,
     note: null,
+    guide_accepted_at: "2026-09-01T00:00:00Z",
   };
   const paid = [
     member({ id: "a", role: "organiser", share_usd_cents: 100, paid_usd_cents: 100 }),
@@ -125,6 +193,21 @@ describe("blockedFromBooking", () => {
     expect(blockedFromBooking({ ...group, offering_id: null }, paid)).toContain("trip");
     expect(blockedFromBooking({ ...group, start_date: null }, paid)).toContain("start date");
     expect(blockedFromBooking(group, [])).toContain("Nobody");
+  });
+
+  it("wants the guide's yes before anything is asked of anybody", () => {
+    const unasked = { ...group, status: "forming" as const, guide_accepted_at: null };
+    expect(blockedFromBooking(unasked, paid)).toBe("Ask the guide first.");
+    expect(blockedFromBooking({ ...unasked, status: "requested" }, paid)).toBe(
+      "Waiting on the guide to accept.",
+    );
+    // A booking is the guide's yes in its strongest form.
+    expect(blockedFromBooking({ ...unasked, booking_id: "b1" }, paid)).toBeNull();
+  });
+
+  it("will not go with somebody who has never signed in", () => {
+    const ghost = [paid[0], { ...paid[1], user_id: null, display_name: "Yuki" }];
+    expect(blockedFromBooking(group, ghost)).toContain("Yuki has not signed in");
   });
 
   it("counts people who have not accepted yet", () => {

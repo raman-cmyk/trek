@@ -8,8 +8,13 @@ import { SmartImage } from "~/components/SmartImage";
 import { useMoney } from "~/lib/currency-context";
 import {
   activeMembers,
+  blockedFromAsking,
   blockedFromBooking,
+  GROUP_STEPS,
   groupMoney,
+  groupStep,
+  guideHasAgreed,
+  membersWithoutAccounts,
   type GroupMember,
   type TripGroup,
 } from "~/lib/groups";
@@ -18,6 +23,8 @@ import { cn } from "~/lib/cn";
 import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { TripPipeline } from "~/components/TripPipeline";
+import { PackageCard } from "~/components/messages/PackageCard";
+import { PackageComposer } from "~/components/messages/PackageComposer";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -110,6 +117,27 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .in("id", members.map((m) => m.user_id).filter(Boolean) as string[]),
   ]);
 
+  // Packages proposed in this group (0065), and — for the guide's composer —
+  // the trip's own itemised price to build one from.
+  const [{ data: proposals }, { data: priced }] = await Promise.all([
+    canRead
+      ? admin
+          .from("package_proposals")
+          .select(
+            "id, days, party_size, start_date, total_usd_cents, deposit_usd_cents, note, status, booking_id, price_breakdown",
+          )
+          .eq("group_id", group.id)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    isGuide && group.offering_id
+      ? admin
+          .from("offerings")
+          .select("price_breakdown, days")
+          .eq("id", group.offering_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
   const avatarById = new Map((profiles ?? []).map((p) => [p.id, p]));
   const origin = new URL(request.url).origin;
 
@@ -124,6 +152,25 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       offering: offering ?? null,
       booking: booking ?? null,
       guide: guide ?? null,
+      proposals: (proposals ?? []).map((p: any) => ({
+        id: p.id,
+        title: offering?.title ?? null,
+        days: p.days,
+        partySize: p.party_size,
+        startDate: p.start_date,
+        totalUsdCents: p.total_usd_cents,
+        depositUsdCents: p.deposit_usd_cents,
+        note: p.note,
+        status: p.status,
+        bookingId: p.booking_id,
+        includes: ((p.price_breakdown?.lines ?? []) as any[])
+          .map((l) => l.label)
+          .filter(Boolean)
+          .slice(0, 6),
+      })),
+      // The guide builds a package from the listing's own lines.
+      base: (priced?.price_breakdown as any) ?? null,
+      baseDays: priced?.days ?? offering?.days ?? 1,
       me,
       isMember,
       isOrganiser,
@@ -200,6 +247,45 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // The second thing the guide can do in this room: propose the trip they
+  // would actually run. Same composer, same pricing and the same snapshot as
+  // a one-to-one thread — a group is a conversation, and a guide who can only
+  // type in it has to send people back to a private message to change a day.
+  if (intent === "propose") {
+    if (!isGuide) {
+      return data({ error: "Only the guide can propose a package." }, { status: 403, headers });
+    }
+    if (!group.offering_id) {
+      return data({ error: "The group has not picked a trip yet." }, { status: 400, headers });
+    }
+    const { createProposal, clamp, extraLineFrom } = await import("~/lib/proposals.server");
+    const seats = Math.max(group.party_target, activeMembers(members).length);
+    const res = await createProposal(admin, {
+      guideId: user.id,
+      // The organiser answers for the group — one yes, not a vote.
+      trekkerId: group.organiser_id,
+      offeringId: group.offering_id,
+      groupId: group.id,
+      startDate: String(form.get("start_date") || group.start_date || ""),
+      days: clamp(form.get("days"), 1, 60, 1),
+      partySize: clamp(form.get("party_size"), 1, 24, seats),
+      includedOptionIds: form.getAll("option").map(String),
+      extraLines: extraLineFrom(form),
+      note: String(form.get("note") ?? "").trim().slice(0, 800) || null,
+    });
+    if (res.error) return data({ error: res.error }, { status: 400, headers });
+
+    await systemLine(
+      admin,
+      group.id,
+      user.id,
+      `${myName} suggested a plan — the organiser approves it for everyone.`,
+    );
+    const { notifyGroupMessage } = await import("~/lib/group-notify.server");
+    await notifyGroupMessage(env, admin, { groupId: group.id, authorId: user.id });
+    return data({ ok: "Sent to the group." }, { headers });
+  }
+
   if (!iAmIn && !isOrganiser) {
     return data({ error: "Join the trip first." }, { status: 403, headers });
   }
@@ -225,6 +311,20 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "invite") {
+    // The guide says yes before anybody else is asked. Inviting eight people
+    // to a trek no guide has agreed to run is how a group ends up explaining
+    // to eight people that it is off.
+    if (!guideHasAgreed(group)) {
+      return data(
+        {
+          error:
+            group.status === "requested"
+              ? "The guide has not answered yet — invites open the moment they say yes."
+              : "Ask the guide to take the trip first, then invite everyone.",
+        },
+        { status: 400, headers },
+      );
+    }
     const email = String(form.get("email") ?? "").trim().toLowerCase();
     if (!email.includes("@")) {
       return data({ error: "That does not look like an email address." }, { status: 400, headers });
@@ -303,7 +403,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function GroupPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { group, members, messages, offering, booking, guide, me, isMember, isOrganiser, isGuide, userId, inviteUrl } =
+  const { group, members, messages, offering, booking, guide, proposals, base, baseDays, me, isMember, isOrganiser, isGuide, userId, inviteUrl } =
     loaderData as any;
   const { m: money } = useMoney();
   const nav = useNavigation();
@@ -313,6 +413,9 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
   const seats = booking ? booking.party_size : undefined;
   const purse = groupMoney(members, booking?.total_usd_cents, seats);
   const blocked = blockedFromBooking(group, members);
+  const askBlocked = blockedFromAsking(group, members);
+  const step = groupStep(group, members);
+  const strangers = membersWithoutAccounts(members);
   const active = activeMembers(members);
   const mine = members.find((x: GroupMember) => x.user_id === userId);
   const organiserName =
@@ -528,7 +631,28 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 })}
             </ul>
 
-            {isOrganiser && group.status === "forming" && (
+            {/* Invites wait for the guide. Asking eight people to a trek no
+                guide has agreed to run is how a group ends up un-inviting
+                eight people. */}
+            {isOrganiser && !guideHasAgreed(group) && group.status !== "booked" && (
+              <p className="mt-3 rounded-md border border-line bg-mist p-3 text-sm text-ink">
+                {group.status === "requested"
+                  ? `Waiting on ${guide ? firstName(guide.full_name) : "the guide"}. The moment they say yes you can invite everyone.`
+                  : "Invites open once the guide has taken the trip. Ask them first — it costs nothing."}
+              </p>
+            )}
+
+            {isOrganiser && strangers.length > 0 && guideHasAgreed(group) && (
+              <p className="mt-3 rounded-md border border-line bg-paper p-3 text-sm text-muted">
+                {strangers.length === 1
+                  ? `${strangers[0].display_name} has not signed in yet.`
+                  : `${strangers.length} people have not signed in yet.`}{" "}
+                Everyone going needs their own account — it is how they pay their
+                share, upload a passport and get named on the permit.
+              </p>
+            )}
+
+            {isOrganiser && guideHasAgreed(group) && group.status !== "booked" && (
               <div className="mt-3 space-y-3">
                 <Form method="post" className="flex flex-wrap gap-2">
                   <input type="hidden" name="intent" value="invite" />
@@ -611,6 +735,48 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 );
               })}
             </div>
+            {/* The packages proposed in this room. A group is a conversation,
+                and the thing a guide does in a conversation — "we should add a
+                day at Namche, here is what it costs" — could not be done here
+                at all: they could only type, and then send the organiser to a
+                private thread to actually change the trip. */}
+            {proposals.length > 0 && (
+              <ul className="mt-3 space-y-3">
+                {proposals.map((p: any) => (
+                  <li key={p.id}>
+                    <PackageCard p={p} isTrekker={isOrganiser} />
+                    {!isOrganiser && p.status === "proposed" && (
+                      <p className="mt-1 text-caption text-muted">
+                        {organiserName} approves this for the group.
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* The guide's own composer, in the group's chat. */}
+            {isGuide && base && group.status !== "booked" && (
+              <details className="mt-3 rounded-md border border-line bg-card p-3">
+                <summary className="cursor-pointer text-sm font-medium text-moss">
+                  Suggest a different plan
+                </summary>
+                <div className="mt-3">
+                  <PackageComposer
+                    base={base}
+                    options={((base.lines ?? []) as any[]).filter((l) => l.optional)}
+                    defaults={{
+                      days: baseDays,
+                      partySize: Math.max(group.party_target, active.length),
+                      startDate: group.start_date ?? "",
+                    }}
+                    hidden={{ intent: "propose" }}
+                    submitLabel="Send it to the group"
+                  />
+                </div>
+              </details>
+            )}
+
             <Form method="post" replace className="mt-3 flex gap-2">
               <input type="hidden" name="intent" value="message" />
               <input
@@ -709,40 +875,94 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
             </div>
           )}
 
+          {/* Where the trip is, in the order it actually happens. The page
+              used to invite everybody and collect the money first and ask the
+              guide last — and the gate on asking wanted every share paid,
+              which nobody could do, because a share is paid into a booking
+              that did not exist yet. */}
           <div className="rounded-md border border-line bg-card p-4">
-            <p className="label text-muted">Next</p>
-            {group.status === "booked" ? (
-              <>
-                <p className="mt-2 text-sm text-ink">This trip is booked.</p>
-                {group.booking_id && (
-                  <Link
-                    to={`/trips/${group.booking_id}`}
-                    className="mt-2 inline-block text-sm text-moss underline underline-offset-4"
+            <p className="label text-muted">Where you are</p>
+            <ol className="mt-2 space-y-2">
+              {GROUP_STEPS.map((s, i) => {
+                const at = GROUP_STEPS.findIndex((x) => x.key === step);
+                const state = i < at ? "done" : i === at ? "now" : "ahead";
+                return (
+                  <li key={s.key} className="flex gap-2.5">
+                    <span
+                      className={cn(
+                        "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px]",
+                        state === "done"
+                          ? "bg-moss text-paper"
+                          : state === "now"
+                            ? "bg-mist text-moss ring-1 ring-moss"
+                            : "bg-mist text-muted",
+                      )}
+                    >
+                      {state === "done" ? "✓" : i + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span
+                        className={cn(
+                          "block text-sm",
+                          state === "now" ? "font-medium text-ink" : "text-muted",
+                        )}
+                      >
+                        {s.label}
+                      </span>
+                      {state === "now" && (
+                        <span className="block text-caption text-muted">{s.blurb}</span>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+
+            <div className="mt-3 border-t border-line pt-3">
+              {group.status === "booked" ? (
+                <>
+                  <p className="text-sm text-ink">This trip is booked.</p>
+                  {group.booking_id && (
+                    <Link
+                      to={`/trips/${group.booking_id}`}
+                      className="mt-2 inline-block text-sm text-moss underline underline-offset-4"
+                    >
+                      See the booking →
+                    </Link>
+                  )}
+                </>
+              ) : step === "asking" ? (
+                <p className="text-sm text-muted">
+                  Asked. {guide ? firstName(guide.full_name) : "The guide"} has 24
+                  hours to answer, and invites open the moment they do.
+                </p>
+              ) : !guideHasAgreed(group) ? (
+                <p className="text-sm text-muted">
+                  {askBlocked ??
+                    (isOrganiser
+                      ? "Ask the guide — it costs nothing and nobody else is asked until they say yes."
+                      : "The organiser asks the guide next.")}
+                </p>
+              ) : blocked ? (
+                <p className="text-sm text-muted">{blocked}</p>
+              ) : (
+                <p className="text-sm text-moss">Everyone is in and paid up.</p>
+              )}
+
+              {isOrganiser && !guideHasAgreed(group) && group.status !== "requested" && offering && (
+                <Form method="post" action={`/groups/${group.slug}/enquire`} className="mt-3">
+                  <button
+                    disabled={busy || !!askBlocked}
+                    className="w-full rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    See the booking →
-                  </Link>
-                )}
-              </>
-            ) : blocked ? (
-              <p className="mt-2 text-sm text-muted">{blocked}</p>
-            ) : (
-              <p className="mt-2 text-sm text-moss">
-                Everyone is in and paid up. {isOrganiser ? "Send it to the guide." : "The organiser can send it now."}
-              </p>
-            )}
-            {isOrganiser && group.status === "forming" && offering && (
-              <Form method="post" action={`/groups/${group.slug}/enquire`} className="mt-3">
-                <button
-                  disabled={busy || !!blocked}
-                  className="w-full rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Ask {offering.guide_name.split(" ")[0]} to hold it
-                </button>
-              </Form>
-            )}
+                    Ask {offering.guide_name.split(" ")[0]} to take us
+                  </button>
+                </Form>
+              )}
+            </div>
           </div>
 
-          {isOrganiser && group.status === "forming" && (
+          {isOrganiser && !guideHasAgreed(group) && (
             <details className="rounded-md border border-line bg-card p-4">
               <summary className="cursor-pointer text-sm font-medium text-ink">
                 Change the trip

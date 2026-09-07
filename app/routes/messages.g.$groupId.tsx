@@ -46,6 +46,26 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // Packages proposed in this room (0065). The guide can build one here as
+  // well as on the group page — this is where they read the message that
+  // prompted it.
+  const [{ data: proposals }, { data: priced }] = await Promise.all([
+    admin
+      .from("package_proposals")
+      .select(
+        "id, days, party_size, start_date, total_usd_cents, deposit_usd_cents, note, status, booking_id, price_breakdown",
+      )
+      .eq("group_id", thread.group.id)
+      .order("created_at", { ascending: false }),
+    thread.access.isGuide && thread.group.offering_id
+      ? admin
+          .from("offerings")
+          .select("price_breakdown, days")
+          .eq("id", thread.group.offering_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
   const going = thread.members.filter(
     (m: any) => m.status === "joined" || m.status === "invited",
   ).length;
@@ -87,7 +107,28 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       })),
       canPost: thread.access.canPost,
       isGuide: thread.access.isGuide,
+      isOrganiser: thread.group.organiser_id === user.id,
       muted: !!mute,
+      proposals: (proposals ?? []).map((p: any) => ({
+        id: p.id,
+        title: thread.offering?.title ?? null,
+        days: p.days,
+        partySize: p.party_size,
+        startDate: p.start_date,
+        totalUsdCents: p.total_usd_cents,
+        depositUsdCents: p.deposit_usd_cents,
+        note: p.note,
+        status: p.status,
+        bookingId: p.booking_id,
+        includes: ((p.price_breakdown?.lines ?? []) as any[])
+          .map((l) => l.label)
+          .filter(Boolean)
+          .slice(0, 6),
+      })),
+      base: (priced?.price_breakdown as any) ?? null,
+      baseDays: priced?.days ?? thread.offering?.days ?? 1,
+      seats: Math.max(thread.group.party_target ?? 1, going),
+      startDate: thread.group.start_date ?? "",
     },
     { headers },
   );
@@ -124,6 +165,40 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  if (intent === "propose") {
+    if (!thread.access.isGuide) {
+      return data({ ok: false, error: "Only the guide can propose a package." }, { status: 403, headers });
+    }
+    if (!thread.group.offering_id) {
+      return data({ ok: false, error: "The group has not picked a trip yet." }, { status: 400, headers });
+    }
+    const { createProposal, clamp, extraLineFrom } = await import("~/lib/proposals.server");
+    const { systemLine } = await import("~/lib/groups.server");
+    const seats = Math.max(thread.group.party_target ?? 1, 1);
+    const res = await createProposal(admin, {
+      guideId: user.id,
+      trekkerId: thread.group.organiser_id,
+      offeringId: thread.group.offering_id,
+      groupId: thread.group.id,
+      startDate: String(form.get("start_date") || thread.group.start_date || ""),
+      days: clamp(form.get("days"), 1, 60, 1),
+      partySize: clamp(form.get("party_size"), 1, 24, seats),
+      includedOptionIds: form.getAll("option").map(String),
+      extraLines: extraLineFrom(form),
+      note: String(form.get("note") ?? "").trim().slice(0, 800) || null,
+    });
+    if (res.error) return data({ ok: false, error: res.error }, { status: 400, headers });
+    await systemLine(
+      admin,
+      thread.group.id,
+      user.id,
+      "Your guide suggested a plan — the organiser approves it for everyone.",
+    );
+    const { notifyGroupMessage } = await import("~/lib/group-notify.server");
+    await notifyGroupMessage(env, admin, { groupId: thread.group.id, authorId: user.id });
+    return data({ ok: "Sent to the group." }, { headers });
+  }
+
   const body = String(form.get("body") ?? "").trim();
   if (!body) return data({ ok: false }, { headers });
 
@@ -146,7 +221,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function GroupMessages({ loaderData }: Route.ComponentProps) {
-  const { group, messages, people, canPost, isGuide, muted } = loaderData as any;
+  const { group, messages, people, canPost, isGuide, isOrganiser, muted, proposals, base, baseDays, seats, startDate } =
+    loaderData as any;
   return (
     <GroupThread
       group={group}
@@ -154,7 +230,13 @@ export default function GroupMessages({ loaderData }: Route.ComponentProps) {
       people={people}
       canPost={canPost}
       isGuide={isGuide}
+      isOrganiser={isOrganiser}
       muted={muted}
+      proposals={proposals}
+      base={base}
+      baseDays={baseDays}
+      seats={seats}
+      startDate={startDate}
     />
   );
 }

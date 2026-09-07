@@ -8,7 +8,13 @@
  */
 
 export type PaymentMode = "organiser" | "split";
-export type GroupStatus = "forming" | "ready" | "booked" | "cancelled";
+export type GroupStatus =
+  | "forming"
+  | "requested"
+  | "accepted"
+  | "ready"
+  | "booked"
+  | "cancelled";
 export type MemberStatus = "invited" | "joined" | "declined" | "removed";
 
 export interface GroupMember {
@@ -35,6 +41,79 @@ export interface TripGroup {
   status: GroupStatus;
   booking_id: string | null;
   note: string | null;
+  /** The request the guide is answering (0065). */
+  enquiry_id?: string | null;
+  /** When the guide agreed. Until then, invites are locked. */
+  guide_accepted_at?: string | null;
+}
+
+/**
+ * The four steps of a group trip, in the order they actually happen.
+ *
+ * They used to happen in a different order on paper than in the code: the
+ * page invited everybody and collected the money first and asked the guide
+ * last, while the gate that let the organiser ask required every share to be
+ * paid — money nobody could pay, because there was no booking to pay into.
+ * One list, so the page, the buttons and the rules cannot disagree again.
+ */
+export type GroupStep = "plan" | "asking" | "roster" | "paying" | "done";
+
+export const GROUP_STEPS: Array<{ key: GroupStep; label: string; blurb: string }> = [
+  { key: "plan", label: "Pick the trip", blurb: "A trek, a guide, a date." },
+  { key: "asking", label: "Ask the guide", blurb: "They say yes before anyone else is asked." },
+  { key: "roster", label: "Invite the others", blurb: "Everyone signs in and joins." },
+  { key: "paying", label: "Everyone pays", blurb: "Each person pays their own share." },
+  { key: "done", label: "Going", blurb: "Booked." },
+];
+
+/** Where this group is now. */
+export function groupStep(group: TripGroup, members: GroupMember[]): GroupStep {
+  if (group.status === "booked") return "done";
+  if (!guideHasAgreed(group)) {
+    return group.status === "requested" ? "asking" : "plan";
+  }
+  const active = activeMembers(members);
+  const everyoneHere =
+    active.length >= group.party_target && active.every((m) => m.status === "joined");
+  return everyoneHere ? "paying" : "roster";
+}
+
+/** Has the guide taken the trip? Set by the accept, or by a booking existing. */
+export function guideHasAgreed(group: TripGroup): boolean {
+  return Boolean(group.guide_accepted_at || group.booking_id);
+}
+
+/**
+ * Why the organiser cannot ask the guide yet.
+ *
+ * Deliberately short: a trip, a guide, a date in the future, and a number of
+ * seats. Not the roster, and certainly not the money — asking is free, and
+ * asking is what unlocks everything after it.
+ */
+export function blockedFromAsking(group: TripGroup, members: GroupMember[]): string | null {
+  if (group.status === "cancelled") return "This group was cancelled.";
+  if (group.status === "booked") return "This group is already booked.";
+  if (guideHasAgreed(group)) return null;
+  if (group.status === "requested") return "Already asked — waiting on the guide.";
+  if (!group.offering_id) return "Pick the trip first.";
+  if (!group.guide_id) return "Pick the trip first.";
+  if (!group.start_date) return "Pick a start date.";
+  const today = new Date().toISOString().slice(0, 10);
+  if (group.start_date <= today) return "Pick a start date in the future.";
+  if (group.party_target < 1) return "Say how many of you are going.";
+  if (activeMembers(members).length === 0) return "Nobody is in the group yet.";
+  return null;
+}
+
+/**
+ * Members who were invited by email and have never signed in.
+ *
+ * They cannot pay, cannot upload a passport and cannot be named on a permit,
+ * so a trip cannot leave with one of them still in this state. It is also the
+ * commonest way a group stalls: one person never opens the link.
+ */
+export function membersWithoutAccounts(members: GroupMember[]): GroupMember[] {
+  return activeMembers(members).filter((m) => !m.user_id);
 }
 
 /** People who count for pricing and for the roster: invited or joined. */
@@ -149,12 +228,23 @@ export function blockedFromBooking(
   if (group.status === "cancelled") return "This group was cancelled.";
   if (!group.offering_id) return "Pick the trip first.";
   if (!group.start_date) return "Pick a start date.";
+  // The guide's yes comes before anything else is asked of anybody.
+  if (!guideHasAgreed(group)) {
+    return group.status === "requested"
+      ? "Waiting on the guide to accept."
+      : "Ask the guide first.";
+  }
   const active = activeMembers(members);
   if (active.length < 1) return "Nobody has joined yet.";
   const joined = active.filter((m) => m.status === "joined");
   if (joined.length < active.length) {
     const waiting = active.length - joined.length;
     return `Waiting on ${waiting} ${waiting === 1 ? "person" : "people"} to accept.`;
+  }
+  const strangers = membersWithoutAccounts(members);
+  if (strangers.length) {
+    const n = strangers.length;
+    return `${n === 1 ? `${strangers[0].display_name} has` : `${n} people have`} not signed in yet — everyone going needs an account of their own.`;
   }
   const money = groupMoney(members);
   if (!money.everyoneIn) {

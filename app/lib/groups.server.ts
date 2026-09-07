@@ -264,10 +264,13 @@ export async function groupForBooking(
 ): Promise<string | null> {
   const { data: booking } = await admin
     .from("bookings")
-    .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status")
+    .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status, enquiry_id")
     .eq("id", bookingId)
     .maybeSingle();
-  if (!booking || booking.party_size < 2) return null;
+  if (!booking) return null;
+  // A solo booking gets no group of its own — but one that a group asked for
+  // is linked below however many seats it was sold with.
+  if (booking.party_size < 2 && !booking.enquiry_id) return null;
 
   const { data: existing } = await admin
     .from("trip_groups")
@@ -275,6 +278,38 @@ export async function groupForBooking(
     .eq("booking_id", bookingId)
     .maybeSingle();
   if (existing) return existing.slug;
+
+  // The group that asked for this trip in the first place (0065). Making a
+  // second one here is how the organiser ended up with two group pages for
+  // one trek — the one they built and invited nobody to, and the one the
+  // accept produced.
+  const asked = booking.enquiry_id
+    ? await admin
+        .from("trip_groups")
+        .select("id, slug, party_target")
+        .eq("enquiry_id", booking.enquiry_id)
+        .maybeSingle()
+    : { data: null };
+  if (asked.data) {
+    await admin
+      .from("trip_groups")
+      .update({
+        booking_id: booking.id,
+        status: "accepted",
+        guide_accepted_at: new Date().toISOString(),
+        start_date: booking.start_date,
+        party_target: Math.max(asked.data.party_target ?? 1, booking.party_size),
+      })
+      .eq("id", asked.data.id);
+    await systemLine(
+      admin,
+      asked.data.id,
+      booking.guide_id,
+      `The guide said yes to ${booking.start_date} for ${booking.party_size}. Invite the others — everyone signs in and pays their own share.`,
+    );
+    await recomputeShares(admin, asked.data.id);
+    return asked.data.slug;
+  }
 
   const [{ data: offering }, { data: trekker }] = await Promise.all([
     admin.from("offerings").select("title").eq("id", booking.offering_id).maybeSingle(),
@@ -325,6 +360,54 @@ export async function groupForBooking(
 }
 
 /**
+ * A group's package became a booking.
+ *
+ * The guide proposed it in the group's own chat and the organiser approved
+ * it, which is the same yes the accept gives — so the group moves on exactly
+ * as it would have, and the shares are recomputed against the price everybody
+ * has now seen.
+ */
+export async function groupTookBooking(
+  admin: SupabaseClient,
+  groupId: string,
+  bookingId: string,
+  partySize: number,
+) {
+  const { data: group } = await admin
+    .from("trip_groups")
+    .select("id, party_target, guide_id")
+    .eq("id", groupId)
+    .maybeSingle();
+  if (!group) return;
+  await admin
+    .from("trip_groups")
+    .update({
+      booking_id: bookingId,
+      status: "accepted",
+      guide_accepted_at: new Date().toISOString(),
+      party_target: Math.max(group.party_target ?? 1, partySize),
+    })
+    .eq("id", groupId);
+  await systemLine(
+    admin,
+    groupId,
+    group.guide_id ?? (await organiserOf(admin, groupId)),
+    "The plan is agreed. Invite the others — everyone signs in and pays their own share.",
+  );
+  await recomputeShares(admin, groupId);
+}
+
+/** Fallback author for a system line when the group has no guide on it. */
+async function organiserOf(admin: SupabaseClient, groupId: string): Promise<string> {
+  const { data } = await admin
+    .from("trip_groups")
+    .select("organiser_id")
+    .eq("id", groupId)
+    .maybeSingle();
+  return data?.organiser_id as string;
+}
+
+/**
  * Who is allowed in a group, and what they may do.
  *
  * Three roles, not two. The organiser owns the trip; members are on the
@@ -370,7 +453,9 @@ export async function loadGroupThread(
 ) {
   const { data: group } = await admin
     .from("trip_groups")
-    .select("id, slug, name, organiser_id, guide_id, offering_id, start_date, party_target, status, booking_id")
+    .select(
+      "id, slug, name, organiser_id, guide_id, offering_id, start_date, party_target, status, booking_id, guide_accepted_at",
+    )
     .eq("id", groupId)
     .maybeSingle();
   if (!group) return null;
@@ -406,7 +491,7 @@ export async function loadGroupThread(
       group.offering_id
         ? admin
             .from("public_offerings")
-            .select("id, slug, kind, title, cover_photo_url")
+            .select("id, slug, kind, title, days, cover_photo_url")
             .eq("id", group.offering_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),

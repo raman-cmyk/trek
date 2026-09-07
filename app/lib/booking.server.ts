@@ -268,7 +268,9 @@ async function bookFromQuote(
   // and split the bill. Only now that the guide has confirmed — a group around
   // an unconfirmed trip is a room full of people with nothing to plan. Also
   // best-effort: the booking is the thing that must not fail.
-  if (enq.party_size > 1) {
+  // ...and a booking a group asked for is linked back to that group, whatever
+  // its size, so the organiser does not end up with two pages for one trek.
+  if (enq.party_size > 1 || enq.id) {
     try {
       const { groupForBooking } = await import("~/lib/groups.server");
       await groupForBooking(admin, booking.id);
@@ -740,7 +742,7 @@ export async function approveProposal(
   const { data: p } = await admin
     .from("package_proposals")
     .select(
-      "id, enquiry_id, conversation_id, offering_id, guide_id, trekker_id, start_date, days, party_size, price_breakdown, status",
+      "id, enquiry_id, conversation_id, group_id, offering_id, guide_id, trekker_id, start_date, days, party_size, price_breakdown, status",
     )
     .eq("id", proposalId)
     .eq("trekker_id", trekkerId)
@@ -801,14 +803,25 @@ export async function approveProposal(
       responded_at: new Date().toISOString(),
     })
     .eq("id", p.id);
-  // Any other open proposal in the same conversation or enquiry is now moot.
+  // Any other open proposal in the same conversation, enquiry or group is
+  // now moot.
   const sibling = admin
     .from("package_proposals")
     .update({ status: "superseded" })
     .eq("status", "proposed");
   await (p.enquiry_id
     ? sibling.eq("enquiry_id", p.enquiry_id)
-    : sibling.eq("conversation_id", p.conversation_id));
+    : p.conversation_id
+      ? sibling.eq("conversation_id", p.conversation_id)
+      : sibling.eq("group_id", p.group_id));
+
+  // A package agreed inside a group is the group's trip: the booking belongs
+  // to it, the guide has plainly said yes, and the shares are re-split on the
+  // price everybody just agreed to.
+  if (p.group_id && bookingId) {
+    const { groupTookBooking } = await import("~/lib/groups.server");
+    await groupTookBooking(admin, p.group_id, bookingId, p.party_size);
+  }
 
   return bookingId;
 }
