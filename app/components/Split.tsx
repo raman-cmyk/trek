@@ -3,7 +3,7 @@ import { cn } from "~/lib/cn";
 
 /**
  * The Split (Feature Pack v3 §0, on Brand v1 tokens). Two modes:
- *  - "guide": how a day rate splits (Guide 90% · Trek 10%). Thin bar.
+ *  - "guide": how a day rate splits (Guide 90% · our 10%). Thin bar.
  *  - "experience": the full package breakdown from explicit amounts. Amounts
  *    MUST sum to the total; on mismatch we render in --ember, never silently
  *    normalise a money figure. Transaction layer — plain, mono amounts.
@@ -17,7 +17,7 @@ const SLICE: Record<SliceKey, { color: string; label: string }> = {
   permits: { color: "var(--color-pine)", label: "Permits" },
   porters: { color: "var(--color-fern)", label: "Porters" },
   logistics: { color: "var(--color-sage)", label: "Teahouse, food & logistics" },
-  trek: { color: "var(--color-wheat)", label: "Trek fee" },
+  trek: { color: "var(--color-wheat)", label: "Our fee" },
   fund: { color: "var(--color-chartreuse)", label: "The Fund" },
 };
 
@@ -54,7 +54,7 @@ export function GuideSplit({
             <span className="font-mono text-ink">{guide}%</span> to your guide
           </span>
           <span>
-            Trek <span className="font-mono text-ink">{trek}%</span>
+            Guides of Nepal <span className="font-mono text-ink">{trek}%</span>
           </span>
         </div>
       )}

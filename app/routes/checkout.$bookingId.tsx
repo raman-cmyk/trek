@@ -151,7 +151,7 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
     ...(b.porter_fee_usd_cents ? [{ label: "Porters", usdCents: b.porter_fee_usd_cents }] : []),
     ...(b.permit_fees_usd_cents ? [{ label: "Permits", usdCents: b.permit_fees_usd_cents }] : []),
     ...(b.logistics_usd_cents ? [{ label: "Teahouse, food & logistics", usdCents: b.logistics_usd_cents }] : []),
-    { label: isTrek ? "Trek fee" : "Service fee", usdCents: b.service_fee_usd_cents },
+    { label: "Our fee", usdCents: b.service_fee_usd_cents },
     ...(b.fund_usd_cents ? [{ label: "The Fund (3%)", usdCents: b.fund_usd_cents }] : []),
     ...(b.permit_handling_usd_cents ? [{ label: "Permit handling", usdCents: b.permit_handling_usd_cents }] : []),
   ];
@@ -227,7 +227,7 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
                 <span className="font-mono">{m(balance)}</span> before you leave.
               </>
             ),
-            note: "Trek holds it until the trek starts. Nothing goes to anyone before that.",
+            note: "Guides of Nepal holds it until the trek starts. Nothing goes to anyone before that.",
           },
           {
             label: guideName

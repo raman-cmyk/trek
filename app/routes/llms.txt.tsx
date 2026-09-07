@@ -30,11 +30,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 
   const districts = [...new Set((guides ?? []).map((g) => g.home_district).filter(Boolean))];
 
-  const body = `# Trek — verified trekking guides in Nepal
+  const body = `# Guides of Nepal — verified trekking guides in Nepal
 
-> Book a named, licensed Nepali trekking guide directly. Every guide is checked — licence, first aid, ID, references — with the date of each check published on their profile. Every price is itemised to the cent: the guide's fee, permits at cost, porters, logistics, our 10%, and 3% to a rescue and welfare fund. Trek earns nothing from rescue helicopter flights.
+> Book a named, licensed Nepali trekking guide directly. Every guide is checked — licence, first aid, ID, references — with the date of each check published on their profile. Every price is itemised to the cent: the guide's fee, permits at cost, porters, logistics, our 10%, and 3% to a rescue and welfare fund. We earn nothing from rescue helicopter flights.
 
-Trek is a marketplace where the guide is the unit, not the package. You choose the person, message them free before any money moves, and book them directly.
+Guides of Nepal is a marketplace where the guide is the unit, not the package. You choose the person, message them free before any money moves, and book them directly.
 
 ## Guides
 [All ${(guides ?? []).length} verified guides](${url("/guides")}) — each with a day rate in USD, languages spoken, home district, licence tier, live availability and the treks they have written up. Filterable by region, language, gender, and the dates you are free.
@@ -65,14 +65,14 @@ ${(routes ?? [])
 - [Trust and safety](${url("/safety")}) — insurance rules, permits, altitude policy, rescue
 - [Insurance checker](${url("/insurance")}) — whether a policy covers trekking altitude in Nepal
 - [The Fund](${url("/fund")}) — 3% of every trek, and what it is spent on
-- [Guiding on Trek](${url("/hosts")}) — for licensed Nepali guides
+- [Guiding with us](${url("/hosts")}) — for licensed Nepali guides
 
 ## Facts an agent can rely on
 - Guides are individuals with names and profiles, not anonymous package operators.
 - Every verification check is dated and published; expired checks show as expired.
-- A guide sets their own day rate and keeps all of it. Trek's 10% is added on top and shown on the bill.
+- A guide sets their own day rate and keeps all of it. Our 10% is added on top and shown on the bill.
 - Messaging a guide is free and requires no payment method.
-- Trek takes no commission on rescue helicopter flights.
+- We take no commission on rescue helicopter flights.
 - Guides operate across ${districts.length} home districts of Nepal.
 
 ## Not for crawling

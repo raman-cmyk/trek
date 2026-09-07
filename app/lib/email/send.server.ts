@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { renderEmail, type EmailContent } from "~/lib/email/render";
+import { BRAND } from "~/lib/brand";
 
 /**
- * One door for every email Trek sends.
+ * One door for every email we send.
  *
  * The old sendEmail was four lines: if there is no key, log; otherwise fetch
  * and swallow whatever comes back. That is fine for a stub and useless the
@@ -44,15 +45,15 @@ export interface SendResult {
   reason?: string;
 }
 
-const TRANSACTIONAL_FROM = "Trek <no-reply@guidesofnepal.com>";
-const MARKETING_FROM = "Trek <hello@guidesofnepal.com>";
+const TRANSACTIONAL_FROM = `${BRAND} <no-reply@guidesofnepal.com>`;
+const MARKETING_FROM = `${BRAND} <hello@guidesofnepal.com>`;
 const DEFAULT_REPLY_TO = "hello@guidesofnepal.com";
 
 /**
  * Legally required on marketing mail in the US, and a trust signal everywhere.
  * Replace with the registered address before the first campaign goes out.
  */
-const POSTAL_ADDRESS = "Trek · Thamel, Kathmandu, Nepal";
+const POSTAL_ADDRESS = `${BRAND} · Thamel, Kathmandu, Nepal`;
 
 function siteUrl(env: Env): string {
   return (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");

@@ -8,7 +8,7 @@ import { slugTail } from "~/lib/groups";
 
 export function meta() {
   return pageMeta({
-    title: "Organise a trip — Trek",
+    title: "Organise a trip — Guides of Nepal",
     description:
       "Have a group and an idea? Tell us what you want to run. We handle the permits, find the guide, and put it on the site.",
     canonical: "",

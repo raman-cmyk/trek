@@ -338,7 +338,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         <section className="mt-5 rounded-card border border-danger/30 bg-danger/5 p-4">
           <p className="font-medium text-danger">SOS — while you're on the trail</p>
           <ul className="mt-1 text-sm text-ink-soft">
-            <li>Trek ops line: +977 1 555 0100</li>
+            <li>Our ops line: +977 1 555 0100</li>
             <li>Insurer hotline: on your policy card</li>
             <li>Your guide: {guidePhone ?? "released 48h before start"}</li>
           </ul>

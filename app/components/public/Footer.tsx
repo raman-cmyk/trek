@@ -6,7 +6,7 @@ import { SmartImage } from "~/components/SmartImage";
  *
  * A footer is usually the place a site gives up: a decorative wave, four
  * columns of links, a copyright line. This one is built from the two things
- * Trek has that nobody else does, so it cannot be copied by editing a
+ * we have that nobody else does, so it cannot be copied by editing a
  * template.
  *
  *   1. The top edge is cut from a real route's elevation profile, drawn from
@@ -119,7 +119,7 @@ export function Footer({
           <div className="grid gap-8 border-t border-fern/20 pt-10 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="font-display text-lg text-paper">
-                Trek<span className="text-moss">.</span>
+                Guides of Nepal<span className="text-moss">.</span>
               </p>
               <p className="mt-2 max-w-[30ch] text-sm text-sage">
                 Know who&rsquo;s walking with you.
@@ -155,7 +155,7 @@ export function Footer({
             </div>
 
             <div>
-              <p className="text-sm font-medium text-paper">Trek</p>
+              <p className="text-sm font-medium text-paper">Guides of Nepal</p>
               <ul className="mt-2 space-y-1 text-sm">
                 {[
                   ["/guides", "Find your guide"],
@@ -168,7 +168,7 @@ export function Footer({
                   ["/insurance", "Insurance checker"],
                   ["/safety", "Trust & safety"],
                   ["/fund", "The Fund"],
-                  ["/hosts", "Guide on Trek"],
+                  ["/hosts", "Guide with us"],
                 ].map(([to, label]) => (
                   <li key={to}>
                     <Link to={to} className="hover:text-fern">
@@ -183,7 +183,7 @@ export function Footer({
 
         <div className="border-t border-fern/20 py-4">
           <p className="mx-auto max-w-6xl px-4 text-center text-xs text-sage/70">
-            © {new Date().getFullYear()} Trek. A guide-first marketplace for Nepal.
+            © {new Date().getFullYear()} Guides of Nepal. A guide-first marketplace for Nepal.
           </p>
         </div>
       </div>

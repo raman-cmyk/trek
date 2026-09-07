@@ -207,7 +207,7 @@ function WriteUp({
             bookings.length === 0 && "opacity-40",
           )}
         >
-          A trek from Trek
+          Booked here
         </button>
         <button
           type="button"

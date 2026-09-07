@@ -52,7 +52,7 @@ export function validateDraft(d: Partial<JournalDraft>): string | null {
   if (!d.title?.trim()) return "Give the trek a title.";
   if (!d.start_date) return "Add the day you set off.";
   if (!d.booking_id && !d.pre_platform) {
-    return "Pick the booking this trek was, or mark it as a trek from before Trek.";
+    return "Pick the booking this trek was, or mark it as one of your own.";
   }
   return null;
 }

@@ -12,9 +12,9 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
-    title: "Become a guide on Trek",
+    title: "Become a guide on Guides of Nepal",
     description:
-      "Apply to lead treks and experiences on Trek. Verified guides set their own rate and keep their whole fee — Trek's 10% is added on top and paid by the trekker.",
+      "Apply to lead treks and experiences on Guides of Nepal. Verified guides set their own rate and keep their whole fee — our 10% is added on top and paid by the trekker.",
     canonical: d?.canonical ?? "",
   });
 }

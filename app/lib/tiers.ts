@@ -14,7 +14,7 @@ export const TIERS: TierDef[] = [
   {
     tier: 1,
     name: "Verified",
-    what: "Government licence, photo ID and a working phone — all checked and dated. The bar to appear on Trek at all.",
+    what: "Government licence, photo ID and a working phone — all checked and dated. The bar to appear on Guides of Nepal at all.",
     checks: [
       "TAAN / NMA licence verified",
       "Photo ID matched to the licence",

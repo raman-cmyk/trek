@@ -9,7 +9,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Transparent pricing — every line, printed",
     description:
-      "Trek shows every line of what you pay: the guide's fee (all of it goes to them), permits at cost, teahouse and logistics, our 10% fee, and 3% to The Fund. Every rupee, itemised.",
+      "Guides of Nepal shows every line of what you pay: the guide's fee (all of it goes to them), permits at cost, teahouse and logistics, our 10% fee, and 3% to The Fund. Every rupee, itemised.",
     canonical: (data as any)?.canonical ?? "",
   });
 }
@@ -96,7 +96,7 @@ export default function Transparency({ loaderData }: Route.ComponentProps) {
           page shows the live permit table. No markup hides in these lines.
         </Item>
         <Item title="Our fee: 10%, on top, visible">
-          Trek charges a 10% fee on the package — printed as its own line on
+          Guides of Nepal charges a 10% fee on the package — printed as its own line on
           every price, on the listing and at checkout. That's how we pay for
           verification, permits paperwork, payments, support and the 24/7 ops
           line. It is the only money we make on your trek.

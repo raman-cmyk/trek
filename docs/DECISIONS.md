@@ -348,3 +348,36 @@ into "Permits (TIMS + park)" and "Porters" — for a food tour. Steps are now
 derived from the kind (no route step where there is no route), the length
 defaults to what that kind usually is, and a price row worth nothing is not
 shown at all.
+
+## The name is Guides of Nepal, and it lives in one file (2026-09-06)
+
+The working name was "Trek" — in a hundred and thirty-odd places: two
+wordmarks, the email from-line, every SMS prefix, schema.org publisher, the
+contract, the TIMS card, the price breakdown's fee row. It is now Guides of
+Nepal, which is what the domain has said all along.
+
+`app/lib/brand.ts` holds it. Anything that composes a string imports `BRAND`
+(or `COMPANY_NAME`, or `SMS_PREFIX`); prose in a page says the name plainly,
+because a paragraph built out of constants is unreadable. The next rename is
+an afternoon, not a week.
+
+**"trek" the noun did not move.** A trek is a walk in the mountains: "Trek
+stories", "a trek from before", `kind: "trek"`, "Trek Manaslu with Binod" —
+that last one is a verb — all stayed. Only the capitalised brand changed, which
+is why this was done by hand, one occurrence at a time, rather than with a
+find-and-replace that would have produced "a Guides of Nepal from before".
+
+**The fee line is now "Our fee (10%)"**, not "Guides of Nepal fee". It sits in
+a column beside "Teahouse, food & logistics" and reads better in the first
+person, which is also what it is: the platform, talking about itself, on a bill
+the platform issued.
+
+**Two SMS templates were trimmed.** The prefix went from 6 characters to 17,
+which pushed the welcome and the listing-updated messages past 160 — a second
+segment, billed again, on every send. The listing title is now cut to 28
+characters (the link survives, because that is the part a guide taps) and the
+licence sentence moved to the welcome email, which has room.
+
+**Not renamed, deliberately:** the Cloudflare worker (`trek`), the repository,
+the package name, and the workers.dev subdomain. Renaming the worker changes
+the live URL, which is a deployment decision and not a branding one.

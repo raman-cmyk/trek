@@ -8,7 +8,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
     title: "How we verify guides — the trust ladder",
     description:
-      "Every guide on Trek is a named, verified human. Here's exactly what each tier means, what we check, and when we re-check it.",
+      "Every guide on Guides of Nepal is a named, verified human. Here's exactly what each tier means, what we check, and when we re-check it.",
     canonical: d?.canonical ?? "",
   });
 }

@@ -59,7 +59,7 @@ export function TimsCard({ tims }: { tims: Tims }) {
       </div>
       <div className="flex items-center justify-between bg-[#152a63] px-5 py-2 text-[11px] text-white/70">
         <span>Issued {new Date(tims.issued_at).toLocaleDateString()} · verify guide licence at checkpoints</span>
-        <span className="font-semibold text-white/90">Trek</span>
+        <span className="font-semibold text-white/90">Guides of Nepal</span>
       </div>
     </div>
   );

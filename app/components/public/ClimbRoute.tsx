@@ -550,7 +550,7 @@ function SummitSplit({
     ["Permits, at cost", split.permitsUsdCents],
     ["Porters", split.portersUsdCents],
     ["Lodges & food", split.logisticsUsdCents],
-    ["Trek, added on top", split.trekUsdCents],
+    ["Our fee, added on top", split.trekUsdCents],
     ["Rescue & welfare fund", split.fundUsdCents],
   ];
   return (

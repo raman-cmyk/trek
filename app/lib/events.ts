@@ -3,7 +3,7 @@
  *
  * An event is a trip proposed by a member of the public: a photographer taking
  * eight people to Gokyo, a yoga teacher running a week in Langtang. They bring
- * the group; Trek brings the permits, the guide and the audience.
+ * the group; Guides of Nepal brings the permits, the guide and the audience.
  *
  * The state machine is small and the transitions are the product decision, so
  * they live here where they can be read and tested rather than being spread

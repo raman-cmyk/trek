@@ -44,12 +44,12 @@ export const copy = {
   },
   guide: {
     earningsExplainer:
-      "Your fee is yours in full — Trek's 10% is added on top of the package, paid by the trekker.",
+      "Your fee is yours in full — Guides of Nepal' 10% is added on top of the package, paid by the trekker.",
   },
   empty: {
     noEnquiries:
       "Your profile went live today. Most guides get their first enquiry within 2 weeks.",
-    newGuide: "New to Trek — be the first to trek with them.",
+    newGuide: "New here — be the first to trek with them.",
     noJournals:
       "The next journal isn't written yet. Book them this season and you'll be in it.",
     threadStarter:

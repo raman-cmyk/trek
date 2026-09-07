@@ -8,7 +8,7 @@ import { eventDates, placesLeft } from "~/lib/events";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
-    title: "Group trips anyone can join — Trek",
+    title: "Group trips anyone can join — Guides of Nepal",
     description:
       "Trips organised by people, not agencies: a photographer's week in Gokyo, a walking group in Langtang. Fixed dates, a capped group, a verified guide.",
     canonical: (d as any)?.canonical ?? "",

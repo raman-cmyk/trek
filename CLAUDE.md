@@ -1,8 +1,13 @@
-# CLAUDE.md — Guide Marketplace (working codename: GMKT — rename before launch)
+# CLAUDE.md — Guides of Nepal
 
 ## What this project is
 
-A guide-first marketplace for Nepal trekking and experiences. **Positioning: "The only place in Nepal where you pick your guide, not your agency."**
+A guide-first marketplace for Nepal trekking and experiences, called
+**Guides of Nepal** (the domain, the wordmark and the email from-line all say
+so). The name lives in `app/lib/brand.ts` — anything that composes a string
+imports `BRAND` rather than typing it, which is what made the last rename a
+morning instead of a week. "trek" the lowercase noun is a walk in the
+mountains and is not the brand. **Positioning: "The only place in Nepal where you pick your guide, not your agency."**
 
 - The **guide is the atomic unit**. Every trek, day hike, and experience is an offering that belongs to a specific verified guide. There are no anonymous packages.
 - Two browse lanes, one data model: "Find your guide" (guide-first) and "Browse experiences" (offering-first). Both converge on the same booking flow.

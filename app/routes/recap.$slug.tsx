@@ -72,7 +72,7 @@ export default function Recap({ loaderData: d }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
       <div className="rounded-card bg-pine p-8 text-white">
-        <p className="text-sm uppercase tracking-wide opacity-80">Trek · Nepal</p>
+        <p className="text-sm uppercase tracking-wide opacity-80">Guides of Nepal</p>
         <h1 className="mt-2 font-display text-4xl">{d.title}</h1>
         <div className="mt-3 flex flex-wrap gap-6 text-lg">
           {d.days && <span>{d.days} days</span>}

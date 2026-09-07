@@ -5,6 +5,7 @@
  * These return React Router meta descriptors. JSON-LD uses RR's
  * `{ "script:ld+json": {...} }` descriptor so it renders in <head> at SSR.
  */
+import { BRAND } from "~/lib/brand";
 
 export interface PageMetaInput {
   title: string;
@@ -84,7 +85,7 @@ export function organizationLd(origin: string) {
     "@context": "https://schema.org",
     "@type": "Organization",
     "@id": `${origin}/#organization`,
-    name: "Trek",
+    name: BRAND,
     url: origin,
     description:
       "A guide-first marketplace for trekking in Nepal. Every guide is a named, licensed individual whose licence, first aid, ID and references are checked and dated. Every price is itemised: the guide's fee, permits at cost, porters, logistics, a 10% platform fee added on top, and 3% to a rescue and welfare fund.",
@@ -104,12 +105,12 @@ export function organizationLd(origin: string) {
     makesOffer: {
       "@type": "Offer",
       description:
-        "Trek takes 0% commission on rescue helicopter flights. A rescue is arranged at cost.",
+        `${BRAND} takes 0% commission on rescue helicopter flights. A rescue is arranged at cost.`,
       priceSpecification: {
         "@type": "PriceSpecification",
         price: "0",
         priceCurrency: "USD",
-        description: "Commission taken by Trek on a rescue helicopter flight",
+        description: `Commission taken by ${BRAND} on a rescue helicopter flight`,
       },
     },
   };
@@ -170,7 +171,7 @@ export function personLd(g: {
           },
         }
       : {}),
-    worksFor: { "@type": "Organization", name: "Trek", url: new URL(g.url).origin },
+    worksFor: { "@type": "Organization", name: BRAND, url: new URL(g.url).origin },
   };
   // Where they actually work. Nepal always; the district and any route
   // regions narrow it, which is what "a guide in the Khumbu" resolves against.
@@ -222,7 +223,7 @@ export function websiteLd(origin: string) {
     "@type": "WebSite",
     "@id": `${origin}/#website`,
     url: origin,
-    name: "Trek",
+    name: BRAND,
     description:
       "Book a named, licensed Nepali trekking guide directly. Every guide checked, every price itemised.",
     publisher: { "@id": `${origin}/#organization` },

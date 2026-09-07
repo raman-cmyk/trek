@@ -8,9 +8,9 @@ import { formatUsd } from "~/lib/pricing";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
-    title: "Guide on Trek — your name, your rate, your clients",
+    title: "Guide with Guides of Nepal — your name, your rate, your clients",
     description:
-      "Trek puts your face on the product. Set your own day rate, keep your whole fee, get paid in NPR within 7 days, and build a review record that belongs to you.",
+      "Guides of Nepal puts your face on the product. Set your own day rate, keep your whole fee, get paid in NPR within 7 days, and build a review record that belongs to you.",
     canonical: (data as any)?.canonical ?? "",
   });
 }
@@ -26,7 +26,7 @@ const PROPS = [
   },
   {
     title: "You set the rate — and keep it",
-    body: "Your day rate is yours to choose, yours to raise as your reviews grow, and yours in full. Trek's 10% is added on top and paid by the trekker, printed on their bill.",
+    body: "Your day rate is yours to choose, yours to raise as your reviews grow, and yours in full. Our 10% is added on top and paid by the trekker, printed on their bill.",
   },
   {
     title: "Paid in NPR, within 7 days",
@@ -52,7 +52,7 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
   const [trips, setTrips] = useState(6);
 
   const guideFeeUsdCents = dayRate * 100 * tripDays * trips;
-  // v3: the guide's fee is theirs in full; Trek's fee is added on top of the
+  // v3: the guide's fee is theirs in full; our fee is added on top of the
   // package and paid by the trekker.
   const keepUsdCents = guideFeeUsdCents;
   const keepNpr = Math.round((keepUsdCents / 100) * FX_RATE_NPR);
@@ -64,7 +64,7 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
         Your name. Your rate. Your clients.
       </h1>
       <p className="mt-4 max-w-[62ch] text-body-l text-ink">
-        Agencies sell packages and rent your legs. Trek sells <em>you</em> — a verified,
+        Agencies sell packages and rent your legs. Guides of Nepal sells <em>you</em> — a verified,
         named guide with a licence we've checked and reviews no one can take away.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
@@ -72,7 +72,7 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
           to="/apply"
           className="rounded-button bg-primary px-6 py-3 font-medium text-white hover:bg-primary-hover"
         >
-          Apply to guide on Trek
+          Apply to guide with us
         </Link>
         <Link
           to="/trust"
@@ -95,7 +95,7 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
       <section className="mt-12 rounded-card border border-border bg-card p-6">
         <h2 className="font-display text-display-m text-ink">What would a season pay?</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Move the numbers. Your fee is yours — Trek adds {Math.round(TREK_FEE_PCT * 100)}% on
+          Move the numbers. Your fee is yours — we add {Math.round(TREK_FEE_PCT * 100)}% on
           top of the package, paid by the trekker, printed on their bill. We take
           nothing out of your rate.
         </p>

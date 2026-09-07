@@ -32,7 +32,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   const origin = new URL(data.canonical).origin;
   return [
     ...pageMeta({
-      title: `${j.title} — a Trek journal by ${j.guide_name}`,
+      title: `${j.title} — a trek journal by ${j.guide_name}`,
       description:
         (j.guide_note ?? "").slice(0, 155) ||
         `${j.days} days on ${j.route_name ?? "the trail"} in Nepal, told by the guide who led it.`,
@@ -53,7 +53,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         name: j.guide_name,
         url: `${origin}/guides/${j.guide_slug}`,
       },
-      publisher: { "@type": "Organization", name: "Trek", url: origin },
+      publisher: { "@type": "Organization", name: "Guides of Nepal", url: origin },
       mainEntityOfPage: data.canonical,
       about: j.route_name
         ? { "@type": "Place", name: `${j.route_name}, Nepal`, url: `${origin}/routes/${j.route_slug}` }
@@ -447,7 +447,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
               {j.pre_platform && (
                 <p className="mt-3 rounded bg-mist px-2.5 py-1.5 text-caption text-ink-soft">
                   {j.guide_name} led this trek on their own — it was not booked
-                  through Trek.
+                  through Guides of Nepal.
                 </p>
               )}
               <p className="mt-3 font-mono text-caption text-muted">

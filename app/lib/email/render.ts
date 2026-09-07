@@ -114,7 +114,7 @@ export function renderEmail(o: RenderOpts): { html: string; text: string } {
 <tr><td align="center" style="padding:28px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${LINE};border-radius:10px">
 <tr><td style="padding:24px 28px 0">
-  <a href="${esc(o.siteUrl)}" style="font:700 20px/1 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:${INK};text-decoration:none">Trek<span style="color:${MOSS}">.</span></a>
+  <a href="${esc(o.siteUrl)}" style="font:700 20px/1 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:${INK};text-decoration:none">Guides of Nepal<span style="color:${MOSS}">.</span></a>
 </td></tr>
 <tr><td style="padding:18px 28px 0;font:700 22px/1.3 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:${INK}">${esc(c.heading)}</td></tr>
 <tr><td style="padding:16px 28px 8px">

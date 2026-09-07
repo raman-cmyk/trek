@@ -221,7 +221,7 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
           </p>
           <p className="mt-1 max-w-[54ch] text-muted">
             {total === 0
-              ? "Every trek booked on Trek ends with one — photos, days and the guide's own account. They start appearing as this season's treks come home."
+              ? "Every trek booked here ends with one — photos, days and the guide's own account. They start appearing as this season's treks come home."
               : "Try a wider region, or another season."}
           </p>
           <Link

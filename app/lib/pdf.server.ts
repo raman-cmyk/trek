@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Tims } from "~/components/TimsCard";
+import { COMPANY_NAME } from "~/lib/brand";
 
 const BLUE = rgb(0.118, 0.227, 0.541); // official TIMS blue (#1e3a8a)
 const INK = rgb(0.07, 0.14, 0.11);
@@ -83,7 +84,7 @@ export async function timsCardPdf(t: Tims): Promise<Uint8Array> {
     `Issued ${new Date(t.issued_at).toLocaleDateString()} · verify guide licence at checkpoints`,
     { x: cardX, y: cardY - 20, size: 8, font, color: GREY },
   );
-  page.drawText("Issued by Trek — Grey Floor Pvt. Ltd. (TAAN-registered).", {
+  page.drawText(`Issued by ${COMPANY_NAME} (TAAN-registered).`, {
     x: cardX, y: cardY - 36, size: 8, font, color: GREY,
   });
 

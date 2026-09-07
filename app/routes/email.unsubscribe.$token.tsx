@@ -16,7 +16,7 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
  */
 
 export function meta() {
-  return [{ title: "Email preferences · Trek" }, { name: "robots", content: "noindex" }];
+  return [{ title: "Email preferences · Guides of Nepal" }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ params, context }: Route.LoaderArgs) {

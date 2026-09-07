@@ -15,7 +15,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
   const origin = new URL((d as any).canonical).origin;
   return [
     ...pageMeta({
-      title: `${e.title} — a group trip on Trek`,
+      title: `${e.title} — a group trip on Guides of Nepal`,
       description:
         e.summary ??
         `${eventDates(e.start_date, e.end_date)}. Organised by ${e.organiser_name}, capped at ${e.max_people} people.`,
@@ -34,7 +34,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
       maximumAttendeeCapacity: e.max_people,
       eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
       location: { "@type": "Place", name: e.region ? `${e.region}, Nepal` : "Nepal" },
-      organizer: { "@type": "Organization", name: "Trek", url: origin },
+      organizer: { "@type": "Organization", name: "Guides of Nepal", url: origin },
     }),
     jsonLd(
       breadcrumbLd([
@@ -327,7 +327,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
                 note: "Licence, first aid and references, dated and on their profile.",
               },
               {
-                label: "Trek handles the permits and the money.",
+                label: "Guides of Nepal handles the permits and the money.",
                 note: `${e.organiser_name} put the trip together; the booking runs through us like any other.`,
               },
               {

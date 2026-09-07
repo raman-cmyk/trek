@@ -948,7 +948,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                 </>
               ) : (
                 <EmptyNote>
-                  A review on Trek can only be written by someone who finished a
+                  A review on Guides of Nepal can only be written by someone who finished a
                   trek they paid for, which is why they arrive slowly and why
                   none of them can be bought. {first}&rsquo;s licence, identity
                   and first aid are checked and dated below —{" "}
@@ -1018,7 +1018,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   to="/trust"
                   className="mt-3 inline-block text-xs text-primary hover:underline"
                 >
-                  How Trek verifies guides →
+                  How we verify guides →
                 </Link>
               </details>
 

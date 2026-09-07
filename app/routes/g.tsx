@@ -74,7 +74,7 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
-        <span className="font-display text-lg">Trek Guide</span>
+        <span className="font-display text-lg">Guides of Nepal</span>
         <Form method="post">
           <button className="text-xs text-primary">Sign out</button>
         </Form>

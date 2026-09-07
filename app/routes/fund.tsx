@@ -9,7 +9,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "The Fund — 3% of every trek, spent on the trail",
     description:
-      "Every Trek booking carries a visible 3% line called The Fund. Here's exactly what it has collected and where it goes: porter insurance, guide first-aid training, and trail communities.",
+      "Every Guides of Nepal booking carries a visible 3% line called The Fund. Here's exactly what it has collected and where it goes: porter insurance, guide first-aid training, and trail communities.",
     canonical: (data as any)?.canonical ?? "",
   });
 }
@@ -34,7 +34,7 @@ const ALLOCATION = [
   {
     share: "40%",
     title: "Porter insurance & gear",
-    body: "Accident and helicopter-evacuation cover for porters on Trek trips, plus a gear library (boots, jackets, sunglasses) for work above 3,000m — the practical half of the porter-welfare pledge.",
+    body: "Accident and helicopter-evacuation cover for porters on Guides of Nepal trips, plus a gear library (boots, jackets, sunglasses) for work above 3,000m — the practical half of the porter-welfare pledge.",
   },
   {
     share: "35%",
@@ -59,7 +59,7 @@ export default function Fund({ loaderData }: Route.ComponentProps) {
         3% of every trek, spent on the trail.
       </h1>
       <p className="mt-4 max-w-[62ch] text-body-l text-ink">
-        Every price breakdown on Trek shows a line called <strong>The Fund</strong> — 3% of the
+        Every price breakdown on Guides of Nepal shows a line called <strong>The Fund</strong> — 3% of the
         package, printed in the open, never hidden in a margin. This page is where it goes.
       </p>
 
@@ -97,7 +97,7 @@ export default function Fund({ loaderData }: Route.ComponentProps) {
         <h2 className="font-display text-display-m text-ink">Who decides?</h2>
         <p className="mt-2 max-w-[62ch] text-ink">
           A committee of three platform guides — rotating yearly, currently drawn from our
-          Elite tier — plus one Trek staff member. Disbursements are published here as they
+          Elite tier — plus one Guides of Nepal staff member. Disbursements are published here as they
           happen, with amounts. No disbursement, no line item, no exceptions.
         </p>
         <p className="mt-3 text-sm text-ink-soft">

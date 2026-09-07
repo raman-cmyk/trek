@@ -51,9 +51,9 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
       <h1 className="font-display text-3xl text-ink">Welcome back</h1>
-      <p className="mt-1 text-ink-soft">Sign in to your Trek account.</p>
+      <p className="mt-1 text-ink-soft">Sign in to your Guides of Nepal account.</p>
       <p className="mt-2 text-sm text-ink-soft">
-        New to Trek?{" "}
+        New to Guides of Nepal?{" "}
         <a
           href={`/signup${next && next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`}
           className="font-medium text-primary hover:underline"

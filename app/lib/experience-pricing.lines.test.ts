@@ -96,7 +96,7 @@ describe("line-item pricing", () => {
       "Guide fee",
       "Teahouse & food",
       "Permits",
-      "Trek fee (10%)",
+      "Our fee (10%)",
       "The Fund (3%)",
     ]);
   });

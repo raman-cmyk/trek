@@ -64,13 +64,16 @@ export function Header({
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:h-16">
         <Link
           to="/"
-          className="shrink-0 font-display text-[22px] leading-none tracking-[-0.03em] text-ink sm:text-2xl"
+          className="shrink-0 font-display text-[17px] leading-none tracking-[-0.03em] text-ink sm:text-xl"
         >
-          Trek<span className="text-moss">.</span>
+          Guides of Nepal<span className="text-moss">.</span>
         </Link>
 
-        {/* ── Centre: where to go ─────────────────────────────────────────── */}
-        <nav className="ml-4 hidden items-center gap-6 lg:flex">
+        {/* ── Centre: where to go ───────────────────────────────────────────
+            Nowrap and a tighter gap: the wordmark is three words now, and at a
+            1100px laptop "Group trips" and "Sign out" were each wrapping onto
+            two lines rather than the row simply being tight. */}
+        <nav className="ml-3 hidden items-center gap-5 whitespace-nowrap lg:flex">
           {BROWSE.map((item) => (
             <NavLink
               key={item.to}
@@ -141,7 +144,7 @@ export function Header({
                   prefetch="intent"
                   className={({ isActive }) =>
                     cn(
-                      "hidden rounded-pill px-3 py-1.5 text-[15px] transition-colors lg:inline-block",
+                      "hidden whitespace-nowrap rounded-pill px-3 py-1.5 text-[15px] transition-colors lg:inline-block",
                       isActive ? "text-ink" : "text-ink-soft hover:text-ink",
                     )
                   }
@@ -153,14 +156,14 @@ export function Header({
               <NavLink
                 to={dash.to}
                 prefetch="intent"
-                className="hidden rounded-pill border border-line px-3.5 py-1.5 text-[15px] font-medium text-ink transition-colors hover:border-sage sm:inline-block"
+                className="hidden whitespace-nowrap rounded-pill border border-line px-3.5 py-1.5 text-[15px] font-medium text-ink transition-colors hover:border-sage sm:inline-block"
               >
                 {dash.label}
               </NavLink>
 
               <Form method="post" action="/logout" className="hidden lg:block">
                 <button
-                  className="rounded-pill px-2.5 py-1.5 text-[15px] text-ink-soft transition-colors hover:text-ink"
+                  className="whitespace-nowrap rounded-pill px-2.5 py-1.5 text-[15px] text-ink-soft transition-colors hover:text-ink"
                   title={`Signed in as ${account.firstName}`}
                 >
                   Sign out

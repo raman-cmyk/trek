@@ -182,7 +182,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       key: "rate",
       done: !!me?.day_rate_usd_cents,
       label: "Set your day rate",
-      note: "You keep all of it. Trek adds its fee on top.",
+      note: "You keep all of it. Guides of Nepal adds its fee on top.",
       to: "/g/profile",
     },
     {

@@ -124,9 +124,9 @@ export function JournalMetaForm({
         <fieldset className="rounded border border-line p-3">
           <legend className="px-1 text-sm font-medium text-ink">Which trek was this?</legend>
           <label className={label}>
-            A booking on Trek
+            A booking here
             <select name="booking_id" defaultValue={journal?.booking_id ?? ""} className={input}>
-              <option value="">— not a Trek booking —</option>
+              <option value="">— not booked here —</option>
               {bookings.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.start_date} · {b.offering?.title ?? "trek"}
@@ -142,7 +142,7 @@ export function JournalMetaForm({
               className="mt-1 accent-moss"
             />
             <span>
-              This was before Trek — ops has checked it happened.
+              Led outside — ops has checked it happened.
               <span className="block text-caption text-muted">
                 Journals must be real treks. No samples, no composites.
               </span>

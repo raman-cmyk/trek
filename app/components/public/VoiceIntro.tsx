@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 /**
  * A guide's 60-second voice note, actually playable (the column existed and the
  * public view exposed it, but nothing ever rendered it). Hearing the person you
- * are about to trust for two weeks is the most Trek-specific thing on the page.
+ * are about to trust for two weeks is the most us-specific thing on the page.
  */
 export function VoiceIntro({ src, name }: { src: string; name: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);

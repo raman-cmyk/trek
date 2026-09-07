@@ -1303,3 +1303,34 @@ replace view` can only add columns at the end, and inserting one mid-list
 renames every column after it. Postgres said so, loudly, before anything ran.
 
 293 tests green, build green, 0060 applied to the live database.
+
+## Session — the rename (2026-09-06)
+
+"Trek" → **Guides of Nepal**, everywhere it was the brand and nowhere it was
+the noun. 136 occurrences, done by hand in explicit batches, because a
+find-and-replace here produces "a Guides of Nepal from before Guides of Nepal"
+and a verb that no longer means anything ("Trek Manaslu with Binod").
+
+Changed: both wordmarks and the one in the email template, the email from-line
+and postal address, every guide SMS, schema.org Organization/publisher, the
+contract and TIMS-card company name, page titles, `llms.txt`, the sign-in and
+apply pages, the Fund and transparency pages, and the fee row in every price
+breakdown ("Our fee (10%)").
+
+Kept: "trek" the lowercase noun, "Trek stories" (it reads as stories about
+treks), `kind: "trek"`, and the worker/repo/package names — renaming the worker
+would change the live URL.
+
+New `app/lib/brand.ts` holds the name for anything that composes a string.
+CLAUDE.md's header said "working codename: GMKT — rename before launch"; it now
+says what the product is called and where the name lives.
+
+Two SMS templates were trimmed to stay inside one 160-character segment — the
+prefix grew by eleven characters and two messages tipped over, which would have
+doubled their cost on every send.
+
+The header needed work: at 1100px the longer wordmark pushed "Group trips" and
+"Sign out" onto second lines. Nav gap tightened and the items set to nowrap;
+checked at 360px and 1100px.
+
+293 tests green, build green.

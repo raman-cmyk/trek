@@ -106,7 +106,7 @@ export default function GuideLogin({ loaderData, actionData }: Route.ComponentPr
       </Form>
 
       <p className="mt-6 text-sm text-ink-soft">
-        Not a guide on Trek yet?{" "}
+        Not a guide on Guides of Nepal yet?{" "}
         <a href="/apply" className="text-primary hover:underline">
           Apply here
         </a>

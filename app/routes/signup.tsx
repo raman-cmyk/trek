@@ -7,7 +7,7 @@ import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.ser
 
 export function meta() {
   return [
-    { title: "Create your Trek account" },
+    { title: "Create your Guides of Nepal account" },
     { name: "robots", content: "noindex" },
   ];
 }
@@ -184,7 +184,7 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
 
       <header className="flex items-center justify-between px-5 py-4">
         <Link to="/" className="font-display text-xl text-ink">
-          Trek<span className="text-moss">.</span>
+          Guides of Nepal<span className="text-moss">.</span>
         </Link>
         {step > 0 ? (
           <button onClick={back} className="text-sm text-muted hover:text-ink">

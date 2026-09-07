@@ -68,7 +68,7 @@ export async function quote(
       guideFeeUsdCents: a.guideUsdCents,
       porterFeeUsdCents: a.portersUsdCents,
       permitFeesUsdCents: a.permitsUsdCents,
-      serviceFeeUsdCents: a.trekUsdCents, // the 10% Trek fee is the platform's cut
+      serviceFeeUsdCents: a.trekUsdCents, // our 10% fee is the platform's cut
       permitHandlingUsdCents: 0,
       totalUsdCents: a.totalUsdCents, // guide+porters+permits+logistics+trek+fund
       commissionUsdCents: a.trekUsdCents,

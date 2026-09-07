@@ -34,7 +34,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   const canonical = data?.canonical ?? "";
   const tags = [
     ...pageMeta({
-      title: "Trek \u2014 know who\u2019s walking with you",
+      title: "Guides of Nepal \u2014 know who\u2019s walking with you",
       description: copy.brand.tagline,
       canonical,
     }),
@@ -130,7 +130,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   // Route rows for the catalogue strip. Route pages are the primary SEO
   // surface, so the homepage links the named routes themselves — not just the
   // hub — with the one number that makes a route feel staffed rather than
-  // listed: how many guides on Trek actually lead it.
+  // listed: how many guides here actually lead it.
   const guidesPerRoute: Record<string, Set<string>> = {};
   for (const o of offerings ?? []) {
     if (o.route_id) (guidesPerRoute[o.route_id] ??= new Set()).add(o.guide_id);
@@ -422,7 +422,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* 5b — The routes themselves. Named, with the number that matters:
-          how many guides on Trek lead it. */}
+          how many guides here lead it. */}
       {routeRows.length > 0 && (
         <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -506,7 +506,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
-      {/* 7 — The Split. Only Trek has this section. */}
+      {/* 7 — The Split. Only we have this section. */}
       {splitOffering?.price_breakdown && (
         <GiantSplit offering={splitOffering as PublicOffering} />
       )}
@@ -864,7 +864,7 @@ function GuideCall({ count }: { count: number }) {
               Your name on the work.
             </h2>
             <p className="mt-4 max-w-[52ch] text-body-l text-ink">
-              You set your day rate and keep all of it. Trek adds{" "}
+              You set your day rate and keep all of it. We add{" "}
               <span className="font-mono">{Math.round(TREK_FEE_PCT * 100)}%</span> on top,
               paid by the trekker and printed on their bill. Your reviews are yours.
             </p>
@@ -874,7 +874,7 @@ function GuideCall({ count }: { count: number }) {
                 prefetch="intent"
                 className="rounded bg-pine px-5 py-3 font-medium text-paper hover:bg-moss"
               >
-                Apply to guide on Trek
+                Apply to guide with us
               </Link>
               <Link
                 to="/hosts"

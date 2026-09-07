@@ -62,7 +62,7 @@ export default function OpsLogin({ actionData }: Route.ComponentProps) {
   const busy = nav.state !== "idle";
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="font-display text-3xl text-ink">Trek Ops</h1>
+      <h1 className="font-display text-3xl text-ink">Guides of Nepal Ops</h1>
       <p className="mt-1 text-ink-soft">Sign in to the operations console.</p>
       <Form method="post" className="mt-6 space-y-4">
         <label className="block">

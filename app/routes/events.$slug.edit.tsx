@@ -16,7 +16,7 @@ import { cn } from "~/lib/cn";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
-    title: `${(d as any)?.event?.title ?? "Your trip"} — Trek`,
+    title: `${(d as any)?.event?.title ?? "Your trip"} — Guides of Nepal`,
     description: "Your group trip.",
     canonical: "",
     noindex: true,

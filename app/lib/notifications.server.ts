@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
+import { BRAND, SMS_PREFIX } from "~/lib/brand";
 
 /**
  * Event-level notifications (docs/02 §Notifications matrix). One function per
@@ -40,7 +41,7 @@ export async function notifyNewEnquiry(
   await sendGuideSms(
     env,
     g?.phone,
-    `Trek: new request — ${args.offeringTitle}, ${args.startDate}, ${args.partySize}p. Open your dashboard to accept (24h).`,
+    `${SMS_PREFIX}: new request — ${args.offeringTitle}, ${args.startDate}, ${args.partySize}p. Open your dashboard to accept (24h).`,
   );
 }
 
@@ -63,7 +64,7 @@ export async function notifyDepositPaid(env: Env, admin: SupabaseClient, booking
     sendGuideSms(
       env,
       c.guidePhone,
-      `Trek: deposit paid for ${c.title}, ${c.startDate}. The trip is on — see your dashboard.`,
+      `${SMS_PREFIX}: deposit paid for ${c.title}, ${c.startDate}. The trip is on — see your dashboard.`,
     ),
     sendEmail(
       env,
@@ -87,13 +88,13 @@ export async function notifyNewMessage(
     .maybeSingle();
   if (!u) return;
   if (u.role === "guide") {
-    await sendGuideSms(env, u.phone, `Trek: new message from ${args.fromName}. Reply: ${env.SITE_URL}${args.threadPath}`);
+    await sendGuideSms(env, u.phone, `${SMS_PREFIX}: new message from ${args.fromName}. Reply: ${env.SITE_URL}${args.threadPath}`);
   } else {
     await sendEmail(
       env,
       u.email,
       `New message from ${args.fromName}`,
-      `${args.fromName} sent you a message on Trek.\n${env.SITE_URL}${args.threadPath}`,
+      `${args.fromName} sent you a message on ${BRAND}.\n${env.SITE_URL}${args.threadPath}`,
       { kind: "new_message" },
     );
   }
@@ -152,7 +153,7 @@ export async function notifyBookingCancelled(
           : ""),
       { kind: "booking_cancelled", about: { type: "booking", id: bookingId } },
     ),
-    sendGuideSms(env, c.guidePhone, `Trek: booking cancelled — ${c.title}, ${c.startDate}. Your calendar is open again.`),
+    sendGuideSms(env, c.guidePhone, `${SMS_PREFIX}: booking cancelled — ${c.title}, ${c.startDate}. Your calendar is open again.`),
   ]);
 }
 
@@ -183,8 +184,8 @@ export async function notifyGuideVerification(
     env,
     u?.phone,
     approved
-      ? "Trek: you're verified! Your profile is live. Sign in to set your calendar."
-      : "Trek: we couldn't verify your application yet. Sign in to see what's missing.",
+      ? `${SMS_PREFIX}: you're verified! Your profile is live. Sign in to set your calendar.`
+      : `${SMS_PREFIX}: we couldn't verify your application yet. Sign in to see what's missing.`,
   );
 }
 
@@ -210,7 +211,7 @@ export async function notifyGuideOfQuestion(
   await sendGuideSms(
     env,
     g?.phone,
-    `Trek: ${args.askerName} asked you "${snippet}" — answer it and it goes on your profile.`,
+    `${SMS_PREFIX}: ${args.askerName} asked you "${snippet}" — answer it and it goes on your profile.`,
   );
 }
 
@@ -268,7 +269,10 @@ export async function notifyListingEdited(
   await sendGuideSms(
     env,
     g?.phone,
-    `Trek: our office updated "${args.title}" (${what}). See it: ${env.SITE_URL}/g/experiences/${args.offeringId}`,
+    // Trimmed to fit one SMS segment: the longer name costs eleven characters
+    // and Sparrow bills per 160. The title is cut rather than the link, which
+    // is the part a guide actually taps.
+    `${SMS_PREFIX}: we updated "${args.title.slice(0, 28)}" (${what}). See it: ${env.SITE_URL}/g/experiences/${args.offeringId}`,
   );
   if (g?.email) {
     await sendEmail(
@@ -302,7 +306,7 @@ export async function notifyGuideWelcome(
   await sendEmail(
     env,
     args.email,
-    "Your Trek account is open — here's how to set it up",
+    `Your ${BRAND} account is open — here's how to set it up`,
     [
       `${first}, your application is in. Your account is already open, so you can start now rather than waiting on us.`,
       ``,
@@ -327,7 +331,8 @@ export async function notifyGuideWelcome(
   await sendGuideSms(
     env,
     args.phone,
-    `Trek: your account is open. Sign in at ${site}/g/login and add your photo and story — that is what gets you booked. We are checking your licence now.`,
+    // One segment. The licence line moved to the welcome email, which has room.
+    `${SMS_PREFIX}: your account is open. Sign in at ${site}/g/login and add your photo and story — that is what gets you booked.`,
   );
 }
 
@@ -425,7 +430,7 @@ export async function notifyProposalApproved(
   await sendGuideSms(
     env,
     g?.phone,
-    `Trek: they approved your ${p.days}-day plan for ${p.party_size} on ${p.start_date}. Deposit next — see your dashboard.`,
+    `${SMS_PREFIX}: they approved your ${p.days}-day plan for ${p.party_size} on ${p.start_date}. Deposit next — see your dashboard.`,
   );
   await sendEmail(
     env,

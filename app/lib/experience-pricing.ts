@@ -5,7 +5,7 @@
  * separately, so they can't disagree).
  *
  * Group pricing: the guide's fee is fixed per trip and amortises across the
- * group; permits/porters/logistics are per-person; the Trek fee and The Fund
+ * group; permits/porters/logistics are per-person; our fee and The Fund
  * are percentages of the per-person subtotal. Per-person price drops as the
  * group grows. All money is integer USD cents.
  */
@@ -181,7 +181,7 @@ export function computeExperiencePricing(
             },
           ]
         : []),
-      { key: "trek", label: `Trek fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
+      { key: "trek", label: `Our fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
       { key: "fund", label: `The Fund (${pct(bd.fund_pct)})`, amountUsdCents: Math.round(base * bd.fund_pct) },
     ];
     // What one person would carry alone, for the group-saving figure.
@@ -196,7 +196,7 @@ export function computeExperiencePricing(
       { key: "permits", label: "Permits (TIMS + park)", amountUsdCents: bd.permits_usd_cents, bucket: "permits" },
       { key: "porters", label: "Porters", amountUsdCents: bd.porters_usd_cents, bucket: "porters" },
       { key: "logistics", label: "Teahouse, food & logistics", amountUsdCents: bd.logistics_usd_cents, bucket: "logistics" },
-      { key: "trek", label: `Trek fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
+      { key: "trek", label: `Our fee (${pct(bd.trek_pct)})`, amountUsdCents: Math.round(base * bd.trek_pct) },
       { key: "fund", label: `The Fund (${pct(bd.fund_pct)})`, amountUsdCents: Math.round(base * bd.fund_pct) },
     ];
     soloGuide = bd.guide_fee_total_usd_cents;

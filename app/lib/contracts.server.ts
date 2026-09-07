@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatUsd, formatNpr } from "~/lib/pricing";
 
-export const COMPANY_NAME = "Trek — Grey Floor Pvt. Ltd.";
+import { COMPANY_NAME } from "~/lib/brand";
+export { COMPANY_NAME };
 
 /** Fill {{placeholders}} in a template body. Unknown keys are left blank. Pure. */
 export function renderTemplate(body: string, vars: Record<string, string>): string {

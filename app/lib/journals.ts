@@ -49,7 +49,7 @@ export interface PublicJournal {
   id: string;
   kind?: "journey" | "post" | "gallery";
   comment_count?: number;
-  /** True when the guide led this trek outside Trek — we did not arrange it. */
+  /** True when the guide led this trek outside the platform — we did not arrange it. */
   pre_platform?: boolean;
   slug: string;
   title: string;
