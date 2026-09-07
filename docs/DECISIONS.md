@@ -267,3 +267,35 @@ new column, so nothing can drift: a shorter track just skips positions, and a
 day hike sitting at `docs_pending` reads as "Paid" instead of falling off the
 end of its own track. Pure and tested, so the group page, the chat, the trip
 page and the guide's list cannot disagree about where a trip is.
+
+## Group chat notifies by email only, in bursts, and can be muted (2026-09-06)
+
+The reason group chat shipped silent was cost: every other thread texts the
+guide through Sparrow, which is metered per message, and one person typing
+"morning!" into a group of six is five texts. Email is not metered per
+recipient, so the fan-out is email for everybody — the guide included, who is
+the one exception to "guides get SMS" everywhere else in the app. A guide who
+misses a group message loses nothing urgent; the booking thread still texts
+them.
+
+Three rules keep it from becoming the thing people mute on day one:
+
+- **Never mail the person who just typed.** Obvious, and the bug every group
+  chat ships with once.
+- **One email per person per group per 30 minutes.** A group agreeing on a
+  date sends fifteen messages in four minutes. The window makes that one
+  email carrying the last five lines, not fifteen interruptions.
+- **Only what they have not seen.** The catch-up starts at the later of their
+  last read (`thread_reads`) and their last email, so an email never quotes
+  lines they read on the site an hour ago. System lines alone ("Marie
+  joined") never earn an email — they ride along inside one a real message
+  has already justified.
+
+Muting lives in its own table (`trip_group_mutes`, migration 0057) rather
+than a column on the roster, because the guide is in the chat without being
+on the roster. It is yours alone: no organiser and no ops policy touches it,
+and muting never removes you from the trip.
+
+These are transactional, not marketing: it is a message on a trip you joined,
+so it ignores marketing consent and honours the block list — which is exactly
+the line drawn in 0055.

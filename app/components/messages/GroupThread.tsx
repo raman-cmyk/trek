@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Link } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { Composer } from "./Composer";
 import { TripPipeline } from "~/components/TripPipeline";
@@ -35,6 +35,7 @@ export function GroupThread({
   people,
   canPost,
   isGuide,
+  muted,
 }: {
   group: {
     id: string;
@@ -50,6 +51,8 @@ export function GroupThread({
   people: number;
   canPost: boolean;
   isGuide: boolean;
+  /** Emails about this trip are off for this person. */
+  muted: boolean;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -79,6 +82,7 @@ export function GroupThread({
             {people} {people === 1 ? "person" : "people"} · {group.partyLabel}
           </p>
         </div>
+        <MuteToggle muted={muted} />
         <Link
           to={`/groups/${group.slug}`}
           className="shrink-0 rounded-pill border border-line px-3 py-1.5 text-caption text-ink hover:border-sage"
@@ -181,6 +185,52 @@ export function GroupThread({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Emails on or off for this trip, for you alone.
+ *
+ * A fetcher rather than a link: muting a group in the middle of reading it
+ * should not move you off the message you were reading.
+ */
+function MuteToggle({ muted }: { muted: boolean }) {
+  const fetcher = useFetcher();
+  const busy = fetcher.state !== "idle";
+  // Optimistic: the button says what you just asked for, not what the server
+  // has confirmed.
+  const next = fetcher.formData ? fetcher.formData.get("intent") === "mute" : muted;
+  return (
+    <fetcher.Form method="post" className="shrink-0">
+      <input type="hidden" name="intent" value={next ? "unmute" : "mute"} />
+      <button
+        disabled={busy}
+        title={next ? "Emails about this trip are off" : "Stop emailing me about this trip"}
+        className="flex items-center gap-1.5 rounded-pill border border-line px-3 py-1.5 text-caption text-muted hover:border-sage hover:text-ink disabled:opacity-60"
+      >
+        {next ? <MutedIcon /> : <BellIcon />}
+        <span className="hidden sm:inline">{next ? "Muted" : "Mute"}</span>
+      </button>
+    </fetcher.Form>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M6 8a4 4 0 018 0c0 3 1.2 4.2 1.7 4.7a.5.5 0 01-.35.85H4.65a.5.5 0 01-.35-.85C4.8 12.2 6 11 6 8z" strokeLinejoin="round" />
+      <path d="M8.4 16a1.7 1.7 0 003.2 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MutedIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M6 8a4 4 0 018 0c0 3 1.2 4.2 1.7 4.7a.5.5 0 01-.35.85H4.65a.5.5 0 01-.35-.85C4.8 12.2 6 11 6 8z" strokeLinejoin="round" />
+      <path d="M8.4 16a1.7 1.7 0 003.2 0" strokeLinecap="round" />
+      <path d="M3.5 3.5l13 13" strokeLinecap="round" />
+    </svg>
   );
 }
 

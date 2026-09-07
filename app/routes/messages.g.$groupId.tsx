@@ -39,6 +39,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   );
   const guideId = thread.group.guide_id;
 
+  const { data: mute } = await admin
+    .from("trip_group_mutes")
+    .select("user_id")
+    .eq("group_id", thread.group.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   const going = thread.members.filter(
     (m: any) => m.status === "joined" || m.status === "invited",
   ).length;
@@ -80,6 +87,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       })),
       canPost: thread.access.canPost,
       isGuide: thread.access.isGuide,
+      muted: !!mute,
     },
     { headers },
   );
@@ -97,6 +105,25 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   const form = await request.formData();
+  const intent = String(form.get("intent") ?? "send");
+
+  // Whether you want to hear about a trip is yours alone — no organiser, no
+  // ops, and it never removes you from the group.
+  if (intent === "mute" || intent === "unmute") {
+    if (intent === "mute") {
+      await admin
+        .from("trip_group_mutes")
+        .upsert({ group_id: thread.group.id, user_id: user.id });
+    } else {
+      await admin
+        .from("trip_group_mutes")
+        .delete()
+        .eq("group_id", thread.group.id)
+        .eq("user_id", user.id);
+    }
+    return data({ ok: true }, { headers });
+  }
+
   const body = String(form.get("body") ?? "").trim();
   if (!body) return data({ ok: false }, { headers });
 
@@ -105,13 +132,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     author_id: user.id,
     body: body.slice(0, 4000),
   });
-  return error
-    ? data({ ok: false, error: "Message didn't send — try again." }, { status: 500, headers })
-    : data({ ok: true }, { headers });
+  if (error) {
+    return data({ ok: false, error: "Message didn't send — try again." }, { status: 500, headers });
+  }
+
+  // Tell the rest of the group. Awaited rather than fired and forgotten: on
+  // Workers there is no runtime after the response is returned, so an
+  // un-awaited send is a send that may never happen.
+  const { notifyGroupMessage } = await import("~/lib/group-notify.server");
+  await notifyGroupMessage(env, admin, { groupId: thread.group.id, authorId: user.id });
+
+  return data({ ok: true }, { headers });
 }
 
 export default function GroupMessages({ loaderData }: Route.ComponentProps) {
-  const { group, messages, people, canPost, isGuide } = loaderData as any;
+  const { group, messages, people, canPost, isGuide, muted } = loaderData as any;
   return (
     <GroupThread
       group={group}
@@ -119,6 +154,7 @@ export default function GroupMessages({ loaderData }: Route.ComponentProps) {
       people={people}
       canPost={canPost}
       isGuide={isGuide}
+      muted={muted}
     />
   );
 }

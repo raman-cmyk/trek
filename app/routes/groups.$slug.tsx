@@ -190,9 +190,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       author_id: user.id,
       body: body.slice(0, 4000),
     });
-    return error
-      ? data({ error: error.message }, { status: 400, headers })
-      : data({ ok: true }, { headers });
+    if (error) return data({ error: error.message }, { status: 400, headers });
+
+    // The same fan-out as the inbox composer — the group hears about a
+    // message wherever it was typed.
+    const { notifyGroupMessage } = await import("~/lib/group-notify.server");
+    await notifyGroupMessage(env, admin, { groupId: group.id, authorId: user.id });
+
+    return data({ ok: true }, { headers });
   }
 
   if (!iAmIn && !isOrganiser) {

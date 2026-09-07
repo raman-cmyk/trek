@@ -1091,3 +1091,38 @@ Migration 0056 needs applying — see below.
 **🙋 Founder needed:** apply migration 0056 to the cloud database (`supabase db
 push`, or the SQL editor) — until it runs, the guide's group thread will list
 in their inbox but the group page will not open for them.
+
+## Session — group chat learns to send email (2026-09-06)
+
+The fan-out that was logged in BACKLOG last session is built, on top of the
+email foundation from 0055 rather than beside it: `sendRichEmail`, so every
+group email is consent-aware, skips blocked addresses, retries once, and
+lands a row in `email_log`.
+
+**`app/lib/group-notify.ts`** is the pure half — who is mailed, whether they
+were mailed too recently, and what they missed — so the rules that decide
+whether somebody's evening gets interrupted are tested rather than trusted.
+**`group-notify.server.ts`** does the IO. It fires from both places a group
+message can be typed: the inbox composer and the trip page.
+
+The rules: never the author; at most one email per person per group per 30
+minutes; catch-up starts at the later of their last read and their last
+email, so nothing quotes lines they have already seen; system lines alone
+never earn an email. The guide gets email like everyone else here — the one
+place in the app where a guide is not texted, because a group of six typing
+would be five SMS a message.
+
+**Muting** is `trip_group_mutes` (migration 0057), keyed on (group, user) so
+it covers the guide, who is in the chat but not on the roster. The toggle is
+in the chat header — a fetcher, so muting mid-read does not move the page —
+and the email footnote points at it.
+
+`email_log` is now browsable in `/ops/data` under Messaging, which answers the
+only question anyone asks about a notification: did it go, and if not, why.
+
+283 tests green (12 new on recipients, the burst window and the digest), build
+green.
+
+**🙋 Founder needed:** migrations 0056 and 0057 still have to be applied — this
+container has no database credentials, so I could not run them. See the next
+session note or ask Claude to run them once a connection string is available.

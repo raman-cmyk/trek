@@ -21,9 +21,11 @@ const TABLES: Record<string, string[]> = {
   People: ["users", "guides", "guide_languages", "guide_verifications", "guide_change_requests", "guide_strikes"],
   Catalogue: ["routes", "offerings", "offering_photos", "permits", "availability"],
   Bookings: ["enquiries", "bookings", "payments", "instalments", "payouts", "contracts", "tims_cards", "permit_applications", "booking_documents", "checkins"],
-  Groups: ["trip_groups", "trip_group_members", "trip_group_messages", "events", "event_signups", "departures", "departure_members"],
+  Groups: ["trip_groups", "trip_group_members", "trip_group_messages", "trip_group_mutes", "events", "event_signups", "departures", "departure_members"],
   Content: ["journals", "journal_entries", "journal_comments", "journal_tags", "guide_questions", "guide_question_votes", "reviews", "recaps", "guide_photos"],
-  Messaging: ["conversations", "messages", "thread_reads", "canned_replies"],
+  // email_log answers the only question anyone asks about a notification:
+  // did it actually go, and if not, why not.
+  Messaging: ["conversations", "messages", "thread_reads", "canned_replies", "email_log"],
   Safety: ["incidents", "document_access_log"],
 };
 
