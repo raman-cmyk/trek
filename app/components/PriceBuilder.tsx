@@ -107,8 +107,6 @@ const toSeasons = (rows: DraftSeason[]): PriceSeason[] =>
       pct: (Number(r.pct) || 0) / 100,
     }));
 
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const MONTH_MIDS = MONTH_NAMES.map((_, i) => `${String(i + 1).padStart(2, "0")}-15`);
 
 const toBreakdown = (lines: DraftLine[], days: number, seasons: DraftSeason[] = []): PriceBreakdown => ({
   guide_fee_total_usd_cents: 0,
@@ -272,107 +270,14 @@ export function PriceBuilder({
         + Add your own line
       </button>
 
-      {/* ── Seasons. ───────────────────────────────────────────────────── */}
-      <div className="mt-4 border-t border-line pt-3">
-        <p className="text-sm font-medium text-ink">Dates that cost more or less</p>
-        <p className="mt-0.5 text-caption text-muted">
-          October is not July. Set a stretch of the year and how much it moves
-          your price. It repeats every year — you do not have to come back each
-          January.
-        </p>
-        {seasons.length > 0 && (
-          <ul className="mt-2 space-y-2">
-            {seasons.map((sn) => (
-              <li key={sn.id} className="rounded border border-line bg-paper p-2.5">
-                <div className="flex gap-2">
-                  <input
-                    aria-label="Season name"
-                    value={sn.label}
-                    onChange={(e) => setSeason(sn.id, { label: e.target.value })}
-                    placeholder="October peak"
-                    className={`${field} min-w-0 flex-1`}
-                  />
-                  <div className="flex w-24 shrink-0 items-center gap-1">
-                    <input
-                      aria-label="Percent change"
-                      type="number"
-                      value={sn.pct}
-                      onChange={(e) => setSeason(sn.id, { pct: e.target.value })}
-                      className={`${field} w-full`}
-                    />
-                    <span className="text-caption text-muted">%</span>
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-muted">
-                  <label>
-                    from
-                    <input
-                      aria-label="Season starts"
-                      type="date"
-                      value={`2026-${sn.from}`}
-                      onChange={(e) => setSeason(sn.id, { from: e.target.value.slice(5) })}
-                      className="ml-1 rounded border border-line bg-card px-2 py-1 text-sm text-ink"
-                    />
-                  </label>
-                  <label>
-                    to
-                    <input
-                      aria-label="Season ends"
-                      type="date"
-                      value={`2026-${sn.to}`}
-                      onChange={(e) => setSeason(sn.id, { to: e.target.value.slice(5) })}
-                      className="ml-1 rounded border border-line bg-card px-2 py-1 text-sm text-ink"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setSeasons((all) => all.filter((x) => x.id !== sn.id))}
-                    className="ml-auto text-ember underline underline-offset-2"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button
-          type="button"
-          onClick={() =>
-            setSeasons((all) => [
-              ...all,
-              { id: `s${all.length}-${Date.now().toString(36)}`, label: "", from: "10-01", to: "11-15", pct: "20" },
-            ])
-          }
-          className="mt-2 text-caption text-moss underline underline-offset-4"
-        >
-          + Add a season
-        </button>
-
-        {/* Your year at a glance. A guide setting three overlapping ranges by
-            hand cannot otherwise see what they have built — or spot the month
-            they priced themselves out of. */}
-        <div className="mt-3 flex gap-0.5">
-          {MONTH_MIDS.map((mid, i) => {
-            const p = computeExperiencePricing(bd, group, `2026-${mid}`).perPersonUsdCents;
-            const hi = Math.max(...MONTH_MIDS.map((m) => computeExperiencePricing(bd, group, `2026-${m}`).perPersonUsdCents), 1);
-            return (
-              <div key={mid} className="flex-1 text-center" title={`${MONTH_NAMES[i]}: ${formatUsd(p)}`}>
-                <div className="flex h-10 items-end">
-                  <div
-                    className="w-full rounded-t bg-moss"
-                    style={{ height: `${Math.max(6, (p / hi) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-muted">{MONTH_NAMES[i][0]}</p>
-              </div>
-            );
-          })}
-        </div>
-        <p className="text-caption text-muted">
-          What one person pays across the year, at a group of {group}.
-        </p>
-      </div>
+      {/* Seasonal pricing was here — a season editor and a twelve-month bar
+          chart, between the price lines and the total. A guide adding a trek
+          is answering "what does this cost"; being asked, in the same breath,
+          to model how October differs from July is a second job, and every
+          guide met it before they had finished the first. The seasons a trip
+          already has are preserved below and still price the booking; setting
+          them is not part of listing a trip. The hidden price_seasons field
+          above is what carries them back untouched on an edit. */}
 
       {/* ── The calculator. ─────────────────────────────────────────────── */}
       <div className="mt-4 border-t border-line pt-3">
