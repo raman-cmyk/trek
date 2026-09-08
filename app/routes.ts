@@ -66,6 +66,9 @@ export default [
     route("g/enquiries", "routes/g.enquiries.tsx"),
     route("g/bookings", "routes/g.bookings.tsx"),
     route("g/calendar", "routes/g.calendar.tsx"),
+    // The daily safety update, on a screen of its own next to the calendar
+    // rather than a button under the earnings.
+    route("g/checkin", "routes/g.checkin.tsx"),
     route("g/earnings", "routes/g.earnings.tsx"),
     route("g/profile", "routes/g.profile.tsx"),
     route("g/questions", "routes/g.questions.tsx"),

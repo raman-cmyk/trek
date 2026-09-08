@@ -5,6 +5,7 @@ import { requireUser } from "~/lib/auth.server";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
 import { dialable } from "~/lib/emergency";
+import { trekDay } from "~/lib/checkin";
 import { cn } from "~/lib/cn";
 
 /**
@@ -84,12 +85,11 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const dayNum = Math.max(
-    1,
-    Math.round((Date.parse(today) - Date.parse(b.start_date)) / 86400000) + 1,
-  );
-  const total =
-    Math.round((Date.parse(b.end_date) - Date.parse(b.start_date)) / 86400000) + 1;
+  // Clamped to the trek: day 1 on the start date, the last day on the end
+  // date. Unclamped, a trek nobody had closed reached "day 34" of fourteen.
+  const window = trekDay(b.start_date, b.end_date, today);
+  const dayNum = window.day;
+  const total = window.total;
   const stops = (b.offering?.route?.day_stops ?? []) as Array<{
     day: number;
     place: string;
@@ -187,7 +187,13 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* The one button, at the bottom, where the thumb is. */}
-      {checkedInToday ? (
+      {window.where !== "on" ? (
+        <p className="rounded-card bg-surface p-4 text-center text-sm text-ink-soft">
+          {window.where === "before"
+            ? `Nothing to send yet — day 1 is ${b.start_date}.`
+            : "This trek is finished. Close it from the safety screen so your payout goes out."}
+        </p>
+      ) : checkedInToday ? (
         <p className="rounded-card bg-mist p-4 text-center text-sm text-ink">
           Checked in for day {dayNum} — the office knows you&rsquo;re fine. See
           you tomorrow.

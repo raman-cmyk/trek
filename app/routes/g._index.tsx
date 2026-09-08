@@ -8,10 +8,10 @@ import {
 } from "~/lib/guide-checks";
 import { requireUser } from "~/lib/auth.server";
 import { cn } from "~/lib/cn";
-import { CheckinButton } from "~/components/guide/CheckinButton";
 import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
+import { checkinIsDue, dayLabel, needsClosing, trekDay } from "~/lib/checkin";
 import { SmartImage } from "~/components/SmartImage";
 
 
@@ -101,7 +101,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     ] = await Promise.all([
       admin
         .from("bookings")
-        .select("id, start_date, offering:offerings(title)")
+        .select("id, start_date, end_date, offering:offerings(title)")
         .eq("guide_id", user.id)
         .eq("status", "active")
         .limit(1)
@@ -256,25 +256,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const form = await request.formData();
-  if (String(form.get("intent")) === "checkin") {
-    const bookingId = String(form.get("booking_id"));
-    // Guard: only the guide's own active booking.
-    const { data: b } = await admin
-      .from("bookings")
-      .select("id")
-      .eq("id", bookingId)
-      .eq("guide_id", user.id)
-      .maybeSingle();
-    if (b) {
-      await admin
-        .from("checkins")
-        .upsert(
-          { booking_id: bookingId, day: new Date().toISOString().slice(0, 10), method: "app" },
-          { onConflict: "booking_id,day" },
-        );
-    }
-    return data({ ok: true }, { headers });
-  }
+  // The check-in used to be recorded here as well as on its own screen. Two
+  // copies of one rule is how one of them ends up not knowing that a trek has
+  // ended — /g/checkin owns it now, and this page links to it.
   return data({ ok: false }, { headers });
 }
 
@@ -294,14 +278,11 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
   if (status !== "verified")
     return <StatusView name={first} guide={guide} status={status} setup={setup} />;
 
-  const dayNum = active
-    ? Math.max(
-        1,
-        Math.round(
-          (Date.parse(today) - Date.parse(active.start_date)) / 86400000,
-        ) + 1,
-      )
-    : 0;
+  // Day 1 is the day the trek starts and the last day is the day it ends.
+  // This used to be "days since the start date" with no ceiling, so a
+  // fourteen-day trek that nobody had closed read "day 34".
+  const window = active ? trekDay(active.start_date, active.end_date, today) : null;
+  const dayNum = window?.day ?? 0;
 
   return (
     <div className="space-y-5">
@@ -325,7 +306,9 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           to="/g/active"
           className="block rounded-card border border-moss/50 bg-mist p-4"
         >
-          <p className="text-xs text-ink-soft">On the trail — day {dayNum}</p>
+          <p className="text-xs text-ink-soft">
+            {window ? (window.where === "on" ? `On the trail — ${dayLabel(window).toLowerCase()}` : dayLabel(window)) : ""}
+          </p>
           <p className="mt-0.5 font-medium text-ink">{active.offering?.title}</p>
           <p className="mt-1 text-sm text-primary">Open the trek →</p>
         </Link>
@@ -488,12 +471,25 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         </section>
       )}
 
-      {active && !checkedInToday && (
-        <CheckinButton
-          bookingId={active.id}
-          dayNumber={dayNum}
-          alreadyToday={checkedInToday}
-        />
+      {/* The update itself lives on /g/checkin now, next to the calendar,
+          rather than as a button below the earnings. This is the reminder,
+          and only on the days one is actually owed. */}
+      {window && checkinIsDue(window, checkedInToday) && (
+        <Link
+          to="/g/checkin"
+          className="block rounded-card bg-pine px-6 py-4 text-center text-lg font-medium text-paper hover:bg-moss"
+        >
+          Send today&rsquo;s safety update — {dayLabel(window).toLowerCase()}
+        </Link>
+      )}
+      {window && needsClosing(window, "active") && (
+        <Link
+          to="/g/checkin"
+          className="block rounded-card border border-border bg-card p-4 text-sm text-ink hover:border-moss"
+        >
+          <span className="font-medium">This trek is finished.</span> Close it so
+          your payout goes into the next batch →
+        </Link>
       )}
 
       {/* Other guides' write-ups. The rest of this screen is a guide's own

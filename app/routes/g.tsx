@@ -1,6 +1,7 @@
 import { Form, NavLink, Outlet, data, redirect } from "react-router";
 import type { Route } from "./+types/g";
 import { cn } from "~/lib/cn";
+import { checkinIsDue, needsClosing, trekDay } from "~/lib/checkin";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { countUnread } from "~/lib/unread.server";
@@ -15,7 +16,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // The unread count used to run after this batch rather than inside it,
   // which put a whole extra round trip on the critical path of every page in
   // the guide area. It depends on nothing above it.
-  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }, { data: running }] =
+    await Promise.all([
     admin.from("guides").select("status, slug").eq("user_id", user.id).single(),
     admin
       .from("enquiries")
@@ -23,13 +26,37 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .eq("guide_id", user.id)
       .eq("status", "open"),
     countUnread(admin, user.id),
+    // A trek on the trail today, so the tab can say there is an update owed.
+    admin
+      .from("bookings")
+      .select("id, status, start_date, end_date")
+      .eq("guide_id", user.id)
+      .eq("status", "active"),
   ]);
+
+  // One number: treks needing today's safety update, plus finished ones
+  // nobody has closed. Both are things only this guide can clear.
+  let checkinDue = 0;
+  const live = running ?? [];
+  if (live.length) {
+    const { data: sentToday } = await admin
+      .from("checkins")
+      .select("booking_id")
+      .in("booking_id", live.map((b: any) => b.id))
+      .eq("day", today);
+    const sent = new Set((sentToday ?? []).map((c: any) => c.booking_id));
+    for (const b of live) {
+      const w = trekDay(b.start_date, b.end_date, today);
+      if (checkinIsDue(w, sent.has(b.id)) || needsClosing(w, b.status)) checkinDue++;
+    }
+  }
   return data(
     {
       name: profile.full_name,
       status: guide?.status ?? "applied",
       enquiryCount: enquiryCount ?? 0,
       unreadTotal,
+      checkinDue,
     },
     { headers },
   );
@@ -66,10 +93,11 @@ const TABS = [
   { to: "/g/messages", label: "Messages", badge: "unreadTotal" as const, icon: IconChat },
   { to: "/g/experiences", label: "Experiences", badge: 0, icon: IconBoot },
   { to: "/g/calendar", label: "Calendar", badge: 0, icon: IconCalendar },
+  { to: "/g/checkin", label: "Safety", badge: "checkinDue" as const, icon: IconShield },
 ];
 
 export default function GuideLayout({ loaderData }: Route.ComponentProps) {
-  const { enquiryCount, unreadTotal } = loaderData;
+  const { enquiryCount, unreadTotal, checkinDue } = loaderData;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
@@ -96,7 +124,9 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
               ? enquiryCount
               : t.badge === "unreadTotal"
                 ? unreadTotal
-                : 0;
+                : t.badge === "checkinDue"
+                  ? checkinDue
+                  : 0;
           const Icon = t.icon;
           return (
             <NavLink
@@ -186,6 +216,15 @@ function IconBoot({ active }: IconProps) {
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" {...S(active)}>
       <path d="M6.4 3.2h2.4v6.1l4.6 2.2a2.6 2.6 0 0 1 1.5 2.3v1.4a.8.8 0 0 1-.8.8H5.3a.8.8 0 0 1-.8-.8V4a.8.8 0 0 1 .8-.8Z" />
       <path d="M4.5 13.4h10.4" />
+    </svg>
+  );
+}
+
+function IconShield({ active }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.5 5.5 6v5.5c0 4 2.8 7.3 6.5 8.5 3.7-1.2 6.5-4.5 6.5-8.5V6L12 3.5Z" />
+      <path d="m9.2 12 2 2 3.6-3.8" />
     </svg>
   );
 }
