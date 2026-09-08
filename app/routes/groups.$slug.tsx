@@ -19,6 +19,7 @@ import {
   type TripGroup,
 } from "~/lib/groups";
 import { joinGroup, recomputeShares, systemLine } from "~/lib/groups.server";
+import { depositShares, stillOwing } from "~/lib/group-pay";
 import { cn } from "~/lib/cn";
 import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
@@ -421,6 +422,14 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
   const organiserName =
     members.find((x: GroupMember) => x.role === "organiser")?.display_name ?? "the organiser";
   const iOwe = mine ? Math.max(0, mine.share_usd_cents - mine.paid_usd_cents) : 0;
+  // What this person owes TODAY — their part of the deposit — as against
+  // their share of the whole trip. Confusing the two is how somebody pays a
+  // fifth of a deposit and believes they are square.
+  const depositShareMap = booking
+    ? depositShares(booking.deposit_usd_cents, members, group.payment_mode, group.organiser_id)
+    : new Map<string, number>();
+  const myDepositShare = mine ? Math.max(0, (depositShareMap.get(mine.id) ?? 0) - mine.paid_usd_cents) : 0;
+  const waitingOn = booking ? stillOwing(members, depositShareMap) : [];
 
   const scroller = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -530,6 +539,14 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                     unclaimed — send them the link below.
                   </p>
                 )}
+                {/* Named, not counted: "waiting on 2 shares" makes everybody
+                    assume it is somebody else. */}
+                {booking && waitingOn.length > 0 && (
+                  <p className="mt-2 text-sm text-ink-soft">
+                    Waiting on{" "}
+                    {waitingOn.map((w: GroupMember) => w.display_name).join(", ")}.
+                  </p>
+                )}
                 {iOwe > 0 ? (
                   <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md bg-mist p-3">
                     <p className="min-w-0 flex-1 text-sm text-ink">
@@ -545,17 +562,17 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                         cannot pay us directly until per-person charging is
                         live; and on an unbooked trip nobody owes anything
                         yet. */}
-                    {booking && isOrganiser ? (
+                    {/* Everyone pays their own, which is what the group was
+                        always for. The organiser used to be the only person
+                        who could pay at all, and everybody else was told to
+                        settle up with them by hand. */}
+                    {booking ? (
                       <Link
-                        to={`/checkout/${booking.id}`}
+                        to={`/groups/${group.slug}/pay`}
                         className="shrink-0 rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
                       >
-                        Pay the deposit — {money(booking.deposit_usd_cents)}
+                        Pay your share — {money(myDepositShare)}
                       </Link>
-                    ) : booking ? (
-                      <span className="shrink-0 rounded border border-line bg-paper px-3 py-2 text-sm text-muted">
-                        Settle {money(iOwe)} with {organiserName}
-                      </span>
                     ) : (
                       <span className="shrink-0 rounded border border-line bg-paper px-3 py-2 text-sm text-muted">
                         Nothing to pay until the guide confirms

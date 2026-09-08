@@ -323,6 +323,26 @@ export async function fulfillDeposit(
     { onConflict: "stripe_payment_intent,type" },
   );
 
+  await advanceOnDepositPaid(admin, bookingId);
+  return { applied: true };
+}
+
+/**
+ * The deposit is in — move the booking on.
+ *
+ * Split out because a deposit now arrives two ways: one payer through
+ * checkout, or every member of a group paying their own share (0069). What
+ * happens next must be identical either way, and the surest way to make it
+ * identical is to have one copy of it.
+ */
+export async function advanceOnDepositPaid(admin: SupabaseClient, bookingId: string) {
+  const { data: booking } = await admin
+    .from("bookings")
+    .select("id, status, deposit_usd_cents, total_usd_cents, instalment_count, guide_id, start_date, end_date, enquiry_id, offering:offerings(kind)")
+    .eq("id", bookingId)
+    .single();
+  if (!booking || booking.status !== "pending_deposit") return;
+
   await admin
     .from("bookings")
     .update({ status: "deposit_paid", deposit_paid_at: new Date().toISOString() })
@@ -367,8 +387,12 @@ export async function fulfillDeposit(
   if (booking.enquiry_id) {
     await admin.from("enquiries").update({ status: "converted" }).eq("id", booking.enquiry_id);
   }
-  // Notifications fire here (Resend/SMS) — wired in M7.
-  return { applied: true };
+  // A group's page follows the booking, so it moves with it.
+  await admin
+    .from("trip_groups")
+    .update({ status: "booked" })
+    .eq("booking_id", bookingId)
+    .neq("status", "cancelled");
 }
 
 /** Cancel a booking, computing the refund per policy (docs/02).

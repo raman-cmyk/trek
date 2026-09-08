@@ -47,6 +47,8 @@ export default [
     route("groups/new", "routes/groups.new.tsx"),
     route("groups/:slug", "routes/groups.$slug.tsx"),
     route("groups/:slug/enquire", "routes/groups.$slug.enquire.tsx"),
+    // One member paying their own share of the deposit (0069).
+    route("groups/:slug/pay", "routes/groups.$slug.pay.tsx"),
     route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
     // The other half of "know who is walking with you": what a guide is told
     // about the person asking. Never public — the loader decides who may read

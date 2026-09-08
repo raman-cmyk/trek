@@ -7,7 +7,14 @@ import { fulfillDeposit } from "./booking.server";
  */
 function makeMock(store: any) {
   function builder(table: string) {
-    const state: any = { table, op: "select", filters: [] as [string, any][], single: false, payload: null };
+    const state: any = {
+      table,
+      op: "select",
+      filters: [] as [string, any][],
+      negatives: [] as [string, any][],
+      single: false,
+      payload: null,
+    };
     const api: any = {
       select() { return api; },
       insert(rows: any) { state.op = "insert"; state.payload = rows; return api; },
@@ -19,6 +26,9 @@ function makeMock(store: any) {
       },
       update(patch: any) { state.op = "update"; state.payload = patch; return api; },
       eq(k: string, v: any) { state.filters.push([k, v]); return api; },
+      // Groups follow their booking, and moving one on excludes the cancelled
+      // ones — so the mock needs the negative filter too.
+      neq(k: string, v: any) { state.negatives.push([k, v]); return api; },
       maybeSingle() { state.single = true; return api; },
       single() { state.single = true; return api; },
       then(onF: any, onR: any) {
@@ -26,7 +36,10 @@ function makeMock(store: any) {
       },
     };
     function match(row: any) {
-      return state.filters.every(([k, v]: [string, any]) => row[k] === v);
+      return (
+        state.filters.every(([k, v]: [string, any]) => row[k] === v) &&
+        state.negatives.every(([k, v]: [string, any]) => row[k] !== v)
+      );
     }
     function run() {
       const rows: any[] = store[state.table] ?? (store[state.table] = []);
