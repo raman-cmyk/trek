@@ -20,6 +20,12 @@ import { GuideMap, type MapPin, type MapRoute } from "~/components/public/GuideM
 import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { INTENTS, REGIONS, matchesKeywords } from "~/lib/intents";
+import {
+  categoryIsReady,
+  membersOf,
+  orderCategories,
+  type Category,
+} from "~/lib/categories";
 import { addDays } from "~/lib/browse";
 import { TREK_FEE_PCT } from "~/lib/config";
 import { fmtDate, fmtDateShort } from "~/lib/format";
@@ -99,6 +105,19 @@ export async function loader({ context }: Route.LoaderArgs) {
         .limit(3),
     ]);
 
+  // The rows somebody made, rather than the ones a developer wrote (0067).
+  const [{ data: categoryRows }, { data: picks }, { data: skillRows }] = await Promise.all([
+    client
+      .from("categories")
+      .select("id, slug, label, blurb, auto_skill, live, sort, min_guides")
+      .eq("live", true)
+      .order("sort"),
+    client.from("guide_categories").select("category_id, guide_id, sort"),
+    client.from("guide_skills").select("guide_id, skill"),
+  ]);
+  const skillsByGuide: Record<string, string[]> = {};
+  for (const r of skillRows ?? []) (skillsByGuide[r.guide_id] ??= []).push(r.skill);
+
   const all = (guides ?? []) as HomeGuide[];
   const ids = all.map((g) => g.user_id);
 
@@ -167,7 +186,35 @@ export async function loader({ context }: Route.LoaderArgs) {
     median_response_mins: g.median_response_mins,
   });
 
-  const rows = INTENTS.map((intent) => {
+  // Curated rows first: they are this week's judgement, and the evergreen
+  // intent rows below them are the standing furniture.
+  const byCategory = new Map<string, Array<{ guide_id: string; sort: number }>>();
+  for (const p of picks ?? []) {
+    (byCategory.get(p.category_id) ?? byCategory.set(p.category_id, []).get(p.category_id))!.push(p);
+  }
+  const categoryRowsOut = orderCategories((categoryRows ?? []) as Category[])
+    .map((c) => {
+      const members = membersOf(c, all, byCategory.get(c.id) ?? [], skillsByGuide);
+      return {
+        key: `c:${c.slug}`,
+        label: c.label,
+        blurb: c.blurb ?? "",
+        href: `/guides?category=${c.slug}`,
+        total: members.length,
+        guides: members.slice(0, 8).map(pick),
+        ready: categoryIsReady(c, members.length),
+      };
+    })
+    .filter((r) => r.ready);
+
+  // A curated row that names a skill replaces the built-in row for that same
+  // skill rather than sitting next to it — otherwise turning on "Photographers"
+  // in the console shows the reader two rows of the same people.
+  const claimedSkills = new Set(
+    ((categoryRows ?? []) as Category[]).map((c) => c.auto_skill).filter(Boolean) as string[],
+  );
+
+  const rows = INTENTS.filter((i) => !(i.skill && claimedSkills.has(i.skill))).map((intent) => {
     let matched = all;
     if (intent.gender) matched = matched.filter((g) => g.gender === intent.gender);
     if (intent.keywords) matched = matched.filter((g) => matchesKeywords(g, intent.keywords!));
@@ -230,6 +277,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   }));
 
   return {
+    categoryRows: categoryRowsOut,
     rows,
     experiences,
     freeThisWeek: freeThisWeek.slice(0, 8).map(pick),
@@ -265,6 +313,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
+    categoryRows,
     rows,
     experiences,
     freeThisWeek,
@@ -387,6 +436,19 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* 5 — Browse by intent. Each row is a real filtered search. */}
       <div className="bg-card py-4">
+        {/* The rows somebody made this week (0067), above the standing ones. */}
+        {categoryRows.map((r: any) => (
+          <Row
+            key={r.key}
+            label={r.label}
+            blurb={r.blurb}
+            count={r.total}
+            href={r.href}
+            guides={r.guides}
+            ratings={ratings}
+            langMap={langMap}
+          />
+        ))}
         {rows.map((r) => (
           <Row
             key={r.key}

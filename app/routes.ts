@@ -122,6 +122,8 @@ export default [
     // edit every experience and create none.
     route("ops/experiences/new", "routes/ops.experiences.new.tsx"),
     route("ops/routes", "routes/ops.routes.tsx"),
+    // The homepage's rows, made by whoever runs the marketplace (0067).
+    route("ops/categories", "routes/ops.categories.tsx"),
     route("ops/experiences/:id", "routes/ops.experiences.$id.tsx"),
     route("ops/data", "routes/ops.data.tsx"),
     route("ops/search", "routes/ops.search.tsx"),

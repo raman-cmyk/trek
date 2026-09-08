@@ -452,3 +452,19 @@ where b.balance_paid_at is not null and b.total_usd_cents > b.deposit_usd_cents
   and not exists (select 1 from public.payments p where p.booking_id = b.id and p.type = 'balance');
 update public.guides set voice_intro_url = '/img/voice/' || slug || '.wav'
 where slug in ('pemba-sherpa','sunita-gurung','mingma-sherpa');
+
+-- ---- Homepage rows (0067) --------------------------------------------------
+-- Four to start with, as drafts: the founder turns one live in
+-- /ops/categories and it appears on the homepage in place of the built-in row
+-- for the same skill. Everyone who ticked the skill is in it without being
+-- assigned; hand-picking a guide puts them at the front of the row.
+insert into public.categories (slug, label, blurb, auto_skill, live, sort, min_guides) values
+  ('village-hosts', 'Guides who host you in their village',
+   'A night in a family house instead of a lodge.', 'village_host', false, 10, 3),
+  ('first-timers', 'First-timer friendly — they go slow',
+   'No hero pace. Nobody made to feel stupid for asking.', 'first_timers', false, 20, 3),
+  ('photographers', 'Photographers, and guides up before dawn',
+   'One carries a real camera. The rest will wake you for the light.', 'photography', false, 30, 3),
+  ('trained-for-trouble', 'Trained for when it goes wrong',
+   'A nurse, a Gurkha, a guide who checks your oxygen nightly.', 'first_aid', false, 40, 3)
+on conflict (slug) do nothing;

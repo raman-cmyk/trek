@@ -199,6 +199,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: "Sent to the group." }, { headers });
   }
 
+  await rememberZone(admin, user.id, form.get("tz"));
   const body = String(form.get("body") ?? "").trim();
   if (!body) return data({ ok: false }, { headers });
 
@@ -239,4 +240,16 @@ export default function GroupMessages({ loaderData }: Route.ComponentProps) {
       startDate={startDate}
     />
   );
+}
+
+/**
+ * Keep the sender's time zone current (0068), so the other side can be shown
+ * their clock. Written on the way past a message they were sending anyway.
+ */
+async function rememberZone(admin: any, userId: string, tz: unknown) {
+  const zone = String(tz ?? "").trim();
+  // A zone is "Area/City" and nothing longer than a label: anything else is a
+  // crafted field, not a browser.
+  if (!/^[A-Za-z]+\/[A-Za-z_\-+0-9\/]{2,40}$/.test(zone)) return;
+  await admin.from("users").update({ timezone: zone }).eq("id", userId);
 }

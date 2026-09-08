@@ -13,6 +13,7 @@ import {
   parseRange,
 } from "~/lib/browse.server";
 import { findIntent, matchesKeywords } from "~/lib/intents";
+import { membersOf } from "~/lib/categories";
 import { fmtDateShort } from "~/lib/format";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
@@ -135,6 +136,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const fSkill = p.get("skill");
   if (fSkill) rows = rows.filter((g) => (skillMap[g.user_id] ?? []).includes(fSkill));
 
+  // A category row's "see everyone" (0067). Hand-picked members, plus anyone
+  // swept in by the category's skill — the same rule the homepage row used, so
+  // the row and its link can never show different people.
+  const fCategory = p.get("category");
+  let category: { label: string; blurb: string | null } | null = null;
+  if (fCategory) {
+    const { data: cat } = await client
+      .from("categories")
+      .select("id, slug, label, blurb, auto_skill, live, sort, min_guides")
+      .eq("slug", fCategory)
+      .eq("live", true)
+      .maybeSingle();
+    if (cat) {
+      category = { label: cat.label, blurb: cat.blurb };
+      const { data: picked } = await client
+        .from("guide_categories")
+        .select("guide_id, sort")
+        .eq("category_id", cat.id);
+      const members = new Set(
+        membersOf(cat as any, rows, picked ?? [], skillMap).map((g: { user_id: string }) => g.user_id),
+      );
+      rows = rows.filter((g) => members.has(g.user_id));
+    } else {
+      rows = [];
+    }
+  }
+
   if (intent) {
     if (intent.gender) rows = rows.filter((g) => g.gender === intent.gender);
     // The row's skill is the filter where a guide has claimed anything at all;
@@ -180,7 +208,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     totalGuides,
     facets: { districts, languages },
     filters: { q, from: range?.from ?? "", to: range?.to ?? "", fTier, fLang, fDistrict, fWomen, sort },
-    intent: intent ? { key: intent.key, label: intent.label, blurb: intent.blurb } : null,
+    // A category reads like an intent on this page: a heading and a line.
+    intent: category
+      ? { key: `category:${fCategory}`, label: category.label, blurb: category.blurb ?? "" }
+      : intent
+        ? { key: intent.key, label: intent.label, blurb: intent.blurb }
+        : null,
     today,
     canonical: absoluteUrl(env.SITE_URL, "/guides"),
   };

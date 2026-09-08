@@ -9,6 +9,7 @@ import { TierBadge } from "~/components/public/bits";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
 import { cn } from "~/lib/cn";
+import { awayNote, clockIn, nepalClock } from "~/lib/local-time";
 
 export interface ThreadMessage {
   id: string;
@@ -37,6 +38,8 @@ export interface ThreadTrip {
 export interface ThreadPartner {
   name: string;
   slug?: string | null;
+  /** Their IANA zone (0068). Guides are always Nepal, so this is the trekker's. */
+  timeZone?: string | null;
   /** Where the header links when the partner is not a guide (0066). */
   profileHref?: string | null;
   avatarUrl?: string | null;
@@ -98,6 +101,17 @@ export function Thread({
   /** The trip this conversation started from, pre-selected. */
   defaultTripId?: string | null;
 }) {
+  // Their clock, and what silence means (0068). A guide is always in Nepal;
+  // a trekker's zone is whatever their browser said when they last wrote.
+  // Recomputed on every render rather than memoised — it is two arithmetic
+  // operations, and a stale "2:10am" is worse than no line at all.
+  const away = awayNote({
+    name: partner.name,
+    clock: isGuide ? clockIn(partner.timeZone) : nepalClock(),
+    medianReplyMins: isGuide ? null : (partner.responseMins ?? null),
+    theyAreTheGuide: !isGuide,
+  });
+
   const [prefill, setPrefill] = useState<string | null>(null);
   // Which trip the next message is about. A conversation opened from a listing
   // starts on that one.
@@ -232,6 +246,12 @@ export function Thread({
             onSent={() => setBuilding(false)}
           />
         </Sheet>
+      )}
+
+      {away && (
+        <p className="border-t border-line bg-card px-3 pt-2 text-caption text-muted sm:px-4">
+          {away}
+        </p>
       )}
 
       <Composer

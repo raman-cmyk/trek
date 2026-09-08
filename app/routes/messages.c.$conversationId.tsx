@@ -73,7 +73,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     admin.from("users").select("last_seen_at").eq("id", convo.guide_id).maybeSingle(),
     admin
       .from("users")
-      .select("full_name, avatar_url, last_seen_at")
+      .select("full_name, avatar_url, last_seen_at, timezone")
       .eq("id", convo.trekker_id)
       .maybeSingle(),
   ]);
@@ -108,6 +108,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         lastSeenAt: trekkerUser?.last_seen_at ?? null,
         // Who they are, for the guide deciding whether to take them (0066).
         profileHref: `/trekkers/${convo.trekker_id}`,
+        // Their clock, so the guide is not answering at somebody's 3am (0068).
+        timeZone: trekkerUser?.timezone ?? null,
       }
     : {
         name: firstName(guideRow?.full_name) || "Your guide",
@@ -237,6 +239,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  await rememberZone(admin, user.id, form.get("tz"));
   const body = String(form.get("body") ?? "").trim();
   if (!body) return data({ ok: false }, { headers });
   // "This is the trip I mean." Checked against this guide's own trips, so a
@@ -298,4 +301,16 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
       defaultTripId={conversationOfferingId}
     />
   );
+}
+
+/**
+ * Keep the sender's time zone current (0068), so the other side can be shown
+ * their clock. Written on the way past a message they were sending anyway.
+ */
+async function rememberZone(admin: any, userId: string, tz: unknown) {
+  const zone = String(tz ?? "").trim();
+  // A zone is "Area/City" and nothing longer than a label: anything else is a
+  // crafted field, not a browser.
+  if (!/^[A-Za-z]+\/[A-Za-z_\-+0-9\/]{2,40}$/.test(zone)) return;
+  await admin.from("users").update({ timezone: zone }).eq("id", userId);
 }

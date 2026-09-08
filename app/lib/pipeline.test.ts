@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tripPipeline, nextStep, trackFor } from "./pipeline";
+import { previewTrack, tripPipeline, nextStep, trackFor } from "./pipeline";
 
 const keys = (kind: string, state: any) =>
   tripPipeline(kind, state).stages.map((s) => `${s.key}:${s.state}`);
@@ -69,5 +69,30 @@ describe("the trip pipeline", () => {
     expect(nextStep("trek", { bookingStatus: "docs_pending" })?.label).toBe(
       "Passports & insurance",
     );
+  });
+});
+
+describe("previewTrack", () => {
+  it("is what happens after you book, not before", () => {
+    const keys = previewTrack("trek").map((s) => s.key);
+    expect(keys).not.toContain("forming");
+    expect(keys[0]).toBe("deposit");
+  });
+
+  it("differs by experience, which is the whole point", () => {
+    const trek = previewTrack("trek").map((s) => s.key);
+    const food = previewTrack("food_culture").map((s) => s.key);
+    expect(trek).toContain("papers");
+    expect(trek).toContain("permits");
+    expect(food).not.toContain("permits");
+    expect(food.length).toBeLessThan(trek.length);
+  });
+
+  it("falls back to the trek track for an unknown kind", () => {
+    expect(previewTrack("spelunking")).toEqual(previewTrack("trek"));
+  });
+
+  it("carries a hint on every step — a label alone explains nothing", () => {
+    for (const s of previewTrack("day_hike")) expect(s.hint.length).toBeGreaterThan(0);
   });
 });

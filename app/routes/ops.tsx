@@ -73,6 +73,7 @@ const NAV = [
       { to: "/ops/pipeline", label: "Pipeline", badge: null },
       { to: "/ops/experiences", label: "Experiences", badge: null },
       { to: "/ops/routes", label: "Routes", badge: null },
+      { to: "/ops/categories", label: "Homepage rows", badge: null },
       { to: "/ops/permits", label: "Permits", badge: null },
       { to: "/ops/contracts", label: "Contracts", badge: null },
       { to: "/ops/events", label: "Group trips", badge: null },

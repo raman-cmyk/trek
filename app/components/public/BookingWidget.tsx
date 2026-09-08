@@ -7,6 +7,7 @@ import { computePricing } from "~/lib/pricing";
 import { computeExperiencePricing, type PriceBreakdown as PB , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { TrustPanel } from "~/components/public/TrustPanel";
+import { previewTrack } from "~/lib/pipeline";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -196,6 +197,15 @@ function ConfigBody({
           the page said nothing about what it costs or commits you to. It
           costs nothing and commits you to nothing, which is worth saying at
           the exact moment somebody hesitates. */}
+      {/* What happens next, generated from the track this trip will actually
+          run on (app/lib/pipeline.ts) rather than a second list written here.
+          Two lists of steps maintained in two places is how a booking flow
+          starts promising something the trip page then contradicts — and the
+          steps genuinely differ: a trek files permits, a food tour sends an
+          address.
+
+          The first two items are the request itself, which no pipeline stage
+          covers because it happens before there is a booking at all. */}
       <TrustPanel
         className="mt-3"
         title="What happens when you send this"
@@ -205,9 +215,10 @@ function ConfigBody({
             note: "You talk first. Your card is not asked for until you both agree.",
           },
           {
-            label: "Your dates are held while they answer.",
-            note: "Nobody else can book those days out from under you.",
+            label: "If they say yes, your dates are held while you pay.",
+            note: "Nothing is charged until then, and nothing commits you now.",
           },
+          ...previewTrack(o.kind).map((s) => ({ label: s.label, note: s.hint })),
           { label: "Cancel free until 30 days before you leave." },
         ]}
       />

@@ -18,7 +18,7 @@ async function loadParticipant(request: Request, env: Env, bookingId: string) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, trekker_id, guide_id, start_date, end_date, party_size, offering:offerings(title), trekker:users(full_name, avatar_url, last_seen_at)",
+      "id, status, trekker_id, guide_id, start_date, end_date, party_size, offering:offerings(title), trekker:users(full_name, avatar_url, last_seen_at, timezone)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -87,7 +87,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         avatarUrl: (booking as any).trekker?.avatar_url ?? null,
         lastSeenAt: (booking as any).trekker?.last_seen_at ?? null,
         // Who they are, for the guide deciding whether to take them (0066).
-        profileHref: `/trekkers/${(booking as any).trekker?.id}`,
+        profileHref: `/trekkers/${(booking as any).trekker_id}`,
+        // Their clock, so the guide is not answering at somebody's 3am (0068).
+        timeZone: (booking as any).trekker?.timezone ?? null,
       }
     : {
         name: firstName(guide?.full_name) || "Your guide",
@@ -131,6 +133,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const { user, admin, booking, headers } = await loadParticipant(request, env, params.bookingId);
   const form = await request.formData();
+  await rememberZone(admin, user.id, form.get("tz"));
   const body = String(form.get("body") ?? "").trim();
   if (!body) return data({ ok: false, error: "Write something first." }, { headers });
 
@@ -172,4 +175,16 @@ export default function BookingThread({ loaderData }: Route.ComponentProps) {
       masked={masked}
     />
   );
+}
+
+/**
+ * Keep the sender's time zone current (0068), so the other side can be shown
+ * their clock. Written on the way past a message they were sending anyway.
+ */
+async function rememberZone(admin: any, userId: string, tz: unknown) {
+  const zone = String(tz ?? "").trim();
+  // A zone is "Area/City" and nothing longer than a label: anything else is a
+  // crafted field, not a browser.
+  if (!/^[A-Za-z]+\/[A-Za-z_\-+0-9\/]{2,40}$/.test(zone)) return;
+  await admin.from("users").update({ timezone: zone }).eq("id", userId);
 }

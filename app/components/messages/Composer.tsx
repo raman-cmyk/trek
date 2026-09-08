@@ -94,7 +94,7 @@ export function Composer({
     const body = [text, ...photos].filter(Boolean).join("\n");
     onOptimistic?.(body);
     fetcher.submit(
-      { intent: "send", body, ...(extraFields ?? {}) },
+      { intent: "send", body, tz: browserZone(), ...(extraFields ?? {}) },
       { method: "post", action },
     );
   }
@@ -228,6 +228,21 @@ export function Composer({
       </div>
     </div>
   );
+}
+
+/**
+ * The sender's own time zone, for the other side's clock (0068).
+ *
+ * Free — the browser already knows, and it rides along with the message
+ * rather than costing a request of its own. A browser that will not say
+ * (some privacy modes) simply sends nothing.
+ */
+function browserZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function InfoIcon() {

@@ -121,6 +121,24 @@ export function trackFor(kind: string | null | undefined): StageDef[] {
   return TRACKS[(kind ?? "trek") as OfferingKind] ?? TRACKS.trek;
 }
 
+/**
+ * The track as a reader sees it BEFORE they book.
+ *
+ * Same definitions the live pipeline uses, so what an experience page promises
+ * and what the trip page then shows cannot drift apart — the commonest way a
+ * booking flow starts lying is two lists of steps maintained in two places.
+ * The forming stages are dropped: somebody reading a listing is not a group
+ * yet, and "invite the others" is not an answer to "what happens if I book
+ * this".
+ */
+export function previewTrack(
+  kind: string | null | undefined,
+): Array<{ key: string; label: string; hint: string }> {
+  return trackFor(kind)
+    .filter((d) => d.at >= 0)
+    .map(({ key, label, hint }) => ({ key, label, hint }));
+}
+
 export interface TripState {
   /** 'forming' | 'ready' | 'booked' | 'cancelled' — null for a plain booking. */
   groupStatus?: string | null;
