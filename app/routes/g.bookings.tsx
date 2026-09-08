@@ -4,6 +4,7 @@ import { fmtDate, fmtDateRange } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { submitReview } from "~/lib/reviews.server";
+import { TREKKER_SUB_RATINGS } from "~/lib/trekker-profile";
 import { firstName } from "~/lib/names";
 import { TripPipeline } from "~/components/TripPipeline";
 import { Badge } from "~/components/ops/ui";
@@ -113,6 +114,9 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   <a href={`/messages/${b.id}`} className="text-sm font-medium text-primary">
                     Message
                   </a>
+                  <a href={`/trekkers/${b.trekker_id}`} className="text-sm font-medium text-primary">
+                    Their profile
+                  </a>
                   {/* The guide signs the contract and is asked for the TIMS card
                       at checkpoints — both were ops/trekker-only links before. */}
                   <a href={`/pdf/contract/${b.id}`} target="_blank" rel="noreferrer" className="text-sm text-ink-soft hover:text-primary">
@@ -138,7 +142,12 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   <p className="font-medium text-ink">{b.offering?.title}</p>
                   <Badge tone="green">completed</Badge>
                 </div>
-                <p className="text-sm text-ink-soft">{firstName(b.trekker?.full_name)} · {fmtDate(b.start_date)}</p>
+                <p className="text-sm text-ink-soft">
+                  <a href={`/trekkers/${b.trekker_id}`} className="text-primary hover:underline">
+                    {firstName(b.trekker?.full_name)}
+                  </a>{" "}
+                  · {fmtDate(b.start_date)}
+                </p>
                 {b.reviewed ? (
                   <p className="mt-2 text-xs text-ink-soft">You reviewed this trekker ✓</p>
                 ) : (
@@ -153,16 +162,24 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                         </select>
                       </label>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        {["fitness_honesty", "punctuality", "respect"].map((k) => (
-                          <label key={k} className="text-xs text-ink-soft">
-                            {k.replace(/_/g, " ")}
-                            <select name={`sub_${k}`} defaultValue="5" className="mt-1 w-full rounded border border-border px-1 py-1 text-sm">
+                        {TREKKER_SUB_RATINGS.map((sub) => (
+                          <label key={sub.key} className="text-xs text-ink-soft">
+                            {/* Labelled in words now: these appear on the
+                                trekker's own profile, and "fitness honesty"
+                                is a column name, not a question. */}
+                            {sub.label}
+                            <select name={`sub_${sub.key}`} defaultValue="5" className="mt-1 w-full rounded border border-border px-1 py-1 text-sm">
                               {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n}</option>)}
                             </select>
                           </label>
                         ))}
                       </div>
-                      <textarea name="body" rows={2} placeholder="A note about this trekker" className="w-full rounded-button border border-border px-2 py-1 text-sm" />
+                      <textarea name="body" rows={2} placeholder="A note the next guide would want — how they walked, how they were to be with." className="w-full rounded-button border border-border px-2 py-1 text-sm" />
+                      <p className="text-xs text-ink-soft">
+                        Sealed until they have reviewed you too, or two weeks
+                        pass — the same rule that protects your own reviews.
+                        Then it sits on their profile for the next guide.
+                      </p>
                       <Button type="submit" size="sm" loading={nav.state !== "idle"}>
                         Leave the review
                       </Button>

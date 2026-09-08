@@ -796,6 +796,20 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
 
             {/* Guides have one of these now too (0063) — the office had no way
                 to reach a guide's family when the guide was the casualty. */}
+            {!d.isGuide && (
+              <Panel title="As guides see them">
+                <p className="text-sm text-ink-soft">
+                  Their trek history and what the guides who took them said.
+                </p>
+                <a
+                  href={`/trekkers/${p.id}`}
+                  className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+                >
+                  Open their profile →
+                </a>
+              </Panel>
+            )}
+
             <Panel title="In an emergency">
               <dl className="space-y-1 text-sm">
                 <Row label="Contact" value={p.emergency_contact_name} />

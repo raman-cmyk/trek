@@ -86,6 +86,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         name: firstName((booking as any).trekker?.full_name) || "Trekker",
         avatarUrl: (booking as any).trekker?.avatar_url ?? null,
         lastSeenAt: (booking as any).trekker?.last_seen_at ?? null,
+        // Who they are, for the guide deciding whether to take them (0066).
+        profileHref: `/trekkers/${(booking as any).trekker?.id}`,
       }
     : {
         name: firstName(guide?.full_name) || "Your guide",

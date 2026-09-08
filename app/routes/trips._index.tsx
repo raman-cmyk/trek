@@ -69,6 +69,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   return data(
     {
+      userId: user.id,
       bookings: bookings ?? [],
       requests: (requests ?? []).map((r: any) => ({
         ...r,
@@ -105,9 +106,20 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
   const bookings = loaderData.bookings as any[];
   const proposals = (loaderData as any).proposals as any[];
   const requests = (loaderData as any).requests as any[];
+  const userId = (loaderData as any).userId as string;
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="font-display text-3xl text-ink">My trips</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="font-display text-3xl text-ink">My trips</h1>
+        {/* The other half of the profile idea: guides can now read who is
+            asking them, so you should be able to read what they read. */}
+        <Link
+          to={`/trekkers/${userId}`}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          How guides see you →
+        </Link>
+      </div>
 
       {proposals.length > 0 && (
         <ul className="mt-6 space-y-3">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, data } from "react-router";
+import { Form, Link, data } from "react-router";
 import type { Route } from "./+types/g.enquiries";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
@@ -7,6 +7,7 @@ import { firstName } from "~/lib/names";
 import { Button } from "~/components/Button";
 import { hasBreakdown, type PriceBreakdown } from "~/lib/experience-pricing";
 import { optionsOf } from "~/lib/packages";
+import { EXPERIENCE_LABELS, type TrekExperience } from "~/lib/trekker-profile";
 import { PackageComposer } from "~/components/messages/PackageComposer";
 import { formatUsd } from "~/lib/pricing";
 
@@ -16,7 +17,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: enquiries } = await admin
     .from("enquiries")
     .select(
-      "id, start_date, party_size, message, status, expires_at, selected_options, trekker:users(full_name, country_code), offering:offerings(id, title, kind, days, price_breakdown)",
+      "id, trekker_id, start_date, party_size, message, status, expires_at, selected_options, trekker:users(full_name, country_code, trek_experience), offering:offerings(id, title, kind, days, price_breakdown)",
     )
     .eq("guide_id", user.id)
     .in("status", ["open", "quoted"])
@@ -173,6 +174,18 @@ function EnquiryCard({ enquiry: e, sent }: { enquiry: any; sent: any[] }) {
         </p>
         <span className="text-xs text-ink-soft">{e.party_size}p</span>
       </div>
+      {/* Who is asking. Accepting this costs the guide two weeks of their
+          season, and until now they decided it on a first name. */}
+      <p className="text-sm">
+        <Link to={`/trekkers/${e.trekker_id}`} className="text-primary hover:underline">
+          See who they are
+        </Link>
+        {e.trekker?.trek_experience && (
+          <span className="text-ink-soft">
+            {" "}· {EXPERIENCE_LABELS[e.trekker.trek_experience as TrekExperience].toLowerCase()}
+          </span>
+        )}
+      </p>
       <p className="text-sm text-ink-soft">{e.offering?.title}</p>
       <p className="text-sm text-ink-soft">
         Start {e.start_date} · {e.offering?.days ?? 1} days

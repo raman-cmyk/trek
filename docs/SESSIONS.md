@@ -1469,3 +1469,78 @@ row while the claims fill up.
 
 308 tests green, build green. 0062 applied and smoke-tested against the live
 database.
+
+---
+
+## 2026-09-07 — Emergency contacts, message photos, the group order, and the trekker's own profile
+
+A long session, mostly founder-reported breakage, and two features.
+
+**Skills picker rebuilt for scale.** The vocabulary went from 23 to 39 across
+five groups (adding "how you work"), which as a column of checkboxes was a
+screen and a half of scrolling on a 360px phone. Chips that wrap, a search box,
+a live "n of 8 chosen" and the cap explained before it bites. The tick is still
+a plain checkbox with `defaultChecked`, so it works with no JavaScript.
+
+**Emergency contacts, both sides (0063).** Two columns had sat on `users`
+since 0001 marked "trekker only", written by nothing but the ops console. Now
+the trekker fills theirs in beside their documents, a guide gives theirs when
+they apply and can fix it on their profile, the guide sees the trekker's as a
+`tel:` link on the active-trip screen, and ops sees both. On `users`, not
+`bookings`: a next of kin is a fact about a person, and it is what lets guides —
+who have no booking of their own — have one at all.
+
+**Photos in messages were destroyed by the contact masking.** The pre-deposit
+mask ran over the whole body, links included, and a photo URL is a user id and
+a timestamp — all digits — so every shared photo arrived as
+`[number hidden]/[number hidden]-msg.webp`. Nobody could send or receive one.
+The mask steps over `http(s)` links now and masks only the prose between them;
+one shared renderer (`MessageBody`) shows photos as photos in both threads; the
+composer holds an attachment as a thumbnail instead of pasting a URL into the
+text box. The one already-broken row was repaired in place.
+
+**Pre-trek brief, written from the trip** (`app/lib/pre-trek.ts`). Was four
+lines behind the T-7 unlock — advice that arrives after the boots are bought
+and the flight home is booked. Now six sections generated from the booking:
+cash for this many days, altitude only above 3,000m, Lukla only for Khumbu,
+restricted permits only where they apply, packing for the season it actually
+is. Open from the day they pay; only the meeting point and the guide's phone
+still wait for T-7, because those are the two things that change.
+
+**The request flow, walked end to end.** A trekker could not see their own
+requests anywhere, which is what makes a second request to the same guide feel
+impossible — they are listed on My trips now, with a way to take one back
+(0064 adds `withdrawn`). Three real bugs alongside it: `acceptEnquiry` demanded
+status `open`, so a guide who proposed a package could never accept the
+original request; accepting did not check the guide was still free, so two
+overlapping requests could both be accepted and the second silently overwrote
+the first's calendar; and the identical request sent twice made two rows.
+
+**The group trek ran in an impossible order (0065).** A group invited
+everybody, split the money and collected it, and asked the guide last — and the
+gate on asking demanded every share be paid, which cannot happen, because a
+share is paid into a booking that does not exist until the guide agrees. The
+order is now: pick the trip → ask the guide → invite the others → everyone
+pays, shown as four steps on the page. Invites are locked until the guide says
+yes, a group cannot go with somebody who was invited by email and never signed
+in, and an accept lands back in the group that asked instead of creating a
+second group page. A guide can now propose a package inside the group's chat —
+same composer, same pricing — and the organiser approves it for everyone.
+
+**The trekker has a profile (0066).** The reviews table has carried a
+`guide_to_trekker` direction since 0006, written after every completed trek by
+`/g/bookings` and read by nothing. `/trekkers/:id` now shows it: what the
+guides said, the treks and days behind them, and the trekker's own words for
+the guide deciding whether to take the trip. Not public, and the loader is what
+keeps it that way — a guide who has been asked, ops, or yourself.
+
+**Not built, and the founder knows:** per-person payment. A group member has a
+share in the database and no way to pay it; only the organiser can pay, through
+the ordinary checkout.
+
+**Founder-side, outstanding:** Workers Paid plan (the homepage SSR exceeds the
+free plan's 10ms CPU limit and throws 1102 under load), `STRIPE_SECRET_KEY`
+(checkout runs in mock mode and confirms without charging), `RESEND_API_KEY`
+and `SPARROW_SMS_TOKEN` (nothing is emailed or texted at any step).
+
+362 tests green, build green. 0063–0066 applied to the live database.

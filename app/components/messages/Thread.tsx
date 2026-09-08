@@ -37,6 +37,8 @@ export interface ThreadTrip {
 export interface ThreadPartner {
   name: string;
   slug?: string | null;
+  /** Where the header links when the partner is not a guide (0066). */
+  profileHref?: string | null;
   avatarUrl?: string | null;
   tier?: number | null;
   district?: string | null;
@@ -300,8 +302,11 @@ function ThreadHeader({
         </svg>
       </Link>
 
-      {partner.slug ? (
-        <Link to={`/guides/${partner.slug}`} className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80">
+      {partner.slug || partner.profileHref ? (
+        <Link
+          to={partner.slug ? `/guides/${partner.slug}` : partner.profileHref!}
+          className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80"
+        >
           {inner}
         </Link>
       ) : (

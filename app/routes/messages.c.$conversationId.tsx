@@ -106,6 +106,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         name: firstName(trekkerUser?.full_name) || "Trekker",
         avatarUrl: trekkerUser?.avatar_url ?? null,
         lastSeenAt: trekkerUser?.last_seen_at ?? null,
+        // Who they are, for the guide deciding whether to take them (0066).
+        profileHref: `/trekkers/${convo.trekker_id}`,
       }
     : {
         name: firstName(guideRow?.full_name) || "Your guide",

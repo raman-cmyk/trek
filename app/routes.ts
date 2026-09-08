@@ -48,6 +48,10 @@ export default [
     route("groups/:slug", "routes/groups.$slug.tsx"),
     route("groups/:slug/enquire", "routes/groups.$slug.enquire.tsx"),
     route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
+    // The other half of "know who is walking with you": what a guide is told
+    // about the person asking. Never public — the loader decides who may read
+    // it (0066).
+    route("trekkers/:id", "routes/trekkers.$id.tsx"),
     route("recap/:slug", "routes/recap.$slug.tsx"),
     // 404 catch-all gets the site chrome too.
     route("*", "routes/$.tsx"),
