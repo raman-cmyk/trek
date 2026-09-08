@@ -3,6 +3,7 @@ import { Link, useFetcher } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
+import { awayNote, nepalClock } from "~/lib/local-time";
 import { PackageCard, type PackageCardData } from "./PackageCard";
 import { PackageComposer } from "./PackageComposer";
 import type { PriceBreakdown } from "~/lib/experience-pricing";
@@ -73,6 +74,17 @@ export function GroupThread({
   seats?: number;
   startDate?: string;
 }) {
+  // Nepal is UTC+05:45 all year, so the guide's clock needs no stored zone.
+  const away = isGuide
+    ? null
+    : awayNote({
+        // The guide's first name where they have spoken in the room; the
+        // group's header has no field for it.
+        name: messages.find((m) => m.fromGuide && !m.mine)?.authorName ?? "your guide",
+        clock: nepalClock(),
+        theyAreTheGuide: true,
+      });
+
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -223,6 +235,16 @@ export function GroupThread({
           <div ref={endRef} />
         </div>
       </div>
+
+      {/* The guide's clock, for the same reason a one-to-one thread carries
+          it: a group asking a question at 2am Nepal time reads the silence as
+          being ignored. Members only — the guide is the one person here whose
+          zone everybody else can be sure of. */}
+      {away && (
+        <p className="border-t border-line bg-card px-4 pt-2 text-caption text-muted">
+          {away}
+        </p>
+      )}
 
       {canPost ? (
         <Composer

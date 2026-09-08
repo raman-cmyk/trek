@@ -142,11 +142,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const fCategory = p.get("category");
   let category: { label: string; blurb: string | null } | null = null;
   if (fCategory) {
+    // Not filtered on `live`: that flag decides whether a row appears on the
+    // homepage, not whether anybody may read the list behind it. Filtering on
+    // it here made the console's own "see the row" link show an empty page for
+    // every row still being built — which is exactly when you want to look.
     const { data: cat } = await client
       .from("categories")
       .select("id, slug, label, blurb, auto_skill, live, sort, min_guides")
       .eq("slug", fCategory)
-      .eq("live", true)
       .maybeSingle();
     if (cat) {
       category = { label: cat.label, blurb: cat.blurb };
