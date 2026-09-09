@@ -1640,3 +1640,48 @@ tests and the deployed pages' HTML; neither was fired against a real account
 from here.
 
 449 tests green, build green, deployed.
+
+## 2026-09-09 — The routes index, rebuilt around the shape of each trek
+
+The founder sent a design draft for `/routes` and three asks: images,
+descriptions, and the price as a range.
+
+**The profile is the card.** The draft generated plausible-looking elevation
+profiles from a seeded PRNG. It did not need to — every route already has real
+altitudes in `day_stops` — so `profileOf()` builds the profile from those and
+the card draws the actual climb. Poon Hill reads short and gentle beside the
+Three Passes' three teeth, which is the argument the page is making.
+
+**Images where they exist.** Seven of twenty-four routes have a photograph
+(six article heroes plus one a guide uploaded). Where there is one the profile
+rides its bottom edge as a white ridge over a scrim; where there is not, the
+profile fills the frame. Both sit in the same aspect-ratio box, so a row of
+cards does not step up and down as the photographs run out. **The other
+seventeen routes need photographs** — that is a founder task, not a code one.
+
+**The price is a range.** `priceSpread()` takes the low and high across every
+guide's offering, and the card prints `$398–$463` rather than `from $398`,
+which hid the nine guides who are not the cheapest. Rounded — `$397.76` is not
+a number anyone compares. A route with guides but no prices says "Ask a guide";
+one with no guides at all says "No guide listed yet" and shows no price.
+
+**Also on the card:** the route's own `summary`, the grade as four filled
+triangles, days and best months in fixed positions, and the real faces of up
+to three guides who walk it.
+
+**Filters are progressive.** Region, grade and sort are client state over a
+list that server-renders complete, so the crawler and a phone with no
+JavaScript still get all twenty-four. The bar is sticky, which means it has to
+be short: fourteen region pills wrapped onto five rows and pinned a whole 360px
+screen, so on a phone each row scrolls sideways and the sort collapses to a
+native select.
+
+The hero keeps the tilted Nepal map from the last session; the closing band is
+forty-nine real guide photographs behind "49 people. Pick one."
+
+**Verified** at 1440px and 360px against a snapshot of live data, and on the
+deployed page: 24 cards, 48 profile paths, 17 "no guide listed yet", and the
+rounded ranges. Map tiles cannot load in this sandbox, so the map itself was
+not re-verified visually — it is unchanged from the last deploy.
+
+469 tests green, build green, deployed.
