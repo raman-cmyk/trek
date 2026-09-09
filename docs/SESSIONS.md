@@ -1602,3 +1602,41 @@ updates are done, revoke the Cloudflare token and Supabase access token and
 reset the database password that were used in these sessions.
 
 438 tests green, build green, deployed.
+
+## 2026-09-09 — Everyone's logins
+
+The founder asked to see every account and get into any of them. `/ops/users`,
+in the ops sidebar under System, and only for `raman@greyemails.com`.
+
+**Accounts, not profiles.** `/ops/people` reads `public.users`, so a signup
+that never finished a profile appears nowhere. This lists the auth records
+themselves — `admin.auth.admin.listUsers`, paged — joined to whatever profile
+exists: name, role (or "no profile"), email and phone each with a copy button,
+last sign-in as "3h ago" with the date under it, joined, provider, and flags
+for unconfirmed and banned. Sorted by last sign-in, never-signed-in last, and
+searchable by name, email or phone.
+
+**Two ways in, because there is no third.** Supabase stores a password hash,
+so "copy their password" cannot exist and the page says so. Instead: *Open as
+them* mints a magic link with `generateLink` and points it at our own
+`/ops/users/enter`, which verifies the token and redirects to wherever that
+role lands — the route sits outside the ops layout, because by the time it
+redirects the browser is no longer ops. *New password* sets a readable
+three-word password on the account and shows it once, next to a link to that
+person's own sign-in page with the email pre-filled (`?email=` now fills the
+field on `/login`, `/g/login` and `/ops/login`).
+
+**The gate is a list in code.** `SUPER_ADMIN_EMAILS` in
+`app/lib/super-admin.ts`, checked against the signed-in auth email. Not a
+column: ops can edit `public.users`, so a super-admin column is one ops
+account away from being self-granted. The nav entry hides for everyone else
+and both the loader and the action redirect them to `/ops`. Reasoning in
+docs/DECISIONS.md.
+
+**Caveat:** the two buttons are real actions on real accounts. *New password*
+replaces a person's actual password — fine for test accounts and a locked-out
+guide, not something to click on a live trekker. Both were verified by unit
+tests and the deployed pages' HTML; neither was fired against a real account
+from here.
+
+449 tests green, build green, deployed.
