@@ -104,6 +104,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
             ? parsePairs(raw)
             : String(raw ?? "").slice(0, f.max ?? 4000);
     }
+    // One pass through the normaliser, so a bad choice value or a stray key
+    // never reaches the row: the page reads through the same function.
+    {
+      const clean = normaliseBlock(kind, next);
+      for (const k of Object.keys(next)) next[k] = clean[k];
+    }
     await admin
       .from("route_blocks")
       .update({ data: next, live: form.get("live") === "on" })
@@ -229,7 +235,15 @@ export default function OpsRoutePage({ loaderData, actionData }: Route.Component
                 <label key={f.key} className="block text-xs text-ink-soft">
                   {f.label}
                   {f.hint && <span className="ml-1.5 text-ink-soft/70">{f.hint}</span>}
-                  {f.type === "long" || f.type === "pairs" || f.type === "list" ? (
+                  {f.type === "choice" ? (
+                    <select name={f.key} defaultValue={b.data[f.key]} className={field}>
+                      {(f.options ?? []).map((o: any) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : f.type === "long" || f.type === "pairs" || f.type === "list" ? (
                     <textarea
                       name={f.key}
                       rows={f.type === "long" ? 5 : 4}

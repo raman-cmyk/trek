@@ -26,10 +26,16 @@ export type BlockKind =
   | "gallery"
   | "quote"
   | "faq"
-  | "guides";
+  | "guides"
+  | "map"
+  | "permits"
+  | "season"
+  | "packing"
+  | "split"
+  | "cta";
 
 /** How a field is edited, which is all the console needs to know. */
-export type FieldType = "text" | "long" | "number" | "image" | "list" | "pairs";
+export type FieldType = "text" | "long" | "number" | "image" | "list" | "pairs" | "choice";
 
 export interface FieldDef {
   key: string;
@@ -38,6 +44,8 @@ export interface FieldDef {
   /** The line under the input — what to write, not what the field is called. */
   hint?: string;
   max?: number;
+  /** For `choice`: the values, and what to call each. */
+  options?: Array<{ value: string; label: string }>;
 }
 
 export interface BlockDef {
@@ -190,9 +198,91 @@ export const BLOCKS: BlockDef[] = [
     ],
     empty: { heading: "", note: "" },
   },
+  {
+    kind: "map",
+    label: "The map",
+    blurb: "The route's own line on a map, a pin per night, drawn from its day stops.",
+    fields: [
+      { key: "heading", label: "Heading", type: "text", max: 90 },
+      { key: "note", label: "A line under it", type: "text", max: 200 },
+    ],
+    empty: { heading: "Where it goes", note: "" },
+  },
+  {
+    kind: "permits",
+    label: "Papers & permits",
+    blurb: "What the park asks for, at cost, as paper cards — from the route's own permit rows.",
+    fields: [
+      { key: "heading", label: "Heading", type: "text", max: 90 },
+      { key: "note", label: "A line under it", type: "long", max: 300 },
+    ],
+    empty: {
+      heading: "Your papers, ready",
+      note: "We issue these before you fly. They are in your trip folder, at cost, no margin added.",
+    },
+  },
+  {
+    kind: "season",
+    label: "When to walk it",
+    blurb: "Twelve months, crowds against weather — from the route's own month profile.",
+    fields: [
+      { key: "heading", label: "Heading", type: "text", max: 90 },
+      { key: "note", label: "A line under it", type: "text", max: 200 },
+    ],
+    empty: { heading: "When to walk it", note: "" },
+  },
+  {
+    kind: "packing",
+    label: "What to bring",
+    blurb: "The kit list, each item with the reason it is on it.",
+    fields: [
+      { key: "heading", label: "Heading", type: "text", max: 90 },
+      {
+        key: "items",
+        label: "The kit",
+        type: "pairs",
+        hint: "One per line: the thing, then why. “Down jacket | Nights at Kyanjin drop below zero.”",
+      },
+    ],
+    empty: { heading: "What to bring", items: [] },
+  },
+  {
+    kind: "split",
+    label: "Photo & words",
+    blurb: "One photograph beside a few paragraphs. Swap sides per block.",
+    fields: [
+      { key: "image", label: "Photograph", type: "image" },
+      { key: "caption", label: "What the photograph is", type: "text", max: 120 },
+      { key: "heading", label: "Heading", type: "text", max: 90 },
+      { key: "body", label: "Paragraphs", type: "long", hint: "A blank line between paragraphs.", max: 2400 },
+      {
+        key: "side",
+        label: "Photograph on the",
+        type: "choice",
+        options: [
+          { value: "left", label: "Left" },
+          { value: "right", label: "Right" },
+        ],
+      },
+    ],
+    empty: { image: "", caption: "", heading: "", body: "", side: "left" },
+  },
+  {
+    kind: "cta",
+    label: "Walk it with",
+    blurb: "The landing: the guides who run this route, and the trips you can book on it.",
+    fields: [
+      { key: "heading", label: "Heading", type: "text", max: 120 },
+      { key: "note", label: "A line under it", type: "text", max: 200 },
+    ],
+    empty: { heading: "Now the only question that matters: who takes you.", note: "" },
+  },
 ];
 
 const BY_KIND = new Map(BLOCKS.map((b) => [b.kind, b]));
+
+/** Kinds whose content is the route's own data rather than typed fields. */
+export const DATA_BACKED = new Set<BlockKind>(["elevation", "guides", "map", "permits", "season", "cta"]);
 
 export function blockDef(kind: string): BlockDef | null {
   return BY_KIND.get(kind as BlockKind) ?? null;
@@ -262,7 +352,9 @@ export function normaliseBlock(kind: string, data: unknown): Record<string, any>
         ? Number(v) || 0
         : f.type === "pairs" || f.type === "list"
           ? parsePairs(v)
-          : String(v);
+          : f.type === "choice"
+            ? (f.options?.some((o) => o.value === String(v)) ? String(v) : (def.empty[f.key] as string))
+            : String(v);
   }
   return out;
 }
@@ -271,6 +363,10 @@ export function normaliseBlock(kind: string, data: unknown): Record<string, any>
 export function blockIsEmpty(kind: string, data: Record<string, any>): boolean {
   const def = blockDef(kind);
   if (!def) return true;
+  // These draw on the route's own rows — the day stops, the permits, the
+  // month profile, the offerings — so they have something to show with every
+  // field of their own blank.
+  if (DATA_BACKED.has(kind as BlockKind)) return false;
   return def.fields.every((f) => {
     const v = data[f.key];
     if (f.type === "pairs" || f.type === "list") return !Array.isArray(v) || v.length === 0;
@@ -325,4 +421,30 @@ export function swapSorts(
     { id: moved.id, sort: moved.sort + step },
     { id: neighbour.id, sort: neighbour.sort - step },
   ];
+}
+
+/**
+ * Which altitude each block sits at, so the page colour carries between the
+ * days rather than snapping back to the trailhead under every paragraph.
+ *
+ * A day block is its own altitude; anything else takes the altitude of the
+ * last day above it; before the first day, the first day's start. The hero
+ * is the trailhead — the lowest point of the walk — because that is where
+ * you are when you are reading it.
+ */
+export function altitudesFor(blocks: RouteBlock[]): number[] {
+  const days = blocks
+    .filter((b) => b.kind === "climb_day")
+    .map((b) => Number(b.data?.altitude) || 0)
+    .filter((a) => a > 0);
+  const floor = days.length ? Math.min(...days) : 1400;
+  let current = floor;
+  return blocks.map((b) => {
+    if (b.kind === "climb_day") {
+      current = Number(b.data?.altitude) || current;
+      return current;
+    }
+    if (b.kind === "hero") return floor;
+    return current;
+  });
 }

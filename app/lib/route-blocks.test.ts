@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BLOCKS,
+  altitudesFor,
   blockDef,
   blockIsEmpty,
   normaliseBlock,
@@ -22,9 +23,9 @@ const block = (over: Partial<RouteBlock> = {}): RouteBlock => ({
 });
 
 describe("the vocabulary", () => {
-  it("is ten kinds, closed", () => {
-    expect(BLOCKS).toHaveLength(10);
-    expect(new Set(BLOCKS.map((b) => b.kind)).size).toBe(10);
+  it("is sixteen kinds, closed", () => {
+    expect(BLOCKS).toHaveLength(16);
+    expect(new Set(BLOCKS.map((b) => b.kind)).size).toBe(16);
   });
 
   it("gives every kind fields, a label and an empty state", () => {
@@ -101,6 +102,45 @@ describe("blockIsEmpty", () => {
     expect(blockIsEmpty("prose", normaliseBlock("prose", { body: "A word." }))).toBe(false);
     expect(blockIsEmpty("faq", normaliseBlock("faq", { items: "Q | A" }))).toBe(false);
     expect(blockIsEmpty("climb_day", normaliseBlock("climb_day", { altitude: 3430 }))).toBe(false);
+  });
+});
+
+describe("the data-backed kinds", () => {
+  it("are never empty — their content is the route's own rows", () => {
+    for (const kind of ["map", "permits", "season", "elevation", "guides", "cta"]) {
+      expect(blockIsEmpty(kind, normaliseBlock(kind, {}))).toBe(false);
+    }
+  });
+
+  it("a choice field falls back to its default rather than an unknown value", () => {
+    expect(normaliseBlock("split", { side: "right" }).side).toBe("right");
+    expect(normaliseBlock("split", { side: "sideways" }).side).toBe("left");
+  });
+});
+
+describe("altitudesFor", () => {
+  const page = [
+    block({ id: "h", kind: "hero", sort: 10, data: {} }),
+    block({ id: "p", kind: "prose", sort: 20 }),
+    block({ id: "d1", kind: "climb_day", sort: 30, data: { altitude: 2470 } }),
+    block({ id: "q", kind: "quote", sort: 40, data: { text: "…" } }),
+    block({ id: "d2", kind: "climb_day", sort: 50, data: { altitude: 3430 } }),
+    block({ id: "g", kind: "guides", sort: 60, data: {} }),
+  ];
+
+  it("carries each day's altitude into the blocks beneath it", () => {
+    // Above the first day the page sits at the lowest day's altitude — the
+    // walk's floor — not at some number nobody set.
+    expect(altitudesFor(page)).toEqual([2470, 2470, 2470, 2470, 3430, 3430]);
+  });
+
+  it("starts a page with no days at the trailhead", () => {
+    expect(altitudesFor([page[0], page[1]])).toEqual([1400, 1400]);
+  });
+
+  it("uses the lowest day as the floor, not a hard-coded number", () => {
+    const high = [block({ id: "d", kind: "climb_day", sort: 1, data: { altitude: 3000 } })];
+    expect(altitudesFor([page[0], ...high])).toEqual([3000, 3000]);
   });
 });
 
