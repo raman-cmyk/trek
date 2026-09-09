@@ -1544,3 +1544,61 @@ free plan's 10ms CPU limit and throws 1102 under load), `STRIPE_SECRET_KEY`
 and `SPARROW_SMS_TOKEN` (nothing is emailed or texted at any step).
 
 362 tests green, build green. 0063–0066 applied to the live database.
+
+## 2026-09-08 — Categories, each other's clocks, everyone's own share, the safety screen, and route pages as blocks
+
+Six things, in the order the founder asked for them. Migrations 0067–0071.
+
+**Homepage rows come from a category, not a hard-coded list (0067).** A
+category is a name, a slug, and a set of guides — hand-picked, or swept up by a
+skill tag — and a guide can sit in as many as apply. `/ops/categories` builds
+them and previews a draft row before it is live (0070 lets ops read the draft;
+the homepage still filters on `live`). `/guides?category=` is the row's "see
+all". Caveat verified against production: `guide_skills` has zero rows, so the
+skill sweep collects nobody until guides tick skills. Hand-picking works today.
+
+**Silence at 2am is not a no (0068).** The trekker in Berlin and the guide in
+Lukla now see each other's local time above the thread — "It's 3:40am for
+Pemba, a reply usually comes in the morning" — from a `timezone` the browser
+records the first time someone opens a conversation. Nobody has one yet; it
+fills as people message. The group thread shows the guide's Nepal clock.
+
+**The track before you book.** `previewTrack(kind)` in `app/lib/pipeline.ts`
+generates the "what happens after you pay" panel on the booking widget from
+the same pipeline definitions the trip page walks, so a day hike and a
+fourteen-day trek promise the steps they actually have.
+
+**Everyone pays their own share (0069).** `/groups/:slug/pay` takes a member's
+deposit share against a pending intent; when the shares cover the deposit the
+booking advances the same way an organiser's payment did (`advanceOnDepositPaid`
+extracted for exactly that). Stripe is still mock — nobody is charged.
+
+**The safety update has its own screen, and a calendar that stops.** The
+day counter on `/g` was days-since-start with no clamp, which read "day 34"
+on a trek nobody closed. `trekDay` clamps to the itinerary, `/g/checkin` is a
+"Safety" tab with a badge when a day's update is due, and the guide closes a
+finished trek from there — completed, recap, payout.
+
+**Route pages are blocks in a list (0071).** `route_blocks` rows carry a
+kind, a sort, and jsonb data; `/ops/routes/:slug/page` adds, fills, moves, and
+publishes them, and `/ops/routes` now lists every route (it listed only guide
+proposals before, of which there were none). Sixteen kinds: hero, prose,
+stats, climb_day, itinerary, elevation, gallery, quote, faq, guides, map,
+permits, season, packing, split, cta. A page with any `climb_day` runs the
+Langtang scroll engine — altimeter, palette climbing with altitude, full-bleed
+day frames — lifted out of the Langtang constant into `RouteBlocks.tsx`, and
+every other block sits inside that palette rather than on a white slab.
+Langtang itself has thirteen blocks live; a built page wins over the
+constants. `/routes` opens on a tilted terrain map of every route.
+
+**Caveats:** a route whose day stops have no lng/lat draws no line on either
+map; production screenshots are impossible from here (Chromium is
+localhost-only), so live pages were verified by fetched HTML and local
+screenshots at 360px and desktop.
+
+**Founder-side, still outstanding:** Workers Paid plan (1102 under load),
+`STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `SPARROW_SMS_TOKEN`; and, when the
+updates are done, revoke the Cloudflare token and Supabase access token and
+reset the database password that were used in these sessions.
+
+438 tests green, build green, deployed.
