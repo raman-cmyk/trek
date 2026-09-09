@@ -6,6 +6,7 @@ import { getRouteArticle } from "~/lib/content";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { monthName } from "~/lib/match";
 import { useMoney } from "~/lib/currency-context";
+import { NepalRouteMap } from "~/components/public/NepalRouteMap";
 import { SmartImage } from "~/components/SmartImage";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
@@ -60,7 +61,19 @@ export async function loader({ context }: Route.LoaderArgs) {
     };
   });
 
-  return { cards, canonical: absoluteUrl(env.SITE_URL, "/routes") };
+  return {
+    cards,
+    // The map's own slice: it needs the line geometry's slug and a label, and
+    // nothing else this page loads.
+    mapped: cards.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      region: c.region,
+      days: c.typical_days,
+      maxAltitudeM: c.max_altitude_m,
+    })),
+    canonical: absoluteUrl(env.SITE_URL, "/routes"),
+  };
 }
 
 function seasonLabel(months: number[] | null): string {
@@ -81,7 +94,7 @@ function seasonLabel(months: number[] | null): string {
 }
 
 export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
-  const { cards } = loaderData as any;
+  const { cards, mapped } = loaderData as any;
   const { m } = useMoney();
 
   return (
@@ -94,6 +107,13 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
         Every route we run, with honest difficulty, live permit costs, and the
         named guides who lead it. Pick the mountain — then pick the human.
       </p>
+
+      {/* The country first. These are twenty-four walks in real places, and
+          a wall of identical cards is the least interesting way to say so.
+          The list below is the page — this is the way in. */}
+      <div className="mt-8">
+        <NepalRouteMap routes={mapped} />
+      </div>
 
       <div className="mt-8 grid gap-5 sm:grid-cols-2">
         {cards.map((r: any) => (

@@ -28,6 +28,8 @@ import { offeringsRating } from "~/lib/ratings.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { CLIMB_ROUTES } from "~/lib/climb";
+import { publishedBlocks } from "~/lib/route-blocks";
+import { RouteBlocks } from "~/components/public/RouteBlocks";
 import { Rail } from "~/components/public/Rail";
 import { ClimbRoute } from "~/components/public/ClimbRoute";
 
@@ -105,7 +107,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     .maybeSingle();
   if (!route) throw new Response("Route not found", { status: 404 });
 
-  const [{ data: permits }, { data: offerings }, { data: journals }] = await Promise.all([
+  const [{ data: permits }, { data: offerings }, { data: journals }, { data: blockRows }] =
+    await Promise.all([
     client
       .from("permits")
       .select("name, cost_usd_cents, cost_npr_paisa, issuing_body, lead_time_days")
@@ -123,6 +126,15 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       .eq("route_id", route.id)
       .order("start_date", { ascending: false })
       .limit(9),
+    // The page somebody built in the console (0071). A route with none of
+    // these keeps the standard layout, which is every route until one is
+    // written.
+    client
+      .from("route_blocks")
+      .select("id, kind, sort, live, data")
+      .eq("route_id", route.id)
+      .eq("live", true)
+      .order("sort"),
   ]);
 
   // Guides who run it, with how many times they have written it up.
@@ -174,6 +186,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   return {
     route,
+    blocks: publishedBlocks((blockRows ?? []) as any),
     permits: permits ?? [],
     offerings: (offerings ?? []) as PublicOffering[],
     journals: (journals ?? []) as PublicJournal[],
@@ -192,6 +205,21 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
   // is configuration in CLIMB_ROUTES, not a rewrite. Dispatched from a
   // wrapper so neither branch calls the other's hooks.
   const d = loaderData as any;
+
+  // A page somebody built in the console wins over both of the hard-coded
+  // layouts. That is the whole point of 0071: the good page stops being a
+  // developer's to give.
+  if (d.blocks.length > 0) {
+    return (
+      <BuiltRoutePage
+        blocks={d.blocks}
+        route={d.route}
+        guides={d.guides}
+        offerings={d.offerings}
+      />
+    );
+  }
+
   const climb = CLIMB_ROUTES[d.route.slug];
   if (climb) {
     return (
@@ -206,6 +234,53 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
     );
   }
   return <StandardRoutePage loaderData={loaderData} />;
+}
+
+/**
+ * A route page made of blocks.
+ *
+ * The blocks are the editorial part. Underneath them sit the two things every
+ * route page owes a reader whatever somebody built on top — the trips you can
+ * actually book on this route, and where to go next — so a half-finished page
+ * is still a page that sells the route.
+ */
+function BuiltRoutePage({
+  blocks,
+  route,
+  guides,
+  offerings,
+}: {
+  blocks: any[];
+  route: any;
+  guides: any[];
+  offerings: any[];
+}) {
+  return (
+    <main>
+      <RouteBlocks blocks={blocks} guides={guides} stops={route.day_stops ?? []} />
+      {offerings.length > 0 && (
+        <section className="mx-auto max-w-4xl px-4 py-10">
+          <h2 className="mb-4 font-display text-2xl text-ink">Walk it with</h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {offerings.slice(0, 6).map((o: any) => (
+              <li key={o.id}>
+                <Link
+                  to={`/treks/${o.slug}`}
+                  prefetch="intent"
+                  className="block rounded-card border border-border bg-card p-4 hover:border-moss"
+                >
+                  <p className="font-medium text-ink">{o.title}</p>
+                  <p className="mt-0.5 text-sm text-ink-soft">
+                    {o.guide_name} · {o.days} days
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </main>
+  );
 }
 
 function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
