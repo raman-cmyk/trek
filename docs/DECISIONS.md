@@ -404,3 +404,19 @@ Worth knowing for the rest of the app: any `cn(...)` that conditionally
 overrides a utility already in the base string has the same hazard. This was
 the only one stacking ring widths; the pattern to avoid is layering, not `cn`
 itself.
+
+## The super admin is a list in code, not a column (2026-09-09)
+
+The founder wants to see every account and be able to step into any of them.
+That is more than ops: there are several ops accounts, and a flag that ops can
+set is a flag ops can set on themselves. So `SUPER_ADMIN_EMAILS` in
+`app/lib/super-admin.ts` holds one address, changes with a deploy, and every
+page it gates checks the signed-in auth email against it — never a profile
+field.
+
+"Copy their password" was the ask, and it does not exist: Supabase keeps a
+hash, and nobody can read a password back. The two honest versions are on
+`/ops/users`: a one-time sign-in link minted on the spot (`generateLink` →
+our own `/ops/users/enter`, which verifies it and sets the session), and a
+new password set on the account and shown once. The second replaces the
+person's real password and says so before it does.

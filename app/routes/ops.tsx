@@ -6,10 +6,11 @@ import {
   getEnv,
   requireOps,
 } from "~/lib/supabase.server";
+import { isSuperAdmin } from "~/lib/super-admin";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const { profile, admin, headers } = await requireOps(request, env);
+  const { user, profile, admin, headers } = await requireOps(request, env);
 
   const [verifs, incidents, payouts, flags, pendingPhotos] = await Promise.all([
     admin
@@ -38,6 +39,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return data(
     {
       profile,
+      superAdmin: isSuperAdmin(user.email),
       counts: {
         verifications: verifs.count ?? 0,
         incidents: incidents.count ?? 0,
@@ -96,12 +98,16 @@ const NAV = [
   },
   {
     group: "System",
-    items: [{ to: "/ops/data", label: "Data", badge: null }],
+    items: [
+      { to: "/ops/data", label: "Data", badge: null },
+      // The founder only: every account and a way into each.
+      { to: "/ops/users", label: "Everyone's logins", badge: null, superOnly: true },
+    ],
   },
 ] as const;
 
 export default function OpsLayout({ loaderData }: Route.ComponentProps) {
-  const { profile, counts } = loaderData;
+  const { profile, counts, superAdmin } = loaderData;
   return (
     <div className="min-h-screen bg-surface text-ink">
       <div className="flex">
@@ -129,7 +135,9 @@ export default function OpsLayout({ loaderData }: Route.ComponentProps) {
                   </p>
                 )}
                 <div className="space-y-0.5">
-                  {section.items.map((item: any) => {
+                  {section.items
+                    .filter((item: any) => !item.superOnly || superAdmin)
+                    .map((item: any) => {
                     const count = item.badge
                       ? counts[item.badge as keyof typeof counts]
                       : 0;

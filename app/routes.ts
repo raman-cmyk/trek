@@ -114,11 +114,15 @@ export default [
 
   // Ops admin (M2). Login sits OUTSIDE the role-gated layout to avoid a loop.
   route("ops/login", "routes/ops.login.tsx"),
+  // Also outside: it swaps the session for another account's, and the layout
+  // would then bounce that account away before the redirect could land.
+  route("ops/users/enter", "routes/ops.users.enter.tsx"),
   layout("routes/ops.tsx", [
     route("ops", "routes/ops._index.tsx"),
     // The directory: everybody, and one page per person holding all of it.
     route("ops/people", "routes/ops.people.tsx"),
     route("ops/people/:id", "routes/ops.people.$id.tsx"),
+    route("ops/users", "routes/ops.users.tsx"),
     // Signed-URL redirect for a private document (guide papers or a
     // trekker's passport). Never renders the URL.
     route("ops/doc/:kind/:docId", "routes/ops.doc.$kind.$docId.tsx"),

@@ -15,9 +15,12 @@ function safeNext(raw: string | null): string {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const next = safeNext(new URL(request.url).searchParams.get("next"));
+  const url = new URL(request.url);
+  const next = safeNext(url.searchParams.get("next"));
+  // Filled in when ops sends someone here with their address already known.
+  const email = (url.searchParams.get("email") ?? "").slice(0, 200);
   const { user } = await getSessionUser(request, env);
-  if (!user) return { next };
+  if (!user) return { next, email };
   // Send people where their role can actually go. Redirecting everyone to
   // `next` dumped a signed-in guide onto a trekker-gated page, which bounced
   // them somewhere else again — same failure as the /g/login loop, one step
@@ -71,6 +74,7 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
             type="email"
             required
             autoComplete="email"
+            defaultValue={loaderData?.email ?? ""}
             className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
           />
         </label>

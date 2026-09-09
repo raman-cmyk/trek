@@ -16,11 +16,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // and looped — ERR_TOO_MANY_REDIRECTS, with no way out but clearing
   // cookies. Only a guide gets redirected; anyone else sees the form and is
   // told why, because signing in here fixes it.
-  if (!user) return { signedInAs: null };
+  // Filled in when ops sends someone here with their address already known.
+  const email = (new URL(request.url).searchParams.get("email") ?? "").slice(0, 200);
+  if (!user) return { signedInAs: null, email };
   const profile = await getProfile(env, user.id);
   if (profile?.role === "guide") throw redirect("/g");
   return {
     signedInAs: { name: profile?.full_name ?? user.email ?? "someone else", role: profile?.role ?? "trekker" },
+    email,
   };
 }
 
@@ -86,6 +89,7 @@ export default function GuideLogin({ loaderData, actionData }: Route.ComponentPr
             type="email"
             autoComplete="username"
             required
+            defaultValue={(loaderData as any)?.email ?? ""}
             className="mt-1 w-full rounded-button border border-border px-3 py-3 text-lg outline-none focus:border-primary"
           />
         </label>

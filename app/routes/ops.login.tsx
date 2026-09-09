@@ -26,7 +26,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .single();
     if (profile?.role === "ops") throw redirect("/ops/verifications");
   }
-  return null;
+  // Filled in when the founder sends an ops account here from /ops/users.
+  return { email: (new URL(request.url).searchParams.get("email") ?? "").slice(0, 200) };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -57,7 +58,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   return redirect("/ops/verifications", { headers });
 }
 
-export default function OpsLogin({ actionData }: Route.ComponentProps) {
+export default function OpsLogin({ actionData, loaderData }: Route.ComponentProps) {
   const nav = useNavigation();
   const busy = nav.state !== "idle";
   return (
@@ -72,6 +73,7 @@ export default function OpsLogin({ actionData }: Route.ComponentProps) {
             type="email"
             required
             autoComplete="username"
+            defaultValue={loaderData?.email ?? ""}
             className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
           />
         </label>
