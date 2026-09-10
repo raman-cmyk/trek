@@ -3,6 +3,7 @@ import type { Route } from "./+types/enquiry";
 import { getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { ENQUIRY_TTL_HOURS } from "~/lib/config";
+import { askOutcome, isUniqueViolation, LIVE_ASK_STATUSES } from "~/lib/ask-guard";
 
 // Action-only route: a trekker sends an enquiry from an offering page.
 export async function action({ request, context }: Route.ActionArgs) {
@@ -72,20 +73,40 @@ export async function action({ request, context }: Route.ActionArgs) {
   // several requests open with one guide — different trips, different dates —
   // but sending the identical one again is a double-tap or an impatient
   // refresh, and it should not put two rows in a guide's list.
-  const { data: twin } = await admin
-    .from("enquiries")
-    .select("id")
-    .eq("trekker_id", user.id)
-    .eq("guide_id", guideId)
-    .eq("offering_id", offeringId)
-    .eq("start_date", startDate)
-    .in("status", ["open", "quoted"])
-    .maybeSingle();
-  if (twin) {
-    return data(
-      { ok: true, enquiryId: twin.id, already: true },
-      { headers },
-    );
+  //
+  // Both halves are checked. Looking only at live REQUESTS was the hole that
+  // shipped on 2026-09-07: once the guide accepted, the identical ask walked
+  // straight past it and made a second booking for a fortnight already
+  // committed. A cancelled booking is not in the way of anything.
+  const [{ data: twin }, { data: booked }] = await Promise.all([
+    admin
+      .from("enquiries")
+      .select("id")
+      .eq("trekker_id", user.id)
+      .eq("guide_id", guideId)
+      .eq("offering_id", offeringId)
+      .eq("start_date", startDate)
+      .in("status", [...LIVE_ASK_STATUSES])
+      .maybeSingle(),
+    admin
+      .from("bookings")
+      .select("id, status")
+      .eq("trekker_id", user.id)
+      .eq("offering_id", offeringId)
+      .eq("start_date", startDate)
+      .not("status", "like", "cancelled%")
+      .maybeSingle(),
+  ]);
+
+  const outcome = askOutcome({
+    liveEnquiryId: twin?.id ?? null,
+    bookingStatus: booked?.status ?? null,
+  });
+  if (outcome === "already-booked") {
+    return data({ ok: true, bookingId: booked!.id, booked: true }, { headers });
+  }
+  if (outcome === "already-asked") {
+    return data({ ok: true, enquiryId: twin!.id, already: true }, { headers });
   }
 
   const { data: enq, error } = await admin
@@ -103,7 +124,23 @@ export async function action({ request, context }: Route.ActionArgs) {
     })
     .select("id")
     .single();
-  if (error || !enq) return data({ error: "Could not send your request." }, { status: 400, headers });
+  if (error || !enq) {
+    // 0072's index caught a double-tap: two requests in flight at once, both
+    // finding nothing, both inserting. The loser is not an error — it is the
+    // same "you already asked" the check above would have given a moment later.
+    if (isUniqueViolation(error)) {
+      const { data: won } = await admin
+        .from("enquiries")
+        .select("id")
+        .eq("trekker_id", user.id)
+        .eq("offering_id", offeringId)
+        .eq("start_date", startDate)
+        .in("status", [...LIVE_ASK_STATUSES])
+        .maybeSingle();
+      if (won) return data({ ok: true, enquiryId: won.id, already: true }, { headers });
+    }
+    return data({ error: "Could not send your request." }, { status: 400, headers });
+  }
 
   // The guide hears about it immediately (SMS — many guides have no email).
   const { notifyNewEnquiry } = await import("~/lib/notifications.server");

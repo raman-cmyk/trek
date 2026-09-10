@@ -100,6 +100,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       throw e;
     }
     if (!bookingId) {
+      // Also the answer when the same trek on the same dates is already
+      // booked for this trekker — a duplicate ask from before those were
+      // refused. Accepting it would book the fortnight twice.
       return data({ error: "This request has expired or was already handled." }, { status: 409, headers });
     }
     const { notifyEnquiryAccepted } = await import("~/lib/notifications.server");

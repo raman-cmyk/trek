@@ -4,6 +4,7 @@ import { partyAmounts, type PriceBreakdown as ExperienceBreakdown , hasBreakdown
 import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
+import { isCancelledBooking } from "~/lib/ask-guard";
 import type { StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
 
@@ -142,7 +143,24 @@ export async function acceptEnquiry(
     .select("id, status")
     .eq("enquiry_id", enq.id)
     .limit(5);
-  if ((already ?? []).some((b: any) => !String(b.status ?? "").startsWith("cancelled"))) {
+  if ((already ?? []).some((b: any) => !isCancelledBooking(b.status))) {
+    return null;
+  }
+
+  // Nor out of two requests. Before 2026-09-07 a trekker could send the
+  // identical ask twice, and the guide's list showed the same trek on the same
+  // dates twice with no way to tell them apart; accepting both booked the
+  // fortnight twice. The duplicate ask is now refused at the door and by an
+  // index, but requests made before that are still sitting in guides' lists,
+  // so the accept refuses them too rather than trusting the queue to be clean.
+  const { data: twinBooking } = await admin
+    .from("bookings")
+    .select("id, status")
+    .eq("trekker_id", enq.trekker_id)
+    .eq("offering_id", enq.offering_id)
+    .eq("start_date", enq.start_date)
+    .limit(5);
+  if ((twinBooking ?? []).some((b: any) => !isCancelledBooking(b.status))) {
     return null;
   }
 
