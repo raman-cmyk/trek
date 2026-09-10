@@ -1719,3 +1719,44 @@ imported into two client bundles.
 
 476 tests green, build green, deployed. Both routes verified live on GET and
 POST.
+
+## 2026-09-10 — One live request per trekker, per trip, per date
+
+The founder sent a screenshot: the same trek, the same dates, twice in My trips
+and twice in the guide's queue, both acceptable.
+
+**Those rows are from 2026-09-03** — four days before the first duplicate guard
+shipped on the 7th, and both bookings are cancelled now. The two enquiries
+behind them were created four minutes apart while the first was still open,
+which is exactly what that guard refuses. So the photograph is of a fixed bug.
+
+**Two holes in that guard were real, though.**
+
+It only looked at requests still *waiting* — `open` or `quoted`. Once the guide
+accepted, the identical ask sailed past: the trekker asks again, the guide sees
+the same trek and dates a second time, and accepting books a fortnight already
+committed. `askOutcome()` now weighs a live booking as well as a live request,
+and the widget says "you already have this trip booked" rather than pretending
+to send.
+
+And look-then-insert is not atomic — which is how this bug actually arrives. A
+double-tap on a slow connection puts two requests in flight, both looking, both
+finding nothing, both inserting. **0072** adds partial unique indexes on
+`enquiries` (where status is open or quoted) and on `bookings` (where status is
+not cancelled). Neither had a live violation, so both applied clean. The loser
+of that race gets 23505, which the action answers as "you already asked",
+because that is what happened.
+
+Accept refuses a duplicate too, checking the bookings rather than the enquiry:
+requests sent before any of this are still in guides' queues and nothing else
+stops one being accepted.
+
+Cancelled bookings and finished requests are deliberately outside every guard —
+a trip that fell through can be asked for again, which is a normal thing a
+person does after a no.
+
+`acceptEnquiry` had no test at all. It has five now, the founder's case among
+them, and the booking mock grew `in` and `limit` to reach them.
+
+491 tests green, build green, deployed. 0072 applied; index predicates verified
+in production.
