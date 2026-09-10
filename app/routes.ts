@@ -61,6 +61,9 @@ export default [
 
   // Guide area (M4 status page; M5 dashboard). Login sits outside the gate.
   route("g/login", "routes/g.login.tsx"),
+  // Sign-out sits outside the gate too: the layout's loader demands a guide,
+  // and this is the request that stops there being one.
+  route("g/logout", "routes/g.logout.tsx"),
   layout("routes/g.tsx", [
     route("g", "routes/g._index.tsx"),
     route("g/enquiries", "routes/g.enquiries.tsx"),
@@ -114,6 +117,7 @@ export default [
 
   // Ops admin (M2). Login sits OUTSIDE the role-gated layout to avoid a loop.
   route("ops/login", "routes/ops.login.tsx"),
+  route("ops/logout", "routes/ops.logout.tsx"),
   // Also outside: it swaps the session for another account's, and the layout
   // would then bounce that account away before the redirect could land.
   route("ops/users/enter", "routes/ops.users.enter.tsx"),

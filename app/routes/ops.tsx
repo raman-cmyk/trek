@@ -1,11 +1,7 @@
-import { Form, NavLink, Outlet, data, redirect } from "react-router";
+import { Form, NavLink, Outlet, data } from "react-router";
 import type { Route } from "./+types/ops";
 import { cn } from "~/lib/cn";
-import {
-  createSupabaseServerClient,
-  getEnv,
-  requireOps,
-} from "~/lib/supabase.server";
+import { getEnv, requireOps } from "~/lib/supabase.server";
 import { isSuperAdmin } from "~/lib/super-admin";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -51,13 +47,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 }
 
-export async function action({ request, context }: Route.ActionArgs) {
-  // Logout.
-  const env = getEnv(context);
-  const { supabase, headers } = createSupabaseServerClient(request, env);
-  await supabase.auth.signOut();
-  return redirect("/ops/login", { headers });
-}
+// The sign-out action used to live here, unreachable for the same reason as
+// the guide dashboard's. It is /ops/logout now.
 
 // Grouped by the job being done, not by the order the pages were built.
 // Journals had no nav entry at all — the page existed and was reachable only
@@ -170,7 +161,9 @@ export default function OpsLayout({ loaderData }: Route.ComponentProps) {
           </nav>
           <div className="border-t border-border p-3 text-sm">
             <p className="truncate text-ink-soft">{profile.full_name}</p>
-            <Form method="post">
+            {/* Explicit action — see /ops/logout for what an actionless Form
+                did from each console page. */}
+            <Form method="post" action="/ops/logout">
               <button className="mt-1 text-xs text-primary hover:underline">
                 Sign out
               </button>

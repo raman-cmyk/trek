@@ -1,8 +1,8 @@
-import { Form, NavLink, Outlet, data, redirect } from "react-router";
+import { Form, NavLink, Outlet, data } from "react-router";
 import type { Route } from "./+types/g";
 import { cn } from "~/lib/cn";
 import { checkinIsDue, needsClosing, trekDay } from "~/lib/checkin";
-import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
+import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { countUnread } from "~/lib/unread.server";
 
@@ -62,12 +62,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 }
 
-export async function action({ request, context }: Route.ActionArgs) {
-  const env = getEnv(context);
-  const { supabase, headers } = createSupabaseServerClient(request, env);
-  await supabase.auth.signOut();
-  return redirect("/g/login", { headers });
-}
+// The sign-out action used to live here, and nothing could reach it: a
+// pathless layout is never the target of a form post. It is /g/logout now.
 
 /**
  * Five tabs is the 360px ceiling — Earnings lives as a quick link on Home.
@@ -103,7 +99,9 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <span className="font-display text-lg">Guides of Nepal</span>
-        <Form method="post">
+        {/* Explicit action: a Form with none posts to whichever page is on
+            screen, which was a 405 on some tabs and a silent no-op on others. */}
+        <Form method="post" action="/g/logout">
           <button className="text-xs text-primary">Sign out</button>
         </Form>
       </header>
