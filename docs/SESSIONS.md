@@ -1685,3 +1685,37 @@ rounded ranges. Map tiles cannot load in this sandbox, so the map itself was
 not re-verified visually — it is unchanged from the last deploy.
 
 469 tests green, build green, deployed.
+
+## 2026-09-10 — Sign out had never worked
+
+The founder signed out of the dashboard and got a 500, "Method Not Allowed".
+
+The button in both dashboards was `<Form method="post">` with no action. A
+form with no action posts to the page currently on screen, not to the layout
+the button is rendered in — and a pathless layout is never the target of a
+form post — so the sign-out action sitting in `g.tsx` and `ops.tsx` had never
+run once.
+
+What that looked like depended which tab you were on. Earnings and Messages,
+and the console's Today, Verifications, Data and Search, have no action: the
+post 405'd and showed the error page. Requests, the Calendar, People, Payouts
+and the rest DO have actions, so the post ran that page's action, which
+answered "Unknown action" — and left the session alive. The visible failure
+and the dangerous one were the same bug, which is why only half of it got
+reported.
+
+Sign-out is now `/g/logout` and `/ops/logout`, each outside its gated layout
+because that layout's loader demands the session the request is ending, and
+each answering GET as well as POST so a typed URL cannot look like it worked.
+The dead actions are gone from both layouts.
+
+`app/routes/layout-forms.test.ts` reads every route module that renders an
+`<Outlet/>` and fails on a post form with no action. The type checker cannot
+see this class of bug and neither can any other test — the only place it is
+visible is the source.
+
+The build caught the tail of it: removing the actions left `supabase.server`
+imported into two client bundles.
+
+476 tests green, build green, deployed. Both routes verified live on GET and
+POST.
