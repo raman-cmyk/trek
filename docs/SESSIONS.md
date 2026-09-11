@@ -1809,3 +1809,41 @@ Verified by unit tests on the exact strings, typecheck and build. The signed-in
 group pages could not be screenshotted from here.
 
 497 tests green, build green, deployed.
+
+## 2026-09-11 — Sending a document back, with a reason
+
+Ops had one verb: verify. A blurry passport scan, a policy with no helicopter
+cover, a passport expiring before the trek ends — all ordinary, and none of
+them had an ending. The document sat unverified, the trekker's page read
+"checking" indefinitely, and whether anybody had actually been told depended on
+somebody remembering to send a message.
+
+**0073** adds `rejected_at`, `rejected_reason`, `rejected_by` to
+`booking_documents` and the same three to `bookings` for insurance, which is
+fields rather than a file. Two check constraints go with them: a row cannot be
+verified and rejected at once, and a rejection without a reason of at least
+three characters is refused by the database. The reason is required in the
+form and in `rejectDocument()` too — a rejection nobody can act on is worse
+than no rejection, and it is the whole point of the feature.
+
+**It reaches the trekker.** The reason shows on their own trip page, in red,
+directly above the upload box that fixes it, and an email goes out naming the
+document and quoting the reason. The badge reads "needs redoing" rather than
+"rejected".
+
+**The trap this had to avoid.** Uploading inserts a new row rather than
+replacing the old one, so a rejected document left in the reckoning would have
+kept the booking unconfirmable no matter what the trekker sent afterwards.
+`confirmIfDocsComplete` now counts only live documents via `docsSettled()`, and
+a booking whose every document was sent back is not "settled" — it is "nothing
+to confirm", which is the same answer as an empty list.
+
+Verifying clears a rejection and rejecting clears a verification, so a document
+that was sent back and then accepted does not carry both.
+
+Verified the trekker's view at 360px on the dev primitives page, which now
+carries a sent-back document in its fixture alongside the verified and checking
+ones. The ops side could not be screenshotted — it needs an ops session.
+
+509 tests green, build green, 0073 applied and columns verified in production,
+deployed.
