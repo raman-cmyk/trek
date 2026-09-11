@@ -38,7 +38,7 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
     }),
     jsonLd(
       breadcrumbLd([
-        { name: "Group trips", url: `${origin}/events` },
+        { name: "Plan an Event", url: `${origin}/events` },
         { name: e.title, url: (d as any).canonical },
       ]),
     ),

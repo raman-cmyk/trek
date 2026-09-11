@@ -133,7 +133,7 @@ export default function EditEvent({ loaderData, actionData }: Route.ComponentPro
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
       <Link to="/events" className="text-sm text-moss hover:underline">
-        ← Group trips
+        ← Plan an Event
       </Link>
       <h1 className="mt-2 font-display text-3xl text-ink">{event.title}</h1>
 

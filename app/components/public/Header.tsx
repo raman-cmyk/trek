@@ -27,7 +27,10 @@ const BROWSE = [
   { to: "/guides", label: "Guides" },
   { to: "/experiences", label: "Experiences" },
   { to: "/routes", label: "Routes" },
-  { to: "/events", label: "Group trips" },
+  // "Group trips" sat two items away from the signed-in "Groups" link and
+  // meant something different; this one is the page where a trip gets planned
+  // and joined.
+  { to: "/events", label: "Plan an Event" },
   { to: "/journals", label: "Stories" },
 ];
 
@@ -71,8 +74,8 @@ export function Header({
 
         {/* ── Centre: where to go ───────────────────────────────────────────
             Nowrap and a tighter gap: the wordmark is three words now, and at a
-            1100px laptop "Group trips" and "Sign out" were each wrapping onto
-            two lines rather than the row simply being tight. */}
+            1100px laptop the longest item and "Sign out" were each wrapping
+            onto two lines rather than the row simply being tight. */}
         <nav className="ml-3 hidden items-center gap-5 whitespace-nowrap lg:flex">
           {BROWSE.map((item) => (
             <NavLink
