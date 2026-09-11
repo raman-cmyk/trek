@@ -1781,3 +1781,31 @@ with no horizontal overflow. The signed-in row has more room than the
 signed-out one measured here, its right-hand side being the shorter of the two.
 
 491 tests green, build green, deployed.
+
+## 2026-09-11 — The trek is the heading, not whose trip it is
+
+/groups read "Odonell's trip", "Sarah's trip", "Ben's trip", with the actual
+trek in small grey type underneath. You could not find the Everest one by
+looking at the list.
+
+A group carries a name of its own and neither source of it works as a headline.
+A group a trekker makes by hand suggests "<first name>'s trip"
+(`groups.new.tsx`). A group created automatically when a guide accepts is named
+after the offering (`groupForBooking`), so those cards printed the same
+sentence twice — "Patan Durbar Square heritage walk" as both lines.
+
+`groupHeading()` puts the trek first and keeps the group's own name as the line
+below, dropped when it only repeats the trek. Comparison ignores case, spacing
+and apostrophe style, so "Kathmandu Momo Crawl!" and "Kathmandu momo crawl"
+count as one thing. The group's own page and the invite page follow the same
+shape, so arriving from the list is continuous. What to say when no trek is
+picked stays with each page — the list says "No trek picked yet", the group
+page offers the guide instead — rather than being baked into the helper.
+
+Dates in those same lines were rendering as `2026-11-11`; they go through
+`fmtDate` now, like everywhere else.
+
+Verified by unit tests on the exact strings, typecheck and build. The signed-in
+group pages could not be screenshotted from here.
+
+497 tests green, build green, deployed.
