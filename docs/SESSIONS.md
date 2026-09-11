@@ -1760,3 +1760,24 @@ them, and the booking mock grew `in` and `limit` to reach them.
 
 491 tests green, build green, deployed. 0072 applied; index predicates verified
 in production.
+
+## 2026-09-11 — The top nav says Plan an Event
+
+"Group trips" sat two items away from the signed-in "Groups" link and meant
+something different, and /events is where a trip is planned as much as joined —
+the page already leads with "Organise one".
+
+The footer link, the two back-links inside the events flow and the JSON-LD
+breadcrumb follow it, so one destination carries one name everywhere the public
+sees it. Two things deliberately keep the old wording: the page's `<title>`
+("Group trips anyone can join"), because that is the phrase people type into
+Google and search is the demand channel; and the ops console, which is the
+office's own language.
+
+The nav row is tight by design — there is a comment about items wrapping at a
+1100px laptop — and the new label is two characters longer, so it was checked:
+the live page served locally at 1024, 1100, 1280 and 1440 stays on one line
+with no horizontal overflow. The signed-in row has more room than the
+signed-out one measured here, its right-hand side being the shorter of the two.
+
+491 tests green, build green, deployed.
