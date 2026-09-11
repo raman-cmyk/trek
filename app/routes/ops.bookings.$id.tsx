@@ -3,7 +3,9 @@ import type { Route } from "./+types/ops.bookings.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { emergencyLine } from "~/lib/emergency";
 import { requireOps } from "~/lib/supabase.server";
-import { verifyDocument, signedDocumentUrl } from "~/lib/documents.server";
+import { verifyDocument, rejectDocument, signedDocumentUrl } from "~/lib/documents.server";
+import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
+import { fmtDate } from "~/lib/format";
 import { generateContractForBooking } from "~/lib/contracts.server";
 import { issueTimsCard } from "~/lib/tims.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
@@ -16,13 +18,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title), trekker:users(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
     )
     .eq("id", params.id)
     .maybeSingle();
   if (!b) throw new Response("Not found", { status: 404 });
   const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }, { data: instalments }, { data: payments }] = await Promise.all([
-    admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id),
+    admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
     admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
     admin
       .from("contracts")
@@ -77,6 +79,63 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // Sending a document back. The reason is required here, in the form, and in
+  // the database (0073) — a rejection nobody can act on is worse than none.
+  if (intent === "reject") {
+    const documentId = String(form.get("document_id"));
+    const reason = String(form.get("reason") ?? "");
+    const problem = rejectionProblem(reason);
+    if (problem) return data({ error: problem }, { status: 400, headers });
+
+    const { bookingId, personName, type } = await rejectDocument(
+      admin,
+      documentId,
+      user.id,
+      reason,
+    );
+    if (!bookingId) return data({ error: "That document is gone." }, { status: 404, headers });
+
+    // Telling them is the point. A document sent back in silence leaves the
+    // trip page reading "checking" and nobody any the wiser.
+    const { data: who } = await admin
+      .from("bookings")
+      .select("trekker:users(email)")
+      .eq("id", bookingId)
+      .single();
+    await sendEmail(
+      env,
+      (who as any)?.trekker?.email,
+      `Your ${type} needs redoing`,
+      `We could not accept the ${type} for ${personName}: ${cleanReason(reason)}\n\nUpload a new one from your trip page and we will check it again.`,
+    );
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "reject_insurance") {
+    const reason = String(form.get("reason") ?? "");
+    const problem = rejectionProblem(reason);
+    if (problem) return data({ error: problem }, { status: 400, headers });
+
+    const { data: b } = await admin
+      .from("bookings")
+      .update({
+        insurance_rejected_at: new Date().toISOString(),
+        insurance_rejected_reason: cleanReason(reason),
+        insurance_rejected_by: user.id,
+        insurance_verified_at: null,
+      })
+      .eq("id", params.id!)
+      .select("trekker:users(email)")
+      .single();
+    await sendEmail(
+      env,
+      (b as any)?.trekker?.email,
+      "Your insurance needs another look",
+      `We could not accept your policy: ${cleanReason(reason)}\n\nUpdate it from your trip page and we will check it again.`,
+    );
+    return data({ ok: true }, { headers });
+  }
+
   if (intent === "view") {
     const documentId = String(form.get("document_id"));
     const url = await signedDocumentUrl(admin, documentId, user.id);
@@ -91,7 +150,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "verify_insurance") {
     await admin
       .from("bookings")
-      .update({ insurance_verified_at: new Date().toISOString() })
+      .update({
+        insurance_verified_at: new Date().toISOString(),
+        insurance_rejected_at: null,
+        insurance_rejected_reason: null,
+        insurance_rejected_by: null,
+      })
       .eq("id", params.id!);
     return data({ ok: true }, { headers });
   }
@@ -119,6 +183,14 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
         <span className="text-ink">{b.offering?.title}</span>
       </div>
 
+      {/* A rejection refused for want of a reason has to say so somewhere the
+          eye lands, not inside the panel that scrolled away. */}
+      {(actionData as any)?.error && (
+        <p role="alert" className="rounded border border-danger/40 bg-danger/5 p-3 text-sm text-danger">
+          {(actionData as any).error}
+        </p>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="Booking">
           <dl className="space-y-1 text-sm">
@@ -143,37 +215,73 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
               <p className="py-4 text-sm text-ink-soft">No documents uploaded yet.</p>
             ) : (
               <ul className="divide-y divide-border">
-                {documents.map((d: any) => (
-                  <li key={d.id} className="flex items-center justify-between py-2">
-                    <div>
-                      <p className="text-sm font-medium capitalize">{d.type}</p>
-                      <p className="text-xs text-ink-soft">{d.person_name}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(actionData as any)?.url && (
-                        <a href={(actionData as any).url} target="_blank" rel="noreferrer" className="text-xs text-primary">
-                          open
-                        </a>
-                      )}
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="view" />
-                        <input type="hidden" name="document_id" value={d.id} />
-                        <button className="rounded border border-border px-2 py-1 text-xs">View</button>
-                      </Form>
-                      {d.verified_at ? (
-                        <Badge tone="green">verified</Badge>
-                      ) : (
+                {documents.map((d: any) => {
+                  const state = docState(d);
+                  return (
+                  <li key={d.id} className="py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium capitalize">{d.type}</p>
+                        <p className="text-xs text-ink-soft">{d.person_name}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(actionData as any)?.url && (
+                          <a href={(actionData as any).url} target="_blank" rel="noreferrer" className="text-xs text-primary">
+                            open
+                          </a>
+                        )}
                         <Form method="post">
-                          <input type="hidden" name="intent" value="verify" />
+                          <input type="hidden" name="intent" value="view" />
                           <input type="hidden" name="document_id" value={d.id} />
-                          <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
-                            Pass
+                          <button className="rounded border border-border px-2 py-1 text-xs">View</button>
+                        </Form>
+                        {state === "verified" ? (
+                          <Badge tone="green">verified</Badge>
+                        ) : (
+                          <Form method="post">
+                            <input type="hidden" name="intent" value="verify" />
+                            <input type="hidden" name="document_id" value={d.id} />
+                            <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
+                              Pass
+                            </button>
+                          </Form>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Saying no, and why. The trekker reads this on their own
+                        trip page, so it is written to them, not about them. */}
+                    {state === "rejected" ? (
+                      <p className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-ink">
+                        <span className="font-medium">Sent back:</span> {d.rejected_reason}
+                        <span className="ml-1 text-ink-soft">
+                          · {fmtDate(d.rejected_at)} · waiting for a new one
+                        </span>
+                      </p>
+                    ) : (
+                      <details className="mt-1.5">
+                        <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+                          Send it back…
+                        </summary>
+                        <Form method="post" className="mt-1.5 flex flex-wrap items-start gap-2">
+                          <input type="hidden" name="intent" value="reject" />
+                          <input type="hidden" name="document_id" value={d.id} />
+                          <textarea
+                            name="reason"
+                            rows={2}
+                            required
+                            placeholder="What is wrong with it? The trekker reads this."
+                            className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs text-ink outline-none focus:border-primary"
+                          />
+                          <button className="rounded border border-border px-2 py-1 text-xs hover:bg-amber-50">
+                            Send back
                           </button>
                         </Form>
-                      )}
-                    </div>
+                      </details>
+                    )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </Panel>
@@ -254,13 +362,40 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                       .filter((k) => meta[k])
                       .join(", ") || "none declared"}
                   </p>
+                  {b.insurance_rejected_at && !b.insurance_verified_at && (
+                    <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-ink">
+                      <span className="font-medium">Sent back:</span> {b.insurance_rejected_reason}
+                      <span className="ml-1 text-ink-soft">· {fmtDate(b.insurance_rejected_at)}</span>
+                    </p>
+                  )}
                   {!b.insurance_verified_at && (
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="verify_insurance" />
-                      <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
-                        Verify insurance
-                      </button>
-                    </Form>
+                    <div className="space-y-2">
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="verify_insurance" />
+                        <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
+                          Verify insurance
+                        </button>
+                      </Form>
+                      <details>
+                        <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+                          {b.insurance_rejected_at ? "Change the reason…" : "Send it back…"}
+                        </summary>
+                        <Form method="post" className="mt-1.5 flex flex-wrap items-start gap-2">
+                          <input type="hidden" name="intent" value="reject_insurance" />
+                          <textarea
+                            name="reason"
+                            rows={2}
+                            required
+                            defaultValue={b.insurance_rejected_reason ?? ""}
+                            placeholder="No helicopter cover above 4,000m, say. The trekker reads this."
+                            className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs text-ink outline-none focus:border-primary"
+                          />
+                          <button className="rounded border border-border px-2 py-1 text-xs hover:bg-amber-50">
+                            Send back
+                          </button>
+                        </Form>
+                      </details>
+                    </div>
                   )}
                 </div>
               ) : (

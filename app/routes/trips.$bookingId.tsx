@@ -34,7 +34,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, days, meeting_point, route:routes(name, region, max_altitude_m)), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, meeting_point, route:routes(name, region, max_altitude_m)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -53,7 +53,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }, { data: instalments }] =
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
-      admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id).order("created_at"),
+      admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id).order("created_at"),
       admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
       admin.from("reviews").select("id").eq("booking_id", b.id).eq("author_id", user.id).maybeSingle(),
       admin.from("recaps").select("slug").eq("booking_id", b.id).maybeSingle(),
@@ -112,6 +112,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       today,
       insuranceAttested: !!b.insurance_attested_at,
       insuranceVerified: !!b.insurance_verified_at,
+      // Sent back, with the reason, so it can actually be fixed.
+      insuranceRejected: b.insurance_verified_at ? null : ((b as any).insurance_rejected_reason ?? null),
       insuranceInterestSent,
       // What the policy has to reach. The trek's own maximum where we know
       // it, so the number on screen is this trek's, not a generic one.
@@ -292,7 +294,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, me, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
+  const { booking: b, me, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceRejected, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -464,6 +466,14 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
               insuranceVerified ? (
                 <p className="mt-2 text-sm text-accent">
                   Verified — high altitude and helicopter evacuation are covered.
+                </p>
+              ) : insuranceRejected ? (
+                <p className="mt-2 rounded-card border border-danger/30 bg-danger/5 p-3 text-sm text-ink">
+                  <span className="font-medium">Your policy needs another look.</span>{" "}
+                  {insuranceRejected}
+                  <span className="mt-1 block text-xs text-ink-soft">
+                    Update it below and we will check it again.
+                  </span>
                 </p>
               ) : insuranceAttested ? (
                 <p className="mt-2 text-sm text-ink-soft">

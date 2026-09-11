@@ -1,5 +1,6 @@
 import { Form, Link, useFetcher } from "react-router";
 import { Button } from "~/components/Button";
+import { docState, outstanding, STATE_LABEL } from "~/lib/doc-review";
 import { Badge } from "~/components/ops/ui";
 
 /**
@@ -56,13 +57,26 @@ export function DocumentSlot({
               >
                 {d.person_name}
               </a>
-              <Badge tone={d.verified_at ? "green" : "amber"}>
-                {d.verified_at ? "verified" : "checking"}
+              <Badge tone={docState(d) === "verified" ? "green" : docState(d) === "rejected" ? "red" : "amber"}>
+                {STATE_LABEL[docState(d)]}
               </Badge>
             </li>
           ))}
         </ul>
       )}
+
+      {outstanding(docs).map((d: any) => (
+        <p
+          key={`why-${d.id}`}
+          className="mt-2 rounded-card border border-danger/30 bg-danger/5 p-3 text-sm text-ink"
+        >
+          <span className="font-medium">{d.person_name} needs redoing.</span>{" "}
+          {d.rejected_reason}
+          <span className="mt-1 block text-xs text-ink-soft">
+            Upload a new one below and we will check it again.
+          </span>
+        </p>
+      ))}
 
       <Form
         method="post"

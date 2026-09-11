@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cleanReason, docsSettled, rejectionProblem } from "~/lib/doc-review";
 import { GUIDE_DOC_KINDS, type GuideDocKind } from "~/lib/guide-documents";
 
 const BUCKET = "documents";
@@ -79,7 +80,15 @@ export async function verifyDocument(
 ): Promise<{ bookingId: string | null; confirmed: boolean }> {
   const { data: doc } = await admin
     .from("booking_documents")
-    .update({ verified_by: verifiedBy, verified_at: new Date().toISOString() })
+    .update({
+      verified_by: verifiedBy,
+      verified_at: new Date().toISOString(),
+      // Verifying settles it, so any earlier rejection is over (0073 forbids a
+      // row claiming both).
+      rejected_at: null,
+      rejected_reason: null,
+      rejected_by: null,
+    })
     .eq("id", documentId)
     .select("booking_id")
     .single();
@@ -87,6 +96,39 @@ export async function verifyDocument(
 
   const confirmed = await confirmIfDocsComplete(admin, doc.booking_id);
   return { bookingId: doc.booking_id, confirmed };
+}
+
+/**
+ * Say no to a document, in words the trekker can act on.
+ *
+ * The reason is not optional at any layer — here, in the form, and in the
+ * database — because a rejection without one tells somebody their passport is
+ * wrong and gives them no way to make it right.
+ */
+export async function rejectDocument(
+  admin: SupabaseClient,
+  documentId: string,
+  rejectedBy: string,
+  reason: string,
+): Promise<{ bookingId: string | null; personName: string | null; type: string | null }> {
+  const problem = rejectionProblem(reason);
+  if (problem) return { bookingId: null, personName: null, type: null };
+
+  const { data: doc } = await admin
+    .from("booking_documents")
+    .update({
+      rejected_at: new Date().toISOString(),
+      rejected_reason: cleanReason(reason),
+      rejected_by: rejectedBy,
+      // It is not verified any more, whatever it was before.
+      verified_at: null,
+      verified_by: null,
+    })
+    .eq("id", documentId)
+    .select("booking_id, person_name, type")
+    .single();
+  if (!doc) return { bookingId: null, personName: null, type: null };
+  return { bookingId: doc.booking_id, personName: doc.person_name, type: doc.type };
 }
 
 /**
@@ -100,10 +142,12 @@ export async function confirmIfDocsComplete(
 ): Promise<boolean> {
   const { data: docs } = await admin
     .from("booking_documents")
-    .select("verified_at")
+    .select("verified_at, rejected_at")
     .eq("booking_id", bookingId);
-  if (!docs || docs.length === 0) return false;
-  if (docs.some((d) => !d.verified_at)) return false;
+  // Rejected documents are out of the reckoning: an upload inserts a new row
+  // rather than replacing the old one, so counting a rejection would keep the
+  // booking unconfirmable no matter what the trekker sent afterwards.
+  if (!docsSettled(docs ?? [])) return false;
 
   const { data: b } = await admin
     .from("bookings")

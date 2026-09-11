@@ -172,6 +172,15 @@ export default function Primitives() {
             docs={[
               { id: "1", person_name: "Tom Weber", verified_at: "2026-09-01" },
               { id: "2", person_name: "Yuki Tanaka", verified_at: null },
+              // Sent back by ops with a reason the trekker can act on (0073).
+              {
+                id: "3",
+                person_name: "Sam Okoro",
+                verified_at: null,
+                rejected_at: "2026-09-10",
+                rejected_reason:
+                  "The photo page is cut off at the bottom — we need the whole machine-readable strip.",
+              },
             ]}
             bookingId="demo"
             error={null}
