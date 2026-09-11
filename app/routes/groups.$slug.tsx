@@ -11,6 +11,7 @@ import {
   blockedFromAsking,
   blockedFromBooking,
   GROUP_STEPS,
+  groupHeading,
   groupMoney,
   groupStep,
   guideHasAgreed,
@@ -21,6 +22,7 @@ import {
 import { joinGroup, recomputeShares, systemLine } from "~/lib/groups.server";
 import { depositShares, stillOwing } from "~/lib/group-pay";
 import { cn } from "~/lib/cn";
+import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { TripPipeline } from "~/components/TripPipeline";
@@ -418,6 +420,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
   const step = groupStep(group, members);
   const strangers = membersWithoutAccounts(members);
   const active = activeMembers(members);
+  const heading = groupHeading({ name: group.name, offeringTitle: offering?.title ?? null });
   const mine = members.find((x: GroupMember) => x.user_id === userId);
   const organiserName =
     members.find((x: GroupMember) => x.role === "organiser")?.display_name ?? "the organiser";
@@ -457,14 +460,17 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
 
       <header className="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-3xl text-ink sm:text-4xl">{group.name}</h1>
+          {/* The trek is the heading, so arriving from the list is continuous;
+              the group's own name — "Odonell's trip" — follows it. */}
+          <h1 className="font-display text-3xl text-ink sm:text-4xl">{heading.title}</h1>
           <p className="mt-1 text-sm text-muted">
+            {heading.sub && <>{heading.sub} · </>}
             {offering ? (
               <Link
                 to={`/${offering.kind === "trek" ? "treks" : "experiences"}/${offering.slug}`}
                 className="text-moss underline underline-offset-4"
               >
-                {offering.title}
+                See the trek
               </Link>
             ) : guide ? (
               <>
@@ -476,7 +482,7 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
             ) : (
               "No trek or guide picked yet"
             )}
-            {group.start_date && ` · ${group.start_date}`}
+            {group.start_date && ` · ${fmtDate(group.start_date)}`}
             {` · ${active.length} of ${group.party_target}`}
           </p>
         </div>
@@ -1058,12 +1064,14 @@ function JoinInvite({
   return (
     <main className="mx-auto max-w-xl px-4 py-16">
       <p className="label text-muted">You have been invited</p>
-      <h1 className="mt-2 font-display text-4xl text-ink">{group.name}</h1>
+      <h1 className="mt-2 font-display text-4xl text-ink">
+        {groupHeading({ name: group.name, offeringTitle: offering?.title ?? null }).title}
+      </h1>
       <p className="mt-3 text-body-l text-ink">
         {offering ? (
           <>
-            {offering.title} — {offering.days} days with {offering.guide_name}
-            {group.start_date && `, from ${group.start_date}`}.
+            {group.name} — {offering.days} days with {offering.guide_name}
+            {group.start_date && `, from ${fmtDate(group.start_date)}`}.
           </>
         ) : guide ? (
           <>

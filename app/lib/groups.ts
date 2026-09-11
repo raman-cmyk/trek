@@ -278,3 +278,41 @@ export function slugTail(bytes: Uint8Array): string {
   const alphabet = "bcdfghjkmnpqrstvwxz23456789";
   return Array.from(bytes.slice(0, 8), (b) => alphabet[b % alphabet.length]).join("");
 }
+
+/**
+ * What to call a group on screen.
+ *
+ * A group carries a name of its own, and neither source of that name is much
+ * use as a headline. One a trekker makes by hand is suggested as "<first
+ * name>'s trip", so a list of them reads "Odonell's trip, Sarah's trip, Ben's
+ * trip" with the actual trek in small grey type underneath — you cannot find
+ * the Everest one by looking. One created automatically when a guide accepts
+ * is named after the offering, so the card printed the same sentence twice.
+ *
+ * The trek leads. The group's own name follows it, and only when it says
+ * something the trek has not already said.
+ */
+export function groupHeading(g: {
+  name?: string | null;
+  offeringTitle?: string | null;
+}): { title: string; sub: string | null } {
+  const name = (g.name ?? "").trim();
+  const trek = (g.offeringTitle ?? "").trim();
+
+  // No trek chosen yet: the group's own name is all there is to go on. What to
+  // say about the missing trek is left to the page — the list says "No trek
+  // picked yet", the group's own page can offer the guide instead.
+  if (!trek) return { title: name || "Trip", sub: null };
+  return { title: trek, sub: sameThing(name, trek) ? null : name || null };
+}
+
+/** Two labels that would read as a repetition rather than as two facts. */
+function sameThing(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[’'`]/g, "'")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  return norm(a) === norm(b);
+}

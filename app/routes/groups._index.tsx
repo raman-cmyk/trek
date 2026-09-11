@@ -5,7 +5,8 @@ import { getEnv } from "~/lib/supabase.server";
 import { getSessionUser } from "~/lib/auth.server";
 import { createAdminClient } from "~/lib/supabase.server";
 import { useMoney } from "~/lib/currency-context";
-import { groupMoney, type GroupMember } from "~/lib/groups";
+import { groupHeading, groupMoney, type GroupMember } from "~/lib/groups";
+import { fmtDate } from "~/lib/format";
 import { TripPipeline } from "~/components/TripPipeline";
 
 export function meta() {
@@ -123,6 +124,10 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
         <ul className="mt-8 space-y-3">
           {groups.map((g: any) => {
             const joined = g.members.filter((m: GroupMember) => m.status === "joined").length;
+            const heading = groupHeading({
+              name: g.name,
+              offeringTitle: g.offering?.title ?? null,
+            });
             return (
               <li key={g.id}>
                 <Link
@@ -132,10 +137,15 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-display text-xl text-ink">{g.name}</p>
+                      <p className="font-display text-xl text-ink">{heading.title}</p>
                       <p className="mt-0.5 text-sm text-muted">
-                        {g.offering ? g.offering.title : "No trek picked yet"}
-                        {g.start_date && ` · ${g.start_date}`}
+                        {[
+                          heading.sub,
+                          g.offering ? null : "No trek picked yet",
+                          g.start_date && fmtDate(g.start_date),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </p>
                     </div>
                     <span

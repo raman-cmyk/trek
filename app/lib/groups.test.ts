@@ -3,6 +3,7 @@ import {
   assignShares,
   blockedFromAsking,
   blockedFromBooking,
+  groupHeading,
   groupMoney,
   groupStep,
   guideHasAgreed,
@@ -261,5 +262,54 @@ describe("groupMoney on a booked trip", () => {
   it("falls back to the share sum when there is no booking", () => {
     expect(groupMoney(one).totalUsdCents).toBe(3240);
     expect(groupMoney(one).unclaimedSeats).toBe(0);
+  });
+});
+
+describe("groupHeading", () => {
+  it("leads with the trek, not whose trip it is", () => {
+    // The founder's screenshot: "Odonell's trip" as the headline with
+    // "Everest Trek" in grey underneath, so the list was unsearchable by eye.
+    expect(groupHeading({ name: "Odonell's trip", offeringTitle: "Everest Trek" })).toEqual({
+      title: "Everest Trek",
+      sub: "Odonell's trip",
+    });
+  });
+
+  it("does not say the same thing twice", () => {
+    // Groups created when a guide accepts are named after the offering, so
+    // the card printed the trek as both lines.
+    expect(
+      groupHeading({
+        name: "Patan Durbar Square heritage walk",
+        offeringTitle: "Patan Durbar Square heritage walk",
+      }),
+    ).toEqual({ title: "Patan Durbar Square heritage walk", sub: null });
+  });
+
+  it("treats punctuation and case as noise when comparing", () => {
+    expect(groupHeading({ name: "Kathmandu Momo Crawl!", offeringTitle: "Kathmandu momo crawl" }).sub)
+      .toBeNull();
+    expect(groupHeading({ name: "Everest  trek", offeringTitle: "Everest trek" }).sub).toBeNull();
+  });
+
+  it("falls back to the group's own name before a trek is picked", () => {
+    // What to say about the absent trek belongs to the page, not here: the
+    // list says "No trek picked yet", the group's page offers the guide.
+    expect(groupHeading({ name: "Odonell's trip", offeringTitle: null })).toEqual({
+      title: "Odonell's trip",
+      sub: null,
+    });
+  });
+
+  it("is never nameless", () => {
+    expect(groupHeading({}).title).toBe("Trip");
+    expect(groupHeading({ name: "   ", offeringTitle: "  " }).title).toBe("Trip");
+  });
+
+  it("drops an empty group name rather than printing a blank line", () => {
+    expect(groupHeading({ name: "", offeringTitle: "Everest Trek" })).toEqual({
+      title: "Everest Trek",
+      sub: null,
+    });
   });
 });
