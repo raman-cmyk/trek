@@ -1847,3 +1847,42 @@ ones. The ops side could not be screenshotted — it needs an ops session.
 
 509 tests green, build green, 0073 applied and columns verified in production,
 deployed.
+
+## 2026-09-13 — The permit tracker gets filters, hand entry, and the permit itself
+
+Three things it could not do.
+
+**It could not be asked a question.** Every application for every upcoming
+trek, sorted by which leaves soonest — the right order to work in and the wrong
+one to find "what is still waiting on documents" in, which meant reading all of
+it. Tabs sit beside the title now: Awaiting documents · With the department ·
+Ready · Rejected, each carrying its own count so the answer is legible before
+the click. Filed and approved share one tab, because "sent off and not back
+yet" is one question and not two. The filter is a URL (`?show=ready`), so a
+shift can be handed over with a link.
+
+**It could not be told about a permit.** Applications only ever appeared via
+the confirm trigger, so a fee paid at a municipal counter, or a permit filed
+before the booking came through, had nowhere to live. There is a form now —
+booking, permit, status, reference, optional scan, optional note for the
+office. `stampsFor()` dates a hand-logged row the way a filed one would be, so
+its history reads the same.
+
+**0074** adds a unique index on (booking, permit) for anything not rejected:
+the trigger and a person can now both reach for the same permit, and the same
+permit listed twice on a trekker's trip is a question nobody can answer. A
+rejected application is excluded so a refused permit can be filed again. No
+live duplicates existed, so it applied clean.
+
+**And it could not hold the permit.** The trekker's page said "Sagarmatha
+National Park Entry — ready" and they arrived at the checkpost with our word
+for it. Ops attaches the issued permit (photo or PDF) from the tracker row or
+when logging it, and it appears on the trekker's own trip page as "View
+permit", behind exactly the passport's rules: private bucket, ten-minute signed
+link, the path stored and never the URL, and a route that checks the booking
+belongs to whoever is asking.
+
+523 tests green, build green. 0074 applied, columns and index verified in
+production; the signed-out gates on `/ops/permits`, `?show=`, and the new
+permit route verified live. The signed-in pages could not be screenshotted from
+here.
