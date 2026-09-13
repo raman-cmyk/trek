@@ -1930,3 +1930,40 @@ only what is still its own.
 (they redirect to the ops login, as they should when signed out). The signed-in
 pages could not be screenshotted; the component itself was checked at 900px and
 380px on the dev primitives page, which now carries it.
+
+## 2026-09-13 — The verification queue gets two lanes and itemised checks
+
+It held one of the two things it is named for. Guides — and only those
+mid-application, since the loader filtered to `applied` and `in_review`, so a
+verified or suspended guide was not reachable from this page at all. A
+trekker's passport was in no queue anywhere: the only way to find one was to
+already know which booking it belonged to and open that booking.
+
+**Two lanes**, each with the console's status filter over it. `LaneTabs` joins
+`StatusTabs` in `components/ops/StatusTabs.tsx` — same pill, different question
+— and crossing lanes drops the status, because "applied" means nothing to a
+passport and carrying it over would land somebody on an empty list they did not
+ask for. Each lane's tab carries its own backlog: guides still applying,
+documents still waiting.
+
+**Guides are itemised.** The row said "4/6 passed", which told you four had and
+never which two had not. Every check is a chip now — named, and stating pending
+/ failed / expired where it is not passed — so "why is this one still in
+review" is answered without opening anybody. The photograph is on the row, and
+its absence is called out in red: a licence that does not match the face is
+what this queue exists to catch. `checkLabel()` supplies the names, so the
+list stays in step with `guide-checks.ts`.
+
+**Trekker documents are decided from the list.** Pass is a button; sending one
+back takes its reason inline and emails the trekker — the same `rejectDocument`
+path the booking page uses, so there is one way to say no and one place the
+reason is written. Opening forty profiles to approve forty passports is the
+work this page now removes.
+
+Their three states are not a column — `docState()` derives them from
+`verified_at` and `rejected_at` — so `DOC_REVIEW_STATUSES` spells the
+vocabulary out and joins the filter-coverage test with the rest.
+
+573 tests green, build green, deployed. Both lanes were rendered against a
+snapshot of live data at 1100px and read correctly; the live page could not be
+screenshotted, as it needs an ops session.
