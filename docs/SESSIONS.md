@@ -2087,3 +2087,35 @@ completed — the only thing that is actually a lost connection — from a reply
 that is not JSON, which says you have been signed out.
 
 604 tests green, build green, deployed.
+
+**The daily safety check, where there is no signal.** "We just need the daily
+safety check as a due diligence but alot of places theres no internet so he
+cant do anything about it."
+
+The screen only ever wrote today. The action hard-coded `day: today` and
+refused outright unless the trek was running right now, so four days above
+Namche with no bars were four days gone — and once the guide was back down
+there was nothing they could do about it. The record the platform keeps for
+due diligence had holes in it that no one could ever close, which is the one
+thing a due-diligence record cannot have.
+
+Guides walking out of signal is the normal condition of the job, not a
+failure. So the check-in is no longer a thing that only exists on the day:
+`missingDays()` lists the days of the trek with nothing against them and
+`canRecord()` lets any day that has already happened be written up, up until
+the trek is closed. The guide's screen shows them as "5 days still to fill in
+— no signal is fine, just say so", one line each with an "All was well" button
+and an optional note, on its own line so it is typeable at 360px.
+
+Filling a day in late does not pretend it was sent on time. `wasLate()`
+compares the day against when it arrived, and the ops booking page now carries
+a **Daily safety check** panel: every day of the trek in order, tagged "on the
+day", "filled in Sep 12" or "nothing yet". A back-filled record is still a
+record — but the office can see which is which, and a gap reads as no signal
+rather than no guide.
+
+No migration: `checkins` already carries `unique (booking_id, day)` and
+`received_at`, so lateness was derivable all along and the upsert had a
+conflict target waiting for it.
+
+627 tests green, build green.

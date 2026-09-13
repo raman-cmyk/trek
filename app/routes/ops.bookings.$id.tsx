@@ -6,6 +6,7 @@ import { requireOps } from "~/lib/supabase.server";
 import { verifyDocument, rejectDocument, signedDocumentUrl } from "~/lib/documents.server";
 import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
 import { fmtDate } from "~/lib/format";
+import { missingDays, wasLate } from "~/lib/checkin";
 import { generateContractForBooking } from "~/lib/contracts.server";
 import { issueTimsCard } from "~/lib/tims.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
@@ -23,7 +24,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("id", params.id)
     .maybeSingle();
   if (!b) throw new Response("Not found", { status: 404 });
-  const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }, { data: instalments }, { data: payments }] = await Promise.all([
+  const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }, { data: instalments }, { data: payments }, { data: checkins }] = await Promise.all([
     admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
     admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
     admin
@@ -42,6 +43,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .select("type, amount_usd_cents, status, created_at")
       .eq("booking_id", b.id)
       .order("created_at"),
+    // The safety record. Guides walk out of signal for days and fill those
+    // days in when they get back down, so the day a check-in is *about* and
+    // the day it arrived are different questions — and for due diligence the
+    // office has to be able to see which.
+    admin
+      .from("checkins")
+      .select("day, method, note, received_at")
+      .eq("booking_id", b.id)
+      .order("day"),
   ]);
   return data(
     {
@@ -52,6 +62,22 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       tims,
       instalments: instalments ?? [],
       payments: payments ?? [],
+      // One row per day of the trek so far, in order — a gap reads as a gap
+      // only when it sits between the days either side of it.
+      safety: [
+        ...(checkins ?? []).map((c: any) => ({
+          day: c.day as string,
+          note: c.note as string | null,
+          late: wasLate(c.day, c.received_at),
+          receivedAt: c.received_at as string,
+        })),
+        ...missingDays(
+          b.start_date,
+          b.end_date,
+          new Date().toISOString().slice(0, 10),
+          (checkins ?? []).map((c: any) => c.day),
+        ).map((day) => ({ day, note: null, late: false, receivedAt: null })),
+      ].sort((x, y) => x.day.localeCompare(y.day)),
     },
     { headers },
   );
@@ -172,7 +198,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits, contract, tims, instalments, payments } = loaderData as any;
+  const { booking: b, documents, permits, contract, tims, instalments, payments, safety } =
+    loaderData as any;
   const meta = b.insurance_meta ?? {};
   const insuranceOk = meta.altitude && meta.helicopter;
   return (
@@ -499,6 +526,39 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
               )}
             </Panel>
           </div>
+
+          {safety.length > 0 && (
+            <div className="mt-4">
+              <Panel title="Daily safety check">
+                <ul className="space-y-1 text-sm">
+                  {safety.map((c: any) => (
+                    <li key={c.day} className="flex items-start justify-between gap-3">
+                      <span className={c.receivedAt ? "min-w-0" : "min-w-0 text-ink-soft"}>
+                        {fmtDate(c.day)}
+                        {c.note ? <span className="text-ink-soft"> — {c.note}</span> : null}
+                      </span>
+                      {/* A day written up a week later is still a record, but
+                          it is not the same record as one sent that evening,
+                          and the office should not have to guess which. */}
+                      {!c.receivedAt ? (
+                        <Badge tone="red">nothing yet</Badge>
+                      ) : c.late ? (
+                        <Badge tone="amber">filled in {fmtDate(c.receivedAt)}</Badge>
+                      ) : (
+                        <Badge tone="green">on the day</Badge>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {safety.some((c: any) => !c.receivedAt) && (
+                  <p className="mt-2 text-caption text-ink-soft">
+                    A gap is usually no signal, not no guide. They can still fill
+                    these in from their check-in screen until the trek is closed.
+                  </p>
+                )}
+              </Panel>
+            </div>
+          )}
 
           {permits.length > 0 && (
             <div className="mt-4">

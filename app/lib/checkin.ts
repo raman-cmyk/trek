@@ -93,3 +93,63 @@ export function dayLabel(window: TrekDay): string {
   if (window.where === "after") return "Finished";
   return window.lastDay ? `Last day — day ${window.day}` : `Day ${window.day} of ${window.total}`;
 }
+
+const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * The days of this trek that have no update yet.
+ *
+ * Guides walk out of signal for days at a time — that is the normal condition
+ * of the job, not a failure — so the check-in cannot be a thing that only
+ * exists on the day itself. It is a record kept for due diligence, and a
+ * record can be completed afterwards. These are the days still missing from
+ * it: from the first day of the trek up to today, or to the last day once the
+ * trek is over, minus whatever has already been sent.
+ *
+ * Nothing in the future, because a guide cannot report a day that has not
+ * happened.
+ */
+export function missingDays(
+  startIso: string,
+  endIso: string,
+  todayIso: string,
+  done: string[],
+): string[] {
+  const start = midnight(startIso);
+  const end = Math.max(midnight(endIso), start);
+  const today = midnight(todayIso);
+  const last = Math.min(end, today);
+  if (last < start) return [];
+
+  const sent = new Set(done.map((d) => d.slice(0, 10)));
+  const out: string[] = [];
+  for (let t = start; t <= last; t += DAY) {
+    const d = iso(t);
+    if (!sent.has(d)) out.push(d);
+  }
+  return out;
+}
+
+/**
+ * May this day be recorded at all?
+ *
+ * Inside the trek, and not in the future. Deliberately allows a day that has
+ * already passed, which is the whole point: the guide is filling in the week
+ * they spent above the treeline.
+ */
+export function canRecord(
+  startIso: string,
+  endIso: string,
+  todayIso: string,
+  dayIso: string,
+): boolean {
+  const day = midnight(dayIso);
+  const start = midnight(startIso);
+  const end = Math.max(midnight(endIso), start);
+  return day >= start && day <= end && day <= midnight(todayIso);
+}
+
+/** Sent after the day it describes — worth showing, and not worth scolding. */
+export function wasLate(dayIso: string, receivedAtIso: string): boolean {
+  return midnight(receivedAtIso) > midnight(dayIso);
+}

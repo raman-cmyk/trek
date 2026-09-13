@@ -6,7 +6,14 @@ import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { fmtDate, fmtDateRange } from "~/lib/format";
 import { firstName } from "~/lib/names";
-import { checkinIsDue, dayLabel, needsClosing, trekDay } from "~/lib/checkin";
+import {
+  canRecord,
+  checkinIsDue,
+  dayLabel,
+  missingDays,
+  needsClosing,
+  trekDay,
+} from "~/lib/checkin";
 
 export function meta() {
   return [{ title: "Daily safety update" }, { name: "robots", content: "noindex" }];
@@ -73,14 +80,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       closeUp: needsClosing(window, b.status),
       // The last few, so a guide can see the office has them.
       recent: done.slice(0, 5),
-      missed:
-        window.where === "on"
-          ? Math.max(0, window.day - done.filter((d) => d <= today).length)
-          : 0,
+      // The days with nothing against them. Not a score — a list of things
+      // still to write up, which is what a guide can actually act on once
+      // they have signal again.
+      // Today is already the big button above, so what is left here is the
+      // backlog: the days that went by out of signal.
+      toFill: missingDays(b.start_date, b.end_date, today, done).filter((d) => d !== today),
     };
   });
 
-  return data({ trips, today }, { headers });
+  return data({ trips }, { headers });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -122,9 +131,14 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ ok: "Closed. Your payout is queued." }, { headers });
   }
 
-  if (window.where !== "on") {
+  // Which day is being written up. Defaults to today, but any day of the trek
+  // that has already happened can be filled in: guides are out of signal for
+  // days at a time, and a record that can only be written on the day is a
+  // record with holes in it that nobody can ever close.
+  const day = String(form.get("day") ?? today).slice(0, 10);
+  if (!canRecord(b.start_date, b.end_date, today, day)) {
     return data(
-      { error: "There is no update to send today — you are not on the trail." },
+      { error: "That is not a day of this trek." },
       { status: 400, headers },
     );
   }
@@ -133,10 +147,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   await admin
     .from("checkins")
     .upsert(
-      { booking_id: b.id, day: today, method: "app", note },
+      { booking_id: b.id, day, method: "app", note },
       { onConflict: "booking_id,day" },
     );
-  return data({ ok: `Sent — day ${window.day}.` }, { headers });
+  const which = trekDay(b.start_date, b.end_date, day);
+  return data(
+    { ok: day === today ? `Sent — day ${which.day}.` : `Day ${which.day} filled in.` },
+    { headers },
+  );
 }
 
 export default function GuideCheckin({ loaderData, actionData }: Route.ComponentProps) {
@@ -152,7 +170,8 @@ export default function GuideCheckin({ loaderData, actionData }: Route.Component
         <h1 className="font-display text-2xl text-ink">Daily safety update</h1>
         <p className="mt-0.5 text-sm text-ink-soft">
           One tap a day while you are on a trek, so the office knows everyone is
-          fine. Nothing to send on the days you are not walking.
+          fine. Nothing to send on the days you are not walking — and if you
+          were out of signal, fill those days in when you get back down.
         </p>
       </div>
 
@@ -195,7 +214,8 @@ export default function GuideCheckin({ loaderData, actionData }: Route.Component
               </p>
               <p className="mt-0.5 text-sm text-ink-soft">
                 Close it and your payout goes into the next batch. Until then
-                the app keeps counting days that are not happening.
+                the app keeps counting days that are not happening — and any
+                days still to fill in stay fillable below.
               </p>
               <Form method="post" className="mt-2">
                 <input type="hidden" name="intent" value="close" />
@@ -234,6 +254,46 @@ export default function GuideCheckin({ loaderData, actionData }: Route.Component
                 {t.window.lastDay ? "last day" : `day ${t.window.day}`}
               </button>
             </Form>
+          )}
+
+          {/* Out of signal for four days is the normal condition of the job,
+              not a failure — so the days with nothing against them are a list
+              of things to write up, not a score. They stay fillable until the
+              trek is closed. */}
+          {t.toFill.length > 0 && (
+            <details className="mt-3 border-t border-border pt-3">
+              <summary className="cursor-pointer text-sm text-ink">
+                {t.toFill.length} day{t.toFill.length === 1 ? "" : "s"} still to fill in
+                <span className="ml-1 text-ink-soft">— no signal is fine, just say so</span>
+              </summary>
+              <ul className="mt-2 divide-y divide-border border-t border-border">
+                {t.toFill.map((d: string) => (
+                  <li key={d} className="py-2">
+                    {/* The date and the button share a line; the note gets its
+                        own, because on a 360px phone three things in a row
+                        leaves the note a sliver nobody can type into. */}
+                    <Form method="post" className="flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="intent" value="checkin" />
+                      <input type="hidden" name="booking_id" value={t.id} />
+                      <input type="hidden" name="day" value={d} />
+                      <span className="text-sm text-ink-soft">{fmtDate(d)}</span>
+                      <button
+                        disabled={busy}
+                        className="ml-auto rounded-button border border-border px-3 py-2 text-sm text-ink hover:bg-mist"
+                      >
+                        All was well
+                      </button>
+                      <input
+                        name="note"
+                        maxLength={280}
+                        placeholder="Anything to note (optional)"
+                        className="w-full basis-full rounded-button border border-border bg-paper px-3 py-2 text-base text-ink outline-none focus:border-primary"
+                      />
+                    </Form>
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {t.recent.length > 0 && (

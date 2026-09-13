@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { checkinIsDue, dayLabel, needsClosing, trekDay } from "./checkin";
+import {
+  canRecord,
+  checkinIsDue,
+  dayLabel,
+  missingDays,
+  needsClosing,
+  trekDay,
+  wasLate,
+} from "./checkin";
 
 // The real booking that produced "day 34" on a fourteen-day trek: it ran
 // 6–20 August, nobody closed it, and today is the 8th of September.
@@ -74,5 +82,76 @@ describe("dayLabel", () => {
   it("says the last day is the last day", () => {
     expect(dayLabel(trekDay(...EBC, "2026-08-20"))).toBe("Last day — day 15");
     expect(dayLabel(trekDay(...EBC, "2026-08-10"))).toBe("Day 5 of 15");
+  });
+});
+
+describe("missingDays — the record, not the alarm", () => {
+  const START = "2026-10-01";
+  const END = "2026-10-07"; // seven days
+
+  it("is every day so far when nothing has been sent", () => {
+    expect(missingDays(START, END, "2026-10-03", [])).toEqual([
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+    ]);
+  });
+
+  it("is the gap a week out of signal leaves behind", () => {
+    // The case this exists for: signal on day 1, nothing until day 6.
+    expect(missingDays(START, END, "2026-10-06", ["2026-10-01"])).toEqual([
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+    ]);
+  });
+
+  it("never asks for a day that has not happened", () => {
+    expect(missingDays(START, END, "2026-10-02", [])).toEqual(["2026-10-01", "2026-10-02"]);
+  });
+
+  it("still lists the whole trek after it has finished", () => {
+    // The guide walks out on the 8th and fills the record in Kathmandu.
+    expect(missingDays(START, END, "2026-10-20", ["2026-10-01"])).toHaveLength(6);
+  });
+
+  it("is empty before the trek starts, and when it is all in", () => {
+    expect(missingDays(START, END, "2026-09-28", [])).toEqual([]);
+    const every = ["01", "02", "03", "04", "05", "06", "07"].map((d) => `2026-10-${d}`);
+    expect(missingDays(START, END, "2026-10-20", every)).toEqual([]);
+  });
+
+  it("does not mind a timestamp where a date was expected", () => {
+    expect(missingDays(START, END, "2026-10-02", ["2026-10-01T04:00:00Z"])).toEqual([
+      "2026-10-02",
+    ]);
+  });
+});
+
+describe("canRecord", () => {
+  const START = "2026-10-01";
+  const END = "2026-10-07";
+
+  it("allows a day that has passed — the point of the whole thing", () => {
+    expect(canRecord(START, END, "2026-10-06", "2026-10-02")).toBe(true);
+  });
+
+  it("allows the record to be completed after the trek", () => {
+    expect(canRecord(START, END, "2026-10-20", "2026-10-04")).toBe(true);
+  });
+
+  it("refuses the future and anything outside the trek", () => {
+    expect(canRecord(START, END, "2026-10-02", "2026-10-05")).toBe(false);
+    expect(canRecord(START, END, "2026-10-20", "2026-09-30")).toBe(false);
+    expect(canRecord(START, END, "2026-10-20", "2026-10-08")).toBe(false);
+  });
+});
+
+describe("wasLate", () => {
+  it("knows an update written up afterwards", () => {
+    expect(wasLate("2026-10-02", "2026-10-06T09:00:00Z")).toBe(true);
+    expect(wasLate("2026-10-02", "2026-10-02T22:00:00Z")).toBe(false);
   });
 });
