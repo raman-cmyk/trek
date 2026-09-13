@@ -2011,3 +2011,37 @@ the trek · Oct 30, 2026 · 2 of 2" beneath it — the founder's screenshot of t
 old order predated that deploy.
 
 573 tests green, build green, deployed.
+
+## 2026-09-13 — The balance was total minus deposit, not what was still owed
+
+A group paid for a whole trek in shares — the group page said "everyone is
+paid up", $54 of $54 — and the organiser was then asked for the balance again.
+
+`runBalanceSweep` computed `balance = total − deposit`. That is right for one
+person paying alone and wrong for every group: shares are recorded as payments
+against the same booking, and the sweep never looked at them. Fourteen days
+before departure it would charge the organiser's card `total − deposit` for
+money the group had already paid in full.
+
+The worse half was the other branch. Inside ten days the sweep cancels for
+nonpayment, and it checked the date before it checked the money — so a group
+that had paid for everything was in the window to lose its trip.
+
+`outstandingUsdCents()` now counts what has actually arrived, and the sweep
+asks it first: a booking whose payments cover its total is stamped
+`balance_paid_at` and advanced to `docs_pending`, charging nothing; one that is
+short is charged the difference rather than the whole balance. The settled
+branch runs before both the instalment path and the cancellation, because a
+paid-up trip must never be cancelled.
+
+`runBalanceSweep` had no tests at all, which for the function that charges
+cards is the wrong number. It has five now — paid in full charges nothing,
+partly paid charges only the remainder, deposit-only charges the whole balance,
+a paid-up trip inside ten days is not cancelled, and one that genuinely has not
+paid still is. The mock learned `.is()`, `.not(col, "like", …)` and rows back
+from `update().select()` to reach them.
+
+Checked production before shipping: no booking was sitting in the exposed state
+(`deposit_paid` with no `balance_paid_at`), so nobody was double-charged.
+
+584 tests green, build green, deployed.
