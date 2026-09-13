@@ -332,3 +332,58 @@ export async function deleteGuideDocument(
   await admin.from("guide_documents").delete().eq("id", documentId);
   return true;
 }
+
+/* ── Permit scans (0074) ─────────────────────────────────────────────────
+   The issued permit itself, so the trekker has something to show at a
+   checkpost rather than our word that it is "ready". Same private bucket and
+   the same signed-URL-only rule as a passport: the path is stored, never the
+   URL, and nothing is ever public. */
+
+/** Ops attaches the issued permit — a photograph of it, or the PDF. */
+export async function uploadPermitScan(
+  admin: SupabaseClient,
+  args: { applicationId: string; bookingId: string; file: File; uploadedBy: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const ext = extFor(args.file.type, args.file.name);
+  const path = `permits/${args.bookingId}/${args.applicationId}-${Date.now()}.${ext}`;
+
+  const bytes = new Uint8Array(await args.file.arrayBuffer());
+  const { error: upErr } = await admin.storage
+    .from(BUCKET)
+    .upload(path, bytes, { contentType: args.file.type, upsert: true });
+  if (upErr) return { ok: false, error: upErr.message };
+
+  const { error } = await admin
+    .from("permit_applications")
+    .update({
+      scan_path: path,
+      scan_uploaded_at: new Date().toISOString(),
+      scan_uploaded_by: args.uploadedBy,
+    })
+    .eq("id", args.applicationId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * A short-lived link to an issued permit.
+ *
+ * The caller decides who is allowed to ask — ops, or the trekker whose booking
+ * it is. This only turns a stored path into a link that expires.
+ */
+export async function signedPermitScanUrl(
+  admin: SupabaseClient,
+  applicationId: string,
+): Promise<string | null> {
+  const { data: app } = await admin
+    .from("permit_applications")
+    .select("scan_path")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (!app?.scan_path) return null;
+
+  const { data: signed } = await admin.storage
+    .from(BUCKET)
+    .createSignedUrl(app.scan_path, SIGNED_TTL_SECONDS);
+  return signed?.signedUrl ?? null;
+}

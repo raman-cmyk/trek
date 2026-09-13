@@ -54,7 +54,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
       admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id).order("created_at"),
-      admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
+      admin.from("permit_applications").select("id, status, reference_no, scan_path, permit:permits(name)").eq("booking_id", b.id),
       admin.from("reviews").select("id").eq("booking_id", b.id).eq("author_id", user.id).maybeSingle(),
       admin.from("recaps").select("slug").eq("booking_id", b.id).maybeSingle(),
       admin
@@ -499,11 +499,30 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           <h2 className="mb-2 font-display text-xl">Permits</h2>
           <ul className="space-y-1 text-sm">
             {permits.map((p: any, i: number) => (
-              <li key={i} className="flex items-center justify-between">
-                <span>{p.permit?.name}</span>
-                <Badge tone={p.status === "ready" || p.status === "approved" ? "green" : "amber"}>
-                  {p.status.replace(/_/g, " ")}
-                </Badge>
+              <li key={p.id ?? i} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0">
+                  {p.permit?.name}
+                  {p.reference_no && (
+                    <span className="ml-1.5 font-mono text-xs text-ink-soft">{p.reference_no}</span>
+                  )}
+                </span>
+                <span className="flex items-center gap-2">
+                  {/* The permit itself, when we have it — so a checkpost sees
+                      the document rather than our word that it is ready. */}
+                  {p.scan_path && (
+                    <a
+                      href={`/trips/${b.id}/permit/${p.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-primary hover:underline"
+                    >
+                      View permit
+                    </a>
+                  )}
+                  <Badge tone={p.status === "ready" || p.status === "approved" ? "green" : "amber"}>
+                    {p.status.replace(/_/g, " ")}
+                  </Badge>
+                </span>
               </li>
             ))}
           </ul>

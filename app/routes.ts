@@ -50,6 +50,8 @@ export default [
     // One member paying their own share of the deposit (0069).
     route("groups/:slug/pay", "routes/groups.$slug.pay.tsx"),
     route("trips/:bookingId", "routes/trips.$bookingId.tsx"),
+    // The issued permit itself, behind the same signed-URL rule as a passport.
+    route("trips/:bookingId/permit/:applicationId", "routes/trips.$bookingId.permit.$applicationId.tsx"),
     // The other half of "know who is walking with you": what a guide is told
     // about the person asking. Never public — the loader decides who may read
     // it (0066).
