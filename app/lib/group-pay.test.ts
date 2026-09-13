@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   collected,
+  fullyPaid,
+  outstandingUsdCents,
   depositIsCovered,
   depositShares,
   shareState,
@@ -117,5 +119,48 @@ describe("stillOwing", () => {
   it("is empty when everyone is square", () => {
     const roster = [member({ id: "a", paid_usd_cents: 500 }), member({ id: "b", paid_usd_cents: 500 })];
     expect(stillOwing(roster, depositShares(1000, roster, "split", "org"))).toEqual([]);
+  });
+});
+
+describe("outstandingUsdCents / fullyPaid", () => {
+  const pay = (type: string, n: number) => ({
+    type,
+    amount_usd_cents: n,
+    status: "succeeded",
+  });
+
+  it("nets every kind of payment off the total", () => {
+    // A group of two, each paying their half of a $54 walk as a share.
+    expect(outstandingUsdCents(5400, [pay("share", 2700), pay("share", 2700)])).toBe(0);
+    expect(fullyPaid(5400, [pay("share", 2700), pay("share", 2700)])).toBe(true);
+  });
+
+  it("is the founder's bug: shares covering the whole trip leave nothing owed", () => {
+    // The sweep charged `total − deposit` regardless, so the organiser was
+    // billed a second time for money the group had already paid.
+    const paid = [pay("share", 2700), pay("share", 2700)];
+    expect(5400 - 1080).toBe(4320); // what the old arithmetic would have charged
+    expect(outstandingUsdCents(5400, paid)).toBe(0);
+  });
+
+  it("leaves the remainder owed when only part has come in", () => {
+    expect(outstandingUsdCents(5400, [pay("deposit", 1080)])).toBe(4320);
+    expect(outstandingUsdCents(5400, [pay("share", 2700)])).toBe(2700);
+    expect(fullyPaid(5400, [pay("share", 2700)])).toBe(false);
+  });
+
+  it("never goes negative when somebody overpays", () => {
+    expect(outstandingUsdCents(5400, [pay("share", 9000)])).toBe(0);
+  });
+
+  it("ignores payments that did not succeed", () => {
+    const pending = { type: "share", amount_usd_cents: 2700, status: "pending" };
+    expect(outstandingUsdCents(5400, [pay("share", 2700), pending])).toBe(2700);
+  });
+
+  it("is not fully paid when there is nothing to pay for", () => {
+    // A booking with no total is a booking that has not been priced, not one
+    // that is settled — charging or clearing it would both be wrong.
+    expect(fullyPaid(0, [])).toBe(false);
   });
 });

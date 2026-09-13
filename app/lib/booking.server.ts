@@ -5,6 +5,7 @@ import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
 import { isCancelledBooking } from "~/lib/ask-guard";
+import { outstandingUsdCents } from "~/lib/group-pay";
 import type { StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
 
@@ -656,7 +657,32 @@ export async function runBalanceSweep(
   let charged = 0;
   let cancelled = 0;
   let instalmentsCharged = 0;
+  let settled = 0;
   for (const b of due ?? []) {
+    // What is actually still owed, counted from the money that has arrived
+    // rather than from `total − deposit`. A group pays in shares against this
+    // same booking; the old arithmetic could not see them, so five people
+    // could pay for the whole trek and the organiser's card would still be
+    // charged the balance — and, inside ten days, the trip cancelled for
+    // nonpayment it had already made.
+    const { data: paid } = await admin
+      .from("payments")
+      .select("type, amount_usd_cents, status")
+      .eq("booking_id", b.id);
+    const owed = outstandingUsdCents(b.total_usd_cents, paid ?? []);
+
+    // Settled by whoever paid it. Checked before everything else, including
+    // the cancellation, because a paid-up trip must never be cancelled.
+    if (owed === 0 && b.total_usd_cents > 0) {
+      await admin
+        .from("bookings")
+        .update({ balance_paid_at: new Date().toISOString(), status: "docs_pending" })
+        .eq("id", b.id)
+        .is("balance_paid_at", null);
+      settled++;
+      continue;
+    }
+
     // Instalment bookings pay the balance on their own schedule — never
     // auto-charge the whole balance or cancel them via the 14-day sweep.
     if ((b.instalment_count ?? 1) > 1) {
@@ -664,13 +690,12 @@ export async function runBalanceSweep(
       continue;
     }
     const daysUntil = daysBetween(todayIso, b.start_date);
-    const balance = Math.max(0, b.total_usd_cents - b.deposit_usd_cents);
     if (daysUntil <= 10) {
       await cancelBooking(admin, stripe, b.id, "nonpayment", env);
       cancelled++;
-    } else if (daysUntil <= 14 && balance > 0) {
+    } else if (daysUntil <= 14) {
       const pi = await stripe.createDepositIntent({
-        amountUsdCents: balance,
+        amountUsdCents: owed,
         bookingId: b.id,
         saveCard: false,
       });
@@ -680,7 +705,7 @@ export async function runBalanceSweep(
           booking_id: b.id,
           stripe_payment_intent: pi.paymentIntentId,
           type: "balance",
-          amount_usd_cents: balance,
+          amount_usd_cents: owed,
           status: "succeeded",
         });
         await admin
@@ -690,12 +715,12 @@ export async function runBalanceSweep(
         charged++;
         if (env) {
           const { notifyBalanceCharged } = await import("~/lib/notifications.server");
-          await notifyBalanceCharged(env, admin, b.id, balance);
+          await notifyBalanceCharged(env, admin, b.id, owed);
         }
       }
     }
   }
-  return { charged, cancelled, instalmentsCharged };
+  return { charged, cancelled, instalmentsCharged, settled };
 }
 
 /**

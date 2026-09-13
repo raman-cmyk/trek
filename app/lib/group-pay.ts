@@ -96,3 +96,31 @@ export function stillOwing(
     (m) => m.paid_usd_cents < (shares.get(m.id) ?? 0),
   );
 }
+
+/**
+ * What is still owed on a booking, after everything anybody has paid.
+ *
+ * The balance sweep used to charge `total − deposit` on the fourteenth day
+ * before a trek, which is correct for one person paying alone and wrong for
+ * every group: five people had each paid their share of the WHOLE trip, the
+ * booking still read `deposit_paid`, and the organiser's card was charged the
+ * balance a second time. The money had all arrived; nothing had counted it.
+ *
+ * Counted from the payments rather than the booking's flags, because the
+ * flags are what drift — shares are recorded against the booking exactly like
+ * a deposit or a balance, and this adds them all up.
+ */
+export function outstandingUsdCents(
+  totalUsdCents: number,
+  payments: Array<{ type: string; amount_usd_cents: number; status: string }>,
+): number {
+  return Math.max(0, Math.round(totalUsdCents) - collected(payments));
+}
+
+/** Has this booking been paid for in full, however many people it took? */
+export function fullyPaid(
+  totalUsdCents: number,
+  payments: Array<{ type: string; amount_usd_cents: number; status: string }>,
+): boolean {
+  return totalUsdCents > 0 && outstandingUsdCents(totalUsdCents, payments) === 0;
+}
