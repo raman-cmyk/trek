@@ -1886,3 +1886,47 @@ belongs to whoever is asking.
 production; the signed-out gates on `/ops/permits`, `?show=`, and the new
 permit route verified live. The signed-in pages could not be screenshotted from
 here.
+
+## 2026-09-13 — One status filter, on every console list
+
+People had a status dropdown at the far end of the search row: it needed a
+second click on Search, said nothing about how many sat in each state, and
+vanished on the Trekkers and Office tabs. The permit tracker had tabs written
+three days earlier in its own idiom. Every other queue had nothing at all, so
+"which guides are waiting on review" meant reading the whole of /ops/people.
+
+**Seven lists now share one pattern** — guides, experiences, group trips,
+journals, routes, incidents, permits. `StatusTabs` sits beside the title; each
+tab carries its own count so the shape of the queue is readable before the
+click; an empty tab is dimmed so it does not look like work waiting. The choice
+lives in the URL, and every other parameter (a search term, which tab of People
+you are on) rides along untouched — losing somebody's search because they
+clicked "Verified" is the kind of small rudeness that makes a console tiring.
+
+**Two things the tests hold down.** `allOf()` carries an *empty* status list,
+which this module reads as "every row". Spelling out the known statuses looked
+tidier and silently dropped rows whose status is null — on People, a user with
+no guide record — from the one view meant to hold everything; the test caught
+it. And `ops-filters.test.ts` asserts every filter set against the status
+vocabulary in its own migration, both directions: no status without a tab, no
+tab filtering on a status the table cannot hold, and each status in exactly one
+tab so the counts add up. A status added to a check constraint and not to a
+filter now fails a test instead of appearing under All and nowhere else.
+
+**The summary lines needed care.** "3 waiting on us" on group trips, "2 waiting
+on approval" on experiences, and the routes headline all counted the rows on
+screen — which are now filtered, so they would have read zero the moment
+somebody clicked another tab. They read from the counts, which are taken before
+filtering.
+
+**Deliberately untouched:** `/ops/pipeline` and `/ops/payouts`. Both already
+lay their rows out in per-status sections, so a filter over the top would only
+hide columns that are the point of the page.
+
+The permit tracker's bespoke filter code is gone; `app/lib/permits.ts` keeps
+only what is still its own.
+
+568 tests green, build green, deployed. All seven filtered URLs verified live
+(they redirect to the ops login, as they should when signed out). The signed-in
+pages could not be screenshotted; the component itself was checked at 900px and
+380px on the dev primitives page, which now carries it.
