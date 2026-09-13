@@ -8,6 +8,7 @@ import { fmtDate } from "~/lib/format";
 import { StatusTabs } from "~/components/ops/StatusTabs";
 import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
 import { JOURNAL_FILTERS } from "~/lib/ops-filters";
+import { labelledInOrder } from "~/lib/guide-label";
 
 /**
  * Ops journal desk — the concierge model. We interview a guide by phone, type
@@ -50,6 +51,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       guides: (guides ?? []).map((g: any) => ({
         user_id: g.user_id,
         name: g.users?.full_name ?? g.slug,
+        // Carried so two guides of the same name can be told apart.
+        slug: g.slug,
         count: g.journals_count,
       })),
     },
@@ -109,9 +112,14 @@ export default function OpsJournals({ loaderData, actionData }: Route.ComponentP
           <span className="text-sm text-ink-soft">Guide</span>
           <select name="guide_id" className={cls} required>
             <option value="">— pick —</option>
-            {guides.map((g: any) => (
-              <option key={g.user_id} value={g.user_id}>
-                {g.name} ({g.count})
+            {/* Two guides can share a name; the journal count is not an
+                identifier either. The labeller adds what it takes. */}
+            {labelledInOrder(
+              guides.map((g: any) => ({ id: g.user_id, name: g.name, slug: g.slug })),
+              (c: number) => String(c),
+            ).map((row, i) => (
+              <option key={row.id} value={row.id}>
+                {row.label} ({guides[i].count})
               </option>
             ))}
           </select>

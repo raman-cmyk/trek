@@ -8,6 +8,7 @@ import { createGroup } from "~/lib/groups.server";
 import { useMoney } from "~/lib/currency-context";
 import { firstName } from "~/lib/names";
 import { groupOfferings, optionLabel } from "~/lib/offering-picker";
+import { labelledInOrder } from "~/lib/guide-label";
 
 export function meta() {
   return pageMeta({
@@ -35,7 +36,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .order("title"),
     client
       .from("public_guides")
-      .select("user_id, slug, full_name, home_district, day_rate_usd_cents")
+      .select("user_id, slug, full_name, home_district, day_rate_usd_cents, years_experience")
       .order("full_name"),
   ]);
 
@@ -201,11 +202,23 @@ export default function NewGroup({ loaderData, actionData }: Route.ComponentProp
               required
             >
               <option value="">— pick a guide —</option>
-              {guides.map((g: any) => (
-                <option key={g.user_id} value={g.user_id}>
-                  {firstName(g.full_name)}
-                  {g.home_district ? ` · ${g.home_district}` : ""}
-                  {g.day_rate_usd_cents ? ` · ${mr(g.day_rate_usd_cents)}/day` : ""}
+              {/* Whole names, and more detail for any two who would otherwise
+                  read the same. A first name is friendly and, in Nepal, not an
+                  identifier — picking the wrong human is the one mistake this
+                  product cannot make. */}
+              {labelledInOrder(
+                guides.map((g: any) => ({
+                  id: g.user_id,
+                  name: g.full_name,
+                  district: g.home_district,
+                  dayRateUsdCents: g.day_rate_usd_cents,
+                  yearsExperience: g.years_experience,
+                  slug: g.slug,
+                })),
+                mr,
+              ).map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.label}
                 </option>
               ))}
             </select>

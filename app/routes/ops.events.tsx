@@ -13,6 +13,8 @@ import { cn } from "~/lib/cn";
 import { StatusTabs } from "~/components/ops/StatusTabs";
 import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
 import { EVENT_FILTERS } from "~/lib/ops-filters";
+import { labelledInOrder } from "~/lib/guide-label";
+import { formatUsd } from "~/lib/pricing";
 
 /**
  * The events desk.
@@ -42,7 +44,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .order("created_at", { ascending: false }),
     admin
       .from("public_guides")
-      .select("user_id, full_name, home_district")
+      .select("user_id, slug, full_name, home_district, day_rate_usd_cents, years_experience")
       .order("full_name"),
   ]);
 
@@ -113,6 +115,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function OpsEvents({ loaderData, actionData }: Route.ComponentProps) {
   const { events, guides, counts, filter } = loaderData as any;
+  // Whole names, with more detail for any two that would read the same —
+  // built once for the page rather than per event card.
+  const guideOptions = labelledInOrder(
+    guides.map((g: any) => ({
+      id: g.user_id,
+      name: g.full_name,
+      district: g.home_district,
+      dayRateUsdCents: g.day_rate_usd_cents,
+      yearsExperience: g.years_experience,
+      slug: g.slug,
+    })),
+    (c: number) => formatUsd(c),
+  );
   const nav = useNavigation();
   // From the counts, which are taken before filtering: "3 waiting on us" must
   // not become "0 waiting on us" because somebody clicked Live.
@@ -198,9 +213,9 @@ export default function OpsEvents({ loaderData, actionData }: Route.ComponentPro
                       className="mt-1 block rounded border border-line bg-paper px-2.5 py-1.5 text-sm text-ink"
                     >
                       <option value="">— none —</option>
-                      {guides.map((g: any) => (
-                        <option key={g.user_id} value={g.user_id}>
-                          {g.full_name} · {g.home_district}
+                      {guideOptions.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.label}
                         </option>
                       ))}
                     </select>
