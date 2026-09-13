@@ -6,6 +6,9 @@ import { sniffImage, stripGps } from "~/lib/exif";
 /**
  * Journal photo upload.
  *
+ * Used by guides writing journals, by ops on their behalf, and by an event's
+ * organiser adding photographs to their own group trip.
+ *
  * A guide uploads straight off their phone, so the file arrives carrying the
  * coordinates of every teahouse and campsite on the trek. We keep the dates —
  * they are how ops checks a journal against the trek it claims to be — and
@@ -17,18 +20,20 @@ import { sniffImage, stripGps } from "~/lib/exif";
  */
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  // Guides upload their own; ops uploads on their behalf (concierge model).
-  let auth: Awaited<ReturnType<typeof requireUser>>;
-  try {
-    auth = await requireUser(request, env, "guide");
-  } catch {
-    auth = await requireUser(request, env, "ops");
-  }
-  const { user, admin, headers } = auth;
+  // Anyone signed in, because this is not only journals any more: an event's
+  // organiser adds photos to their own group trip, and organisers are
+  // trekkers. It used to demand a guide and fall back to demanding ops, so a
+  // trekker's upload was answered with a redirect to the login page — which
+  // the browser followed, handing the uploader an HTML page where it expected
+  // JSON, which it reported as "No connection".
+  const { user, profile, admin, headers } = await requireUser(request, env);
 
   const form = await request.formData();
   const file = form.get("file");
-  const guideId = String(form.get("guide_id") ?? user.id);
+  // Uploading on somebody else's behalf is the concierge case, and ops only.
+  // Everyone else writes to their own folder whatever they ask for.
+  const asked = String(form.get("guide_id") ?? "").trim();
+  const guideId = asked && profile?.role === "ops" ? asked : user.id;
   if (!(file instanceof File)) {
     return Response.json({ error: "No file." }, { status: 400, headers });
   }

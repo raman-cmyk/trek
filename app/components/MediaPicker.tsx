@@ -58,19 +58,36 @@ export function MediaPicker({
       const body = new FormData();
       body.append("file", file);
       if (guideId) body.append("guide_id", guideId);
+      let res: Response;
       try {
-        const res = await fetch("/api/journal-photo", { method: "POST", body });
-        const json: any = await res.json();
-        if (!res.ok) {
-          setError(json?.error ?? "That one didn't send. Try again.");
-          break;
-        }
-        if (json.strippedGps) setStrippedGps(true);
-        added.push({ url: json.url, kind: "photo" });
+        res = await fetch("/api/journal-photo", { method: "POST", body });
       } catch {
+        // Only a fetch that never completed is actually a lost connection.
         setError("No connection. It will still be here when you have signal.");
         break;
       }
+      // A reply that is not JSON is a reply from somewhere else — a login
+      // page the browser followed a redirect to, or an error page. Reading it
+      // inside the same try as the fetch made every one of those say "no
+      // connection", which sent people to check their wifi over a problem
+      // that had nothing to do with it.
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+      if (!res.ok || !json) {
+        setError(
+          json?.error ??
+            (res.status === 401 || res.status === 403 || res.redirected
+              ? "You have been signed out. Open the page again and sign in."
+              : "That one didn't send. Try again."),
+        );
+        break;
+      }
+      if (json.strippedGps) setStrippedGps(true);
+      added.push({ url: json.url, kind: "photo" });
     }
     setBusy(null);
     if (fileRef.current) fileRef.current.value = "";
