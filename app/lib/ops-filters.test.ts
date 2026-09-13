@@ -59,6 +59,7 @@ describe("the console's filter sets", () => {
       "routes",
       "incidents",
       "permits",
+      "trekker documents",
     ]);
   });
 });

@@ -100,6 +100,21 @@ export const PERMIT_FILTERS: StatusFilter[] = [
   { key: "rejected", label: "Rejected", statuses: ["rejected"] },
 ];
 
+
+/* ── Trekker documents (0003 + 0073) ────────────────────────────────────
+   Not a column: `docState()` derives these three from verified_at and
+   rejected_at, which is why the vocabulary is spelled out here rather than
+   read off a check constraint. */
+export const DOC_REVIEW_STATUSES = ["pending", "verified", "rejected"];
+
+export const DOC_FILTERS: StatusFilter[] = [
+  allOf(),
+  // The only one that is somebody's turn to act, so it leads.
+  { key: "pending", label: "Waiting on us", statuses: ["pending"] },
+  { key: "verified", label: "Verified", statuses: ["verified"] },
+  { key: "rejected", label: "Sent back", statuses: ["rejected"] },
+];
+
 /** Every pairing, for the test that keeps filters and vocabularies together. */
 export const ALL_FILTER_SETS: Array<{
   name: string;
@@ -113,4 +128,5 @@ export const ALL_FILTER_SETS: Array<{
   { name: "routes", statuses: ROUTE_STATUSES, filters: ROUTE_FILTERS },
   { name: "incidents", statuses: INCIDENT_STATUSES, filters: INCIDENT_FILTERS },
   { name: "permits", statuses: PERMIT_APP_STATUSES, filters: PERMIT_FILTERS },
+  { name: "trekker documents", statuses: DOC_REVIEW_STATUSES, filters: DOC_FILTERS },
 ];

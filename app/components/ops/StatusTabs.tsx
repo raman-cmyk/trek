@@ -70,3 +70,67 @@ export function StatusTabs({
     </nav>
   );
 }
+
+/**
+ * A switch between two or more lanes of a queue — which kind of thing you are
+ * looking at, rather than which state it is in.
+ *
+ * Same pill as the status filter because it behaves the same way: a link, a
+ * count, the rest of the URL carried through. It sits above the status filter,
+ * since changing lane changes which statuses even exist.
+ */
+export function LaneTabs({
+  lanes,
+  current,
+  counts,
+  param = "who",
+  className,
+}: {
+  lanes: Array<{ key: string; label: string }>;
+  current: string;
+  counts?: Record<string, number>;
+  param?: string;
+  className?: string;
+}) {
+  const [params] = useSearchParams();
+
+  function hrefFor(key: string): string {
+    const next = new URLSearchParams(params);
+    next.set(param, key);
+    // Statuses do not survive the crossing: "applied" means nothing to a
+    // passport, and carrying it over would land somebody on an empty list
+    // they did not ask for.
+    next.delete("status");
+    next.delete("page");
+    return `?${next.toString()}`;
+  }
+
+  return (
+    <nav aria-label="Which queue" className={cn("flex flex-wrap gap-1", className)}>
+      {lanes.map((l) => {
+        const on = l.key === current;
+        return (
+          <Link
+            key={l.key}
+            to={hrefFor(l.key)}
+            prefetch="intent"
+            aria-current={on ? "page" : undefined}
+            className={cn(
+              "rounded-pill px-4 py-2 text-sm font-medium transition-colors",
+              on
+                ? "bg-moss text-paper"
+                : "border border-border text-ink-soft hover:border-moss hover:text-ink",
+            )}
+          >
+            {l.label}
+            {counts?.[l.key] != null && (
+              <span className={cn("ml-1.5 font-mono text-xs", on ? "opacity-80" : "opacity-60")}>
+                {counts[l.key]}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
