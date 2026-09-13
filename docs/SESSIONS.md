@@ -2045,3 +2045,45 @@ Checked production before shipping: no booking was sitting in the exposed state
 (`deposit_paid` with no `balance_paid_at`), so nobody was double-charged.
 
 584 tests green, build green, deployed.
+
+## 2026-09-13 — The trek picker, and a photo upload that blamed the wifi
+
+**Choosing a trek on /groups/new.** Every guide's title starts with the route
+they walk — "Everest Base Camp at porter pace", "on a budget", "with a
+mountaineer" — so a flat list of fifty-six offerings ordered by title put eight
+nearly identical lines between somebody and the trek they wanted, with the
+route and the guide jumbled into one sentence.
+
+Grouped by route now, in one native `<select>` with `<optgroup>`s: it
+server-renders, needs no JavaScript, and optgroups are real on a phone. The
+heading is the trek; inside it the guide leads, carrying the few words of their
+own title the heading has not already said, then the length and the price.
+Cheapest first within a trek, unpriced last where a missing number cannot read
+as free. Day trips keep their whole titles and sit at the end.
+
+`angleOf()` strips the route from the title, and `echoesGuide()` catches the
+case that made it look silly: "Annapurna Circuit with Sunita" stripped to "with
+Sunita", printed beside "with Sunita". Checked by rendering all fifty-six live
+offerings through it.
+
+The QA note asked for two dropdowns, route then guide. The founder said not to
+follow it, and the underlying complaint — route and guide jumbled together —
+is what the grouping answers, without a wizard.
+
+**Photos on a group trip.** "No connection. It will still be here when you have
+signal." on a working connection, and nothing uploaded.
+
+`/api/journal-photo` demanded a guide and fell back to demanding ops. An
+event's organiser is a trekker, so both threw a redirect to `/login`, the
+browser followed it, and the uploader got an HTML page where it expected JSON.
+`res.json()` threw *inside the same try as the fetch*, so a permissions problem
+was reported as a network one — which is why it sent the founder to look at his
+wifi.
+
+Both halves fixed: any signed-in person may upload (this serves journals, ops
+and now organisers), while a `guide_id` naming somebody else's folder is
+honoured only for ops. And the uploader now separates a fetch that never
+completed — the only thing that is actually a lost connection — from a reply
+that is not JSON, which says you have been signed out.
+
+604 tests green, build green, deployed.
