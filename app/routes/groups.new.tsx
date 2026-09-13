@@ -6,8 +6,8 @@ import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.se
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { createGroup } from "~/lib/groups.server";
 import { useMoney } from "~/lib/currency-context";
-import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { firstName } from "~/lib/names";
+import { groupOfferings, optionLabel } from "~/lib/offering-picker";
 
 export function meta() {
   return pageMeta({
@@ -217,19 +217,23 @@ export default function NewGroup({ loaderData, actionData }: Route.ComponentProp
             {start === "guide"
               ? "One of their trips — or leave it and decide together"
               : "Which trek"}
+            {/* Grouped by trek, because every guide's title starts with the
+                route: eight versions of the Annapurna Circuit were eight
+                nearly identical lines in one flat list, with the route and
+                the guide jumbled into the same sentence. The heading is the
+                trek; inside it the guide leads, carrying the few words of
+                their own title that the heading has not already said. */}
             <select name="offering_id" defaultValue={preselect} className={field} key={guideId}>
               <option value="">— not decided yet —</option>
-              {(start === "guide" ? guideTreks : offerings).map((o: any) => {
-                const from = hasBreakdown(o.price_breakdown)
-                  ? fromPerPersonUsdCents(o.price_breakdown as PriceBreakdown, o.max_party ?? undefined)
-                  : o.price_usd_cents;
-                return (
-                  <option key={o.id} value={o.id}>
-                    {o.title} · {o.days} days · with {o.guide_name}
-                    {from ? ` · from ${mr(from)} pp` : ""}
-                  </option>
-                );
-              })}
+              {groupOfferings(start === "guide" ? guideTreks : offerings).map((g) => (
+                <optgroup key={g.label} label={g.label}>
+                  {g.options.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {optionLabel(opt, mr)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
             {start === "guide" && guideId && guideTreks.length === 0 && (
               <span className="mt-1 block text-caption text-muted">
