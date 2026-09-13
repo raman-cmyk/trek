@@ -3,6 +3,7 @@ import type { Route } from "./+types/trekkers.$id";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { SmartImage } from "~/components/SmartImage";
+import { AvatarPicker } from "~/components/AvatarPicker";
 import { Button } from "~/components/Button";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
@@ -82,15 +83,28 @@ export default function TrekkerProfile({ loaderData, actionData }: Route.Compone
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <header className="flex items-start gap-4">
-        <SmartImage
-          src={person.avatar_url ?? ""}
-          alt={person.full_name}
-          width={72}
-          height={72}
-          className="h-16 w-16 shrink-0 rounded-full"
-        />
-        <div className="min-w-0">
+      {/* Your own profile is the one place you can put a face on it. A guide
+          deciding whether to take you into the mountains is being asked to
+          trust a stranger, and a grey circle makes that case badly. On your
+          own page the photo stacks above your name, because the picker needs
+          the width for its buttons at 360px. */}
+      <header className={isSelf ? undefined : "flex items-start gap-4"}>
+        {isSelf ? (
+          <AvatarPicker
+            initial={person.avatar_url ?? null}
+            name={person.full_name}
+            hint="A guide sees this when you ask them to take you. Nobody else does."
+          />
+        ) : (
+          <SmartImage
+            src={person.avatar_url ?? ""}
+            alt={person.full_name}
+            width={72}
+            height={72}
+            className="h-16 w-16 shrink-0 rounded-full"
+          />
+        )}
+        <div className={isSelf ? "mt-3 min-w-0" : "min-w-0"}>
           <h1 className="font-display text-2xl text-ink">
             {isSelf ? person.full_name : firstName(person.full_name)}
           </h1>

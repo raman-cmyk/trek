@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/g.profile";
 import { getEnv } from "~/lib/supabase.server";
+import { bucketObjectPath } from "~/lib/avatar";
 import { requireUser } from "~/lib/auth.server";
 import { Button } from "~/components/Button";
 import { formatUsd } from "~/lib/pricing";
@@ -88,22 +89,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     },
     { headers },
   );
-}
-
-/**
- * The object path inside a bucket, recovered from its public URL.
- *
- * Deleting the row is not deleting the file: without this, every removed photo
- * and every re-recorded voice note stays in storage for ever, paid for and
- * still reachable by anyone who kept the link. Returns null for anything that
- * is not a public URL for this bucket — seeded photos are served from /img,
- * and those must not be touched.
- */
-function storagePath(url: string | null | undefined, bucket: string): string | null {
-  if (!url) return null;
-  const marker = `/storage/v1/object/public/${bucket}/`;
-  const i = url.indexOf(marker);
-  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length));
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -194,7 +179,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       .select("voice_intro_url")
       .eq("user_id", user.id)
       .single();
-    const old = storagePath(cur?.voice_intro_url, "guide-audio");
+    const old = bucketObjectPath(cur?.voice_intro_url, "guide-audio");
 
     if (form.get("delete")) {
       await admin.from("guides").update({ voice_intro_url: null }).eq("user_id", user.id);
@@ -206,7 +191,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({ error: "The upload didn't finish. Try again." }, { status: 400, headers });
     }
     await admin.from("guides").update({ voice_intro_url: url }).eq("user_id", user.id);
-    if (old && old !== storagePath(url, "guide-audio")) {
+    if (old && old !== bucketObjectPath(url, "guide-audio")) {
       await admin.storage.from("guide-audio").remove([old]);
     }
     return data({ ok: "Saved. Trekkers can hear you now." }, { headers });
@@ -334,7 +319,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       await admin.from("guide_photos").delete().eq("id", id).eq("guide_id", user.id);
       // The file too, not just the row — a photo a guide took down should
       // stop existing, not merely stop being listed.
-      const path = storagePath(row?.url, "journal-photos");
+      const path = bucketObjectPath(row?.url, "journal-photos");
       if (path) await admin.storage.from("journal-photos").remove([path]);
       return data({ ok: "Photo removed." }, { headers });
     }

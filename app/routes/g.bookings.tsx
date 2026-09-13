@@ -7,6 +7,7 @@ import { submitReview } from "~/lib/reviews.server";
 import { TREKKER_SUB_RATINGS } from "~/lib/trekker-profile";
 import { firstName } from "~/lib/names";
 import { TripPipeline } from "~/components/TripPipeline";
+import { permitProgress } from "~/lib/pipeline";
 import { Badge } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
 
@@ -35,8 +36,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     .eq("author_id", user.id)
     .eq("direction", "guide_to_trekker");
   const reviewed = new Set((myReviews ?? []).map((r) => r.booking_id));
+
+  // The trekker's trip page now says the guide collects the permits from the
+  // office. It has to be true at the other end too: before this the guide was
+  // told nothing about permits anywhere in the app.
+  const ids = (bookings ?? []).map((b: any) => b.id);
+  const { data: permitRows } = ids.length
+    ? await admin.from("permit_applications").select("booking_id, status").in("booking_id", ids)
+    : { data: [] as any[] };
+  const permitsBy: Record<string, Array<{ status: string }>> = {};
+  for (const r of permitRows ?? []) (permitsBy[r.booking_id] ??= []).push({ status: r.status });
+
   return data(
-    { bookings: (bookings ?? []).map((b: any) => ({ ...b, reviewed: reviewed.has(b.id) })) },
+    {
+      bookings: (bookings ?? []).map((b: any) => ({
+        ...b,
+        reviewed: reviewed.has(b.id),
+        permits: permitProgress(permitsBy[b.id] ?? []),
+      })),
+    },
     { headers },
   );
 }
@@ -104,7 +122,16 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   className="mt-1.5"
                   kind={b.offering?.kind}
                   bookingStatus={b.status}
+                  permits={b.permits}
                 />
+                {/* Two taps and a plain sentence: the one thing a guide has
+                    to physically do before this trek, and where to do it. */}
+                {b.permits === "issued" && b.status !== "active" && (
+                  <p className="mt-1.5 rounded-button bg-moss/10 px-2.5 py-1.5 text-sm text-moss">
+                    Permits are ready. Collect them from the Kathmandu office
+                    before you go.
+                  </p>
+                )}
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {b.trekker?.phone && b.status !== "deposit_paid" && (
                     <a href={`tel:${b.trekker.phone}`} className="text-sm font-medium text-primary">

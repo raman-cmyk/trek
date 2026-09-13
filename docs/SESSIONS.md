@@ -2119,3 +2119,57 @@ No migration: `checkins` already carries `unique (booking_id, day)` and
 conflict target waiting for it.
 
 627 tests green, build green.
+
+**A trekker can put a face on their profile.** The profile page always showed
+an avatar; nothing anywhere let the person it belongs to fill it. The only
+route into `users.avatar_url` was an ops admin pasting a URL into a text box
+on /ops/people/:id — so a trekker asking a stranger to walk them to 5,300m was
+making that case from behind a grey circle.
+
+New `avatars` bucket (0075), `/api/avatar`, and an `AvatarPicker` on your own
+trekker profile. The upload stands alone rather than riding on the page's
+form: a photo is picked, seen and done, and cannot be lost to a validation
+error somewhere else on the page. A selfie carries the coordinates of wherever
+it was taken, usually somebody's home, so the GPS pointer is stripped before a
+byte reaches storage, and the old file is deleted once the new one is live.
+
+The bucket is public but its select policy is not: the object endpoint serves
+a file to anyone holding its exact URL, while `list()` is limited to the owner
+and ops. Without that second half anyone could enumerate the bucket and walk
+off with a directory of trekkers' faces, which is the opposite of what the
+page promises in as many words.
+
+Guides still cannot set their own — theirs is the public face of a verified
+professional and ops holds it deliberately. Noted rather than quietly changed.
+
+**"Permits filed" never ticked.** The step was driven entirely by the
+booking's status, which cannot know anything about permits: a booking sits at
+`confirmed` from the day the papers land until the day the trek starts, so the
+step stayed an open circle for weeks after the permits had been issued and
+were sitting in the Kathmandu office. Four live applications were at `ready`
+against bookings still at `confirmed` when this was found.
+
+`permitProgress()` reads the applications themselves — issued only when every
+one of them is, and the worst news wins, because one rejected permit is the
+story however well the others went. A ticked step keeps its hint, which no
+other step does, because "Permits filed ✓" raises a question it has to answer:
+"Issued and at our Kathmandu office. Pemba collects them — nothing for you to
+do." And the step after it stops claiming they are walking when they are not.
+
+The other end of that sentence: guides were told nothing about permits
+anywhere in the app. Their trip list now says "Permits are ready. Collect them
+from the Kathmandu office before you go."
+
+**A way back in.** There was no forgot-password anywhere. Everybody here signs
+in with an email and a password — trekkers, guides, the office — and a guide
+who forgot theirs had one route back: ring Kathmandu. `/forgot` mints a
+recovery token with the service role and sends it through our own mail, the
+same machinery "Open as them" already uses; `/reset` trades the token for a
+session, spends it, and drops it out of the address bar before rendering the
+form. The answer is the same words whether or not the address has an account.
+The link sits beside the password field on all three sign-in pages.
+
+The admin half of that request already existed: /ops/users and
+/ops/people/:id both set a password and show it to copy.
+
+670 tests green, build green.

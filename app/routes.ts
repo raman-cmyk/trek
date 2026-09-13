@@ -29,6 +29,10 @@ export default [
     route("insurance", "routes/insurance.tsx"),
     route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
+    // The way back in, for everybody: trekkers, guides and the office all
+    // sign in with a password, so they all need a way to have forgotten it.
+    route("forgot", "routes/forgot.tsx"),
+    route("reset", "routes/reset.tsx"),
     // Booking flow + account pages share the public chrome (audit: these had
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
@@ -167,6 +171,8 @@ export default [
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
   route("api/journal-photo", "routes/api.journal-photo.tsx"),
+  // Your own face, on your own profile.
+  route("api/avatar", "routes/api.avatar.tsx"),
   route("api/guide-voice", "routes/api.guide-voice.tsx"),
   route("api/message-photo", "routes/api.message-photo.tsx"),
 

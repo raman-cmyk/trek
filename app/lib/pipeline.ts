@@ -25,6 +25,15 @@ export interface Stage {
   /** What this step actually means, in the words we would say out loud. */
   hint: string;
   state: StageState;
+  /**
+   * Say the hint even though this step is done.
+   *
+   * Normally only the step you are on explains itself — a track where every
+   * row carries a paragraph is a wall. But a ticked "Permits filed" raises a
+   * question it has to answer: does somebody have to go and fetch them? The
+   * answer is no, and it belongs on that line.
+   */
+  emphasis?: boolean;
 }
 
 interface StageDef {
@@ -139,11 +148,46 @@ export function previewTrack(
     .map(({ key, label, hint }) => ({ key, label, hint }));
 }
 
+/**
+ * How the permits themselves are doing.
+ *
+ * The track used to infer this from the booking's status, which cannot know
+ * it. A booking sits at `confirmed` from the moment the papers are in until
+ * the day the trek starts, so "Permits filed" stayed an open circle for weeks
+ * after the permits had been issued and were sitting in the office in
+ * Kathmandu. The office had done the work and the trekker was being told it
+ * had not.
+ */
+export type PermitProgress = "none" | "waiting" | "filed" | "issued" | "problem";
+
+/**
+ * The one state a trip's permits are in, from however many applications it has.
+ *
+ * A trek needs several — the park entry, the municipality fee, TIMS — and they
+ * are only really "done" when every one of them is. The worst news wins:
+ * one rejected permit is the story, however well the others went.
+ */
+export function permitProgress(
+  applications: Array<{ status?: string | null }> | null | undefined,
+): PermitProgress {
+  const all = applications ?? [];
+  if (all.length === 0) return "none";
+  const statuses = all.map((a) => String(a.status ?? ""));
+  if (statuses.some((s) => s === "rejected")) return "problem";
+  if (statuses.every((s) => s === "ready")) return "issued";
+  if (statuses.some((s) => s === "filed" || s === "approved" || s === "ready")) return "filed";
+  return "waiting";
+}
+
 export interface TripState {
   /** 'forming' | 'ready' | 'booked' | 'cancelled' — null for a plain booking. */
   groupStatus?: string | null;
   /** The booking's status, once there is a booking. */
   bookingStatus?: string | null;
+  /** What the permit office has actually done, when the caller knows. */
+  permits?: PermitProgress;
+  /** Who collects them. First name — this is read by the person who booked. */
+  guideName?: string | null;
 }
 
 /** Where the trip is on the one timeline, as a position the stages compare to. */
@@ -162,6 +206,45 @@ export function isStopped(state: TripState): boolean {
     state.groupStatus === "cancelled" ||
     String(state.bookingStatus ?? "").startsWith("cancelled")
   );
+}
+
+/**
+ * What a step says, once we know more than its position on the track.
+ *
+ * Only the permits step and the one after it change: everywhere else the
+ * definition's own words are right. The founder's ask, in his words: once the
+ * permits are ticked it "need to say Pemba(Guide) will collect it from the
+ * office" — because a trekker who reads "issued" quite reasonably wonders
+ * whether that means they have to go and fetch something.
+ */
+function hintFor(
+  def: StageDef,
+  index: number,
+  currentIndex: number,
+  state: TripState,
+): string {
+  const guide = (state.guideName ?? "").trim();
+  if (def.key === "permits") {
+    switch (state.permits) {
+      case "issued":
+        return guide
+          ? `Issued and at our Kathmandu office. ${guide} collects them — nothing for you to do.`
+          : "Issued and at our Kathmandu office. Your guide collects them — nothing for you to do.";
+      case "problem":
+        return "One came back from the permit office. We are sorting it out and will tell you if we need anything.";
+      case "filed":
+        return "Filed. We are waiting on the permit office.";
+      default:
+        return def.hint;
+    }
+  }
+  // The step after the permits becomes the current one the moment they are
+  // issued, which can be weeks before anybody walks. "Walking. Your guide
+  // checks in each day." is not true yet.
+  if (def.key === "active" && index === currentIndex && state.bookingStatus !== "active") {
+    return "Everything is ready. Nothing left to do before you fly.";
+  }
+  return def.hint;
 }
 
 /**
@@ -188,13 +271,30 @@ export function tripPipeline(
     if (d.at <= pos) currentIndex = i;
   });
 
+  // The permits are the one step the booking's status genuinely cannot speak
+  // for: a booking stays `confirmed` from the day the papers land until the
+  // day the trek starts, so this step sat open for weeks with the permits
+  // already issued and in the office. When the office says they are done, the
+  // track moves on rather than waiting for the departure date to say so.
+  const permitIndex = defs.findIndex((d) => d.key === "permits");
+  const permitsIssued = state.permits === "issued";
+  if (permitIndex >= 0 && permitsIssued && currentIndex === permitIndex && !finished) {
+    currentIndex = Math.min(permitIndex + 1, defs.length - 1);
+  }
+
   const stages = defs.map((d, i) => {
-    let state: StageState;
-    if (stopped) state = i < currentIndex ? "done" : i === currentIndex ? "stopped" : "stopped";
-    else if (i < currentIndex || finished) state = "done";
-    else if (i === currentIndex) state = "current";
-    else state = "upcoming";
-    return { key: d.key, label: d.label, hint: d.hint, state };
+    let stageState: StageState;
+    if (stopped) stageState = i < currentIndex ? "done" : "stopped";
+    else if (i < currentIndex || finished) stageState = "done";
+    else if (i === currentIndex) stageState = "current";
+    else stageState = "upcoming";
+    return {
+      key: d.key,
+      label: d.label,
+      hint: hintFor(d, i, currentIndex, state),
+      state: stageState,
+      emphasis: d.key === "permits" && permitsIssued && stageState === "done",
+    };
   });
 
   return {

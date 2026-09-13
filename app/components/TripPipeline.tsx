@@ -1,4 +1,4 @@
-import { tripPipeline, type Stage } from "~/lib/pipeline";
+import { tripPipeline, type PermitProgress, type Stage } from "~/lib/pipeline";
 import { cn } from "~/lib/cn";
 
 /**
@@ -17,17 +17,27 @@ export function TripPipeline({
   kind,
   groupStatus,
   bookingStatus,
+  permits,
+  guideName,
   className,
   compact = false,
 }: {
   kind: string | null | undefined;
   groupStatus?: string | null;
   bookingStatus?: string | null;
+  /** What the permit office has actually done, where the caller knows it. */
+  permits?: PermitProgress;
+  guideName?: string | null;
   className?: string;
   /** One line — the step you are on — for headers and cards. */
   compact?: boolean;
 }) {
-  const { stages, stopped } = tripPipeline(kind, { groupStatus, bookingStatus });
+  const { stages, stopped } = tripPipeline(kind, {
+    groupStatus,
+    bookingStatus,
+    permits,
+    guideName,
+  });
   const current = stages.find((s) => s.state === "current");
 
   if (compact) {
@@ -78,7 +88,7 @@ export function TripPipeline({
               {s.label}
               {s.state === "done" && <span className="sr-only"> — done</span>}
             </p>
-            {s.state === "current" && (
+            {(s.state === "current" || s.emphasis) && (
               <p className="mt-0.5 text-caption text-muted">{s.hint}</p>
             )}
           </div>

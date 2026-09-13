@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { previewTrack, tripPipeline, nextStep, trackFor } from "./pipeline";
+import { permitProgress, previewTrack, tripPipeline, nextStep, trackFor } from "./pipeline";
 
 const keys = (kind: string, state: any) =>
   tripPipeline(kind, state).stages.map((s) => `${s.key}:${s.state}`);
@@ -94,5 +94,161 @@ describe("previewTrack", () => {
 
   it("carries a hint on every step — a label alone explains nothing", () => {
     for (const s of previewTrack("day_hike")) expect(s.hint.length).toBeGreaterThan(0);
+  });
+});
+
+describe("permitProgress", () => {
+  it("is nothing at all when no permit has been raised", () => {
+    expect(permitProgress([])).toBe("none");
+    expect(permitProgress(null)).toBe("none");
+    expect(permitProgress(undefined)).toBe("none");
+  });
+
+  it("is issued only when every one of them is", () => {
+    // A trek carries several — park entry, municipality fee, TIMS — and one
+    // still at the office means the trip is not cleared.
+    expect(permitProgress([{ status: "ready" }, { status: "ready" }])).toBe("issued");
+    expect(permitProgress([{ status: "ready" }, { status: "filed" }])).toBe("filed");
+  });
+
+  it("lets the worst news win", () => {
+    expect(permitProgress([{ status: "ready" }, { status: "rejected" }])).toBe("problem");
+  });
+
+  it("separates filed from not yet started", () => {
+    expect(permitProgress([{ status: "filed" }])).toBe("filed");
+    expect(permitProgress([{ status: "approved" }])).toBe("filed");
+    expect(permitProgress([{ status: "awaiting_docs" }])).toBe("waiting");
+  });
+});
+
+describe("the permits step reads the permits, not the booking", () => {
+  const stageOf = (stages: any[], key: string) => stages.find((s) => s.key === key);
+
+  it("ticks once the office has them, without waiting for departure", () => {
+    // The bug: a booking sits at `confirmed` from the day the papers land
+    // until the day the trek starts, so this step stayed an open circle for
+    // weeks after the permits were issued and in the office.
+    const { stages } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+    });
+    expect(stageOf(stages, "permits").state).toBe("done");
+  });
+
+  it("says who collects them, because otherwise people ask", () => {
+    const { stages } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+      guideName: "Pemba",
+    });
+    expect(stageOf(stages, "permits").hint).toContain("Pemba collects them");
+    expect(stageOf(stages, "permits").hint).toContain("office");
+  });
+
+  it("still names a collector when we have no guide name", () => {
+    const { stages } = tripPipeline("trek", { bookingStatus: "confirmed", permits: "issued" });
+    expect(stageOf(stages, "permits").hint).toContain("Your guide collects them");
+  });
+
+  it("keeps the step open while they are still with the permit office", () => {
+    const { stages } = tripPipeline("trek", { bookingStatus: "confirmed", permits: "filed" });
+    expect(stageOf(stages, "permits").state).toBe("current");
+    expect(stageOf(stages, "permits").hint).toContain("waiting on the permit office");
+  });
+
+  it("does not pretend a rejected permit is fine", () => {
+    const { stages } = tripPipeline("trek", { bookingStatus: "confirmed", permits: "problem" });
+    expect(stageOf(stages, "permits").state).toBe("current");
+    expect(stageOf(stages, "permits").hint).toContain("came back");
+  });
+
+  it("behaves exactly as before when nobody tells it about permits", () => {
+    const { stages, currentKey } = tripPipeline("trek", { bookingStatus: "confirmed" });
+    expect(stageOf(stages, "permits").state).toBe("current");
+    expect(currentKey).toBe("permits");
+    expect(stageOf(stages, "permits").hint).toContain("TIMS");
+  });
+
+  it("moves the trip on to the next step rather than leaving it with none", () => {
+    // A track with nothing marked current reads as finished, which it is not.
+    const { stages, currentKey } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+    });
+    expect(currentKey).toBe("active");
+    expect(stageOf(stages, "active").state).toBe("current");
+  });
+
+  it("does not claim they are walking before they are", () => {
+    const { stages } = tripPipeline("trek", { bookingStatus: "confirmed", permits: "issued" });
+    expect(stageOf(stages, "active").hint).not.toContain("Walking");
+    expect(stageOf(stages, "active").hint).toContain("Nothing left to do");
+  });
+
+  it("says walking once they actually are", () => {
+    const { stages } = tripPipeline("trek", { bookingStatus: "active", permits: "issued" });
+    expect(stageOf(stages, "active").state).toBe("current");
+    expect(stageOf(stages, "active").hint).toContain("Walking");
+  });
+
+  it("leaves a day hike alone — it has no permits step to move", () => {
+    const { stages, currentKey } = tripPipeline("day_hike", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+    });
+    expect(stages.some((s) => s.key === "permits")).toBe(false);
+    expect(currentKey).toBe("confirmed");
+  });
+
+  it("does not resurrect a cancelled trip", () => {
+    const { stages, stopped } = tripPipeline("trek", {
+      bookingStatus: "cancelled_trekker",
+      permits: "issued",
+    });
+    expect(stopped).toBe(true);
+    expect(stageOf(stages, "permits").state).toBe("stopped");
+  });
+
+  it("leaves a finished trip every step done", () => {
+    const { stages, currentKey } = tripPipeline("trek", {
+      bookingStatus: "completed",
+      permits: "issued",
+    });
+    expect(stages.every((s) => s.state === "done")).toBe(true);
+    expect(currentKey).toBeNull();
+  });
+});
+
+describe("a ticked permits step still answers the question it raises", () => {
+  it("keeps explaining itself once it is done", () => {
+    // "Permits filed ✓" makes a trekker wonder whether they have to go and
+    // collect something. The answer belongs on that line, not on the step
+    // after it.
+    const { stages } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+      guideName: "Pemba",
+    });
+    const permits = stages.find((s) => s.key === "permits")!;
+    expect(permits.state).toBe("done");
+    expect(permits.emphasis).toBe(true);
+  });
+
+  it("does not shout on steps that are merely done", () => {
+    const { stages } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+    });
+    expect(stages.find((s) => s.key === "papers")!.emphasis).toBeFalsy();
+    expect(stages.find((s) => s.key === "deposit")!.emphasis).toBeFalsy();
+  });
+
+  it("stays quiet on a trip that was called off", () => {
+    const { stages } = tripPipeline("trek", {
+      bookingStatus: "cancelled_trekker",
+      permits: "issued",
+    });
+    expect(stages.find((s) => s.key === "permits")!.emphasis).toBeFalsy();
   });
 });

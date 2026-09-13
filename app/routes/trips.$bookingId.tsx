@@ -17,6 +17,7 @@ import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
 import { TripPipeline } from "~/components/TripPipeline";
+import { permitProgress } from "~/lib/pipeline";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
@@ -378,6 +379,10 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           className="mt-6"
           kind={b.offering?.kind}
           bookingStatus={b.status}
+          // The permits' own state, not what the booking status guesses about
+          // it: the office had issued these weeks before the track admitted it.
+          permits={permitProgress(permits)}
+          guideName={firstName(b.guide?.users?.full_name)}
         />
       ) : (
         <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">

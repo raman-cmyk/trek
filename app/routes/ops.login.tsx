@@ -78,7 +78,12 @@ export default function OpsLogin({ actionData, loaderData }: Route.ComponentProp
           />
         </label>
         <label className="block">
-          <span className="text-sm text-ink-soft">Password</span>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm text-ink-soft">Password</span>
+            <a href="/forgot" className="text-sm text-primary hover:underline">
+              Forgot it?
+            </a>
+          </div>
           <input
             name="password"
             type="password"

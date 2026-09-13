@@ -79,7 +79,14 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
           />
         </label>
         <label className="block">
-          <span className="text-sm text-ink-soft">Password</span>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm text-ink-soft">Password</span>
+            {/* Beside the field it belongs to, which is where a person looks
+                at the moment they realise they cannot remember it. */}
+            <a href="/forgot" className="text-sm text-primary hover:underline">
+              Forgot it?
+            </a>
+          </div>
           <input
             name="password"
             type="password"
