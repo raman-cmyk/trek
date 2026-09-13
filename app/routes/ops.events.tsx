@@ -10,6 +10,9 @@ import {
   type EventStatus,
 } from "~/lib/events";
 import { cn } from "~/lib/cn";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { EVENT_FILTERS } from "~/lib/ops-filters";
 
 /**
  * The events desk.
@@ -47,7 +50,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const d = ORDER.indexOf(a.status) - ORDER.indexOf(b.status);
     return d !== 0 ? d : String(b.created_at).localeCompare(String(a.created_at));
   });
-  return data({ events: list, guides: guides ?? [] }, { headers });
+  const filter = resolveKey(EVENT_FILTERS, new URL(request.url).searchParams.get("status"));
+  return data(
+    {
+      events: applyFilter(list, EVENT_FILTERS, filter, (e: any) => e.status),
+      counts: countsFor(list, EVENT_FILTERS, (e: any) => e.status),
+      filter,
+      guides: guides ?? [],
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -100,16 +112,21 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsEvents({ loaderData, actionData }: Route.ComponentProps) {
-  const { events, guides } = loaderData as any;
+  const { events, guides, counts, filter } = loaderData as any;
   const nav = useNavigation();
-  const waiting = events.filter((e: any) => e.status === "submitted" || e.status === "review");
+  // From the counts, which are taken before filtering: "3 waiting on us" must
+  // not become "0 waiting on us" because somebody clicked Live.
+  const waiting = counts.waiting ?? 0;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl text-ink">Group trips</h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="font-display text-2xl text-ink">Group trips</h1>
+          <StatusTabs filters={EVENT_FILTERS} current={filter} counts={counts} />
+        </div>
         <p className="mt-1 text-sm text-muted">
-          Proposals from the public. <span className="font-mono">{waiting.length}</span> waiting on
+          Proposals from the public. <span className="font-mono">{waiting}</span> waiting on
           us.
         </p>
       </div>

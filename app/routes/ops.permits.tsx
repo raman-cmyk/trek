@@ -6,18 +6,15 @@ import { signedPermitScanUrl, uploadPermitScan } from "~/lib/documents.server";
 import { fmtDate } from "~/lib/format";
 import {
   bySoonest,
-  filterCounts,
-  isFilterKey,
   manualEntryProblem,
-  matchesFilter,
-  PERMIT_FILTERS,
   PERMIT_STATUSES,
   PERMIT_TONE,
   stampsFor,
-  statusesFor,
-  type FilterKey,
   type PermitStatus,
 } from "~/lib/permits";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { PERMIT_FILTERS } from "~/lib/ops-filters";
 
 /**
  * Every permit for every upcoming trek.
@@ -36,8 +33,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { admin, headers } = await requireOps(request, env);
   const url = new URL(request.url);
-  const raw = url.searchParams.get("show");
-  const filter: FilterKey = isFilterKey(raw) ? raw : "all";
+  const filter = resolveKey(PERMIT_FILTERS, url.searchParams.get("status"));
 
   const [{ data: apps }, { data: bookings }, { data: permits }] = await Promise.all([
     admin
@@ -59,8 +55,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const all = bySoonest((apps ?? []) as any[]);
   return data(
     {
-      rows: all.filter((r: any) => matchesFilter(r.status, filter)),
-      counts: filterCounts(all.map((r: any) => ({ status: r.status }))),
+      rows: applyFilter(all, PERMIT_FILTERS, filter, (r: any) => r.status),
+      counts: countsFor(all, PERMIT_FILTERS, (r: any) => r.status),
       filter,
       bookings: bookings ?? [],
       permits: permits ?? [],
@@ -177,32 +173,9 @@ export default function OpsPermits({ loaderData, actionData }: Route.ComponentPr
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl">Permit tracker</h1>
-        {/* The questions this page gets asked, with the answer's size on the
-            tab so it can be read without clicking. */}
-        <nav className="flex flex-wrap gap-1">
-          {PERMIT_FILTERS.map((f) => {
-            const on = f.key === filter;
-            return (
-              <Link
-                key={f.key}
-                to={f.key === "all" ? "/ops/permits" : `/ops/permits?show=${f.key}`}
-                prefetch="intent"
-                aria-current={on ? "page" : undefined}
-                className={
-                  "rounded-pill px-3 py-1.5 text-xs transition-colors " +
-                  (on
-                    ? "bg-ink text-paper"
-                    : "border border-border text-ink-soft hover:border-moss hover:text-ink")
-                }
-              >
-                {f.label}{" "}
-                <span className={on ? "opacity-70" : "font-mono opacity-60"}>
-                  {counts[f.key]}
-                </span>
-              </Link>
-            );
-          })}
-        </nav>
+        {/* The questions this page gets asked, answered the same way as on
+            every other console list. */}
+        <StatusTabs filters={PERMIT_FILTERS} current={filter} counts={counts} />
       </div>
 
       {act.error && (

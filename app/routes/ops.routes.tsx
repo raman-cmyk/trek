@@ -2,6 +2,9 @@ import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { Badge } from "~/components/ops/ui";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { ROUTE_FILTERS } from "~/lib/ops-filters";
 
 /**
  * Every route, and the queue of ones a guide has proposed.
@@ -48,11 +51,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     proposed: !!r.created_by_guide_id,
   }));
 
+  const filter = resolveKey(ROUTE_FILTERS, new URL(request.url).searchParams.get("status"));
   return data(
     {
-      // The queue is what needs a decision; the rest is the catalogue.
+      // The queue is what needs a decision; the rest is the catalogue. The
+      // queue ignores the filter — it is the work, not a view of the work.
       queue: all.filter((r: any) => r.proposed && r.status === "pending"),
-      all,
+      all: applyFilter(all, ROUTE_FILTERS, filter, (r: any) => r.status),
+      counts: countsFor(all, ROUTE_FILTERS, (r: any) => r.status),
+      filter,
+      // The headline describes the catalogue, not whichever tab is open.
+      total: all.length,
+      builtCount: all.filter((r: any) => r.blocks.live > 0).length,
     },
     { headers },
   );
@@ -86,17 +96,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsRoutes({ loaderData, actionData }: Route.ComponentProps) {
-  const { queue, all } = loaderData as any;
+  const { queue, all, counts, filter, total, builtCount } = loaderData as any;
   const nav = useNavigation();
   const busy = nav.state !== "idle";
-  const builtCount = all.filter((r: any) => r.blocks.live > 0).length;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl text-ink">Routes</h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="font-display text-2xl text-ink">Routes</h1>
+          <StatusTabs filters={ROUTE_FILTERS} current={filter} counts={counts} />
+        </div>
         <p className="text-sm text-ink-soft">
-          {all.length} routes. {builtCount} {builtCount === 1 ? "has" : "have"} a built
+          {total} routes. {builtCount} {builtCount === 1 ? "has" : "have"} a built
           page; the rest show the standard layout until you build one.
           {queue.length > 0 && ` ${queue.length} proposed by a guide, waiting to be checked.`}
         </p>

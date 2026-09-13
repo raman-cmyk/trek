@@ -2,6 +2,9 @@ import { Form, Link, data, useNavigation, useSearchParams } from "react-router";
 import { useState } from "react";
 import type { Route } from "./+types/ops.people";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { GUIDE_FILTERS } from "~/lib/ops-filters";
 import { Button } from "~/components/Button";
 import { cn } from "~/lib/cn";
 import { escapeLike } from "~/lib/browse";
@@ -26,7 +29,6 @@ const TABS = [
   { key: "office", label: "Office" },
 ] as const;
 
-const GUIDE_STATUSES = ["applied", "in_review", "verified", "suspended", "removed"];
 
 function slugify(s: string) {
   return (
@@ -43,7 +45,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const tab = (url.searchParams.get("tab") ?? "guides") as (typeof TABS)[number]["key"];
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 60);
-  const status = url.searchParams.get("status") ?? "";
+  const status = resolveKey(GUIDE_FILTERS, url.searchParams.get("status"));
 
   const role = tab === "office" ? "ops" : tab === "trekkers" ? "trekker" : "guide";
 
@@ -110,9 +112,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     trips: trips.get(u.id) ?? { total: 0, live: 0 },
   }));
 
-  if (tab === "guides" && status) rows = rows.filter((r) => r.guide?.status === status);
+  // Counted before filtering, so each tab can say how much is behind it.
+  const counts = countsFor(rows, GUIDE_FILTERS, (r: any) => r.guide?.status);
+  if (tab === "guides") rows = applyFilter(rows, GUIDE_FILTERS, status, (r: any) => r.guide?.status);
 
-  return data({ tab, q, status, rows }, { headers });
+  return data({ tab, q, status, rows, counts }, { headers });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -194,7 +198,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsPeople({ loaderData, actionData }: Route.ComponentProps) {
-  const { tab, q, status, rows } = loaderData;
+  const { tab, q, status, rows, counts } = loaderData;
   const [params] = useSearchParams();
   const nav = useNavigation();
   const [adding, setAdding] = useState(false);
@@ -209,7 +213,15 @@ export default function OpsPeople({ loaderData, actionData }: Route.ComponentPro
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl">People</h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="font-display text-2xl">People</h1>
+          {/* Beside the title, where the question gets asked. The old control
+              was a dropdown at the far end of the search row that needed a
+              second click on Search and never said how many were in each. */}
+          {tab === "guides" && (
+            <StatusTabs filters={GUIDE_FILTERS} current={status} counts={counts} />
+          )}
+        </div>
         <Button size="sm" onClick={() => setAdding((v) => !v)}>
           {adding ? "Cancel" : "Add someone"}
         </Button>
@@ -288,19 +300,10 @@ export default function OpsPeople({ loaderData, actionData }: Route.ComponentPro
             placeholder="Name, email or phone"
             className="w-56 rounded border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary"
           />
-          {tab === "guides" && (
-            <select
-              name="status"
-              defaultValue={status}
-              className="rounded border border-border bg-surface px-2 py-1.5 text-sm"
-            >
-              <option value="">Any status</option>
-              {GUIDE_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace("_", " ")}
-                </option>
-              ))}
-            </select>
+          {/* The chosen status rides along with a search rather than being
+              cleared by it. */}
+          {tab === "guides" && status !== "all" && (
+            <input type="hidden" name="status" value={status} />
           )}
           <Button size="sm" variant="secondary" type="submit">
             Search

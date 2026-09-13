@@ -5,6 +5,9 @@ import { requireUser } from "~/lib/auth.server";
 import { Button } from "~/components/Button";
 import { uniqueSlug, validateDraft } from "~/lib/journals.server";
 import { fmtDate } from "~/lib/format";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { JOURNAL_FILTERS } from "~/lib/ops-filters";
 
 /**
  * Ops journal desk — the concierge model. We interview a guide by phone, type
@@ -33,9 +36,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     (guides ?? []).map((g: any) => [g.user_id, g.users?.full_name ?? g.slug]),
   );
 
+  const allJournals = (journals ?? []).map((j) => ({
+    ...j,
+    guide_name: names.get(j.guide_id) ?? "—",
+  }));
+  const filter = resolveKey(JOURNAL_FILTERS, new URL(request.url).searchParams.get("status"));
+
   return data(
     {
-      journals: (journals ?? []).map((j) => ({ ...j, guide_name: names.get(j.guide_id) ?? "—" })),
+      journals: applyFilter(allJournals, JOURNAL_FILTERS, filter, (j: any) => j.status),
+      counts: countsFor(allJournals, JOURNAL_FILTERS, (j: any) => j.status),
+      filter,
       guides: (guides ?? []).map((g: any) => ({
         user_id: g.user_id,
         name: g.users?.full_name ?? g.slug,
@@ -76,13 +87,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsJournals({ loaderData, actionData }: Route.ComponentProps) {
-  const { journals, guides } = loaderData as any;
+  const { journals, guides, counts, filter } = loaderData as any;
   const nav = useNavigation();
   const cls = "w-full rounded border border-line px-3 py-2 text-sm";
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-2xl text-ink">Trek journals</h1>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="font-display text-2xl text-ink">Trek journals</h1>
+        <StatusTabs filters={JOURNAL_FILTERS} current={filter} counts={counts} />
+      </div>
 
       {actionData && "error" in actionData && (actionData as any).error && (
         <p className="rounded bg-ember/10 px-3 py-2 text-sm text-ember">

@@ -4,6 +4,9 @@ import { Badge } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { firstName } from "~/lib/names";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { OFFERING_FILTERS } from "~/lib/ops-filters";
 
 /**
  * Every experience on the marketplace, with the review gate.
@@ -21,10 +24,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     .select("id, kind, title, status, days, price_usd_cents, guide:guides!offerings_guide_id_fkey(slug, users(full_name))")
     .order("title");
   const order: Record<string, number> = { pending: 0, draft: 1, live: 2, paused: 3 };
-  const rows = (offerings ?? []).sort(
+  const all = (offerings ?? []).sort(
     (a: any, b: any) => (order[a.status] ?? 9) - (order[b.status] ?? 9),
   );
-  return data({ rows }, { headers });
+  const filter = resolveKey(OFFERING_FILTERS, new URL(request.url).searchParams.get("status"));
+  return data(
+    {
+      rows: applyFilter(all, OFFERING_FILTERS, filter, (r: any) => r.status),
+      counts: countsFor(all, OFFERING_FILTERS, (r: any) => r.status),
+      filter,
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -41,13 +52,17 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsExperiences({ loaderData }: Route.ComponentProps) {
-  const { rows } = loaderData as any;
-  const pending = rows.filter((r: any) => r.status === "pending").length;
+  const { rows, counts, filter } = loaderData as any;
+  // Counted over everything, not the visible tab.
+  const pending = counts.pending ?? 0;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="font-display text-2xl text-ink">Experiences</h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="font-display text-2xl text-ink">Experiences</h1>
+          <StatusTabs filters={OFFERING_FILTERS} current={filter} counts={counts} />
+        </div>
         <div className="flex items-center gap-4">
           {pending > 0 && (
             <p className="text-sm text-ink-soft">

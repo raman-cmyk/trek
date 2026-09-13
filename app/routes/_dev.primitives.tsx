@@ -13,6 +13,8 @@ import {
   ReviewSkeleton,
   TripCardSkeleton,
 } from "~/components/skeletons";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { GUIDE_FILTERS } from "~/lib/ops-filters";
 
 export function meta(_: Route.MetaArgs) {
   return [
@@ -165,6 +167,17 @@ export default function Primitives() {
 
       <Section title="Trip documents — one slot per thing we ask for">
         <div className="max-w-xl space-y-3">
+          {/* The console's status filter, in its three states: the chosen
+              tab, one with work in it, and an empty one that should not look
+              like work waiting to be done. */}
+          <div className="mb-6">
+            <StatusTabs
+              filters={GUIDE_FILTERS}
+              current="in_review"
+              counts={{ all: 49, applied: 2, in_review: 4, verified: 43, off: 0 }}
+            />
+          </div>
+
           <DocumentSlot
             title="Passport"
             blurb="The photo page — a photo of it is fine. One for each person going."

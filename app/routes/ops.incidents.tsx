@@ -3,6 +3,9 @@ import type { Route } from "./+types/ops.incidents";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+import { StatusTabs } from "~/components/ops/StatusTabs";
+import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
+import { INCIDENT_FILTERS } from "~/lib/ops-filters";
 
 const SEV_TONE: Record<string, "amber" | "blue" | "red"> = {
   L1: "amber",
@@ -26,7 +29,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .in("status", ["confirmed", "active"])
       .order("start_date"),
   ]);
-  return data({ incidents: incidents ?? [], bookings: bookings ?? [] }, { headers });
+  const all = incidents ?? [];
+  const filter = resolveKey(INCIDENT_FILTERS, new URL(request.url).searchParams.get("status"));
+  return data(
+    {
+      incidents: applyFilter(all, INCIDENT_FILTERS, filter, (i: any) => i.status),
+      counts: countsFor(all, INCIDENT_FILTERS, (i: any) => i.status),
+      filter,
+      bookings: bookings ?? [],
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -58,12 +71,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function OpsIncidents({ loaderData }: Route.ComponentProps) {
   const incidents = loaderData.incidents as any[];
+  const { counts, filter } = loaderData as any;
   const bookings = loaderData.bookings as any[];
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
-        <h1 className="font-display text-2xl">Incidents</h1>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="font-display text-2xl">Incidents</h1>
+          <StatusTabs filters={INCIDENT_FILTERS} current={filter} counts={counts} />
+        </div>
         <Panel>
           {incidents.length === 0 ? (
             <EmptyRow>No incidents. Good.</EmptyRow>

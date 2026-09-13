@@ -24,39 +24,6 @@ export const PERMIT_TONE: Record<PermitStatus, "neutral" | "amber" | "blue" | "g
   rejected: "red",
 };
 
-export type FilterKey = "all" | "ready" | "rejected" | "awaiting" | "in_flight";
-
-export const PERMIT_FILTERS: Array<{ key: FilterKey; label: string; statuses: PermitStatus[] }> = [
-  { key: "all", label: "All", statuses: [...PERMIT_STATUSES] },
-  { key: "awaiting", label: "Awaiting documents", statuses: ["awaiting_docs"] },
-  // Filed and approved are both "with the office, not back yet" — one answer
-  // to one question, rather than two tabs nobody would think to compare.
-  { key: "in_flight", label: "With the department", statuses: ["filed", "approved"] },
-  { key: "ready", label: "Ready", statuses: ["ready"] },
-  { key: "rejected", label: "Rejected", statuses: ["rejected"] },
-];
-
-export function isFilterKey(v: string | null | undefined): v is FilterKey {
-  return PERMIT_FILTERS.some((f) => f.key === v);
-}
-
-export function statusesFor(key: FilterKey): PermitStatus[] {
-  return PERMIT_FILTERS.find((f) => f.key === key)?.statuses ?? [...PERMIT_STATUSES];
-}
-
-export function matchesFilter(status: string, key: FilterKey): boolean {
-  return statusesFor(key).includes(status as PermitStatus);
-}
-
-/** How many rows each tab would show, so the tab can say so before it is clicked. */
-export function filterCounts(rows: Array<{ status: string }>): Record<FilterKey, number> {
-  const counts = {} as Record<FilterKey, number>;
-  for (const f of PERMIT_FILTERS) {
-    counts[f.key] = rows.filter((r) => matchesFilter(r.status, f.key)).length;
-  }
-  return counts;
-}
-
 /**
  * Soonest trek first — the one that will hurt first if its permit is late.
  * A row with no date sorts last rather than first, where an empty string would
