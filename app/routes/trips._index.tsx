@@ -4,6 +4,7 @@ import { fmtDate, fmtDateRange, statusLabel } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { firstName } from "~/lib/names";
+import { groupHeading } from "~/lib/groups";
 import { SmartImage } from "~/components/SmartImage";
 import { Badge } from "~/components/ops/ui";
 
@@ -30,6 +31,23 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     )
     .eq("trekker_id", user.id)
     .order("start_date", { ascending: false });
+  // Which of these are group trips, and what the group calls itself. A group
+  // booking looked identical to a solo one here — nothing on the row said
+  // there were other people on it, or which group page to open.
+  const bookingIds = (bookings ?? []).map((b: any) => b.id);
+  // Skipped rather than asked with an empty list: a trekker with no bookings
+  // yet is the common case on this page.
+  const { data: groups } = bookingIds.length
+    ? await admin
+        .from("trip_groups")
+        .select("name, booking_id")
+        .in("booking_id", bookingIds)
+        .neq("status", "cancelled")
+    : { data: [] as any[] };
+  const groupOf = new Map(
+    (groups ?? []).filter((g: any) => g.booking_id).map((g: any) => [g.booking_id, g.name]),
+  );
+
   // A plan waiting on you is the most important thing on this page — it is
   // the one thing here that stops if nobody looks at it.
   const { data: proposals } = await admin
@@ -70,7 +88,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return data(
     {
       userId: user.id,
-      bookings: bookings ?? [],
+      bookings: (bookings ?? []).map((b: any) => ({
+        ...b,
+        // The same rule as the groups list: name it only when it says
+        // something the trek has not. A group created when the guide accepted
+        // is named after the trip itself, and repeating that helps nobody.
+        groupName: groupOf.has(b.id)
+          ? groupHeading({ name: groupOf.get(b.id), offeringTitle: b.offering?.title }).sub
+          : null,
+      })),
       requests: (requests ?? []).map((r: any) => ({
         ...r,
         guideName: nameOf.get(r.guide_id) ?? null,
@@ -229,6 +255,12 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
                   </div>
                   <p className="text-sm text-ink-soft">
                     {firstName(b.guide?.users?.full_name)}
+                    {b.groupName && (
+                      <>
+                        {" · "}
+                        <span className="text-ink">{b.groupName}</span>
+                      </>
+                    )}
                   </p>
                   <p className="text-sm text-ink-soft">
                     {fmtDateRange(b.start_date, b.end_date)}
