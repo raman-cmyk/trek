@@ -1988,3 +1988,26 @@ Not linked, deliberately: the whole row is already a link to the trip, and an
 anchor inside an anchor is invalid HTML. The trip page links on to the group.
 
 573 tests green, build green, deployed.
+
+## 2026-09-13 — The ask sits at the top of the group page
+
+"Ask Pemba to take us" lived at the foot of the right-hand rail. On a phone
+that rail stacks underneath everything — the money, the roster, the whole
+conversation — so the organiser scrolled past their own next step, and a trip
+sat waiting on nobody. It is the one action that unblocks a group: invites do
+not open and nobody pays a share until the guide has said yes.
+
+It is a banner directly under the header now, naming the next step and why it
+is safe ("it costs nothing, and nobody else is asked until they say yes"), with
+the button beside it. The rail keeps its step list and its explanatory line;
+the duplicate button is gone, since two buttons doing one thing is one too
+many. `askBlocked` still drives both the wording and the disabled state, so the
+banner cannot invite a click that would be refused.
+
+Verified at 1100px and 380px against a fixture group in the waiting-to-ask
+state. That check also confirmed the 11 September heading change is live: the
+page renders "Patan Durbar Square heritage walk" as the H1 with "Heritage · See
+the trek · Oct 30, 2026 · 2 of 2" beneath it — the founder's screenshot of the
+old order predated that deploy.
+
+573 tests green, build green, deployed.
