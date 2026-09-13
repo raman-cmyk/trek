@@ -506,6 +506,35 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
         </p>
       )}
 
+      {/* The one thing that moves this trip along, where it will be seen.
+          It lived at the foot of the right-hand rail, which on a phone is
+          below the money, the roster and the whole conversation — so the
+          organiser scrolled past their own next step and the trip sat there
+          waiting on nobody. */}
+      {isOrganiser && !guideHasAgreed(group) && group.status !== "requested" && offering && (
+        <section className="mt-5 rounded-md border border-moss/30 bg-mist/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium text-ink">
+                Next: ask {offering.guide_name.split(" ")[0]} if they will take you.
+              </p>
+              <p className="mt-0.5 text-sm text-muted">
+                {askBlocked ??
+                  "It costs nothing, and nobody else is asked until they say yes."}
+              </p>
+            </div>
+            <Form method="post" action={`/groups/${group.slug}/enquire`} className="shrink-0">
+              <button
+                disabled={busy || !!askBlocked}
+                className="rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Ask {offering.guide_name.split(" ")[0]} to take us
+              </button>
+            </Form>
+          </div>
+        </section>
+      )}
+
       <div className="mt-7 grid gap-8 lg:grid-cols-[1fr_20rem]">
         {/* ── Left: money, roster, chat ─────────────────────────────────── */}
         <div className="min-w-0 space-y-8">
@@ -972,16 +1001,8 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
                 <p className="text-sm text-moss">Everyone is in and paid up.</p>
               )}
 
-              {isOrganiser && !guideHasAgreed(group) && group.status !== "requested" && offering && (
-                <Form method="post" action={`/groups/${group.slug}/enquire`} className="mt-3">
-                  <button
-                    disabled={busy || !!askBlocked}
-                    className="w-full rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Ask {offering.guide_name.split(" ")[0]} to take us
-                  </button>
-                </Form>
-              )}
+              {/* The button itself is at the top of the page now. Two of them
+                  doing the same thing is one too many. */}
             </div>
           </div>
 
