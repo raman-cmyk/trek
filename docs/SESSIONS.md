@@ -1967,3 +1967,24 @@ vocabulary out and joins the filter-coverage test with the rest.
 573 tests green, build green, deployed. Both lanes were rendered against a
 snapshot of live data at 1100px and read correctly; the live page could not be
 screenshotted, as it needs an ops session.
+
+## 2026-09-13 — My trips says which trips are group trips
+
+The groups list was fixed on the 11th (the trek leads, the group's own name
+follows). My trips had the opposite gap: a group booking looked exactly like a
+solo one — trek, guide, dates — with nothing saying there were other people on
+it or which group it belonged to. The word "group" appeared nowhere in that
+page's loader.
+
+The group's name now sits beside the guide's on the row, under the same rule
+`groupHeading()` applies on /groups: named only when it adds something, so a
+group auto-created when the guide accepted — which takes the offering's title —
+does not repeat the line directly above it.
+
+The lookup is skipped rather than asked with an empty `in()` list, since a
+trekker with no bookings is the common case on this page.
+
+Not linked, deliberately: the whole row is already a link to the trip, and an
+anchor inside an anchor is invalid HTML. The trip page links on to the group.
+
+573 tests green, build green, deployed.
