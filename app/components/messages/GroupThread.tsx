@@ -45,6 +45,8 @@ export function GroupThread({
     kind: string | null;
     groupStatus: string;
     bookingStatus: string | null;
+    /** The meeting place and time are known — completes "Where to meet". */
+    meetingSettled?: boolean;
     coverUrl: string | null;
   };
   messages: GroupThreadMessage[];
@@ -102,6 +104,7 @@ export function GroupThread({
               kind={group.kind}
               groupStatus={group.groupStatus}
               bookingStatus={group.bookingStatus}
+              meetingSettled={group.meetingSettled}
             />
           </div>
 

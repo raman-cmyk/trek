@@ -46,6 +46,25 @@ export const copy = {
     earningsExplainer:
       "Your fee is yours in full — Trek's 10% is added on top of the package, paid by the trekker.",
   },
+  meeting: {
+    where: "Where",
+    when: "When",
+    at: "Time",
+    fromGuide: "Set by {guide} for your trip.",
+    fromExperience: "The usual start for this experience.",
+    usuallyStarts: "It usually starts at {place}.",
+    usuallyAt: "It usually starts at {time}.",
+    ask: "Ask {guide}",
+    guideTitle: "Where you'll meet them",
+    guideBlurb:
+      "The address and the time. They see it on their trip page the moment you save, and it ticks off their last step.",
+    guidePlace: "Where to meet",
+    guideTime: "What time",
+    guideNote: "Anything else (what to bring, what you cannot eat)",
+    guideSave: "Send the details",
+    guideSaved: "Sent. They can see it now.",
+    guideNeedBoth: "Both the place and the time, so they can actually be there.",
+  },
   setup: {
     title: "Set up your page",
     percentReady: "Your page is {percent}% ready",

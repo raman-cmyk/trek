@@ -428,3 +428,42 @@ step, so a guide who uploaded a face still had a blank circle in search.
 
 **A pending trip counts as listed.** The office checks it before it goes
 live, but the guide has done their part, and the wizard says so.
+
+## "Where to meet" is a fact, not a booking status (2026-09-14)
+
+Pratik's note: on a paid, confirmed momo crawl, step 4 "Where to meet" sat lit
+up with no address on the screen and no button to press. He was right twice —
+the details were never shown, and the step could never complete.
+
+**Why it was stuck.** A day experience reaches `confirmed` the moment it is
+paid for and stays there until the morning it starts, so the status could
+never tell anyone whether the address had been sent. The meeting point lived
+on the offering, printed only inside the trek pre-trek brief, with the time
+buried in the first row of the itinerary JSON.
+
+**A step may now complete on a fact.** `tripPipeline` takes
+`meetingSettled`, and the meet step (`MEET_KEY`) is done when the place and
+the time are both known. Only that step: a trek's permit step at the same
+position is genuinely ops work in progress and stays current.
+
+**A new stage state, `waiting`.** Once the address is in, what is left is the
+day itself. Marking it "current" asks the trekker to do something; leaving
+nothing current reads as finished. `waiting` is a hollow ring with no halo and
+the hint says when.
+
+**Two sources, and the screen says which.** The guide's instruction for this
+trip wins; otherwise the experience's usual start. `resolveMeeting` decides,
+and a place without a time is explicitly not an answer — a trekker cannot act
+on half of it, so the step stays open and names the missing half.
+
+**The trigger is the guide, and it is now reachable.** Their trip list has
+"Where you'll meet them", pre-filled from the experience, open until sent and
+folded away once it is. The experience form asks for the meeting point and
+start time as well, because nothing in the app captured either: every
+offering created since launch had `meeting_point` null and would have shown
+"TBC" for ever.
+
+**No RLS write policy for guides.** An update policy would have to be written
+against the whole row, so "the guide may set the meeting point" would also
+read "the guide may set total_usd_cents". These write through the service role
+after the route checks the booking is theirs.

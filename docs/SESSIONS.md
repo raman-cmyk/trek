@@ -1348,3 +1348,42 @@ green, build green. No migration.
 
 **Not verified in a browser** (no Supabase credentials here): the 360px
 walk-through is the founder's to do — /g/setup on a phone, photo step first.
+
+## Session — where to meet (2026-09-14)
+
+Pratik, on the Kathmandu momo crawl: step 4 "Where to meet" unchecked on a
+paid trip, no details, nothing to press, same for group trips.
+
+**Migration 0061.** `offerings.meet_time` (backfilled from the first itinerary
+row carrying a time, which is where all 12 seeded experiences keep it — the
+momo crawl's 18:00 included), meeting columns on `bookings`
+(`meeting_point`, `meeting_time`, `meeting_note`, `meeting_set_at`,
+`meeting_set_by`), and `meet_time` appended to `public_offerings`.
+
+**`app/lib/meeting.ts`** resolves a booking's meeting details: the guide's own
+instruction for this trip, else the experience's usual start, and "settled"
+only when both the place and the time are known — 14 tests. The pipeline takes
+`meetingSettled` and completes the meet step on it, with a new `waiting` state
+for the day itself; 7 more tests cover that a trek's permit step is untouched,
+a cancelled trip ticks nothing, and a step the trip has not reached stays shut.
+
+**On screen.** `MeetingDetails` renders inside the step on the trip page and
+the group page: where, when, the time, the guide's note, and who set it. When
+it is not settled it says which half is missing and offers the thread. The
+guide's trip list gets "Where you'll meet them" (pre-filled, open until sent),
+which is the trigger. The experience form now asks for the meeting point and
+start time — nothing did, so every in-app offering had none. The group list
+and the group chat header read the same settled flag, so the step named in a
+list matches the step named inside.
+
+Verified in a scratch Postgres 16: all 61 migrations apply in order on a clean
+database with zero failures, the backfill sets 04:30 for a sunrise hike and
+18:00 for the momo crawl, and a booking on the momo crawl inherits Thamel/18:00
+then takes the guide's "Thamel Chowk, by the big pipal tree" when they send it.
+353 tests green, typecheck green, build green.
+
+**🙋 Founder needed:** three migrations are now waiting —
+`SBP=… REF=… scripts/remote-apply.sh supabase/migrations/0059_delete_person.sql
+supabase/migrations/0060_account_blocks.sql
+supabase/migrations/0061_meeting_details.sql`. Then open the momo crawl trip:
+step 4 should be ticked, with Thamel · 23 Sep 2026 · 18:00 under it.

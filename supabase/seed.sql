@@ -452,3 +452,21 @@ where b.balance_paid_at is not null and b.total_usd_cents > b.deposit_usd_cents
   and not exists (select 1 from public.payments p where p.booking_id = b.id and p.type = 'balance');
 update public.guides set voice_intro_url = '/img/voice/' || slug || '.wav'
 where slug in ('pemba-sherpa','sunita-gurung','mingma-sherpa');
+
+-- 5) Meeting times. Every seeded experience keeps its start time in the first
+--    row of its itinerary ("18:00 · Meet in Thamel"); offerings.meet_time
+--    (migration 0061) is the column the trip page reads. Derived rather than
+--    typed twice, so it stays right as experiences are added above.
+update public.offerings o
+set meet_time = t.val::time
+from (
+  select o2.id, (
+    select e ->> 'time'
+    from jsonb_array_elements(o2.itinerary) e
+    where e ->> 'time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]'
+    limit 1
+  ) as val
+  from public.offerings o2
+  where jsonb_typeof(o2.itinerary) = 'array'
+) t
+where t.id = o.id and t.val is not null and o.meet_time is null;

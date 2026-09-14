@@ -28,6 +28,8 @@ export interface ExperienceValues {
   photos: GalleryPhoto[];
   price_breakdown: PriceBreakdown | null;
   status: string;
+  meeting_point?: string | null;
+  meet_time?: string | null;
 }
 
 /**
@@ -378,6 +380,31 @@ export function ExperienceForm({
         <label className={label}>
           Largest group
           <input type="number" name="max_party" min={1} max={16} defaultValue={values?.max_party ?? 6} className={field} required />
+        </label>
+      </div>
+
+      {/* ── Where it starts. Asked for here because without it the trekker
+           is left on a "Where to meet" step that nothing can complete, and
+           the guide gets a message the night before asking where to go. */}
+      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+        <label className={label}>
+          Where do you meet them?
+          <input
+            name="meeting_point"
+            defaultValue={values?.meeting_point ?? ""}
+            maxLength={200}
+            placeholder="Thamel Chowk, by the big pipal tree"
+            className={field}
+          />
+        </label>
+        <label className={label}>
+          {kind === "trek" ? "What time on day one" : "What time do you start?"}
+          <input
+            name="meet_time"
+            type="time"
+            defaultValue={values?.meet_time?.slice(0, 5) ?? ""}
+            className={field}
+          />
         </label>
       </div>
 

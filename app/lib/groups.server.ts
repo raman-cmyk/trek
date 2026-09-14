@@ -406,14 +406,14 @@ export async function loadGroupThread(
       group.offering_id
         ? admin
             .from("public_offerings")
-            .select("id, slug, kind, title, cover_photo_url")
+            .select("id, slug, kind, title, cover_photo_url, meeting_point, meet_time")
             .eq("id", group.offering_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
       group.booking_id
         ? admin
             .from("bookings")
-            .select("id, status")
+            .select("id, status, meeting_point, meeting_time, meeting_set_at")
             .eq("id", group.booking_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),

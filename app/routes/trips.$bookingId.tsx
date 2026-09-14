@@ -17,6 +17,9 @@ import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
 import { TripPipeline } from "~/components/TripPipeline";
+import { MeetingDetails } from "~/components/MeetingDetails";
+import { MEET_KEY } from "~/lib/pipeline";
+import { meetingLine, resolveMeeting } from "~/lib/meeting";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
@@ -31,7 +34,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, offering:offerings(title, kind, meeting_point, route:routes(max_altitude_m)), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, meeting_point, meeting_time, meeting_note, meeting_set_at, offering:offerings(title, kind, meeting_point, meet_time, route:routes(max_altitude_m)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -277,6 +280,10 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
   const cancelled = b.status.startsWith("cancelled");
   const docError = actionData && "error" in actionData ? (actionData as any).error : null;
   const isTrek = b.offering?.kind === "trek";
+  // Where to meet: what this guide said for this trip, or what the
+  // experience says it always does.
+  const guideName = firstName(b.guide?.users?.full_name);
+  const meeting = resolveMeeting(b, b.offering);
   const canComplete =
     b.status === "active" ||
     (["confirmed", "active"].includes(b.status) && daysUntil < 0);
@@ -353,6 +360,17 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           className="mt-6"
           kind={b.offering?.kind}
           bookingStatus={b.status}
+          meetingSettled={meeting.settled}
+          details={{
+            [MEET_KEY]: (
+              <MeetingDetails
+                meeting={meeting}
+                startDate={b.start_date}
+                guideFirstName={guideName}
+                askHref={`/messages/${b.id}`}
+              />
+            ),
+          }}
         />
       ) : (
         <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">
@@ -470,7 +488,10 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           <h2 className="mb-2 font-display text-xl">Pre-trek brief</h2>
           {brief ? (
             <div className="space-y-1 rounded-card border border-border bg-card p-4 text-sm text-ink">
-              <p><strong>Meeting point:</strong> {b.offering?.meeting_point ?? "TBC"}</p>
+              <p>
+                <strong>Meeting point:</strong>{" "}
+                {meetingLine(meeting, b.start_date, fmtDate) ?? `${guideName} will confirm this`}
+              </p>
               <p><strong>Packing:</strong> layers, broken-in boots, headlamp, sun protection, refillable bottle.</p>
               <p><strong>Altitude:</strong> hydrate, ascend slowly, tell your guide about any headache early.</p>
               {guidePhone && <p><strong>Your guide:</strong> {guidePhone}</p>}

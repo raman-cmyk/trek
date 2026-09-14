@@ -17,7 +17,14 @@
  */
 
 export type OfferingKind = "trek" | "day_hike" | "food_culture" | "adventure" | "city";
-export type StageState = "done" | "current" | "upcoming" | "stopped";
+/**
+ * `waiting` is the state a step is in when the trip has done everything it
+ * can and the step starts by itself: the day arrives, the guide turns up.
+ * Without it, a short trip whose meeting details were settled had either a
+ * "current" step nobody could act on or no current step at all, which reads
+ * as finished.
+ */
+export type StageState = "done" | "current" | "upcoming" | "stopped" | "waiting";
 
 export interface Stage {
   key: string;
@@ -26,6 +33,14 @@ export interface Stage {
   hint: string;
   state: StageState;
 }
+
+/**
+ * The step that says where to meet. It is the one step whose completion is a
+ * fact about the trip rather than a booking status — a booking sits at
+ * `confirmed` from the moment it is paid for until the morning it starts, so
+ * the status can never tell anyone whether the address has been sent.
+ */
+export const MEET_KEY = "confirmed";
 
 interface StageDef {
   key: string;
@@ -126,6 +141,11 @@ export interface TripState {
   groupStatus?: string | null;
   /** The booking's status, once there is a booking. */
   bookingStatus?: string | null;
+  /**
+   * The meeting place and time are both known (see resolveMeeting). This is
+   * what completes the "Where to meet" step; the booking status cannot.
+   */
+  meetingSettled?: boolean;
 }
 
 /** Where the trip is on the one timeline, as a position the stages compare to. */
@@ -170,19 +190,33 @@ export function tripPipeline(
     if (d.at <= pos) currentIndex = i;
   });
 
+  // Standing on the meeting step with the address and the time in hand is
+  // not standing on it: that step is done, and what is left is the day.
+  const meetDone =
+    !stopped &&
+    !finished &&
+    !!state.meetingSettled &&
+    defs[currentIndex]?.key === MEET_KEY;
+
   const stages = defs.map((d, i) => {
-    let state: StageState;
-    if (stopped) state = i < currentIndex ? "done" : i === currentIndex ? "stopped" : "stopped";
-    else if (i < currentIndex || finished) state = "done";
-    else if (i === currentIndex) state = "current";
-    else state = "upcoming";
-    return { key: d.key, label: d.label, hint: d.hint, state };
+    let stageState: StageState;
+    if (stopped) stageState = i < currentIndex ? "done" : "stopped";
+    else if (i < currentIndex || finished) stageState = "done";
+    else if (i === currentIndex) stageState = meetDone ? "done" : "current";
+    else if (meetDone && i === currentIndex + 1) stageState = "waiting";
+    else stageState = "upcoming";
+    return { key: d.key, label: d.label, hint: d.hint, state: stageState };
   });
 
   return {
     stages,
     stopped,
-    currentKey: stopped || finished ? null : (defs[currentIndex]?.key ?? null),
+    currentKey:
+      stopped || finished
+        ? null
+        : meetDone
+          ? (defs[currentIndex + 1]?.key ?? null)
+          : (defs[currentIndex]?.key ?? null),
   };
 }
 
@@ -193,6 +227,6 @@ export function nextStep(
 ): { label: string; hint: string } | null {
   const { stages, stopped } = tripPipeline(kind, state);
   if (stopped) return null;
-  const current = stages.find((s) => s.state === "current");
+  const current = stages.find((s) => s.state === "current" || s.state === "waiting");
   return current ? { label: current.label, hint: current.hint } : null;
 }

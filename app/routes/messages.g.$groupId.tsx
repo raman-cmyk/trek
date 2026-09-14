@@ -5,6 +5,7 @@ import { getSessionUser } from "~/lib/auth.server";
 import { loadGroupThread } from "~/lib/groups.server";
 import { GroupThread } from "~/components/messages/GroupThread";
 import { firstName } from "~/lib/names";
+import { resolveMeeting } from "~/lib/meeting";
 
 export function meta() {
   return [{ title: "Your trip together" }, { name: "robots", content: "noindex" }];
@@ -59,6 +60,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         kind: thread.offering?.kind ?? null,
         groupStatus: thread.group.status,
         bookingStatus: thread.booking?.status ?? null,
+        meetingSettled: resolveMeeting(thread.booking as any, thread.offering as any).settled,
         coverUrl: thread.offering?.cover_photo_url ?? null,
         partyLabel: thread.offering?.title ?? "Still choosing a trip",
       },

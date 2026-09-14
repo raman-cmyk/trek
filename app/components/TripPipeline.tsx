@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { tripPipeline, type Stage } from "~/lib/pipeline";
 import { cn } from "~/lib/cn";
 
@@ -17,18 +18,32 @@ export function TripPipeline({
   kind,
   groupStatus,
   bookingStatus,
+  meetingSettled,
+  details,
   className,
   compact = false,
 }: {
   kind: string | null | undefined;
   groupStatus?: string | null;
   bookingStatus?: string | null;
+  /** Both the meeting place and time are known — completes "Where to meet". */
+  meetingSettled?: boolean;
+  /**
+   * What to show inside a step, by stage key. The meeting details belong
+   * under the step that asks for them, ticked or not: an address a trekker
+   * has to go and find on another screen is an address they will forget.
+   */
+  details?: Partial<Record<string, ReactNode>>;
   className?: string;
   /** One line — the step you are on — for headers and cards. */
   compact?: boolean;
 }) {
-  const { stages, stopped } = tripPipeline(kind, { groupStatus, bookingStatus });
-  const current = stages.find((s) => s.state === "current");
+  const { stages, stopped } = tripPipeline(kind, {
+    groupStatus,
+    bookingStatus,
+    meetingSettled,
+  });
+  const current = stages.find((s) => s.state === "current" || s.state === "waiting");
 
   if (compact) {
     if (stopped) {
@@ -39,7 +54,7 @@ export function TripPipeline({
     const doneCount = stages.filter((s) => s.state === "done").length;
     return (
       <p className={cn("flex items-center gap-2 text-caption text-muted", className)}>
-        <Dot state={current ? "current" : "done"} small />
+        <Dot state={current?.state ?? "done"} small />
         <span className="truncate">
           {current ? current.label : "Finished"}
           <span className="text-muted"> · step {Math.min(doneCount + 1, stages.length)} of {stages.length}</span>
@@ -70,7 +85,7 @@ export function TripPipeline({
             <p
               className={cn(
                 "text-sm leading-5",
-                s.state === "current" && "font-medium text-ink",
+                (s.state === "current" || s.state === "waiting") && "font-medium text-ink",
                 s.state === "done" && "text-ink-soft",
                 (s.state === "upcoming" || s.state === "stopped") && "text-muted",
               )}
@@ -78,9 +93,10 @@ export function TripPipeline({
               {s.label}
               {s.state === "done" && <span className="sr-only"> — done</span>}
             </p>
-            {s.state === "current" && (
+            {(s.state === "current" || s.state === "waiting") && (
               <p className="mt-0.5 text-caption text-muted">{s.hint}</p>
             )}
+            {details?.[s.key] && <div className="mt-2">{details[s.key]}</div>}
           </div>
         </li>
       ))}
@@ -90,6 +106,13 @@ export function TripPipeline({
 
 function Dot({ state, small = false }: { state: Stage["state"]; small?: boolean }) {
   const size = small ? "h-2 w-2" : "h-3.5 w-3.5";
+  // Waiting: reached, nothing to do, starts by itself. A hollow moss ring
+  // without the halo — it is not where anybody's attention is needed.
+  if (state === "waiting") {
+    return (
+      <span className={cn("shrink-0 rounded-full border-2 border-moss/60 bg-paper", size)} />
+    );
+  }
   if (state === "done") {
     return (
       <span
