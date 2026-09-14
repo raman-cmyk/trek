@@ -1,5 +1,6 @@
 import { redirect } from "react-router";
 import { createSupabaseServerClient, createAdminClient } from "~/lib/supabase.server";
+import { activeBlock, blockMessage } from "~/lib/moderation";
 
 export interface SessionUser {
   id: string;
@@ -42,7 +43,20 @@ export async function requireUser(
   const profile = await getProfile(env, user.id);
   if (!profile) throw redirect(loginPath, { headers });
   if (role && profile.role !== role) throw redirect(loginPath, { headers });
-  return { user, profile, headers, admin: createAdminClient(env) };
+  const admin = createAdminClient(env);
+  // A ban that lets you carry on signing in is not a ban. Checked on every
+  // signed-in request rather than only at the login screen, because somebody
+  // suspended at ten in the morning has a session cookie that would otherwise
+  // last them the week.
+  // Ops is exempt, stated here rather than left to the fact that requireOps
+  // happens not to come through this function. Locking the office out of the
+  // console with a moderation action taken in the console is a way to lose
+  // the platform on a Friday afternoon.
+  if (profile.role !== "ops") {
+    const stop = await blockedNow(admin, user.id);
+    if (stop) throw redirect(`/suspended?why=${encodeURIComponent(stop)}`, { headers });
+  }
+  return { user, profile, headers, admin };
 }
 
 /**
@@ -78,4 +92,29 @@ export async function ensureTrekkerProfile(
     full_name: fullName || user.email?.split("@")[0] || "Trekker",
     country_code: country,
   });
+}
+
+/**
+ * The reason this account cannot be used right now, or null.
+ *
+ * Callers decide who to apply it to; requireUser exempts ops.
+ */
+export async function blockedNow(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("account_blocks")
+    .select("kind, reason, starts_at, ends_at, lifted_at")
+    .eq("user_id", userId)
+    .is("lifted_at", null)
+    .neq("kind", "warned")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  // A failure to READ the block list must never lock anybody out: the safe
+  // direction here is letting people in, not shutting the platform.
+  if (error) return null;
+  const now = new Date().toISOString();
+  const active = activeBlock((data ?? []) as any, now);
+  return active ? blockMessage(active, now) : null;
 }

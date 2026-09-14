@@ -32,6 +32,8 @@ export default [
     // The way back in, for everybody: trekkers, guides and the office all
     // sign in with a password, so they all need a way to have forgotten it.
     route("forgot", "routes/forgot.tsx"),
+    // Where a suspended or banned account lands, told why.
+    route("suspended", "routes/suspended.tsx"),
     route("reset", "routes/reset.tsx"),
     // Booking flow + account pages share the public chrome (audit: these had
     // no header/footer — My Trips was an exit-less page).
