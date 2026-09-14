@@ -266,7 +266,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   if (intent === "cancel") {
-    const outcome = await cancelBooking(admin, getStripe(env), b.id, "trekker", env);
+    const outcome = await cancelBooking(admin, getStripe(env), b.id, "trekker", env, user.id);
     return data({ cancelled: true, refund: outcome.refundToTrekkerUsdCents }, { headers });
   }
   return data({ ok: null }, { headers });

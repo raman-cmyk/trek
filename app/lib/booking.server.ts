@@ -330,6 +330,8 @@ export async function cancelBooking(
   bookingId: string,
   reason: "trekker" | "guide" | "force_majeure" | "nonpayment",
   env?: Env,
+  /** Who pressed it. Null when the platform did (an unpaid balance). */
+  byUserId?: string | null,
 ) {
   const { data: b } = await admin
     .from("bookings")
@@ -379,7 +381,16 @@ export async function cancelBooking(
   } as const;
   const { data: updated } = await admin
     .from("bookings")
-    .update({ status: statusMap[reason], cancellation_reason: reason })
+    .update({
+      status: statusMap[reason],
+      cancellation_reason: reason,
+      // When, as a fact — updated_at moves for every other reason too — and
+      // who, so the guide is told "Sarah cancelled" rather than just "cancelled".
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: byUserId ?? null,
+      // Unseen, so the guide's dashboard puts it in front of them once.
+      guide_saw_cancellation_at: null,
+    })
     .eq("id", bookingId)
     .not("status", "like", "cancelled%")
     .select("id");
@@ -418,7 +429,10 @@ export async function cancelBooking(
 
   if (env) {
     const { notifyBookingCancelled } = await import("~/lib/notifications.server");
-    await notifyBookingCancelled(env, admin, bookingId, outcome.refundToTrekkerUsdCents);
+    await notifyBookingCancelled(env, admin, bookingId, outcome.refundToTrekkerUsdCents, {
+      reason,
+      guideKeepsUsdCents: outcome.guideCompensationUsdCents,
+    });
   }
   return outcome;
 }

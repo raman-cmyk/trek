@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
+import { opsSubject, type CancelReason } from "~/lib/cancellations";
+
+/** Where the office reads its post. */
+const OPS_EMAIL = "hello@guidesofnepal.com";
 
 /**
  * Event-level notifications (docs/02 §Notifications matrix). One function per
@@ -23,6 +27,9 @@ async function bookingContacts(admin: SupabaseClient, bookingId: string) {
     trekkerEmail: ((b as any).trekker?.email ?? null) as string | null,
     trekkerName: ((b as any).trekker?.full_name ?? "there") as string,
     guidePhone: ((b as any).guide?.users?.phone ?? null) as string | null,
+    // Every guide signs in with an email now, so an email is a real channel —
+    // which matters, because SMS needs a Sparrow token and email needs Resend.
+    guideEmail: ((b as any).guide?.users?.email ?? null) as string | null,
     guideName: ((b as any).guide?.users?.full_name ?? "your guide") as string,
   };
 }
@@ -133,14 +140,32 @@ export async function notifyBalanceCharged(
   );
 }
 
+/**
+ * A cancellation, told to all three sides.
+ *
+ * The guide used to get one SMS and nothing else — through a provider with no
+ * token in production, so in practice a guide's fortnight emptied in silence.
+ * They now get an email as well (every guide signs in with one), and the
+ * office gets told at all, which it never was. The in-app card on the guide's
+ * dashboard is the part that works with no provider configured; this is the
+ * part that reaches them while they are not looking at the app.
+ */
 export async function notifyBookingCancelled(
   env: Env,
   admin: SupabaseClient,
   bookingId: string,
   refundUsdCents: number,
+  opts?: { reason?: CancelReason; guideKeepsUsdCents?: number },
 ) {
   const c = await bookingContacts(admin, bookingId);
   if (!c) return;
+  const who =
+    opts?.reason === "guide"
+      ? "you"
+      : opts?.reason === "force_majeure"
+        ? "our office"
+        : c.trekkerName || "the trekker";
+  const keeps = opts?.guideKeepsUsdCents ?? 0;
   await Promise.all([
     sendEmail(
       env,
@@ -152,7 +177,32 @@ export async function notifyBookingCancelled(
           : ""),
       { kind: "booking_cancelled", about: { type: "booking", id: bookingId } },
     ),
+    sendEmail(
+      env,
+      c.guideEmail,
+      `Cancelled: ${c.title}, ${c.startDate}`,
+      `${who === "you" ? "You cancelled" : `${who} cancelled`} ${c.title}, due to start ${c.startDate}.\n\n` +
+        `Those days are open on your calendar again.` +
+        (keeps > 0
+          ? ` You keep $${(keeps / 100).toFixed(2)} of it, which will appear in your payouts.`
+          : ` Nothing is owed on it.`) +
+        `\n\nYour trips: ${env.SITE_URL}/g/bookings`,
+      { kind: "booking_cancelled_guide", about: { type: "booking", id: bookingId } },
+    ),
     sendGuideSms(env, c.guidePhone, `Trek: booking cancelled — ${c.title}, ${c.startDate}. Your calendar is open again.`),
+    // The office. Nothing told them before, so a cancellation the day before
+    // a trek was something they found out about by scrolling the pipeline.
+    sendEmail(
+      env,
+      OPS_EMAIL,
+      opsSubject({ title: c.title, startDate: c.startDate }),
+      `${c.title}, ${c.startDate} — cancelled by ${who === "you" ? "the guide" : who}.\n\n` +
+        `Trekker: ${c.trekkerName || "—"}\nGuide: ${c.guideName || "—"}\n` +
+        `Refund to trekker: $${(refundUsdCents / 100).toFixed(2)}\n` +
+        `Guide keeps: $${(keeps / 100).toFixed(2)}\n\n` +
+        `${env.SITE_URL}/ops/bookings/${bookingId}`,
+      { kind: "booking_cancelled_ops", about: { type: "booking", id: bookingId } },
+    ),
   ]);
 }
 

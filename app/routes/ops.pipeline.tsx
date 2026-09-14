@@ -1,9 +1,10 @@
-import { Form, data } from "react-router";
+import { Form, Link, data } from "react-router";
 import type { Route } from "./+types/ops.pipeline";
-import { Badge } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { createPayoutForBooking } from "~/lib/booking.server";
+import { isCancelled, opsLine } from "~/lib/cancellations";
+import { fmtDate } from "~/lib/format";
 
 // Happy-path pipeline columns (docs/01 F1). Cancellations shown separately.
 const COLUMNS = [
@@ -48,7 +49,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
+      "id, status, start_date, end_date, party_size, total_usd_cents, cancelled_at, cancellation_reason, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
     )
     .order("start_date");
   return data({ bookings: bookings ?? [] }, { headers });
@@ -141,16 +142,46 @@ export default function OpsPipeline({ loaderData }: Route.ComponentProps) {
   );
 }
 
+/**
+ * Cancellations, newest first, with who cancelled and how much notice.
+ *
+ * It was a row of badges carrying a status word: "momo crawl — trekker" told
+ * the office a cancellation existed and nothing it would want to know about
+ * it. Anchored, because the dashboard's "Cancelled this week" links here.
+ */
 function CancelledStrip({ bookings }: { bookings: any[] }) {
-  const cancelled = bookings.filter((b) => b.status.startsWith("cancelled"));
+  const cancelled = bookings
+    .filter((b) => isCancelled(b.status))
+    .sort((a, b) => (b.cancelled_at ?? "").localeCompare(a.cancelled_at ?? ""));
   if (cancelled.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-2">
-      {cancelled.map((b) => (
-        <Badge key={b.id} tone="red">
-          {b.offering?.title} — {b.status.replace("cancelled_", "")}
-        </Badge>
-      ))}
-    </div>
+    <section id="cancelled" className="rounded-md border border-line bg-card p-4">
+      <p className="label text-muted">Cancelled</p>
+      <ul className="mt-2 space-y-1.5 text-sm">
+        {cancelled.map((b) => (
+          <li key={b.id} className="flex flex-wrap items-baseline gap-2">
+            <Link to={`/ops/bookings/${b.id}`} className="text-ink hover:underline">
+              {opsLine(
+                {
+                  id: b.id,
+                  status: b.status,
+                  startDate: b.start_date,
+                  cancelledAt: b.cancelled_at,
+                  guideSawAt: null,
+                  trekkerName: b.trekker?.full_name ?? "the trekker",
+                  title: b.offering?.title ?? "a trip",
+                  partySize: b.party_size,
+                  guideKeepsUsdCents: 0,
+                },
+                fmtDate,
+              )}
+            </Link>
+            {b.cancelled_at && (
+              <span className="text-caption text-muted">on {fmtDate(b.cancelled_at)}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

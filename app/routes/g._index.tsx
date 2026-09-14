@@ -1,4 +1,4 @@
-import { Link, data } from "react-router";
+import { Form, Link, data } from "react-router";
 import type { Route } from "./+types/g._index";
 import { getEnv } from "~/lib/supabase.server";
 import {
@@ -13,6 +13,8 @@ import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
 import { setupProgress } from "~/lib/guide-setup";
+import { guideDetail, guideHeadline, unseenByGuide, type CancelledTrip } from "~/lib/cancellations";
+import { FX_RATE_NPR } from "~/lib/config";
 
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -34,6 +36,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     { count: journalCount },
     { count: routeCount },
     { count: headshotCount },
+    { data: cancelledRows },
   ] = await Promise.all([
     // Every column any part of this page wants from the guide's own row,
     // fetched once.
@@ -82,6 +85,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .select("id", { count: "exact", head: true })
       .eq("guide_id", user.id)
       .eq("kind", "headshot"),
+    // Trips called off that this guide has not been shown. Unseen rather than
+    // recent: a guide off the grid for a week must still be told, and one who
+    // read it this morning must not be told twice.
+    admin
+      .from("bookings")
+      .select(
+        "id, status, start_date, party_size, cancelled_at, guide_saw_cancellation_at, guide_fee_usd_cents, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name)",
+      )
+      .eq("guide_id", user.id)
+      .like("status", "cancelled%")
+      .is("guide_saw_cancellation_at", null)
+      .order("cancelled_at", { ascending: false })
+      .limit(10),
   ]);
 
   const me = guide as any;
@@ -216,6 +232,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       today,
       backupFor: backupFor ?? [],
       payableNprPaisa,
+      cancelled: unseenByGuide(
+        (cancelledRows ?? []).map((b: any) => ({
+          id: b.id,
+          status: b.status,
+          startDate: b.start_date,
+          cancelledAt: b.cancelled_at,
+          guideSawAt: b.guide_saw_cancellation_at,
+          trekkerName: firstName(b.trekker?.full_name) || "Your trekker",
+          title: b.offering?.title ?? "your trip",
+          partySize: b.party_size,
+          // What the bands left them. The payout row is the record; this is
+          // the sentence, so an approximation from the fee is not good enough
+          // to print — only whether there is something to collect.
+          guideKeepsUsdCents: 0,
+        })),
+      ) as CancelledTrip[],
     },
     { headers },
   );
@@ -225,6 +257,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const form = await request.formData();
+  if (String(form.get("intent")) === "saw_cancellations") {
+    // One press clears the lot: they are reading them together, on one card.
+    await admin
+      .from("bookings")
+      .update({ guide_saw_cancellation_at: new Date().toISOString() })
+      .eq("guide_id", user.id)
+      .like("status", "cancelled%")
+      .is("guide_saw_cancellation_at", null);
+    return data({ ok: true }, { headers });
+  }
+
   if (String(form.get("intent")) === "checkin") {
     const bookingId = String(form.get("booking_id"));
     // Guard: only the guide's own active booking.
@@ -255,7 +298,7 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, work, checkedInToday, today, backupFor, payableNprPaisa } =
+  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, work, checkedInToday, today, backupFor, payableNprPaisa, cancelled } =
     loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
@@ -275,6 +318,12 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
   return (
     <div className="space-y-5">
       <h1 className="font-display text-2xl text-ink">Namaste, {first}</h1>
+
+      {/* Above everything: a trip that is off is the most important thing on
+          this screen, and until now the guide was told by an SMS that never
+          sent. Dismissible, because a banner that never goes away is a banner
+          nobody reads. */}
+      <CancelledNotice trips={cancelled} />
 
       <SetupChecklist steps={setup} />
 
@@ -669,4 +718,44 @@ function Dot({ tone }: { tone: "moss" | "amber" | "ember" }) {
   const c =
     tone === "moss" ? "bg-moss" : tone === "amber" ? "bg-amber-500" : "bg-ember";
   return <span aria-hidden className={"mt-1.5 h-2 w-2 shrink-0 rounded-full " + c} />;
+}
+
+/**
+ * Trips called off since the guide last looked.
+ *
+ * Who cancelled, how much notice there was, what it does to their calendar
+ * and whether anything is still owed — the four things a guide asks in the
+ * order they ask them. "Got it" marks every one read at once, because they
+ * are being read together.
+ */
+function CancelledNotice({ trips }: { trips: CancelledTrip[] }) {
+  if (!trips || trips.length === 0) return null;
+  return (
+    <section className="rounded-card border border-ember/30 bg-ember/5 p-4">
+      <p className="text-sm font-medium text-ember">
+        {trips.length === 1 ? "A trip was cancelled" : `${trips.length} trips were cancelled`}
+      </p>
+      <ul className="mt-2 space-y-3">
+        {trips.map((t) => (
+          <li key={t.id}>
+            <p className="text-sm font-medium text-ink">{guideHeadline(t)}</p>
+            <p className="mt-0.5 text-caption text-muted">
+              {guideDetail(t, fmtDate, formatNpr, FX_RATE_NPR)}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center gap-3">
+        <Form method="post">
+          <input type="hidden" name="intent" value="saw_cancellations" />
+          <button className="rounded-button bg-pine px-3 py-1.5 text-sm font-medium text-paper hover:bg-moss">
+            Got it
+          </button>
+        </Form>
+        <Link to="/g/calendar" className="text-sm text-primary hover:underline">
+          Open those days again
+        </Link>
+      </div>
+    </section>
+  );
 }

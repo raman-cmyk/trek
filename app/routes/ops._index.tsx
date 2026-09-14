@@ -39,6 +39,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     paidThisMonth,
     verifiedGuides,
     bookingsInFlight,
+    recentCancellations,
   ] = await Promise.all([
     admin
       .from("guides")
@@ -113,6 +114,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .in("status", ["pending_deposit", "deposit_paid", "docs_pending", "confirmed", "active"]),
+    // Cancellations in the last week. Nothing told the office at all before:
+    // a trip called off the day before departure was something they found by
+    // scrolling to the bottom of the pipeline.
+    admin
+      .from("bookings")
+      .select(
+        "id, status, start_date, cancelled_at, party_size, guide_fee_usd_cents, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name)",
+      )
+      .like("status", "cancelled%")
+      .gte("cancelled_at", new Date(Date.now() - 7 * 86400_000).toISOString())
+      .order("cancelled_at", { ascending: false })
+      .limit(20),
   ]);
 
   const payableNpr = (payable.data ?? []).reduce(
@@ -167,6 +180,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       label: "Journals to publish",
       count: readyJournals.count ?? 0,
       why: "Written up, consent to check, ready to go on a profile.",
+    },
+    {
+      to: "/ops/pipeline#cancelled",
+      label: "Cancelled this week",
+      count: (recentCancellations.data ?? []).length,
+      why: "Trips called off in the last 7 days. The guide has been told; check the refund.",
     },
     {
       to: "/ops/pipeline",
