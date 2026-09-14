@@ -500,3 +500,38 @@ different order is not twenty-four new pages for Google to weigh.
 **The headline still counts every route.** Somebody who narrowed to three is
 not looking at a site with three routes on it; what they narrowed to is the
 line under the box.
+
+## A refused embed reads as an empty page, so embeds must name their key (2026-09-14)
+
+PostgREST resolves `trekker:users(full_name)` by finding the one foreign key
+between the two tables. With two it refuses the query (PGRST201), supabase-js
+returns `{ data: null }`, and every loader here spells that `?? []`. The page
+does not error. It renders its empty state: "No trips yet" to a guide with ten
+bookings, on a green build with green tests and a green typecheck.
+
+Production already carried `bookings.insurance_rejected_by` with a foreign key
+to `users` — added by hand, in no migration — so this was already broken
+before today; 0061's `meeting_set_by` made it a third candidate.
+
+**Every users embed on a booking now names its key.** Fifteen across twelve
+files. Dropping the new foreign key instead would have left `meeting_set_by`
+pointing at a deleted office member, which `ops_purge_references` walks
+precisely to avoid.
+
+**A source-scanning test, not a database one** (`app/lib/embeds.test.ts`). It
+parses every select string, tracks what each embed hangs off — `guides(users())`
+is fine, one link — and fails when an unnamed `users` embed sits on a table
+with two. The point is to fail in CI before a migration reaches anybody.
+
+**Migration 0062 writes the drift down** rather than deleting it. Three
+`insurance_rejected_*` columns exist in production and nowhere in the
+migrations; a local database that lacks them passes tests the real one fails.
+Nothing reads them yet, and the comment on the column says why it matters.
+
+## Deploying from two places reverts one of them (2026-09-14)
+
+Two deploys went out 78 seconds apart: mine, then one from the founder's
+machine off a checkout without the merge. The site silently went back to
+yesterday's build — every page still 200, just older. Cloudflare's version
+list is what proved it, with the author on each version. One deployer only,
+or a workflow triggered by the merge.

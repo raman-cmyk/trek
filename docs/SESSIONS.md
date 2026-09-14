@@ -1414,3 +1414,52 @@ no article file, and the grid no longer holds an empty margin open under the
 **Not verified in a browser:** this environment has no Supabase credentials,
 so the page has been driven by types, tests and the build. Search "annapurna"
 and then pick October on the deployed site.
+
+## Session — applied, deployed, and then found the real bug (2026-09-14)
+
+The founder handed over the Supabase and Cloudflare tokens and asked for
+deploys to stop being his job.
+
+**Migrations 0059, 0060, 0061 applied** to the live database and verified
+there: both delete functions plus five columns now nullable with
+`on delete set null`; `account_blocks` with RLS, its policy, three indexes,
+five check constraints and `is_blocked`; five meeting columns on bookings and
+`meet_time` on all 12 experiences, the momo crawl at 18:00. Then deployed.
+
+**The deploy was reverted 78 seconds later** by a deploy from the founder's
+own machine (Cloudflare's version list names the author) off a checkout
+without the merge — every page still answered 200, on yesterday's code.
+Redeployed.
+
+**Then the real find.** Signed in as the seeded office and guide accounts and
+walked the live site, which is what this session had been unable to do before.
+`/ops/blocking` and the new People button were correct — but the guide's own
+trips page said "No trips yet" to a guide with ten bookings. Cause: PostgREST
+refuses an embed it cannot resolve to a single foreign key, supabase-js
+returns `{ data: null }`, and `?? []` turns that into an empty page. Production
+carried an undocumented `bookings.insurance_rejected_by` FK, so
+`trekker:users(...)` had been ambiguous before today; `meeting_set_by` made it
+a third candidate. Fifteen embeds across twelve files were silently returning
+nothing: the guide's trips and earnings, the ops pipeline, today's board,
+incidents, permits, the booking detail, the message thread, the TIMS card.
+
+All fifteen now name `bookings_trekker_id_fkey`. `app/lib/embeds.test.ts`
+parses every select in the source and fails when an unnamed `users` embed sits
+on a table with two links to users — it caught two more files than I had found
+by reading. Migration 0062 records the three drifted `insurance_rejected_*`
+columns so a local database reproduces what production has.
+
+**Verified on the live site, signed in:** the guide's trips list with the
+"Where you'll meet them" form on each; `/g/setup` at "65% ready" with all six
+steps, step numbering, points and the preview card; `/ops/people` with "Delete
+someone"; `/ops/blocking` with its five filter chips; the momo crawl trip page
+showing "Where to meet — done, Where Thamel, Time 18:00, The usual start for
+this experience"; the routes search returning 6 of 24 for "annapurna" and 2 of
+24 for "annapurna circuit" with JavaScript off; `/ops/pipeline`, today's board,
+incidents and permits all listing rows again.
+
+376 tests green, typecheck green, build green.
+
+**🙋 Founder:** rotate the two tokens — they were pasted into a chat
+transcript. And do not deploy from your machine, or it reverts what is live;
+that is what happened at 10:05 UTC today.
