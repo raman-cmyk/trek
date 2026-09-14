@@ -1,106 +1,88 @@
 /**
- * One map style for the whole site.
+ * One map style for the whole site: a clean road map with real mountains on it.
  *
- * This is a trekking company. A flat road map with no ground on it is the
- * wrong map: the argument for a route IS the shape of the land, and a
- * trekker deciding between Langtang and Manaslu is trying to see valleys and
- * ridges, not motorway junctions.
+ * Four attempts, worth writing down because three of them looked reasonable
+ * and would have shipped wrong:
  *
- * So the base is OpenTopoMap — contours, relief shading and the trails
- * themselves — corrected on the GPU into the brand's greens. Raster paint
- * properties do that for free per frame: desaturate hard, rotate what is left
- * toward moss, lift the whites so the map sits on paper rather than punching
- * a hole in it. Topo tiles carry far more line detail than road tiles, so the
- * correction is gentler here than it was over plain OSM — pushed as far and
- * the contours disappear, which is the thing worth keeping.
+ *  1. OSM raster desaturated hard into brand greens. Clean, and completely
+ *     flat — no mountains at all, on a site about mountains.
+ *  2. OpenTopoMap. Genuinely lovely at zoom 11 and above; at the zoom a
+ *     fourteen-day trek needs it switches to an elevation tint that renders
+ *     the Annapurnas as rust and dried blood. Confirmed against the raw tile:
+ *     that colour is the source, not our correction.
+ *  3. A Wikimedia hillshading overlay. The host has been retired — it does
+ *     not resolve at all.
+ *  4. A relief-only map with no basemap, which loses every place name.
  *
- * Attribution is not optional on these: OpenTopoMap is CC-BY-SA and says so
- * below. A previous version of this file pointed at a Wikimedia hillshading
- * host that has been retired — the request does not resolve at all — so
- * anything added here should be checked against the live service first.
+ * What works is OSM for the names, the trails and the rivers, with relief
+ * computed on the GPU from open elevation data and painted in our own greens.
+ * Legible at every zoom, and the valleys look like valleys.
  *
- * Swapping in Baato when the founder has a key stays a one-line change, and
- * it changes every map on the site at once.
+ * One warning for whoever touches this next: tile.openstreetmap.org serves an
+ * "Access blocked" IMAGE, with a 200 status, to clients that send no
+ * User-Agent. Nothing downstream notices — you get a picture of an error
+ * instead of a map. Browsers always send one, so this only bites scripts and
+ * scrapers; if you are mirroring tiles for a test, set a User-Agent.
+ *
+ * Swapping in a keyed provider (Baato is Nepal-specific and reads Nepali
+ * place names properly) stays a one-line change here.
  */
 export const MAP_STYLE = {
   version: 8 as const,
   sources: {
-    // Elevation, as real numbers rather than a picture of shadows. MapLibre
-    // reads terrarium-encoded PNGs natively, which buys two things no raster
-    // overlay can: hillshading computed on the GPU in whatever colours we
-    // like, and actual 3D relief under a pitched camera. Free, no key, and
-    // checked live — the previous attempt at shading pointed at a Wikimedia
-    // host that has been retired.
+    osm: {
+      type: "raster" as const,
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "© OpenStreetMap contributors",
+    },
+    // Elevation as real numbers, so the shading can be ours. Open data, no
+    // key, no usage policy to fall foul of.
     dem: {
       type: "raster-dem" as const,
       tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
       encoding: "terrarium" as const,
       tileSize: 256,
       maxzoom: 13,
-      attribution: "Elevation: Mapzen / AWS Open Data",
-    },
-    topo: {
-      type: "raster" as const,
-      tiles: [
-        "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "https://b.tile.opentopomap.org/{z}/{x}/{y}.png",
-        "https://c.tile.opentopomap.org/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      // OpenTopoMap renders to zoom 17; asking for more gets a blank tile
-      // rather than a sharper one, so the map stops where the data stops.
-      maxzoom: 17,
       attribution:
-        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM · style © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+        'Elevation: <a href="https://registry.opendata.aws/terrain-tiles/">Mapzen / AWS Open Data</a>',
     },
   },
   layers: [
-    // Painted under the tiles so a slow tile load shows brand paper, not the
-    // browser's default black.
     { id: "paper", type: "background" as const, paint: { "background-color": "#eef1e6" } },
     {
-      id: "topo",
+      id: "osm",
       type: "raster" as const,
-      source: "topo",
+      source: "osm",
       paint: {
-        // Much gentler than before. The old numbers desaturated a topographic
-        // map almost to grey, which is precisely what made it "flat and
-        // boring": contour lines, glacier white and forest green are the
-        // whole point of a topo tile, and the correction was erasing them.
-        // Enough hue push to belong on the page, not enough to flatten Nepal.
-        "raster-saturation": -0.18,
-        "raster-hue-rotate": 18,
-        "raster-brightness-min": 0.04,
+        // Enough to belong on the page; not so much that the map goes grey.
+        // The relief above supplies the interest that heavy correction used
+        // to strip out, so this can afford to be gentle.
+        "raster-saturation": -0.42,
+        "raster-hue-rotate": 30,
+        "raster-brightness-min": 0.1,
         "raster-brightness-max": 1,
-        "raster-contrast": 0.12,
-        "raster-opacity": 1,
+        "raster-contrast": -0.05,
+        "raster-opacity": 0.95,
       },
     },
     {
-      // Shading computed from the elevation itself, in brand colours. This is
-      // the layer that makes a valley look like a valley.
-      id: "hillshade",
+      // The mountains. Multiplied over the road map so ridges and gullies
+      // read across it without hiding the names underneath.
+      id: "relief",
       type: "hillshade" as const,
       source: "dem",
       paint: {
-        "hillshade-exaggeration": 0.55,
-        "hillshade-shadow-color": "#1b3b2a",
-        "hillshade-highlight-color": "#fbf9f3",
-        "hillshade-accent-color": "#4f7a3a",
+        "hillshade-exaggeration": 0.5,
+        "hillshade-shadow-color": "#2c4536",
+        "hillshade-highlight-color": "#ffffff",
+        "hillshade-accent-color": "#6f8c6b",
         "hillshade-illumination-anchor": "map" as const,
         "hillshade-illumination-direction": 315,
       },
     },
   ],
-  // Under a pitched camera the horizon is otherwise a hard cut into nothing.
-  sky: {
-    "sky-color": "#bcd2e4",
-    "sky-horizon-blend": 0.6,
-    "horizon-color": "#eef1e6",
-    "horizon-fog-blend": 0.55,
-    "fog-color": "#dfe6d5",
-    "fog-ground-blend": 0.2,
-  },
 };
 
 /** Brand colours the map draws with, kept next to the style they belong to. */

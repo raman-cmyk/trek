@@ -83,13 +83,16 @@ export function RouteMap({
           ],
           fitBoundsOptions: { padding: { top: 56, right: 56, bottom: 84, left: 56 } },
           attributionControl: { compact: true },
-          // Rotating and tilting is the point now that there is terrain under
-          // it: a Himalayan valley is worth looking along, not only down at.
-          dragRotate: true,
-          pitch: 48,
-          maxPitch: 72,
+          // Flat, looking down. A tilted 3D view was built and then taken
+          // out: it could not be verified anywhere before shipping, and an
+          // unseen camera angle on every route page is not worth the gamble.
+          // The relief shading gives the mountains their shape without it.
+          dragRotate: false,
         });
         mapRef.current = m;
+        // Swallowed deliberately: a failed tile must not throw. Note for the
+        // next person — this also hides style and layer errors, so if a layer
+        // is silently missing, log here first.
         m.on("error", () => {});
         m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
@@ -220,14 +223,6 @@ export function RouteMap({
         const draw = () => {
           if (m.getSource("route")) return;
 
-          // Real relief. Wrapped because a DEM tile host that is slow or
-          // blocked must not take the whole map down with it — the route and
-          // the pins are the part that has to work.
-          try {
-            m.setTerrain({ source: "dem", exaggeration: 1.35 });
-          } catch {
-            /* flat is survivable; blank is not */
-          }
           const legs = legsOfRoute(stops);
 
           m.addSource("route", {
@@ -274,33 +269,39 @@ export function RouteMap({
             });
           }
 
-          // Which way round you walk it, without a single external asset.
-          //
-          // The obvious version of this is little arrow glyphs along the
-          // line, and that is what was written first — but a symbol layer
-          // with text needs a glyphs endpoint this style does not have, and
-          // both free font hosts checked were dead (one 404s, the other
-          // answers 200 with an HTML error page). It would have failed
-          // silently in production, which is the worst kind of failure.
-          //
-          // A gradient needs nothing: the trail runs from the green it starts
-          // at to the rust of the high point, so direction is legible at a
-          // glance and the map gains the one thing a flat green line never
-          // had — a sense of going somewhere.
-          m.setPaintProperty("route-line", "line-gradient", [
-            "interpolate",
-            ["linear"],
-            ["line-progress"],
-            0,
-            MAP_INK.start,
-            0.55,
-            MAP_INK.line,
-            1,
-            MAP_INK.summit,
-          ]);
+          // The trail itself. A casing underneath so it reads over both a
+          // dark forest and a white glacier — a single green line disappears
+          // into one or the other, and a topo map has plenty of both.
+          m.addLayer({
+            id: "route-casing",
+            type: "line",
+            source: "route",
+            paint: { "line-color": "#ffffff", "line-width": 7.5, "line-opacity": 0.85 },
+            layout: { "line-cap": "round", "line-join": "round" },
+          });
+          m.addLayer({
+            id: "route-line",
+            type: "line",
+            source: "route",
+            paint: {
+              "line-width": 3.6,
+              // Solid, not a gradient. line-gradient only works on a single
+              // LineString, and the walk is a MultiLineString once the travel
+              // legs are cut out of it — so the gradient version rendered
+              // nothing at all, silently. The numbered pins already say which
+              // way round you walk it.
+              "line-color": MAP_INK.line,
+            },
+            layout: { "line-cap": "round", "line-join": "round" },
+          });
         };
+        // 'styledata', not 'load'. `load` waits for the first complete
+        // render, which never happens when a tile host is slow or partly
+        // blocked — and then the trail is simply never drawn, on exactly the
+        // connection where somebody needs it most. 'styledata' fires as soon
+        // as the style is parsed, which is all addSource and addLayer need.
         if (m.isStyleLoaded()) draw();
-        else m.on("load", draw);
+        else m.once("styledata", draw);
         // Called directly rather than hung on 'idle'. A map whose tile host
         // is slow or blocked never goes idle, and the pins would have stayed
         // in a clump on exactly the connection where that matters most.
