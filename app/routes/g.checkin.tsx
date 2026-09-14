@@ -44,7 +44,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, trekker:users(full_name), offering:offerings(title, kind)",
+      "id, status, start_date, end_date, party_size, trekker:users!bookings_trekker_id_fkey(full_name), offering:offerings(title, kind)",
     )
     .eq("guide_id", user.id)
     .in("status", ["active", "confirmed"])

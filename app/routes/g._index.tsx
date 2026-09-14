@@ -108,7 +108,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .maybeSingle(),
       admin
         .from("bookings")
-        .select("id, start_date, status, offering:offerings(title), trekker:users(full_name)")
+        .select("id, start_date, status, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name)")
         .eq("guide_id", user.id)
         .in("status", ["deposit_paid", "docs_pending", "confirmed"])
         .gte("start_date", today)

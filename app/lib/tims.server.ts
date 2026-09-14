@@ -30,7 +30,7 @@ export async function issueTimsCard(
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, insurance_verified_at, trekker:users(full_name, country_code), guide:guides(licence_no, users(full_name)), offering:offerings(title, meeting_point, route:routes(name, region, max_altitude_m))",
+      "id, start_date, end_date, party_size, insurance_verified_at, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(licence_no, users(full_name)), offering:offerings(title, meeting_point, route:routes(name, region, max_altitude_m))",
     )
     .eq("id", bookingId)
     .maybeSingle();

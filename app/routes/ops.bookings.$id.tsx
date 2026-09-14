@@ -19,7 +19,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title), trekker:users(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -96,7 +96,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       // Booking just became confirmed (permit apps auto-created by trigger).
       const { data: b } = await admin
         .from("bookings")
-        .select("trekker:users(email), guide:guides(users(phone))")
+        .select("trekker:users!bookings_trekker_id_fkey(email), guide:guides(users(phone))")
         .eq("id", params.id)
         .single();
       await sendEmail(env, (b as any)?.trekker?.email, "You're confirmed!", "Your trek is confirmed. Permits are being filed.");
@@ -125,7 +125,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     // trip page reading "checking" and nobody any the wiser.
     const { data: who } = await admin
       .from("bookings")
-      .select("trekker:users(email)")
+      .select("trekker:users!bookings_trekker_id_fkey(email)")
       .eq("id", bookingId)
       .single();
     await sendEmail(
@@ -151,7 +151,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         insurance_verified_at: null,
       })
       .eq("id", params.id!)
-      .select("trekker:users(email)")
+      .select("trekker:users!bookings_trekker_id_fkey(email)")
       .single();
     await sendEmail(
       env,

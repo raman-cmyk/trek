@@ -48,7 +48,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("booking_documents")
       .select(
-        "id, person_name, type, verified_at, rejected_at, rejected_reason, created_at, booking:bookings(id, start_date, trekker:users(full_name), offering:offerings(title))",
+        "id, person_name, type, verified_at, rejected_at, rejected_reason, created_at, booking:bookings(id, start_date, trekker:users!bookings_trekker_id_fkey(full_name), offering:offerings(title))",
       )
       .order("created_at", { ascending: false })
       .limit(300),
@@ -137,7 +137,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     const { data: who } = await admin
       .from("bookings")
-      .select("trekker:users(email)")
+      .select("trekker:users!bookings_trekker_id_fkey(email)")
       .eq("id", bookingId)
       .single();
     await sendEmail(

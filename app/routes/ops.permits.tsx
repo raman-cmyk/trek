@@ -39,13 +39,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("permit_applications")
       .select(
-        "id, status, reference_no, scan_path, scan_uploaded_at, booking_id, permit:permits(name, issuing_body, lead_time_days), booking:bookings(start_date, trekker:users(full_name), offering:offerings(title))",
+        "id, status, reference_no, scan_path, scan_uploaded_at, booking_id, permit:permits(name, issuing_body, lead_time_days), booking:bookings(start_date, trekker:users!bookings_trekker_id_fkey(full_name), offering:offerings(title))",
       ),
     // For logging one by hand: the trips a permit could belong to. Cancelled
     // ones are not among them.
     admin
       .from("bookings")
-      .select("id, start_date, trekker:users(full_name), offering:offerings(title, route_id)")
+      .select("id, start_date, trekker:users!bookings_trekker_id_fkey(full_name), offering:offerings(title, route_id)")
       .not("status", "like", "cancelled%")
       .order("start_date")
       .limit(200),

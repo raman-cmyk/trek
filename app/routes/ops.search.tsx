@@ -46,7 +46,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const { data: b } = await admin
       .from("bookings")
       .select(
-        "id, status, start_date, trekker_id, guide_id, trekker:users(full_name), guide:guides(users(full_name)), offering:offerings(title)",
+        "id, status, start_date, trekker_id, guide_id, trekker:users!bookings_trekker_id_fkey(full_name), guide:guides(users(full_name)), offering:offerings(title)",
       )
       .or(`trekker_id.in.(${ids.join(",")}),guide_id.in.(${ids.join(",")})`)
       .order("start_date", { ascending: false })

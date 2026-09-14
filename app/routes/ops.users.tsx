@@ -40,14 +40,26 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const q = (new URL(request.url).searchParams.get("q") ?? "").trim().slice(0, 60);
 
-  // Auth users come a page at a time; 1000 a page is far more than we have,
-  // and the loop is here so the list never silently stops at page one.
+  // Auth records come a page at a time. 200 rather than 1000: the hosted
+  // auth server rejects an oversized page outright, and the old code treated
+  // that refusal as "no accounts" — which is how this page came to report
+  // zero while seventy people had logins.
+  //
+  // Any failure is CARRIED OUT rather than swallowed. A page that cannot say
+  // why it is empty is worse than a page that errors: the office spent days
+  // believing the platform had no users.
+  const PER_PAGE = 200;
   const auth: AuthRecord[] = [];
-  for (let page = 1; page <= 10; page++) {
-    const { data: res, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error || !res?.users?.length) break;
-    auth.push(...(res.users as AuthRecord[]));
-    if (res.users.length < 1000) break;
+  let listError: string | null = null;
+  for (let page = 1; page <= 50; page++) {
+    const { data: res, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE });
+    if (error) {
+      listError = error.message || "The auth server refused the request.";
+      break;
+    }
+    const batch = (res?.users ?? []) as AuthRecord[];
+    auth.push(...batch);
+    if (batch.length < PER_PAGE) break;
   }
   const { data: profiles } = await admin.from("users").select("id, role, full_name");
 
@@ -56,6 +68,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return data(
     {
       q,
+      listError,
       rows: all.filter((a) => matchesAccount(a, q)),
       total: all.length,
       thisWeek: all.filter((a) => a.last_sign_in_at && Date.parse(a.last_sign_in_at) > week).length,
@@ -128,7 +141,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 const ROLE_TONE = { guide: "teal", trekker: "blue", ops: "amber", none: "neutral" } as const;
 
 export default function OpsUsers({ loaderData, actionData }: Route.ComponentProps) {
-  const { q, rows, total, thisWeek, never } = loaderData;
+  const { q, rows, total, thisWeek, never, listError } = loaderData;
   const nav = useNavigation();
   const busy = nav.state !== "idle";
   const act = (actionData ?? {}) as any;
@@ -143,6 +156,17 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
           <span className="font-mono">{never}</span> never signed in. Only you see this page.
         </p>
       </div>
+
+      {/* The accounts could not be read at all. Said out loud, with the
+          reason, because "0 accounts" on a live platform is a lie the page
+          used to tell with a straight face. */}
+      {listError && (
+        <p role="alert" className="rounded border border-danger/40 bg-danger/5 p-3 text-sm text-danger">
+          <span className="font-medium">The accounts could not be read.</span> The auth server
+          said: {listError}. This is not "no accounts" — it is a failure to ask. Check that
+          SUPABASE_SERVICE_ROLE_KEY in Cloudflare is the service role key for this project.
+        </p>
+      )}
 
       {act.error && (
         <p role="alert" className="rounded border border-danger/40 bg-danger/5 p-3 text-sm text-danger">
