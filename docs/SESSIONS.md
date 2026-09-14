@@ -2562,3 +2562,28 @@ experience, invisible — and now sits above it. The trail line itself is still
 unverifiable here (see above) and wants the founder's eyes.
 
 985 tests green, build green, deployed.
+
+**Correction, same day.** The first deploy of the atlas ranked trails by total
+guide count, which is the wrong number. The rail opened with six Annapurna
+trails all reading "18 guides", led by Annapurna Base Camp — which nobody
+sells. Everest Base Camp and Langtang, with seven and ten guides selling them
+today, were pushed down or off.
+
+The weak "works this region" link had quietly become the ranking signal, so
+the front page led with the trails you cannot book, on the page whose whole
+argument is that you can book a person. And "18 guides" under a trail with no
+sellers is true in the way that misleads: nobody reads it as "eighteen people
+in the general area".
+
+Sellers now decide the order and the regional count is only a tiebreak; the
+label says which number it is ("7 guides" vs "18 in the region"); the regional
+fill is capped at six faces, because twelve ringless faces read as endorsement
+whatever the ring says; and the tour visits a trail somebody sells first. The
+rail now opens Mardi Himal, Langtang, Annapurna Circuit, Everest Base Camp,
+Manaslu — four regions, all bookable, verified on the deployed page.
+
+Worth noting for next time: the first check of the live page showed the old
+rail, because Cloudflare had cached the HTML. A cache-busted request showed
+the truth. A verification that reads a cache is not a verification.
+
+991 tests green, build green, deployed.
