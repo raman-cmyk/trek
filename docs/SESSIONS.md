@@ -2173,3 +2173,41 @@ The admin half of that request already existed: /ops/users and
 /ops/people/:id both set a password and show it to copy.
 
 670 tests green, build green.
+
+**The trail on the picture — the design pass.** The founder sent five
+references (a terrain planner with a dotted route and pins, a split-photo
+sign-in, a summit line with photographs pinned to it, two hiking apps in
+sage and lime) and asked for "more of these vibes wherever possible — at
+least a hundred places". docs/07-visual-direction.md records what we took
+from them and the numbered list of places; this is what shipped.
+
+The foundation is a set of primitives under `app/components/design`:
+`TrailScene` draws a trek as a dotted line with labelled pins over a
+photograph — or over a terrain drawing when there is no photograph, which
+is most guides and many trips — from the route's real day stops;
+`PhotoCard`, `Glass`/`GlassPill`, `Eyebrow` (the `::` mono-caps line),
+`Chip` with an inline glyph set, `StatTile`/`StatRow`, `FactStrip`,
+`ProfileWithPhotos` (the elevation line with a journal's own photographs
+pinned where they were taken), `Fallback` (the contour pattern with the
+guide's initial or the trip's glyph) and `AuthSplit`. Geometry is in
+`app/lib/trail.ts`, tested. `Button` gains `lime`; `app.css` gains glass,
+a 20px photo radius and the line-draw animation.
+
+Applied: every sign-in and sign-up screen as the split card beside a real
+route; the four shared cards (guide, offering, journal, route) in the
+photo-forward shape with designed empty states; eyebrows, glyph chips,
+stat tiles, region photo cards and one lime per screen across the browse
+pages; trail scenes with fact strips on the route, trek, journal, trip and
+event pages; stat tiles on the guide profile; photo cards on My trips;
+tiles and the lime on the guide's phone. 120-odd places by the list in
+docs/07 — around 260 by count of the new marks in the code.
+
+Found and fixed on the way: `SmartImage` held every `<img>` at opacity 0
+until React's onLoad fired, so with JavaScript off, or before the bundle
+arrived on a slow connection, not one photograph on the site was visible.
+The fade is now gated on hydration. Guide names no longer truncate to
+"Pemb…" on a four-up grid.
+
+Verified by mirroring the deployed pages and screenshotting at 1280 and
+400 (Chromium cannot reach the egress proxy directly; curl can). 684 tests
+green, build green, deployed.

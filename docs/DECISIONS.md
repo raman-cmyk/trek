@@ -420,3 +420,21 @@ hash, and nobody can read a password back. The two honest versions are on
 our own `/ops/users/enter`, which verifies it and sets the session), and a
 new password set on the account and shown once. The second replaces the
 person's real password and says so before it does.
+
+## Two radii, not three (2026-09-14)
+
+`rounded-card` stays 6px for dense, data-shaped UI; `rounded-photo` is
+20px for photographs and anything that floats on one; the auth card is
+28px. The 12–14px middle is the template tell and is not used.
+
+## One lime per viewport (2026-09-14)
+
+Chartreuse marks the single thing to do on a screen — match me, request to
+book, I'm safe, accept. A second call to action on the same screen is moss.
+
+## Terrain, never blank (2026-09-14)
+
+Most guides and many trips have no photograph yet. Every card and hero has
+a designed no-photo state made from real data — the contour pattern with
+the route's own line and pins, or a guide's initial — rather than a tan
+box. No stock photography, ever.
