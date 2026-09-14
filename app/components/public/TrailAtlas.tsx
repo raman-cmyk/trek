@@ -5,6 +5,7 @@ import {
   guidesForTrail,
   linkLabel,
   rankTrails,
+  trailGuideLabel,
   tourStops,
   trailBounds,
   trailFacts,
@@ -271,26 +272,26 @@ export function TrailAtlas({
           // entire experience, invisible. It sits above the credit now.
           <div className="pointer-events-none absolute inset-x-0 bottom-11 p-3 sm:inset-y-0 sm:bottom-0 sm:right-auto sm:w-64 sm:p-4">
             <div className="pointer-events-auto flex gap-2 overflow-x-auto pb-1 sm:h-full sm:flex-col sm:overflow-y-auto sm:pb-0">
-              {ranked.slice(0, 10).map(({ trail, guideCount }) => (
+              {ranked.slice(0, 10).map((r) => (
                 <button
-                  key={trail.slug}
+                  key={r.trail.slug}
                   type="button"
                   onClick={() => {
                     setTouring(false);
                     setOpenGuide(null);
-                    setActive(trail.slug);
+                    setActive(r.trail.slug);
                   }}
                   className={cn(
                     "glass-dark shrink-0 rounded-card px-3 py-2 text-left transition",
-                    active === trail.slug
+                    active === r.trail.slug
                       ? "ring-2 ring-chartreuse"
                       : "opacity-80 hover:opacity-100",
                   )}
                 >
-                  <span className="block text-sm font-medium text-white">{trail.name}</span>
+                  <span className="block text-sm font-medium text-white">{r.trail.name}</span>
                   <span className="block text-caption text-white/70">
-                    {guideCount} {guideCount === 1 ? "guide" : "guides"}
-                    {trailFacts(trail) ? ` · ${trailFacts(trail)}` : ""}
+                    {trailGuideLabel(r)}
+                    {trailFacts(r.trail) ? ` · ${trailFacts(r.trail)}` : ""}
                   </span>
                 </button>
               ))}
@@ -327,13 +328,14 @@ export function TrailAtlas({
           browser with JavaScript off get, and it says exactly as much. */}
       <noscript>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-          {ranked.slice(0, 6).map(({ trail, guideCount }) => (
-            <li key={trail.slug} className="rounded-card border border-line bg-card p-4">
-              <Link to={`/routes/${trail.slug}`} className="font-medium text-ink">
-                {trail.name}
+          {ranked.slice(0, 6).map((r) => (
+            <li key={r.trail.slug} className="rounded-card border border-line bg-card p-4">
+              <Link to={`/routes/${r.trail.slug}`} className="font-medium text-ink">
+                {r.trail.name}
               </Link>
               <p className="text-caption text-muted">
-                {guideCount} guides · {trailFacts(trail)}
+                {trailGuideLabel(r)}
+                {trailFacts(r.trail) ? ` · ${trailFacts(r.trail)}` : ""}
               </p>
             </li>
           ))}

@@ -8,6 +8,7 @@ import {
   trailBounds,
   trailCentre,
   trailFacts,
+  trailGuideLabel,
   trailsForGuide,
   type AtlasGuide,
   type AtlasTrail,
@@ -124,6 +125,32 @@ describe("rankTrails", () => {
     expect(out[0].guideCount).toBe(2);
   });
 
+  it("ranks a trail people sell above a busier region nobody sells", () => {
+    // The real data: Annapurna Base Camp had eighteen guides whose regions
+    // covered it and not one selling it, and it outranked Everest Base Camp,
+    // which seven guides sell. The rail led with what you cannot book.
+    const crowd = Array.from({ length: 18 }, (_, i) =>
+      guide({ id: `r${i}`, regions: ["Annapurna"] }),
+    );
+    const seller = guide({ id: "s1", regions: [] });
+    const out = rankTrails(
+      [ABC, EBC],
+      [...crowd, seller],
+      [{ guideId: "s1", routeSlug: "everest-base-camp" }],
+    );
+    expect(out[0].trail.slug).toBe("everest-base-camp");
+    expect(out[0].sellCount).toBe(1);
+    expect(out[1].sellCount).toBe(0);
+    expect(out[1].guideCount).toBe(18);
+  });
+
+  it("counts every regional guide even though the map only shows a few", () => {
+    const crowd = Array.from({ length: 18 }, (_, i) =>
+      guide({ id: `r${i}`, regions: ["Khumbu"] }),
+    );
+    expect(rankTrails([EBC], crowd, [])[0].guideCount).toBe(18);
+  });
+
   it("drops a trail with no line to draw", () => {
     const noGeom = trail({ slug: "ghost", coords: [] });
     expect(rankTrails([noGeom, EBC], guides, []).map((r) => r.trail.slug)).toEqual([
@@ -142,6 +169,19 @@ describe("tourStops", () => {
     const ranked = rankTrails([EBC, khumbu2, ABC], guides, []);
     const stops = tourStops(ranked, 2).map((t) => t.region);
     expect(new Set(stops).size).toBe(2);
+  });
+
+  it("visits a trail somebody sells before a busier one nobody sells", () => {
+    const crowd = Array.from({ length: 9 }, (_, i) =>
+      guide({ id: `r${i}`, regions: ["Annapurna"] }),
+    );
+    const seller = guide({ id: "s1", regions: [] });
+    const ranked = rankTrails(
+      [ABC, EBC],
+      [...crowd, seller],
+      [{ guideId: "s1", routeSlug: "everest-base-camp" }],
+    );
+    expect(tourStops(ranked, 1).map((t) => t.slug)).toEqual(["everest-base-camp"]);
   });
 
   it("never sends the tour to a trail with nobody on it", () => {
@@ -223,5 +263,37 @@ describe("fanOut", () => {
     const out = fanOut([at("a"), at("b", 83.9, 28.3)]);
     expect(out).toHaveLength(2);
     expect(out.find((p) => p.id === "b")!.lng).toBe(83.9);
+  });
+});
+
+describe("the weak link is capped and named", () => {
+  const crowd = Array.from({ length: 18 }, (_, i) =>
+    guide({ id: `r${i}`, regions: ["Annapurna"], tier: 1 }),
+  );
+
+  it("does not let region guides fill the whole map", () => {
+    const out = guidesForTrail(ABC, crowd, []);
+    expect(out).toHaveLength(6);
+    expect(out.every((g) => g.kind === "region")).toBe(true);
+  });
+
+  it("still shows every seller, and tops up around them", () => {
+    const sellers = Array.from({ length: 3 }, (_, i) => guide({ id: `s${i}`, regions: [] }));
+    const out = guidesForTrail(
+      ABC,
+      [...sellers, ...crowd],
+      sellers.map((g) => ({ guideId: g.id, routeSlug: "annapurna-base-camp" })),
+    );
+    expect(out.filter((g) => g.kind === "sells")).toHaveLength(3);
+    expect(out.filter((g) => g.kind === "region")).toHaveLength(6);
+  });
+
+  it("says who can be booked, not how many share a postcode", () => {
+    expect(trailGuideLabel({ trail: EBC, sellCount: 7, guideCount: 20 })).toBe("7 guides");
+    expect(trailGuideLabel({ trail: EBC, sellCount: 1, guideCount: 9 })).toBe("1 guide");
+    expect(trailGuideLabel({ trail: ABC, sellCount: 0, guideCount: 18 })).toBe(
+      "18 in the region",
+    );
+    expect(trailGuideLabel({ trail: ABC, sellCount: 0, guideCount: 0 })).toBe("No guides yet");
   });
 });

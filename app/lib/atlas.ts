@@ -66,6 +66,7 @@ export function guidesForTrail(
   guides: AtlasGuide[],
   offerings: { guideId: string; routeSlug: string }[],
   limit = 12,
+  regionCap = 6,
 ): TrailGuide[] {
   const byId = new Map(guides.map((g) => [g.id, g]));
   const out: TrailGuide[] = [];
@@ -87,10 +88,16 @@ export function guidesForTrail(
     // guide we know most about should be the one you meet first.
     .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
 
+  // The weak link is capped rather than allowed to fill the map. Twelve faces
+  // on a trail nobody sells is a crowd that says nothing — the ring being
+  // absent is easy to miss, and volume reads as endorsement whatever the ring
+  // says. A handful is an honest "these people work here".
+  let filled = 0;
   for (const g of regional) {
-    if (out.length >= limit) break;
+    if (out.length >= limit || filled >= regionCap) break;
     seen.add(g.id);
     out.push({ guide: g, kind: "region" });
+    filled += 1;
   }
 
   return out.slice(0, limit);
@@ -114,22 +121,62 @@ export function trailsForGuide(
 /**
  * Which trails to offer, and in what order.
  *
- * By how many people you could actually walk it with, because a trail with
- * nobody on it is a dead end and this is a page about meeting people. Ties go
- * alphabetical so the rail does not reshuffle between deploys.
+ * By how many people you can BOOK for it, not how many people happen to work
+ * the region. Ranking on the combined number put Annapurna Base Camp — which
+ * nobody sells — above Everest Base Camp and Langtang, which seven and ten
+ * guides sell today, because Annapurna is a populous region. That is a rail
+ * that leads with the trails you cannot book, on a page whose argument is
+ * that you can book a person.
+ *
+ * So: sellers first, regional headcount only as a tiebreak, name last so the
+ * rail does not reshuffle between deploys.
  */
 export function rankTrails(
   trails: AtlasTrail[],
   guides: AtlasGuide[],
   offerings: { guideId: string; routeSlug: string }[],
-): { trail: AtlasTrail; guideCount: number }[] {
+): RankedTrail[] {
   return trails
     .filter((t) => t.coords.length >= 2)
-    .map((t) => ({ trail: t, guideCount: guidesForTrail(t, guides, offerings, 99).length }))
+    .map((t) => {
+      const all = guidesForTrail(t, guides, offerings, 99, 99);
+      return {
+        trail: t,
+        sellCount: all.filter((g) => g.kind === "sells").length,
+        guideCount: all.length,
+      };
+    })
     .sort(
       (a, b) =>
-        b.guideCount - a.guideCount || a.trail.name.localeCompare(b.trail.name),
+        b.sellCount - a.sellCount ||
+        b.guideCount - a.guideCount ||
+        a.trail.name.localeCompare(b.trail.name),
     );
+}
+
+export interface RankedTrail {
+  trail: AtlasTrail;
+  /** Guides selling a trip on this exact route — the bookable number. */
+  sellCount: number;
+  /** Those plus the ones whose regions cover it. */
+  guideCount: number;
+}
+
+/**
+ * What the rail says under a trail name.
+ *
+ * "18 guides" on a trail with no sellers is true and misleading in the same
+ * breath — the reader hears "eighteen people I can book". Say which number it
+ * is.
+ */
+export function trailGuideLabel(r: RankedTrail): string {
+  if (r.sellCount > 0) {
+    return `${r.sellCount} ${r.sellCount === 1 ? "guide" : "guides"}`;
+  }
+  if (r.guideCount > 0) {
+    return `${r.guideCount} in the region`;
+  }
+  return "No guides yet";
 }
 
 /** The middle of a trail, for flying the camera to it. */
@@ -164,26 +211,31 @@ export function trailBounds(
  * of the ranking: three Everest trails in a row teaches nothing about the
  * range of the country.
  */
-export function tourStops(
-  ranked: { trail: AtlasTrail; guideCount: number }[],
-  limit = 5,
-): AtlasTrail[] {
+export function tourStops(ranked: RankedTrail[], limit = 5): AtlasTrail[] {
   const out: AtlasTrail[] = [];
   const regionsUsed = new Set<string>();
-  for (const { trail, guideCount } of ranked) {
-    if (guideCount === 0) continue;
-    const r = trail.region.trim().toLowerCase();
-    if (regionsUsed.has(r)) continue;
-    regionsUsed.add(r);
-    out.push(trail);
+  const take = (r: RankedTrail) => {
+    regionsUsed.add(r.trail.region.trim().toLowerCase());
+    out.push(r.trail);
+  };
+
+  // Best-sold trail in each region. The tour is the shop window, so a stop
+  // where nobody can be booked is a stop that sells nothing.
+  for (const r of ranked) {
     if (out.length >= limit) break;
+    if (r.sellCount === 0) continue;
+    if (regionsUsed.has(r.trail.region.trim().toLowerCase())) continue;
+    take(r);
   }
-  // Not enough regions to fill the tour: top up from the ranking rather than
-  // showing a two-stop tour.
-  for (const { trail, guideCount } of ranked) {
-    if (out.length >= limit) break;
-    if (guideCount === 0 || out.includes(trail)) continue;
-    out.push(trail);
+  // Not enough regions sell yet: top up, still preferring a region the tour
+  // has not been to, so it does not fly between two neighbouring valleys.
+  for (const pass of [false, true]) {
+    for (const r of ranked) {
+      if (out.length >= limit) break;
+      if (r.guideCount === 0 || out.includes(r.trail)) continue;
+      if (!pass && regionsUsed.has(r.trail.region.trim().toLowerCase())) continue;
+      take(r);
+    }
   }
   return out;
 }
