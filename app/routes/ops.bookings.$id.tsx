@@ -15,7 +15,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users(full_name, email), guide:guides(users(full_name))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email), guide:guides(users(full_name))",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -67,7 +67,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       // Booking just became confirmed (permit apps auto-created by trigger).
       const { data: b } = await admin
         .from("bookings")
-        .select("trekker:users(email), guide:guides(users(phone))")
+        .select("trekker:users!bookings_trekker_id_fkey(email), guide:guides(users(phone))")
         .eq("id", params.id)
         .single();
       await sendEmail(env, (b as any)?.trekker?.email, "You're confirmed!", "Your trek is confirmed. Permits are being filed.");

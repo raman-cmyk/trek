@@ -40,7 +40,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, start_date, end_date, status, party_size, guide_payout_npr_paisa, offering:offerings(title), trekker:users(full_name)",
+        "id, start_date, end_date, status, party_size, guide_payout_npr_paisa, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name)",
       )
       .eq("guide_id", user.id)
       .in("status", ["deposit_paid", "docs_pending", "confirmed", "active"])

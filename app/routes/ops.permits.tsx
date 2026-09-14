@@ -18,7 +18,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: apps } = await admin
     .from("permit_applications")
     .select(
-      "id, status, reference_no, permit:permits(name, issuing_body, lead_time_days), booking:bookings(start_date, trekker:users(full_name), offering:offerings(title))",
+      "id, status, reference_no, permit:permits(name, issuing_body, lead_time_days), booking:bookings(start_date, trekker:users!bookings_trekker_id_fkey(full_name), offering:offerings(title))",
     );
   // Sort by trek start-date proximity (soonest first).
   const rows = (apps ?? []).sort((a: any, b: any) =>

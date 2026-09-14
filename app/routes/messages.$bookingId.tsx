@@ -18,7 +18,7 @@ async function loadParticipant(request: Request, env: Env, bookingId: string) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, trekker_id, guide_id, start_date, end_date, party_size, offering:offerings(title), trekker:users(full_name, avatar_url, last_seen_at)",
+      "id, status, trekker_id, guide_id, start_date, end_date, party_size, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, avatar_url, last_seen_at)",
     )
     .eq("id", bookingId)
     .maybeSingle();

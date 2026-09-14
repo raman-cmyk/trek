@@ -17,12 +17,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("incidents")
       .select(
-        "id, severity, summary, status, opened_at, timeline, booking:bookings(offering:offerings(title), trekker:users(full_name))",
+        "id, severity, summary, status, opened_at, timeline, booking:bookings(offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name))",
       )
       .order("opened_at", { ascending: false }),
     admin
       .from("bookings")
-      .select("id, start_date, offering:offerings(title), trekker:users(full_name)")
+      .select("id, start_date, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name)")
       .in("status", ["confirmed", "active"])
       .order("start_date"),
   ]);

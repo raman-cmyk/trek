@@ -22,7 +22,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, trekker:users(full_name, phone), offering:offerings(title, itinerary, route:routes(day_stops))",
+      "id, start_date, end_date, party_size, trekker:users!bookings_trekker_id_fkey(full_name, phone), offering:offerings(title, itinerary, route:routes(day_stops))",
     )
     .eq("guide_id", user.id)
     .eq("status", "active")

@@ -48,7 +48,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
+      "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
     )
     .order("start_date");
   return data({ bookings: bookings ?? [] }, { headers });

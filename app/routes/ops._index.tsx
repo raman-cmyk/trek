@@ -85,7 +85,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, start_date, end_date, party_size, trekker:users(full_name), guide:guides(users(full_name)), offering:offerings(title)",
+        "id, start_date, end_date, party_size, trekker:users!bookings_trekker_id_fkey(full_name), guide:guides(users(full_name)), offering:offerings(title)",
       )
       .eq("status", "active")
       .order("start_date"),
@@ -94,7 +94,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, start_date, status, party_size, trekker:users(full_name), guide:guides(users(full_name)), offering:offerings(title)",
+        "id, start_date, status, party_size, trekker:users!bookings_trekker_id_fkey(full_name), guide:guides(users(full_name)), offering:offerings(title)",
       )
       .in("status", ["deposit_paid", "docs_pending", "confirmed"])
       .gte("start_date", today)
