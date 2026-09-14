@@ -467,3 +467,36 @@ offering created since launch had `meeting_point` null and would have shown
 against the whole row, so "the guide may set the meeting point" would also
 read "the guide may set total_usd_cents". These write through the service role
 after the route checks the booking is theirs.
+
+## The routes page searches in memory, over its own 24 rows (2026-09-14)
+
+Pratik: no search bar on /routes. Choices made while adding it:
+
+**Filtered in the loader, not in the query.** All 24 routes are fetched anyway
+to work out each one's "from" price, so `filterRoutes` runs over what is
+already in hand. The month and length rules are easier to state correctly — and
+to test — as TypeScript than as PostgREST, and 24 rows is not a database
+problem.
+
+**Text is AND-of-words.** "annapurna circuit" narrows to the circuit rather
+than returning every Annapurna route, and "easy annapurna" works. One
+substring match would have made two words useless.
+
+**Four controls, not a date range.** A route has no availability to search: it
+is a mountain, not a seat. What a reader has is a half-remembered name, the
+month they can travel, how long they can be away, and how hard they want it.
+So /routes gets its own search bar rather than reusing BrowseSearch.
+
+**A route with no season recorded is not out of season.** The month filter
+keeps it rather than hiding it on the strength of a missing column.
+
+**The route's `summary` is searchable, and now printed.** It was in the
+database and on no card, so matching it would have returned cards with no
+visible reason. It is the teaser where there is no article file.
+
+**A filtered view is noindex, canonical /routes.** Twenty-four routes in a
+different order is not twenty-four new pages for Google to weigh.
+
+**The headline still counts every route.** Somebody who narrowed to three is
+not looking at a site with three routes on it; what they narrowed to is the
+line under the box.

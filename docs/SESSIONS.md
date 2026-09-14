@@ -1387,3 +1387,30 @@ then takes the guide's "Thamel Chowk, by the big pipal tree" when they send it.
 supabase/migrations/0060_account_blocks.sql
 supabase/migrations/0061_meeting_details.sql`. Then open the momo crawl trip:
 step 4 should be ticked, with Thamel · 23 Sep 2026 · 18:00 under it.
+
+## Session — search on the routes page (2026-09-14)
+
+Pratik: "There is no search bar option in the routes pages."
+
+`app/lib/route-search.ts` is the whole search, pure: AND-of-words text over a
+route's name, region, difficulty, summary and teaser (plus "8 days" and
+"5545m", which is how people type), an exact region and difficulty, three
+length bands that cover every length with no gap, and the month you can
+travel. 19 tests. `RouteSearch` is the bar — one row with the box and a
+Search button, three selects folding behind a chip on a phone and open
+already when a filter is applied, a plain GET form so every result is a URL
+you can send to whoever you are going with and the page still works with the
+JavaScript off.
+
+The page shows "N of 24 routes" when narrowed, a real empty state with "Show
+all 24 routes", and keeps its headline count at the full 24. A filtered view
+is noindex with the canonical still /routes. Two things came with it: the
+routes' own `summary` column is now searched and printed on cards that have
+no article file, and the grid no longer holds an empty margin open under the
+"nothing matches" note.
+
+372 tests green, typecheck green, build green. No migration.
+
+**Not verified in a browser:** this environment has no Supabase credentials,
+so the page has been driven by types, tests and the build. Search "annapurna"
+and then pick October on the deployed site.
