@@ -46,7 +46,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }, { data: instalments }] =
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
-      admin.from("booking_documents").select("id, person_name, type, verified_at").eq("booking_id", b.id).order("created_at"),
+      admin
+        .from("booking_documents")
+        .select("id, person_name, type, verified_at, rejected_at, rejected_reason")
+        .eq("booking_id", b.id)
+        .order("created_at"),
       admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
       admin.from("reviews").select("id").eq("booking_id", b.id).eq("author_id", user.id).maybeSingle(),
       admin.from("recaps").select("slug").eq("booking_id", b.id).maybeSingle(),

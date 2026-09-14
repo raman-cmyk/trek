@@ -17,9 +17,13 @@ import {
 } from "~/lib/experience-pricing";
 import { addOns } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
+import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
+import { startableNote } from "~/lib/availability";
+import { fmtDate } from "~/lib/format";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
+  const { openDays, availability, span, monthAnchor } = data as any;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
@@ -430,6 +434,52 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </section>
           )}
 
+          {/* ── When this trip can actually run. The guide's profile had a
+               calendar and this page had a dropdown, so a reader could see
+               "76 open days" in one place and eight dates in the other with
+               nothing explaining the difference. Both are here now, and the
+               difference is labelled. */}
+          <section id="availability" className="scroll-mt-6">
+            <h2 className="font-display text-xl">When you can go</h2>
+            <dl className="mt-2 flex flex-wrap gap-x-8 gap-y-1 text-sm">
+              {availability?.nextStart && (
+                <div className="flex gap-2">
+                  <dt className="text-muted">Earliest start</dt>
+                  <dd className="font-mono text-ink">{fmtDate(availability.nextStart)}</dd>
+                </div>
+              )}
+              {availability?.nextRun && (
+                <div className="flex gap-2">
+                  <dt className="text-muted">{o.guide_name.split(" ")[0]} is next free</dt>
+                  <dd className="font-mono text-ink">{runWords(availability.nextRun)}</dd>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <dt className="text-muted">Start days, next 3 months</dt>
+                <dd className="font-mono text-ink">{availability?.startableSoon ?? 0}</dd>
+              </div>
+            </dl>
+            {startableNote(span ?? 1, availability?.openSoon ?? 0, availability?.startableSoon ?? 0) && (
+              <p className="mt-2 max-w-[62ch] text-sm text-ink-soft">
+                {startableNote(span ?? 1, availability.openSoon, availability.startableSoon)}
+              </p>
+            )}
+            <div className="mt-4">
+              <AvailabilityCalendar
+                openDays={openDays ?? []}
+                startDays={availableDays}
+                monthsFrom={monthAnchor ?? `${new Date().toISOString().slice(0, 7)}-01`}
+                months={3}
+              />
+            </div>
+            {availableDays.length === 0 && (
+              <p className="mt-3 rounded-card bg-surface p-3 text-sm text-ink-soft">
+                No start dates are open for this trip yet. Message{" "}
+                {o.guide_name.split(" ")[0]} — a guide can open days for you.
+              </p>
+            )}
+          </section>
+
           {reviews.length > 0 && (
             <section className="space-y-4">
               <h2 className="font-display text-xl">Reviews</h2>
@@ -473,4 +523,16 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
       </div>
     </main>
   );
+}
+
+/** "2026-09-08|2026-09-10" → "8–10 Sep". */
+function runWords(run: string): string {
+  const [a, b] = run.split("|");
+  const mon = new Date(`${b}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    timeZone: "UTC",
+  });
+  const dayA = Number(a.slice(8, 10));
+  const dayB = Number(b.slice(8, 10));
+  return `${dayA}–${dayB} ${mon}`;
 }

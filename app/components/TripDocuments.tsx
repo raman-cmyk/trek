@@ -47,18 +47,25 @@ export function DocumentSlot({
       {docs.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm">
           {docs.map((d: any) => (
-            <li key={d.id} className="flex items-center justify-between gap-2">
-              <a
-                href={`/trips/${bookingId}/doc/${d.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="min-w-0 truncate text-primary hover:underline"
-              >
-                {d.person_name}
-              </a>
-              <Badge tone={d.verified_at ? "green" : "amber"}>
-                {d.verified_at ? "verified" : "checking"}
-              </Badge>
+            <li key={d.id}>
+              <div className="flex items-center justify-between gap-2">
+                <a
+                  href={`/trips/${bookingId}/doc/${d.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 truncate text-primary hover:underline"
+                >
+                  {d.person_name}
+                </a>
+                <Badge tone={docTone(d)}>{docWord(d)}</Badge>
+              </div>
+              {/* Turned down. The reason is the whole point — it is what
+                  turns a support thread into a re-upload. */}
+              {isRejected(d) && d.rejected_reason && (
+                <p className="mt-0.5 text-xs text-ember">
+                  {d.rejected_reason} Upload another below.
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -159,4 +166,23 @@ export function NoInsuranceYet({
       </p>
     </div>
   );
+}
+
+/** Whichever happened last decides, so a re-review sticks. */
+function isRejected(d: { verified_at?: string | null; rejected_at?: string | null }): boolean {
+  if (!d.rejected_at) return false;
+  return !d.verified_at || d.rejected_at > d.verified_at;
+}
+
+function docWord(d: { verified_at?: string | null; rejected_at?: string | null }): string {
+  if (isRejected(d)) return "needs another";
+  return d.verified_at ? "verified" : "checking";
+}
+
+function docTone(d: {
+  verified_at?: string | null;
+  rejected_at?: string | null;
+}): "green" | "amber" | "red" {
+  if (isRejected(d)) return "red";
+  return d.verified_at ? "green" : "amber";
 }

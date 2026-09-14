@@ -22,6 +22,7 @@ import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
 import { tierChecks } from "~/lib/tiers";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
+import { firstRun } from "~/lib/availability";
 import {
   OfferingCard,
   offeringFromUsdCents,
@@ -1149,29 +1150,6 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 }
 
 /** "12–18 Oct" — the first stretch of at least `run` consecutive open days. */
-function firstRun(openDays: string[], run: number): string | null {
-  const days = [...openDays].sort();
-  let streak: string[] = [];
-  for (const d of days) {
-    if (streak.length) {
-      const prev = new Date(streak[streak.length - 1] + "T00:00:00Z");
-      prev.setUTCDate(prev.getUTCDate() + 1);
-      if (prev.toISOString().slice(0, 10) !== d) streak = [];
-    }
-    streak.push(d);
-    if (streak.length >= run) {
-      const a = new Date(streak[0] + "T00:00:00Z");
-      const b = new Date(streak[streak.length - 1] + "T00:00:00Z");
-      const mon = (x: Date) =>
-        x.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
-      return a.getUTCMonth() === b.getUTCMonth()
-        ? `${a.getUTCDate()}–${b.getUTCDate()} ${mon(a)}`
-        : `${a.getUTCDate()} ${mon(a)} – ${b.getUTCDate()} ${mon(b)}`;
-    }
-  }
-  return null;
-}
-
 /**
  * One trek, shown wide. A single offering in a three-column grid reads as
  * two empty slots; the same offering at full width reads as the thing this

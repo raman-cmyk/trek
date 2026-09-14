@@ -3,6 +3,7 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { absoluteUrl } from "~/lib/seo";
 import { offeringPath } from "~/components/public/cards";
+import { availabilitySummary, bookableStartDays } from "~/lib/availability";
 
 type Kind = "trek" | "experience";
 
@@ -54,6 +55,10 @@ export async function loadOfferingDetail(
         .order("published_at", { ascending: false }),
     ]);
 
+  const openDays = (avail ?? []).map((a: { day: string }) => a.day);
+  const span = isTrek ? o.days : 1;
+  const startDays = bookableStartDays(openDays, span, today);
+
   const ratings = await guideRatings(client, [o.guide_id]);
   const permitPp = (permits ?? []).reduce(
     (s: number, p: { cost_usd_cents: number }) => s + p.cost_usd_cents,
@@ -70,11 +75,15 @@ export async function loadOfferingDetail(
     // Bookable start days: a lead time of 3 days, and for multi-day treks the
     // guide must be open for EVERY day of the trek from that start (audit 6.3 —
     // a 14-day EBC could previously be requested for tomorrow on a 1-day gap).
-    availableDays: bookableStartDays(
-      (avail ?? []).map((a: { day: string }) => a.day),
-      isTrek ? o.days : 1,
-      today,
-    ),
+    availableDays: startDays,
+    // The guide's free days, unfiltered. The page shows both, because "the
+    // guide is free" and "this trip can start" are different questions and
+    // the difference is the thing a reader cannot otherwise work out.
+    openDays,
+    availability: availabilitySummary({ openDays, bookableDays: startDays, today }),
+    span,
+    today,
+    monthAnchor: `${today.slice(0, 7)}-01`,
     reviews: (reviews ?? []) as Array<{
       id: string;
       overall: number;
@@ -91,23 +100,3 @@ export async function loadOfferingDetail(
 }
 
 export type OfferingDetailData = Awaited<ReturnType<typeof loadOfferingDetail>>;
-
-
-/** Start days with enough lead time AND `span` consecutive open days. */
-function bookableStartDays(openDays: string[], span: number, todayIso: string): string[] {
-  const LEAD_DAYS = 3;
-  const lead = new Date(todayIso + "T00:00:00Z");
-  lead.setUTCDate(lead.getUTCDate() + LEAD_DAYS);
-  const minStart = lead.toISOString().slice(0, 10);
-  const open = new Set(openDays);
-  return openDays.filter((d) => {
-    if (d < minStart) return false;
-    if (span <= 1) return true;
-    const cur = new Date(d + "T00:00:00Z");
-    for (let i = 1; i < span; i++) {
-      cur.setUTCDate(cur.getUTCDate() + 1);
-      if (!open.has(cur.toISOString().slice(0, 10))) return false;
-    }
-    return true;
-  });
-}

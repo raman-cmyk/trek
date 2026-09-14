@@ -11,11 +11,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { profile, admin, headers } = await requireOps(request, env);
 
-  const [verifs, incidents, payouts, flags, pendingPhotos] = await Promise.all([
+  const [verifs, waitingDocs, incidents, payouts, flags, pendingPhotos] = await Promise.all([
     admin
       .from("guides")
       .select("user_id", { count: "exact", head: true })
       .in("status", ["applied", "in_review"]),
+    // The queue holds trekkers' documents as well now, so the badge counts
+    // both: one number for "somebody is waiting on us to look".
+    admin
+      .from("booking_documents")
+      .select("id", { count: "exact", head: true })
+      .is("verified_at", null)
+      .is("rejected_at", null),
     admin
       .from("incidents")
       .select("id", { count: "exact", head: true })
@@ -39,7 +46,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     {
       profile,
       counts: {
-        verifications: verifs.count ?? 0,
+        verifications: (verifs.count ?? 0) + (waitingDocs.count ?? 0),
         incidents: incidents.count ?? 0,
         payouts: payouts.count ?? 0,
         moderation: (flags.count ?? 0) + (pendingPhotos.count ?? 0),
