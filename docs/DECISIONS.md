@@ -648,3 +648,40 @@ need the same total, and writing those sums a second time is precisely the
 mistake that had the guide's profile and the trip page advertising different
 availability this morning. The hook is exported and the offering shape is built
 once; the card and the terms consume the same number.
+
+## Codes in the database, words in the code (2026-09-14)
+
+`activity_level`, `transport` and `accessibility` store codes against a closed
+set the database enforces; the labels live in `app/lib/offering-details.ts`.
+Two reasons. A filter ("show me step-free day trips") needs a value, not a
+sentence. And the copywriter changing "Private vehicle" to "Private car"
+should not be a migration — which is CLAUDE.md rule 4 applied to enumerations
+rather than to strings.
+
+A code the app does not recognise renders as nothing rather than an empty row,
+and a form posting one is dropped rather than failing the whole save: a stale
+tab should not cost a guide their afternoon's typing.
+
+## The gap was schema, not UI (2026-09-14)
+
+The instinct on "their page has more than ours" is to add sections. Every
+missing section here had no column behind it, so a UI-only fix would have been
+a page that shows a guide's answers to questions they were never asked. The
+form step came with the migration, in the same change, and the seed backfill
+exists so nobody reviews an empty box and concludes the feature does not work.
+
+## A rating per trip, not per guide (2026-09-14)
+
+The card had the guide's average available and did not use it, which was
+right: a guide at 4.9 across six trips tells a reader nothing about the one
+they are looking at. `offeringRatings()` aggregates by `offering_id`. A trip
+with none says "No reviews yet" out loud — a blank where a rating belongs is
+read as a bad one.
+
+## "Not suitable if you have limited mobility" is not a tick (2026-09-14)
+
+Accessibility codes carry a `warn` flag and the cautions sort last with a
+different mark. Listing "not suitable if you have limited mobility" as a green
+tick beside "service animals welcome" is how somebody books a trip they then
+have to cancel — and the guide, not the platform, is the one who has to make
+that phone call.

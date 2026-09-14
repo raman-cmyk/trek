@@ -1608,3 +1608,57 @@ chat's branch, which was missing everything since this morning's merge. Both
 branch names now point at the same commit, so the build is identical whichever
 checkout deploys — but the safe rule is still one deployer. Ask me and I will
 push it out.
+
+## Session — the card, and a section-by-section audit of the trip page (2026-09-14)
+
+Two notes from Pratik, both comparisons with a ToursByLocals page: our
+experience card carries far less than theirs, and the whole of their tour page
+should be checked against ours for anything missing — with the backend to
+control it.
+
+**The card.** Ours was a photograph, a title, "Day experience" and a price.
+Theirs carries the rating with its count, how long, how you move and how many
+people. All four are on ours now, and a trip with no reviews says "No reviews
+yet" rather than leaving the space blank, because blank reads as nought out of
+five. The rating is the trip's own, not its guide's — a guide at 4.9 across six
+trips tells you nothing about which to book — so `offeringRatings()` is a new
+per-trip aggregate wired into all four grids: browse, home, route page and
+guide page. Verified live: "★ 5.0 (1)" on the classic EBC card, "Domestic
+flight · On foot" and "Private trip for 1 to 10 people" across the grid.
+
+**The audit.** Held section against section, we were missing a whole tier of
+ordinary fact, and the gap was schema, not UI — there was nowhere for a guide
+to say any of it. Migration 0066 adds activity level, how you travel and a
+note, accessibility and a note, the languages a trip is led in, the questions
+people ask, and a reference code derived from the id. Codes live in the
+database so they stay filterable; the words live in
+`app/lib/offering-details.ts` so the copywriter never needs a migration. The
+FAQ check is a function, because a check constraint may not hold a subquery.
+
+Now on the trip page: **Getting there and around** (the Lukla flight, and
+whether it is in the price); **Other details** — how hard it is in words rather
+than a grade, languages, who it suits with welcomes first and cautions last,
+and the trip reference; **Questions people ask**, as an accordion and as
+FAQPage structured data, emitted only when a guide has answered something;
+the **rating spread** rather than only its mean; the **guide's numbers** (trips
+led, years, reply time) where there was a tier badge; a **breadcrumb** a person
+can climb, where the page had breadcrumb data for Google and nothing for the
+reader; and **two rails** at the foot — the rest of this guide's work, and the
+same route led by somebody else — where the page used to be a dead end.
+
+**The backend for all of it** is a new "Who it suits" step on the experience
+form, which the office's editor gets too because both share the component.
+Radio buttons, checkboxes and paired text inputs, so it still posts a usable
+answer when the JavaScript never arrives on a cheap Android over 3G. Edits
+land in the audit trail the office already reads. Migration 0067 fills in what
+we already knew (a trek is walked; difficulty comes off the route grading the
+office did) and seeds the rest so no section renders as an empty box.
+
+Verified live on the classic EBC trek: "Domestic flight", "Kathmandu to Lukla
+by light aircraft", "Challenging — Long days, real ascent, or altitude",
+"English, Nepali, Sherpa", "Not suitable if you have limited mobility",
+"GN-739CC3", "Is this trip really just me and my guide?", "More from Pemba",
+"Other guides on Everest Base Camp", and FAQPage in the structured data.
+
+486 tests green, typecheck green, build green. Four things from the audit are
+deliberately parked, with reasons, in docs/BACKLOG.md.
