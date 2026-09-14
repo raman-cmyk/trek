@@ -2672,3 +2672,75 @@ it. All probe rows, users and auth users were deleted afterwards and the
 deletion verified.
 
 1044 tests green, build green, deployed.
+
+## 2026-09-15 — The map becomes the product
+
+Six changes, and one correction to something I had written down wrong.
+
+**Guides stand on the trek they run.** A face used to sit at the centre of its
+guide's home district. True, and useless: it piles everybody around Kathmandu
+and says nothing about a walk. Choose a trek and the people who run it now
+step onto the route itself, spaced along the line by DISTANCE rather than by
+vertex — a rest day in Namche is one vertex and a twenty-kilometre valley walk
+is another, so stepping by index bunches four faces into whichever part of the
+trek had the most short days. Eleven guides in a row along the Everest route
+say "these people walk this path" in a way no legend can.
+
+**Contrast is the whole point of selecting something.** Guides on the chosen
+trek take a dark green outline at 42px; everyone else goes light green, 16px,
+desaturated, 40% opacity. The earlier version merely dimmed them, and half-lit
+faces beside lit ones read as a rendering fault rather than a decision.
+
+**Outside Nepal is dimmed.** The map was giving half of India and a slab of
+Tibet the same weight as the one country the whole company is about, so the
+eye had nowhere to land. The first attempt used a world-spanning polygon with
+Nepal as a hole; it looked right in a pitched close-up and vanished completely
+when the camera flattened — a polygon that large, carrying a hole, does not
+survive being cut into tiles at low zoom, and it fails by disappearing rather
+than by erroring. It is a regional box now.
+
+**Altitude is drawn, twice.** Contour lines, generated in the browser from the
+elevation tiles the hillshade already loads — no key, no new provider to go
+down, 3.4 kB gzipped and lazy — because lines close together is the one
+language every walker already reads. And an elevation profile of the selected
+trek, because Everest Base Camp and Mardi Himal both "go up" and only one of
+them goes up for a fortnight. A summit height is a number; the profile is the
+shape of getting there, and it is the most decision-useful thing we know about
+a trek.
+
+**No stray words.** The Esri reference-label overlay is gone. It was scattering
+half-drawn district names across the mountains, including one that read
+"7 4 2". The map now carries exactly one label: the name of the trek, along
+the trek.
+
+Two silent failures fixed on the way, both of the same family as the
+`load`-event bug from last week — things that fail by doing nothing. The style
+had no `glyphs`, so every `symbol` layer on this site has been drawing text
+into the void, which is why the routes map has never once shown a trail name.
+And the routes map was re-adding a `dem` source the shared style already
+owned; that throws, and the `catch` sitting beside it swallowed the loss of
+its own terrain.
+
+**A correction.** I previously recorded here that this sandbox cannot render
+MapLibre `line` layers. That was wrong, and it had me writing off work as
+unverifiable for a week. It cannot load any source that needs MapLibre's Web
+Worker. Proved by putting a bright red fill over the whole country and getting
+zero red pixels, with `isSourceLoaded` false for a geojson source whose data I
+had just read back from the console — and the same with terrain switched off,
+which ruled out draping. Raster imagery, the DEM, hillshade, colour relief and
+terrain all render here; geojson and vector sources do not.
+
+So the trail lines, the contours and the dimming mask are verified in the
+founder's browser and by arithmetic, never by a screenshot from here.
+`nepal-border.test.ts` proves the mask contains Kathmandu, Pokhara, Lukla and
+the far west and excludes Delhi, Lhasa, Gangtok and Bihar — which is a better
+check than looking at it anyway.
+
+What WAS verified visually, at 1280×900 and 390×844: 48 faces, 11 lit in pine
+at 42px, 37 hushed in chartreuse at 16px, standing in a line along the Everest
+route; the profile reading "Highest: Kala Patthar · 5,644 m"; no lit face
+hidden under the trail rail at either size. On a phone the profile panel was
+sitting on top of the trail rail — burying the one control that picks a trek,
+which is the worst thing a supporting panel can do — and now stacks above it.
+
+1076 tests green, build green, deployed.
