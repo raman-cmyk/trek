@@ -2278,3 +2278,60 @@ times rather than days. Group trips get all of it too — the founder asked,
 and it was the same component.
 
 765 tests green, build green, deployed.
+
+**Sharing where you are.** "Yo make it easy for the guide to share location,
+the messaging should have away manymore features than necessary."
+
+A location rides inside the message body exactly as a photograph does, so no
+new column, no new send path, and both threads — the booking one and the
+group one — render it without being told. Masking already steps over whole
+URLs, so the link survives the pre-deposit filter intact.
+
+The part that decides whether this gets used: it reads the links people
+ALREADY send. A guide presses share in Google Maps and pastes whatever comes
+out, and `message-location.ts` takes coordinates out of Google's `@lat,lng`
+and `?q=`, Apple's, Waze's, OpenStreetMap's and a bare `geo:` URI. Anything
+we cannot read stays an ordinary link, which is dull but never wrong.
+
+The card has no map tiles on purpose — this renders on a cheap Android over
+3G in a lodge. What it has instead is everything you need to act on: the
+words somebody typed beside the link, the altitude if their phone knew it,
+coordinates you can read out over a radio, and one tap into either Google or
+OpenStreetMap. The composer's pin button sends immediately; "share location"
+that then needs a second press on Send is two taps for the one thing a guide
+does with cold hands. Each way it can fail gets its own sentence — no sky,
+no permission, no fix — because "location unavailable" tells somebody
+standing in a stone lodge nothing they can do.
+
+One thing found on the way: links in messages had never been tappable. Every
+message in the app rendered a URL as dead text. Fixed for all of them.
+
+**A pause has to say why.** "In the paused experience section there needs to
+be a designated space where administrators can write down the specific reason
+why an experience has been paused."
+
+Pause was one click that left nothing behind. A week later nobody could say
+whether a listing was down because the photographs were somebody else's,
+because the guide was on a trek, or because a price was wrong — and the
+guide, whose income it is, was told nothing at all.
+
+0077 adds `paused_reason`, `paused_at` and `paused_by`. They describe the
+pause a listing is in NOW and are cleared when it goes back up; the history
+is not lost, because every pause and unpause is written to `offering_edits`,
+which nobody can edit and which the guide already sees. The reason is
+required in the action, not just by the browser — an optional box is an empty
+box. One implementation shared by the list and the editor, so two pause
+buttons can never record different things.
+
+The paused rows carry the reason and how long it has been down, in red past a
+month, which is usually somebody forgetting. The editor grows an "on and off
+the market" trail. The guide gets the reason by SMS and email with the link
+to the page where they fix it.
+
+And the hole that opened once a pause carried a decision: a guide could flip
+it straight back. `paused_by` tells the two kinds apart — a guide hiding
+their own trip is theirs to undo; an office pause now shows them the reason
+and asks them to fix it and message us. A decision anyone can reverse without
+a word is not a decision anybody is tracking.
+
+817 tests green, build green, deployed.
