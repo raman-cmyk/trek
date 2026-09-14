@@ -142,6 +142,9 @@ export default [
     route("ops/experiences/new", "routes/ops.experiences.new.tsx"),
     route("ops/routes", "routes/ops.routes.tsx"),
     // Building a route page out of ordered blocks (0071).
+    // Fixing a route's facts, words and itinerary — one correction reaches
+    // every trip listed on it.
+    route("ops/routes/:slug", "routes/ops.routes.$slug.tsx"),
     route("ops/routes/:slug/page", "routes/ops.routes.$slug.page.tsx"),
     // The homepage's rows, made by whoever runs the marketplace (0067).
     route("ops/categories", "routes/ops.categories.tsx"),

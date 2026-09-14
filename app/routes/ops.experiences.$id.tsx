@@ -26,7 +26,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .select("*, guide:guides!offerings_guide_id_fkey(slug, users(full_name))")
       .eq("id", params.id)
       .maybeSingle(),
-    admin.from("routes").select("id, name, status, typical_days, max_altitude_m, day_stops, permits(name, cost_usd_cents)").order("name"),
+    admin.from("routes").select("id, slug, name, status, typical_days, max_altitude_m, day_stops, permits(name, cost_usd_cents)").order("name"),
   ]);
   const { data: opsPhotos } = await admin
     .from("offering_photos")
@@ -140,6 +140,7 @@ export default function OpsExperienceEdit({ loaderData, actionData }: Route.Comp
         guideId={offering.guide_id}
         submitLabel="Save changes"
         busy={nav.state !== "idle"}
+        canEditRoute
       />
     </div>
   );

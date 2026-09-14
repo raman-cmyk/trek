@@ -35,6 +35,7 @@ import { ClimbRoute } from "~/components/public/ClimbRoute";
 import { TrailScene } from "~/components/design/TrailScene";
 import { FactStrip } from "~/components/design/FactStrip";
 import { Eyebrow } from "~/components/design/Eyebrow";
+import { DayByDay, GettingThere, Highlights, KnowBeforeYouGo, Overview, Packing, TripFacts } from "~/components/public/RouteKnowledge";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -104,7 +105,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   const { data: route } = await client
     .from("routes")
     .select(
-      "id, slug, name, region, typical_days, max_altitude_m, difficulty, season_months, distance_km, summary, start_point, end_point, hero_photo_url, day_stops, month_profile, faq, status, created_by_guide_id, guide:guides!routes_created_by_guide_id_fkey(slug, users(full_name))",
+      "id, slug, name, region, typical_days, max_altitude_m, difficulty, season_months, distance_km, summary, start_point, end_point, hero_photo_url, day_stops, month_profile, faq, status, created_by_guide_id, highlights, overview, getting_there, accommodation, food, packing_extra, water_note, guide:guides!routes_created_by_guide_id_fkey(slug, users(full_name))",
     )
     .eq("slug", params.slug)
     .maybeSingle();
@@ -287,6 +288,16 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
   }[];
   const bestMonths = (route.season_months ?? []) as number[];
 
+  // Everything the universal knowledge needs to speak about THIS walk rather
+  // than about trekking in general.
+  const routeFacts = {
+    name: route.name,
+    region: route.region,
+    maxAltitudeM: route.max_altitude_m,
+    days: route.typical_days,
+    permits: (permits as any[]).map((p) => ({ name: p.name, usdCents: p.cost_usd_cents })),
+  };
+
   // The Split uses a real listing on this route, not a made-up number.
   const priced = (offerings as PublicOffering[]).find((o) => o.price_breakdown);
   const split = priced?.price_breakdown
@@ -356,6 +367,19 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
           </p>
         )}
 
+        {/* The quick-facts box every competitor puts under the title, with the
+            one number none of them carry: what the whole walk climbs. */}
+        <TripFacts
+          stops={stops}
+          days={route.typical_days}
+          maxAltitudeM={route.max_altitude_m}
+          distanceKm={route.distance_km}
+          difficulty={route.difficulty}
+        />
+
+        <Highlights items={route.highlights ?? []} />
+        <Overview text={route.overview} name={route.name} />
+
         {/* Elevation + map, wired together. */}
         {stops.length >= 2 && (
           <section className="mt-10">
@@ -369,37 +393,9 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
           </section>
         )}
 
-        {/* Day by day */}
-        {stops.length > 0 && (
-          <section className="mt-12">
-            <h2 className="font-display text-2xl text-ink">Day by day</h2>
-            <ul className="mt-3 divide-y divide-line overflow-hidden rounded-md border border-line bg-card">
-              {stops.map((s) => (
-                <li key={s.day}>
-                  <details
-                    className="group"
-                    onToggle={(e) =>
-                      setActiveDay((e.currentTarget as HTMLDetailsElement).open ? s.day : null)
-                    }
-                  >
-                    <summary className="flex cursor-pointer items-baseline gap-3 px-4 py-3 hover:bg-mist">
-                      <span className="w-10 shrink-0 font-mono text-sm text-muted">
-                        {s.day}
-                      </span>
-                      <span className="flex-1 font-medium text-ink">{s.place}</span>
-                      <span className="shrink-0 font-mono text-caption text-muted">
-                        {s.altitude_m.toLocaleString("en-US")} m
-                      </span>
-                    </summary>
-                    {s.note && (
-                      <p className="px-4 pb-3 pl-[4.25rem] text-sm text-ink-soft">{s.note}</p>
-                    )}
-                  </details>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {/* Day by day — hours, climb, drop and where you sleep, which is the
+            line every agency page carries and ours did not. */}
+        <DayByDay stops={stops} activeDay={activeDay} onDayChange={setActiveDay} />
 
         {/* Permits — exact, at cost */}
         {permits.length > 0 && (
@@ -527,6 +523,17 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
           </section>
         )}
 
+        <GettingThere
+          gettingThere={route.getting_there}
+          accommodation={route.accommodation}
+          food={route.food}
+          water={route.water_note}
+        />
+
+        <Packing route={routeFacts} extra={route.packing_extra} />
+
+        <KnowBeforeYouGo route={routeFacts} />
+
         {/* Guides who run it */}
         {guides.length > 0 && (
           <section className="mt-12">
@@ -596,8 +603,15 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
           </section>
         )}
 
-        {/* Long-form article, when one exists */}
-        {article && (
+        {/* The markdown article (content/routes/*.md) was the old way of doing
+            what `overview`, `getting_there` and the knowledge sections now do
+            — and it needed a deploy to change, which is exactly what the
+            office asked us to fix. Where a route has the newer, fuller
+            content it wins, and the article stands down rather than repeating
+            "Permits and real costs" and "Altitude and safety" a second time
+            further down the same page. Its FAQ is merged either way, in the
+            loader, so nothing is lost. */}
+        {article && !route.overview && (
           <article
             className="prose-trek mt-12 space-y-4 text-ink [&_h2]:mt-8 [&_h2]:font-display [&_h2]:text-2xl [&_h3]:mt-4 [&_h3]:font-medium [&_p]:leading-relaxed"
             dangerouslySetInnerHTML={{ __html: article.html }}

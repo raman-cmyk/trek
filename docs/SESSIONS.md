@@ -2211,3 +2211,49 @@ The fade is now gated on hydration. Guide names no longer truncate to
 Verified by mirroring the deployed pages and screenshotting at 1280 and
 400 (Chromium cannot reach the egress proxy directly; curl can). 684 tests
 green, build green, deployed.
+
+**Catching up with the agencies on content.** The founder put our route page
+beside nepalhightrek.com and trekthehimalayas.com: "there are so many things
+that these guys' pages are covering but ours are not, we need to first fix
+that." He was right. Their pages run to 15,000 words and answer the fifty
+questions somebody has before they fly — how long is each day, where do I
+sleep, is there a shower, what does charging a phone cost at 4,000 m, what
+happens if I get ill up there. Ours answered about five, in 400 words.
+
+Two kinds of content, kept apart on purpose. Route-specific — highlights, the
+overview, getting to the trailhead, what the lodges are like, food, water,
+extra kit — is new columns on `routes` (0076) that ops edits without a
+deploy. Universal — altitude and acclimatisation, insurance, rescue, permits,
+sleeping, food, money, power and signal, porters, tipping, etiquette,
+responsible trekking, and a packing list — is written ONCE in
+`app/lib/trek-knowledge.ts` and parameterised by the route's own altitude,
+region and permits. The competitors copy-paste theirs onto every page, which
+is why the same site quotes a permit at two different prices; ours cannot
+drift. A 2,500 m walk is not told to buy a −15 °C down jacket or read up on
+cerebral oedema; a 5,644 m one is.
+
+The day-by-day now carries what every agency carries and we did not: metres
+climbed and dropped — arithmetic on altitudes we already stored, so exact and
+never written down twice — plus where you sleep and how long the day takes.
+The hours are honest about what they are: an estimate from the climb, printed
+as "about", until a guide or the office types a real figure, which wins. It
+declines to guess at the day you arrive, the day you leave, and any day that
+drops a thousand metres to finish below 2,000 m, because that is a flight out
+of the mountains and not a six-hour walk.
+
+`/ops/routes/:slug` is the founder's other ask — "inline editing capabilities
+to modify route details and itineraries, allowing administrators to directly
+fix any issues for the guides". Every field and a row per day, one save, no
+JavaScript required; spare rows at the bottom add days and emptying a row
+removes one; days renumber themselves. The Hours box shows the estimate as its
+placeholder, so you can see what the page currently says and type over it. It
+is linked from the routes list and from the route block inside the ops
+experience editor, where the founder asked for it, and the page says how many
+trips a correction will reach.
+
+Eight flagship routes seeded with real content. Everest Base Camp went from
+about 400 words to 4,600. The old markdown articles in `content/routes/`
+stand down where the newer fields exist rather than repeating "Permits and
+real costs" twice on one page; their FAQs are still merged.
+
+750 tests green, build green, deployed.

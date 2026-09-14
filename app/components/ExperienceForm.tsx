@@ -67,6 +67,7 @@ export function ExperienceForm({
   guides,
   submitLabel,
   busy,
+  canEditRoute = false,
 }: {
   values?: Partial<ExperienceValues>;
   routes: Array<{
@@ -75,6 +76,7 @@ export function ExperienceForm({
     status?: string;
     typical_days?: number | null;
     max_altitude_m?: number | null;
+    slug?: string | null;
     day_stops?: Array<{ day: number; place: string; altitude_m: number | null }> | null;
     permits?: Array<{ name: string; cost_usd_cents: number }>;
   }>;
@@ -88,6 +90,8 @@ export function ExperienceForm({
   guides?: Array<{ user_id: string; full_name: string; status?: string }>;
   submitLabel: string;
   busy?: boolean;
+  /** Ops only: the route's own facts and itinerary are fixable from here. */
+  canEditRoute?: boolean;
 }) {
   const [kind, setKind] = useState(values?.kind ?? "trek");
   // Photos upload into the guide's own folder, so the picker has to be
@@ -306,12 +310,25 @@ export function ExperienceForm({
               ))}
             </select>
           </label>
-          <a
-            href="/g/routes/new"
-            className="mt-1.5 inline-block text-caption text-moss underline underline-offset-4"
-          >
-            My route isn&rsquo;t listed →
-          </a>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <a
+              href="/g/routes/new"
+              className="text-caption text-moss underline underline-offset-4"
+            >
+              My route isn&rsquo;t listed →
+            </a>
+            {/* The office can correct the route itself without leaving the
+                listing: a wrong altitude here is wrong on every trip that
+                uses it. */}
+            {canEditRoute && chosen?.slug && (
+              <a
+                href={`/ops/routes/${chosen.slug}`}
+                className="text-caption text-moss underline underline-offset-4"
+              >
+                Fix this route&rsquo;s days and details →
+              </a>
+            )}
+          </div>
 
           {/* What you picked, shown. Choosing a route used to change a dropdown
               and nothing else, so a guide had no way to check they had chosen

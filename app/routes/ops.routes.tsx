@@ -176,11 +176,19 @@ export default function OpsRoutes({ loaderData, actionData }: Route.ComponentPro
               </div>
 
               <div className="flex shrink-0 items-center gap-3 text-sm">
+                {/* The facts and the itinerary — the everyday fix. Building a
+                    bespoke page is the rarer job and sits behind it. */}
                 <Link
-                  to={`/ops/routes/${r.slug}/page`}
+                  to={`/ops/routes/${r.slug}`}
                   className="rounded-button bg-pine px-3 py-1.5 font-medium text-paper hover:bg-moss"
                 >
-                  {r.blocks.live + r.blocks.draft > 0 ? "Edit the page" : "Build the page"}
+                  Edit route
+                </Link>
+                <Link
+                  to={`/ops/routes/${r.slug}/page`}
+                  className="text-primary hover:underline"
+                >
+                  {r.blocks.live + r.blocks.draft > 0 ? "Page" : "Build a page"}
                 </Link>
                 <a
                   href={`/routes/${r.slug}`}
