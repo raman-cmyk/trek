@@ -2,23 +2,19 @@ import { data, redirect } from "react-router";
 import type { Route } from "./+types/enquiry";
 import { getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
-import { ENQUIRY_TTL_HOURS } from "~/lib/config";
-import { arrivalError, parseArrival } from "~/lib/arrival";
-import { fmtDate } from "~/lib/format";
+import { submitEnquiry } from "~/lib/enquiry.server";
+import { packPending } from "~/lib/pending-enquiry";
+import { parkedCookie } from "~/lib/pending-enquiry.server";
 
 // Action-only route: a trekker sends an enquiry from an offering page.
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const { user, headers } = await getSessionUser(request, env);
   const form = await request.formData();
-  const offeringId = String(form.get("offering_id"));
-  const guideId = String(form.get("guide_id"));
-  const startDate = String(form.get("start_date"));
-  const partySize = Number(form.get("party_size") ?? 1);
-  const message = String(form.get("message") ?? "").trim() || null;
-  // The optional lines they ticked on the offering page. Parsed defensively —
-  // it arrives as JSON in a form field — and capped, because it is a list of
-  // ids, not an essay.
+
+  const returnTo = String(form.get("return_to") ?? "/");
+  // The optional lines they ticked. Parsed defensively — it arrives as JSON in
+  // a form field — and capped, because it is a list of ids, not an essay.
   let selectedOptions: string[] = [];
   try {
     const raw = JSON.parse(String(form.get("selected_options") ?? "[]"));
@@ -32,11 +28,31 @@ export async function action({ request, context }: Route.ActionArgs) {
     // A malformed list is not a reason to lose the enquiry.
   }
 
+  const fields = {
+    offeringId: String(form.get("offering_id")),
+    guideId: String(form.get("guide_id")),
+    startDate: String(form.get("start_date")),
+    partySize: Number(form.get("party_size") ?? 1),
+    message: String(form.get("message") ?? "").trim() || null,
+    arrivalDate: String(form.get("arrival_date") ?? "").trim() || null,
+    selectedOptions,
+  };
+
   if (!user) {
-    // Send them to sign in, then back to the offering.
-    const next = String(form.get("return_to") ?? "/");
-    throw redirect(`/login?next=${encodeURIComponent(next)}`, { headers });
+    // Park the request, then sign them in, then send it.
+    //
+    // This used to redirect to the login page and throw the request away: the
+    // trekker came back to an empty form and had to pick the date, the party
+    // size and the extras again. On a phone, where the form is a bottom sheet
+    // that closes behind them, the tap looked like it had done nothing at all.
+    const payload = packPending({ ...fields, returnTo });
+    const cookie = await parkedCookie(env, payload);
+    const out = new Headers(headers);
+    out.append("Set-Cookie", cookie);
+    out.set("Location", "/login?next=%2Fenquiry%2Fresume");
+    return new Response(null, { status: 302, headers: out });
   }
+
   // Only trekkers send enquiries.
   const profile = await getProfile(env, user.id);
   if (profile?.role && profile.role !== "trekker") {
@@ -44,68 +60,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { createAdminClient } = await import("~/lib/supabase.server");
-  const admin = createAdminClient(env);
-
-  // Server-side validation (audit: previously zero — garbage enquiries from
-  // stale/crafted POSTs). Date must exist and be in the future; party must fit
-  // the offering's real bounds; the offering must belong to the guide.
-  const today = new Date().toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || startDate <= today) {
-    return data({ error: "Pick a date in the future." }, { status: 400, headers });
+  const result = await submitEnquiry(env, createAdminClient(env), user.id, fields);
+  if (!result.ok) {
+    return data({ error: result.error }, { status: result.status, headers });
   }
-  const { data: off } = await admin
-    .from("offerings")
-    .select("id, title, guide_id, min_party, max_party")
-    .eq("id", offeringId)
-    .maybeSingle();
-  if (!off || off.guide_id !== guideId) {
-    return data({ error: "That trip isn't available." }, { status: 400, headers });
-  }
-  const minP = off.min_party ?? 1;
-  const maxP = off.max_party ?? 12;
-  if (!Number.isFinite(partySize) || partySize < minP || partySize > maxP) {
-    return data(
-      { error: `Group size must be between ${minP} and ${maxP} for this trip.` },
-      { status: 400, headers },
-    );
-  }
-
-  // When they land in Kathmandu. Optional — most people book the trek before
-  // the flight — but checked when given, because a date after the start is a
-  // typo somebody would otherwise discover at the airport.
-  const arrival = parseArrival(form.get("arrival_date"), startDate);
-  if (arrival.problem) {
-    return data(
-      { error: arrivalError(arrival.problem, startDate, fmtDate) },
-      { status: 400, headers },
-    );
-  }
-
-  const { data: enq, error } = await admin
-    .from("enquiries")
-    .insert({
-      trekker_id: user.id,
-      guide_id: guideId,
-      offering_id: offeringId,
-      start_date: startDate,
-      party_size: partySize,
-      arrival_date: arrival.date,
-      message,
-      selected_options: selectedOptions,
-      status: "open",
-      expires_at: new Date(Date.now() + ENQUIRY_TTL_HOURS * 3600_000).toISOString(),
-    })
-    .select("id")
-    .single();
-  if (error || !enq) return data({ error: "Could not send your request." }, { status: 400, headers });
-
-  // The guide hears about it immediately (SMS — many guides have no email).
-  const { notifyNewEnquiry } = await import("~/lib/notifications.server");
-  await notifyNewEnquiry(env, admin, {
-    guideId,
-    offeringTitle: off.title,
-    startDate,
-    partySize,
-  });
-  return data({ ok: true, enquiryId: enq.id }, { headers });
+  return data({ ok: true, enquiryId: result.enquiryId }, { headers });
 }

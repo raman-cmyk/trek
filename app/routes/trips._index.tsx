@@ -1,9 +1,10 @@
-import { Link, data } from "react-router";
+import { Link, data, useSearchParams } from "react-router";
 import type { Route } from "./+types/trips._index";
 import { fmtDateRange, statusLabel } from "~/lib/format";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { firstName } from "~/lib/names";
+import { ENQUIRY_TTL_HOURS } from "~/lib/config";
 import { SmartImage } from "~/components/SmartImage";
 import { Badge } from "~/components/ops/ui";
 
@@ -61,11 +62,39 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function MyTrips({ loaderData }: Route.ComponentProps) {
+  // The outcome of a request that was parked through sign-in. A trekker who
+  // signed in mid-booking arrives here, and has to be told whether the thing
+  // they tapped actually happened.
+  const [params] = useSearchParams();
+  const sent = params.get("sent");
   const bookings = loaderData.bookings as any[];
   const proposals = (loaderData as any).proposals as any[];
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="font-display text-3xl text-ink">My trips</h1>
+
+      {sent === "1" && (
+        <p className="mt-4 rounded-card border border-sage bg-mist px-4 py-3 text-sm text-ink">
+          <span className="font-medium">Request sent.</span> Your guide has{" "}
+          {ENQUIRY_TTL_HOURS} hours to reply, and it stays here until they do.
+        </p>
+      )}
+      {sent === "0" && (
+        <div className="mt-4 rounded-card border border-ember/30 bg-ember/5 px-4 py-3 text-sm">
+          <p className="font-medium text-ink">Your request did not go through</p>
+          <p className="mt-0.5 text-ink-soft">
+            {params.get("why") || "Something about the trip changed while you were signing in."}
+          </p>
+          {params.get("back")?.startsWith("/") && !params.get("back")?.startsWith("//") && (
+            <Link
+              to={params.get("back")!}
+              className="mt-1 inline-block text-moss underline decoration-sage underline-offset-2"
+            >
+              Back to the trip
+            </Link>
+          )}
+        </div>
+      )}
 
       {proposals.length > 0 && (
         <ul className="mt-6 space-y-3">

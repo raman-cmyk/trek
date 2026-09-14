@@ -143,6 +143,9 @@ export default [
 
   // Booking flow (M6) + My Trips & documents (M7).
   route("enquiry", "routes/enquiry.tsx"),
+  // Where a request parked before sign-in is actually sent. The login page
+  // redirects here once there is a session.
+  route("enquiry/resume", "routes/enquiry.resume.tsx"),
   route("trips/:bookingId/doc/:docId", "routes/trips.$bookingId.doc.$docId.tsx"),
   route("conversations", "routes/conversations.tsx"),
   route("pdf/tims/:bookingId", "routes/pdf.tims.$bookingId.tsx"),
