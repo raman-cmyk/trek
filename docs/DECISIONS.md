@@ -535,3 +535,39 @@ machine off a checkout without the merge. The site silently went back to
 yesterday's build — every page still 200, just older. Cloudflare's version
 list is what proved it, with the author on each version. One deployer only,
 or a workflow triggered by the merge.
+
+## Four notes from Pratik, and the rules behind them (2026-09-14)
+
+**A cancellation has to work with no email provider.** Neither Resend nor
+Sparrow has a key in production, so the guide's one SMS went nowhere and the
+office was told nothing. The thing that works regardless is the app: a card on
+the guide's dashboard, a queue row for the office. The emails are wired
+alongside and start arriving the day the keys are set. `guide_saw_cancellation_at`
+makes the card appear once and then stop — a banner that never leaves is a
+banner nobody reads.
+
+**Notice is counted in calendar days,** so the "19 days before" on the guide's
+card is the same 19 the refund bands used. Comparing instants gave 18 and a
+contradiction nobody could explain.
+
+**"Cancel free until 30 days before" was not true** and is gone. The card fee
+is never refunded, and the day somebody cancels is the wrong moment to learn
+that. The four bands are now printed before booking, in the words the policy
+means.
+
+**The deposit is shown as a percentage and an amount, priced for the date and
+party actually selected.** "20%" answers half a question; "a 20% deposit of
+$248" answers it.
+
+**48 hours for a request to book,** up from 24, from one constant that the
+page, the confirmation and the guide's SMS all read. A guide on a mountain
+when the request lands could not answer inside a day.
+
+**The payment link lives in the conversation, not only in an email.** The trip
+gets agreed in the thread; the way to pay for it belongs there too. The guide
+sees the same card from their side, with the hold clock.
+
+**Arrival in Kathmandu is a date, and it is not the start date.** Nullable and
+optional, because most people book the trek before the flight, but constrained
+in the database to fall on or before the start. The guide's card flags the case
+with no slack in it: landing the morning the trek starts.

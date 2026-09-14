@@ -1463,3 +1463,38 @@ incidents and permits all listing rows again.
 **🙋 Founder:** rotate the two tokens — they were pasted into a chat
 transcript. And do not deploy from your machine, or it reverts what is live;
 that is what happened at 10:05 UTC today.
+
+## Session — Pratik's four notes (2026-09-14, later)
+
+**Cancellations now reach somebody.** Migration 0063 records `cancelled_at`,
+`cancelled_by` and `guide_saw_cancellation_at`. The guide's dashboard opens
+with who cancelled, how much notice, that the days are open again and whether
+anything is owed; "Got it" clears it. The office dashboard gains "Cancelled
+this week" and the pipeline's row of status badges becomes a list that says
+who cancelled what with how much notice. The guide and the office also get
+emails, which matters the moment Resend is configured. 17 tests on the wording
+and the notice arithmetic.
+
+**The deposit is on the page before anybody commits.** `payment-policy.ts`
+prices the plan for the chosen date and party: the deposit as a percentage and
+an amount, the balance and the day it is taken, why a close-in trip is paid in
+full, and the four refund bands. The trust panel stopped promising free
+cancellation. 8 tests, including that deposit plus balance always equals the
+total.
+
+**48 hours to answer a request to book,** from one constant. And the payment
+link now sits in the message thread, with the hold clock, for both sides.
+
+**Arrival in Kathmandu** (migration 0064): asked for optionally on a trek
+booking, carried onto the booking, changeable from the trip page when a flight
+moves, shown on the guide's card with a flag when there is no slack, and
+beside the dates for the office. 10 tests.
+
+411 tests green, typecheck green, build green. All 64 migrations apply in
+order on a clean database with zero failures; the arrival checks were proven
+to refuse a landing after the start, on both tables.
+
+**🙋 Founder:** 0063 and 0064 are not applied to production and this is not
+deployed — the tokens shared in chat were used once, then wiped from this
+environment, and they need rotating. Put the new ones in the environment
+variables and I will apply and deploy.
