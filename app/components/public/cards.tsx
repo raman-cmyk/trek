@@ -3,6 +3,9 @@ import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
+import { Fallback } from "~/components/design/Fallback";
+import { GlassPill } from "~/components/design/Glass";
+import { Glyph, type ChipGlyph } from "~/components/design/Chip";
 
 export interface PublicGuide {
   user_id: string;
@@ -48,6 +51,21 @@ const KIND_LABEL: Record<string, string> = {
   city: "City",
 };
 
+/** The glyph each kind carries on its chip and in its empty state. */
+export const KIND_GLYPH: Record<string, ChipGlyph> = {
+  trek: "mountain",
+  day_hike: "walk",
+  food_culture: "spark",
+  adventure: "tent",
+  city: "city",
+};
+
+function responseLabel(mins: number): string {
+  if (mins < 60) return `~${mins} min`;
+  const h = Math.round(mins / 60);
+  return `~${h} hr`;
+}
+
 export function offeringPath(o: { kind: string; slug: string }) {
   return o.kind === "trek" ? `/treks/${o.slug}` : `/experiences/${o.slug}`;
 }
@@ -75,20 +93,35 @@ export function GuideCard({
     <Link
       to={`/guides/${guide.slug}`}
       prefetch="intent"
-      className="group flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
+      className="group flex h-full flex-col overflow-hidden rounded-photo border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
     >
-      <div className="relative">
-        <SmartImage
-          src={guide.avatar_url ?? ""}
-          alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
-          width={300}
-          height={375}
-          className="aspect-[4/5] w-full"
-        />
-        {/* Tier badge on a paper pill, top-right of the photo (§8). */}
+      {/* The photograph carries the card (docs/07). Without one, the contour
+          pattern and the guide's initial — never a blank tan box, which is
+          what most of this grid used to be. */}
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-wheat">
+        {guide.avatar_url ? (
+          <SmartImage
+            src={guide.avatar_url}
+            alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
+            width={300}
+            height={375}
+            cover
+            className="absolute inset-0 h-full w-full"
+            imgClassName="transition duration-slow group-hover:scale-[1.03]"
+          />
+        ) : (
+          <Fallback initial={guide.full_name} />
+        )}
+        {/* Tier on a glass pill, top-right (§8); how fast they answer, bottom-left. */}
         <div className="absolute right-2 top-2">
           <TierBadge tier={guide.tier} static />
         </div>
+        {guide.median_response_mins ? (
+          <GlassPill className="absolute bottom-2 left-2">
+            <Glyph name="clock" className="text-moss" />
+            <span className="font-mono">{responseLabel(guide.median_response_mins)}</span>
+          </GlassPill>
+        ) : null}
       </div>
       <div className="flex flex-1 flex-col p-3.5">
         {/* Her words lead — bold, no quotation marks, the way she said it.
@@ -102,8 +135,11 @@ export function GuideCard({
         {/* One line at card widths that fit it; stacked on the narrow
             two-up mobile grid, where a 2xl name beside a district truncated
             to a single letter. */}
-        <div className="mt-2.5 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
-          <p className="truncate font-display text-xl text-ink sm:text-2xl">
+        {/* Stacked at every width: beside the district the name truncated to
+            "Pemb…" on a four-up grid, and a guide's name is the one thing on
+            the card that must never be cut. */}
+        <div className="mt-2.5 flex flex-col gap-0.5">
+          <p className="font-display text-xl leading-tight text-ink sm:text-2xl">
             {guide.full_name}
           </p>
           {guide.home_district && (
@@ -149,19 +185,34 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
     // nested <a> is invalid HTML that breaks hydration. Instead the title link
     // stretches an invisible ::after over the whole card, so the card is still
     // one big tap target and the chip still wins where it sits.
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-md border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift">
-      <div className="relative">
-        <SmartImage
-          src={offering.cover_photo_url ?? ""}
-          alt={offering.title}
-          width={400}
-          height={267}
-          className="aspect-[3/2] w-full"
-        />
-        {/* Category tag: label style on a paper pill, top-left (§8). */}
-        <span className="absolute left-2 top-2 rounded-full bg-paper/90 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink backdrop-blur">
-          {KIND_LABEL[offering.kind] ?? offering.kind}
-        </span>
+    <div className="group relative flex h-full flex-col overflow-hidden rounded-photo border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-wheat">
+        {offering.cover_photo_url ? (
+          <SmartImage
+            src={offering.cover_photo_url}
+            alt={offering.title}
+            width={400}
+            height={300}
+            cover
+            className="absolute inset-0 h-full w-full"
+            imgClassName="transition duration-slow group-hover:scale-[1.03]"
+          />
+        ) : (
+          <Fallback glyph={KIND_GLYPH[offering.kind] ?? "mountain"} />
+        )}
+        {/* What kind of trip, on a glass pill top-left; the price top-right,
+            so the two questions a grid is scanned for are answered on the
+            picture (docs/07). */}
+        <GlassPill className="absolute left-2 top-2 uppercase tracking-wide">
+          <Glyph name={KIND_GLYPH[offering.kind] ?? "mountain"} className="text-moss" />
+          <span className="text-[11px] font-semibold">{KIND_LABEL[offering.kind] ?? offering.kind}</span>
+        </GlassPill>
+        {from != null && (
+          <GlassPill className="absolute right-2 top-2">
+            <span className="text-muted">from</span>
+            <span className="font-mono font-semibold">{mr(from)}</span>
+          </GlassPill>
+        )}
         {/* Guide chip — full name — overlapping the photo edge (§8). Static:
             the whole card is already a link, and a nested <a> is invalid HTML
             that breaks hydration. Tapping the chip opens the trip, which is
@@ -208,14 +259,9 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
           )}
         </p>
         {from != null && (
-          // Consistent price format site-wide: "from $XX · per person" (§8).
-          // Rounded — converted cents are FX noise in a grid; the breakdown on
-          // the detail page is where "to the cent" is the point.
-          <p className="mt-auto pt-1 text-sm text-muted">
-            from{" "}
-            <span className="font-mono font-medium text-ink">{mr(from)}</span>{" "}
-            · per person
-          </p>
+          // "per person" completes the pill on the photograph; the number is
+          // up there, where a grid is scanned.
+          <p className="mt-auto pt-1 text-caption text-muted">per person</p>
         )}
       </div>
     </div>

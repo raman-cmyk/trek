@@ -12,8 +12,8 @@ export { Skeleton };
 /** Matches GuideCard: 3:4 photo, name + hook lines, badge pill, price line. */
 export function GuideCardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-card bg-card shadow-card">
-      <Skeleton className="aspect-[3/4] w-full" rounded="none" />
+    <div className="overflow-hidden rounded-photo bg-card shadow-card">
+      <Skeleton className="aspect-[4/5] w-full" rounded="none" />
       <div className="space-y-2 p-3">
         <Skeleton className="h-4 w-2/3" />
         <Skeleton className="h-3 w-full" />
@@ -30,7 +30,7 @@ export function GuideCardSkeleton() {
 /** Matches OfferingCard: 4:3 cover, title + meta, guide-avatar bottom-left. */
 export function OfferingCardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-card bg-card shadow-card">
+    <div className="overflow-hidden rounded-photo bg-card shadow-card">
       <div className="relative">
         <Skeleton className="aspect-[4/3] w-full" rounded="none" />
         <Skeleton

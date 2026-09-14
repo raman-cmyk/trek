@@ -13,6 +13,8 @@ import { EmergencyFields } from "~/components/EmergencyFields";
 import { emergencyPatch, parseEmergency } from "~/lib/emergency";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -355,8 +357,10 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
   }
 
   return (
-    <main className="mx-auto max-w-lg px-4 py-10">
-      <h1 className="font-display text-3xl text-ink">Become a guide</h1>
+    <AuthSplit scene={AUTH_SCENE} wide className="items-start">
+      <h1 className="font-display text-3xl text-ink sm:text-4xl">
+        <span className="wt-light">Become a</span> <span className="wt-heavy">guide.</span>
+      </h1>
       <p className="mt-1 text-ink-soft">
         Lead your own treks and experiences. You set your rate and keep it in
         full — our 10% is added on top and paid by the trekker. We verify every
@@ -518,7 +522,7 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
           {saved && <span className="text-xs text-ink-soft">Saved</span>}
         </div>
       </Form>
-    </main>
+    </AuthSplit>
   );
 }
 

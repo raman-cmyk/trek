@@ -2,6 +2,8 @@ import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { GradeGlyph, RouteProfile } from "~/components/public/RouteProfile";
 import { useMoney } from "~/lib/currency-context";
+import { GlassPill } from "~/components/design/Glass";
+import { Glyph } from "~/components/design/Chip";
 import { gradeLevel, isRange, type Profile } from "~/lib/route-cards";
 
 export interface CardGuide {
@@ -59,7 +61,7 @@ export function RouteCard({
       : route.name;
 
   return (
-    <article className="group flex flex-col overflow-hidden rounded-card border border-line bg-card transition duration-quick hover:border-sage hover:shadow-lift">
+    <article className="group flex flex-col overflow-hidden rounded-photo border border-line bg-card shadow-card transition duration-quick hover:-translate-y-0.5 hover:border-sage hover:shadow-lift">
       <Link to={`/routes/${route.slug}`} prefetch="intent" className="block">
         {/* One box, one shape, photo or not — otherwise a row of cards steps
             up and down as the routes with photographs run out. */}
@@ -108,12 +110,15 @@ export function RouteCard({
             />
           ) : null}
 
-          <span className="absolute left-3 top-3 rounded-pill bg-card/85 px-2.5 py-1 text-caption font-medium text-pine backdrop-blur-sm">
+          <GlassPill className="absolute left-3 top-3 text-pine">
+            <Glyph name="pin" className="text-moss" />
             {route.region}
-          </span>
-          <span className="absolute right-3 top-3 rounded-pill bg-card/85 px-2.5 py-1 text-caption text-muted backdrop-blur-sm">
-            <b className="font-mono font-semibold text-ink">{altitude}</b> m
-          </span>
+          </GlassPill>
+          <GlassPill className="absolute right-3 top-3">
+            <Glyph name="altitude" className="text-moss" />
+            <b className="font-mono font-semibold text-ink">{altitude}</b>
+            <span className="text-muted">m</span>
+          </GlassPill>
         </div>
       </Link>
 
@@ -147,14 +152,14 @@ export function RouteCard({
 
         {/* Days, grade and the months — the three questions asked of every
             trek, in the same three places on every card. */}
-        <dl className="mt-4 flex overflow-hidden rounded-md border border-line">
-          <div className="flex-1 border-r border-line px-3 py-2">
+        <dl className="mt-4 flex overflow-hidden rounded-[12px] bg-mist">
+          <div className="flex-1 border-r border-card px-3 py-2">
             <dd className="font-mono text-base font-semibold leading-none text-ink">
               {route.typical_days}
             </dd>
             <dt className="mt-1.5 text-caption text-muted">days</dt>
           </div>
-          <div className="flex-1 border-r border-line px-3 py-2">
+          <div className="flex-1 border-r border-card px-3 py-2">
             <dd className="flex h-4 items-end">
               <GradeGlyph level={gradeLevel(route.difficulty)} label={route.difficulty} />
             </dd>
