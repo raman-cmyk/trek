@@ -8,6 +8,8 @@ import { computeExperiencePricing, type PriceBreakdown as PB , hasBreakdown } fr
 import { useMoney } from "~/lib/currency-context";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { previewTrack } from "~/lib/pipeline";
+import { depositLine, freeCancellationLine } from "~/lib/policy-copy";
+import { Link } from "react-router";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { daysLabel, firstTakenDay, formatSpan, spanEnd } from "~/lib/date-span";
 
@@ -303,6 +305,60 @@ function ConfigBody({
 
           The first two items are the request itself, which no pipeline stage
           covers because it happens before there is a booking at all. */}
+      {/* The free-cancellation period, stated where the thumb is. It says
+          "free" because that is the word people are looking for, and says
+          what is withheld in the same breath — a headline promise with the
+          exception buried on another page is what turns a refund into a
+          complaint. Both numbers come from the refund engine, so the page
+          cannot promise something the code does not pay. */}
+      <p className="mt-3 flex items-start gap-2 rounded-button border border-sage/50 bg-mist px-3 py-2.5">
+        <TickMark />
+        <span className="min-w-0">
+          <Link
+            to="/cancellation#refunds"
+            className="text-sm font-medium text-pine underline underline-offset-4"
+          >
+            {freeCancellationLine().headline}
+          </Link>
+          <span className="mt-0.5 block text-caption text-ink-soft">
+            {freeCancellationLine().detail}
+          </span>
+        </span>
+      </p>
+
+      {/* The two questions somebody asks with their thumb over the button,
+          answered where they ask them rather than in a footer nobody opens.
+          Both go to one page, because "can I get my money back" and "do I
+          have to pay it all now" are the same worry asked twice. */}
+      <ul className="mt-4 space-y-3 border-t border-border pt-4">
+        <li className="flex items-start gap-2.5">
+          <ShieldMark />
+          <span className="min-w-0">
+            <Link
+              to="/cancellation#refunds"
+              className="text-sm font-medium text-ink underline underline-offset-4 hover:text-moss"
+            >
+              View our cancellation policies
+            </Link>
+            <span className="mt-0.5 block text-caption text-muted">
+              What you get back closer in, and what your guide is paid.
+            </span>
+          </span>
+        </li>
+        <li className="flex items-start gap-2.5">
+          <CardMark />
+          <span className="min-w-0">
+            <Link
+              to="/cancellation#deposit"
+              className="text-sm font-medium text-ink underline underline-offset-4 hover:text-moss"
+            >
+              Book with a deposit
+            </Link>
+            <span className="mt-0.5 block text-caption text-muted">{depositLine()}</span>
+          </span>
+        </li>
+      </ul>
+
       <TrustPanel
         className="mt-3"
         title="What happens when you send this"
@@ -316,7 +372,6 @@ function ConfigBody({
             note: "Nothing is charged until then, and nothing commits you now.",
           },
           ...previewTrack(o.kind).map((s) => ({ label: s.label, note: s.hint })),
-          { label: "Cancel free until 30 days before you leave." },
         ]}
       />
     </div>
@@ -410,5 +465,60 @@ export function BookingWidget({
         />
       </Sheet>
     </>
+  );
+}
+
+function ShieldMark() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="mt-0.5 h-4.5 w-4.5 shrink-0 text-moss"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 2.5 4 4.8v4.4c0 3.4 2.4 6.5 6 8.3 3.6-1.8 6-4.9 6-8.3V4.8L10 2.5Z" />
+      <path d="m7.6 9.9 1.7 1.7 3.2-3.4" />
+    </svg>
+  );
+}
+
+function CardMark() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="mt-0.5 h-4.5 w-4.5 shrink-0 text-moss"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2.5" y="4.5" width="15" height="11" rx="2" />
+      <path d="M2.5 8.5h15" />
+      <path d="M5.5 12.5h3" />
+    </svg>
+  );
+}
+
+function TickMark() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="mt-0.5 h-4.5 w-4.5 shrink-0 text-moss"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="10" cy="10" r="7.25" />
+      <path d="m6.8 10.2 2.1 2.1 4.3-4.6" />
+    </svg>
   );
 }

@@ -26,6 +26,8 @@ export default [
     route("hosts", "routes/hosts.tsx"),
     route("safety", "routes/safety.tsx"),
     route("trust", "routes/trust.tsx"),
+    // What happens if you cannot come, generated from the refund engine.
+    route("cancellation", "routes/cancellation.tsx"),
     route("insurance", "routes/insurance.tsx"),
     route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
