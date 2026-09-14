@@ -622,3 +622,29 @@ question — fewest, most, your limit — with the consequence stated (nobody ca
 request more, no stranger joins somebody else's booking), it reads as the
 guide's call, which is what it is. The public page states it as a sentence,
 "Private trip for 1 to 8 people", rather than "up to 8" in a grey byline.
+
+## The money terms go under the calendar, not only in the card (2026-09-14)
+
+A collapsed panel inside the booking card is where terms go to not be read:
+on a phone the card is a bottom sheet, so the deposit and the refund bands
+were two taps deep behind a decision the reader had not made yet. Under the
+calendar they are in the reader's path, at the point where they have just
+picked a day and the next two questions are what they pay now and what happens
+if they cannot come.
+
+The card keeps its priced deposit line — that is the moment of committing, and
+it reads the same `REFUND_BANDS` and `paymentPlan` — so the two cannot say
+different things.
+
+`CANCELLATION_TEASER` is derived from the first refund band rather than written
+out, and `depositTeaser` prints both figures: "pay a deposit" with no second
+number reads as a hidden balance. A trip inside the full-payment window names
+no deposit percentage at all, because it does not have one.
+
+## One quote, two places on the page (2026-09-14)
+
+`useTripQuote` was private to the booking card. The terms under the calendar
+need the same total, and writing those sums a second time is precisely the
+mistake that had the guide's profile and the trip page advertising different
+availability this morning. The hook is exported and the offering shape is built
+once; the card and the terms consume the same number.

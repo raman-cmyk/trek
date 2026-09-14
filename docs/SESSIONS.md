@@ -1572,3 +1572,39 @@ bec6f1fb is live. 456 tests green, typecheck green, build green.
 than naming a deposit — that is the rule working, not a bug: trips starting
 inside the deposit window are paid in full. The trek pages show the deposit
 percentage and amount.
+
+## Session — the deposit and the cancellation policy, below the calendar (2026-09-14, last)
+
+Pratik's note, with a ToursByLocals page as the reference: a "View our
+cancellation policies" and a "Book with a deposit" section have to sit below
+the calendar on every experience, in a similar place to that page.
+
+Both already existed and both were inside the booking card, folded into one
+closed `<details>` whose summary was the deposit line — so the deposit was
+findable if you opened it, and the refund bands if you opened it and read to
+the bottom. On a phone that card is a bottom sheet, which put the whole thing
+behind a tap nobody takes before they have decided to go.
+
+They are now two rows immediately under the availability calendar, on every
+experience and trek page: **Book with a deposit** with both figures and the day
+the balance goes, and **View our cancellation policy** with what comes back,
+each opening in place. Plain `<details>` with no script in them, so they still
+open with the JavaScript off.
+
+Priced for the date and party on screen, from the same quote the booking card
+charges — `useTripQuote` is exported and the offering shape hoisted, because
+two copies of the arithmetic is exactly how the profile and the trip page came
+to advertise different availability this morning. A day trip inside the
+full-payment window says so instead of naming a deposit that does not apply.
+
+Verified live on six pages: the three day experiences read "Paying for this
+trip — $30.24 now, trips this soon are paid in full", and the three EBC treks
+"Book with a deposit — $229.62 now, $918.46 on Oct 5, 2026". Version 32873cd3.
+
+459 tests green, typecheck green, build green.
+
+**🙋 Founder:** the site was reverted a second time by a deploy from the other
+chat's branch, which was missing everything since this morning's merge. Both
+branch names now point at the same commit, so the build is identical whichever
+checkout deploys — but the safe rule is still one deployer. Ask me and I will
+push it out.
