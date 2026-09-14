@@ -106,7 +106,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
           <p className="text-sm font-medium text-ink-soft">Upcoming &amp; active</p>
           <ul className="space-y-2">
             {upcoming.map((b) => (
-              <li key={b.id} className="rounded-card border border-border bg-card p-4">
+              <li key={b.id} className="rounded-photo border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-ink">{b.offering?.title}</p>
                   <Badge tone={STATUS_TONE[b.status] ?? "neutral"}>{b.status.replace(/_/g, " ")}</Badge>
@@ -164,7 +164,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
           <p className="text-sm font-medium text-ink-soft">Completed</p>
           <ul className="space-y-2">
             {past.map((b) => (
-              <li key={b.id} className="rounded-card border border-border bg-card p-4">
+              <li key={b.id} className="rounded-photo border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
                   <p className="font-medium text-ink">{b.offering?.title}</p>
                   <Badge tone="green">completed</Badge>

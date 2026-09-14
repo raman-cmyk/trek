@@ -888,7 +888,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               <div className="flex flex-wrap items-center gap-3 pt-6 lg:hidden">
                 {messageForm(
                   `Message ${first} — free`,
-                  "rounded bg-moss px-6 py-3 font-medium text-white hover:bg-pine",
+                  "inline-flex h-12 items-center rounded-button bg-chartreuse px-6 font-medium text-pine shadow-card hover:brightness-[0.97]",
                 )}
                 <Link
                   to={`/groups/new?guide=${guide.user_id}`}

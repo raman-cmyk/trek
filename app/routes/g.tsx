@@ -111,7 +111,7 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-line bg-paper/95 backdrop-blur-md"
+        className="glass fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-line"
         // The home-indicator strip on an iPhone sits over the bottom of the
         // screen; without this the last row of a tab bar is under it.
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

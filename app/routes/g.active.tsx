@@ -7,6 +7,7 @@ import { firstName } from "~/lib/names";
 import { dialable } from "~/lib/emergency";
 import { trekDay } from "~/lib/checkin";
 import { cn } from "~/lib/cn";
+import { StatRow, StatTile } from "~/components/design/StatTile";
 
 /**
  * The trek that is happening right now — the guide's operations screen.
@@ -102,11 +103,14 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
       <div>
         <h1 className="font-display text-2xl text-ink">{b.offering?.title}</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Day <span className="font-mono text-ink">{dayNum}</span> of{" "}
-          <span className="font-mono text-ink">{total}</span> ·{" "}
-          {firstName(b.trekker?.full_name)} · {b.party_size}p ·{" "}
-          {fmtDate(b.start_date)} → {fmtDate(b.end_date)}
+          {firstName(b.trekker?.full_name)} · {fmtDate(b.start_date)} → {fmtDate(b.end_date)}
         </p>
+        {/* The day as tiles (docs/07): readable at arm's length with gloves on. */}
+        <StatRow className="mt-3" cols={3}>
+          <StatTile glyph="walk" value={dayNum} unit={`of ${total}`} label="Day" />
+          <StatTile glyph="people" value={b.party_size} label={b.party_size === 1 ? "Trekker" : "Trekkers"} />
+          <StatTile glyph="calendar" value={Math.max(0, total - dayNum)} label="Days left" />
+        </StatRow>
       </div>
 
       {stops.length > 0 && (
@@ -117,7 +121,7 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
               <li
                 key={s.day}
                 className={cn(
-                  "flex items-baseline gap-3 rounded-card border p-3",
+                  "flex items-baseline gap-3 rounded-photo border p-3",
                   state === "today"
                     ? "border-moss/60 bg-mist"
                     : state === "done"
@@ -145,7 +149,7 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
         </ol>
       )}
 
-      <div className="rounded-card border border-border bg-card p-4 text-sm">
+      <div className="rounded-photo border border-border bg-card p-4 text-sm">
         <p className="font-medium text-ink">If something goes wrong</p>
         <p className="mt-1 text-ink-soft">
           Message the office from any signal — we watch this trek daily. For a
@@ -188,20 +192,20 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
 
       {/* The one button, at the bottom, where the thumb is. */}
       {window.where !== "on" ? (
-        <p className="rounded-card bg-surface p-4 text-center text-sm text-ink-soft">
+        <p className="rounded-photo bg-surface p-4 text-center text-sm text-ink-soft">
           {window.where === "before"
             ? `Nothing to send yet — day 1 is ${b.start_date}.`
             : "This trek is finished. Close it from the safety screen so your payout goes out."}
         </p>
       ) : checkedInToday ? (
-        <p className="rounded-card bg-mist p-4 text-center text-sm text-ink">
+        <p className="rounded-photo bg-mist p-4 text-center text-sm text-ink">
           Checked in for day {dayNum} — the office knows you&rsquo;re fine. See
           you tomorrow.
         </p>
       ) : (
         <form method="post">
           <input type="hidden" name="booking_id" value={b.id} />
-          <button className="w-full rounded-card bg-pine px-6 py-4 text-lg font-medium text-paper hover:bg-moss">
+          <button className="w-full rounded-photo bg-chartreuse px-6 py-4 text-lg font-medium text-pine shadow-card hover:brightness-[0.97] active:scale-[0.98]">
             I&rsquo;m safe — day {dayNum}
           </button>
         </form>

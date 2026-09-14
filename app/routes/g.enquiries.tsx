@@ -126,13 +126,13 @@ export default function GuideEnquiries({ loaderData, actionData }: Route.Compone
     <div className="space-y-4">
       <h1 className="font-display text-2xl text-ink">Requests</h1>
       {msg?.error && (
-        <p className="rounded-card bg-ember/10 p-3 text-sm text-ember">{msg.error}</p>
+        <p className="rounded-photo bg-ember/10 p-3 text-sm text-ember">{msg.error}</p>
       )}
       {msg?.ok && (
-        <p className="rounded-card bg-mist p-3 text-sm text-moss">{msg.ok}</p>
+        <p className="rounded-photo bg-mist p-3 text-sm text-moss">{msg.ok}</p>
       )}
       {enquiries.length === 0 ? (
-        <div className="rounded-card border border-border bg-card p-6 text-center text-sm text-ink-soft">
+        <div className="rounded-photo border border-border bg-card p-6 text-center text-sm text-ink-soft">
           No new requests right now. Most guides get their first within 2 weeks —
           keep your calendar open and your profile fresh.
         </div>
@@ -169,7 +169,7 @@ function EnquiryCard({ enquiry: e, sent }: { enquiry: any; sent: any[] }) {
   const live = sent.find((p) => p.status === "proposed");
 
   return (
-    <li className="rounded-card border border-border bg-card p-4">
+    <li className="rounded-photo border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <p className="font-medium text-ink">
           {firstName(e.trekker?.full_name)}
@@ -226,7 +226,7 @@ function EnquiryCard({ enquiry: e, sent }: { enquiry: any; sent: any[] }) {
         <Form method="post" className="flex-1">
           <input type="hidden" name="id" value={e.id} />
           <input type="hidden" name="decision" value="accepted" />
-          <Button type="submit" className="w-full">
+          <Button type="submit" variant="lime" className="w-full">
             Accept as asked
           </Button>
         </Form>

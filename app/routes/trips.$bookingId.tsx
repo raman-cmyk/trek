@@ -24,6 +24,11 @@ import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { PreTrekBrief } from "~/components/PreTrekBrief";
 import { dialable, emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
+import { TrailScene } from "~/components/design/TrailScene";
+import { FactStrip } from "~/components/design/FactStrip";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { StatRow, StatTile } from "~/components/design/StatTile";
+import { cn } from "~/lib/cn";
 
 export function meta() {
   return [{ title: "Your trip" }, { name: "robots", content: "noindex" }];
@@ -35,7 +40,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, meeting_point, route:routes(name, region, max_altitude_m)), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, meeting_point, cover_photo_url, route:routes(name, region, max_altitude_m, day_stops)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -306,17 +311,51 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
   const canComplete =
     b.status === "active" ||
     (["confirmed", "active"].includes(b.status) && daysUntil < 0);
+  const tripStops = ((b.offering?.route?.day_stops ?? []) as Array<{ day: number; place: string; altitude_m: number }>).filter(
+    (st) => Number(st?.altitude_m) > 0,
+  );
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <Link to="/trips" className="text-sm text-primary">
         ← My trips
       </Link>
-      <h1 className="mt-2 font-display text-2xl text-ink">{b.offering?.title}</h1>
-      <p className="text-ink-soft">
-        with {firstName(b.guide?.users?.full_name)} · {fmtDateRange(b.start_date, b.end_date)} ·{" "}
-        {b.party_size}p
-      </p>
+      {/* The trip drawn as a walk (docs/07): the route's real day stops over
+          the cover, or over terrain. The title sits on it. */}
+      <TrailScene
+        photo={b.offering?.cover_photo_url}
+        alt={b.offering?.title ?? "Your trek"}
+        stops={tripStops}
+        pins={3}
+        eager
+        height="mt-3 aspect-[4/3] sm:aspect-[16/9]"
+      >
+        <div className={cn("absolute inset-x-0 bottom-0 p-4 sm:p-5", b.offering?.cover_photo_url ? "text-paper" : "text-ink")}>
+          <Eyebrow tone={b.offering?.cover_photo_url ? "chartreuse" : "moss"}>
+            with {firstName(b.guide?.users?.full_name)}
+          </Eyebrow>
+          <h1 className="mt-1 font-display text-2xl leading-tight sm:text-3xl">{b.offering?.title}</h1>
+          <div className="mt-2">
+            <FactStrip
+              onPhoto={Boolean(b.offering?.cover_photo_url)}
+              facts={[
+                { glyph: "calendar", value: fmtDateRange(b.start_date, b.end_date) },
+                { glyph: "people", value: b.party_size, unit: b.party_size === 1 ? "person" : "people" },
+                b.offering?.route?.max_altitude_m ? { glyph: "altitude", value: b.offering.route.max_altitude_m.toLocaleString("en-US"), unit: "m" } : { value: "" },
+              ]}
+            />
+          </div>
+        </div>
+      </TrailScene>
+      {b.status === "completed" && (
+        // The moment at the end (docs/07, from the "walk complete" reference):
+        // the trek as its numbers, not just a status word.
+        <StatRow className="mt-4" cols={3}>
+          <StatTile glyph="calendar" value={b.offering?.days ?? "—"} unit="days" label="Walked" />
+          <StatTile glyph="altitude" value={b.offering?.route?.max_altitude_m?.toLocaleString("en-US") ?? "—"} unit="m" label="Highest point" />
+          <StatTile glyph="people" value={b.party_size} label="Of you" />
+        </StatRow>
+      )}
       {!cancelled && (
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
@@ -352,7 +391,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
       {b.status === "pending_deposit" && !cancelled && (
         <Link
           to={`/checkout/${b.id}`}
-          className="mt-5 block rounded-button bg-primary px-4 py-3 text-center font-medium text-white"
+          className="mt-5 block rounded-button bg-chartreuse px-4 py-3 text-center font-medium text-pine shadow-card hover:brightness-[0.97]"
         >
           {b.deposit_usd_cents >= b.total_usd_cents
             ? `Pay ${m(b.total_usd_cents)} & confirm`

@@ -8,6 +8,12 @@ import { groupHeading } from "~/lib/groups";
 import { SmartImage } from "~/components/SmartImage";
 import { Badge } from "~/components/ops/ui";
 import { Eyebrow } from "~/components/design/Eyebrow";
+import { PhotoCard } from "~/components/design/PhotoCard";
+import { Glass, GlassPill } from "~/components/design/Glass";
+import { Glyph } from "~/components/design/Chip";
+import { TrailScene } from "~/components/design/TrailScene";
+import { AUTH_SCENE } from "~/lib/auth-scene";
+import { cn } from "~/lib/cn";
 
 const TONE: Record<string, "amber" | "blue" | "teal" | "green" | "neutral" | "red"> = {
   pending_deposit: "amber",
@@ -222,62 +228,44 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
       )}
 
       {bookings.length === 0 && requests.length === 0 ? (
-        <div className="mt-8 rounded-card border border-border bg-card p-8 text-center">
-          <p className="text-ink-soft">No trips yet.</p>
-          <Link to="/guides" className="mt-3 inline-block font-medium text-primary">
-            Find your guide →
-          </Link>
-        </div>
+        // No trips yet is still a picture of a walk (docs/07): a real route
+        // as terrain, with the one thing to do on glass.
+        <TrailScene photo={null} alt="A route drawn day by day" stops={AUTH_SCENE.stops} pins={3} height="mt-8 aspect-[4/3] sm:aspect-[16/9]">
+          <div className="absolute inset-x-4 bottom-4">
+            <Glass className="p-4">
+              <p className="font-display text-lg text-ink">No trips yet.</p>
+              <p className="mt-1 text-sm text-muted">Pick the person first. The trek follows.</p>
+              <Link to="/guides" className="mt-3 inline-flex h-10 items-center gap-2 rounded-button bg-chartreuse px-4 text-sm font-medium text-pine shadow-card hover:brightness-[0.97]">
+                <Glyph name="people" /> Find your guide →
+              </Link>
+            </Glass>
+          </div>
+        </TrailScene>
       ) : (
-        <ul className="mt-6 space-y-3">
+        <ul className="mt-6 grid gap-4 sm:grid-cols-2">
           {bookings.map((b) => (
             <li key={b.id}>
-              <Link
+              {/* The trip as a picture (docs/07): its cover, or terrain, with
+                  the words on a dark panel and its state on a glass pill. */}
+              <PhotoCard
                 to={`/trips/${b.id}`}
-                prefetch="intent"
-                className="flex gap-3 rounded-card border border-border bg-card p-3 hover:shadow-card"
+                photo={b.offering?.cover_photo_url}
+                alt={b.offering?.title ?? ""}
+                aspect="aspect-[16/9]"
+                topRight={<GlassPill><Badge tone={TONE[b.status] ?? "neutral"}>{statusLabel(b.status)}</Badge></GlassPill>}
+                topLeft={b.groupName ? <GlassPill><Glyph name="people" className="text-moss" />{b.groupName}</GlassPill> : undefined}
               >
-                <SmartImage
-                  src={b.offering?.cover_photo_url ?? ""}
-                  alt={b.offering?.title ?? ""}
-                  width={96}
-                  height={96}
-
-                  className="h-20 w-20 shrink-0 rounded-lg"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate font-medium text-ink">
-                      {b.offering?.title}
-                    </p>
-                    <Badge tone={TONE[b.status] ?? "neutral"}>
-                      {statusLabel(b.status)}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-ink-soft">
-                    {firstName(b.guide?.users?.full_name)}
-                    {b.groupName && (
-                      <>
-                        {" · "}
-                        <span className="text-ink">{b.groupName}</span>
-                      </>
-                    )}
+                <p className={cn("font-display text-xl leading-tight", !b.offering?.cover_photo_url && "text-ink")}>{b.offering?.title}</p>
+                <p className={cn("mt-1 text-sm", b.offering?.cover_photo_url ? "text-paper/85" : "text-muted")}>
+                  with {firstName(b.guide?.users?.full_name)} · {fmtDateRange(b.start_date, b.end_date)}
+                </p>
+                {b.status === "pending_deposit" && (
+                  <p className="mt-1.5 inline-block rounded-pill bg-chartreuse px-2.5 py-1 text-caption font-medium text-pine">
+                    Pay the deposit to keep these dates
+                    {b.hold_expires_at ? ` — held until ${fmtDate(b.hold_expires_at)}` : ""}
                   </p>
-                  <p className="text-sm text-ink-soft">
-                    {fmtDateRange(b.start_date, b.end_date)}
-                  </p>
-                  {/* An accepted booking holds the guide's calendar for 24
-                      hours and then lets it go. That deadline was only ever
-                      visible inside the booking, which is one click too far
-                      from the list somebody actually opens. */}
-                  {b.status === "pending_deposit" && (
-                    <p className="mt-0.5 text-sm font-medium text-primary">
-                      Pay the deposit to keep these dates
-                      {b.hold_expires_at ? ` — held until ${fmtDate(b.hold_expires_at)}` : ""}
-                    </p>
-                  )}
-                </div>
-              </Link>
+                )}
+              </PhotoCard>
             </li>
           ))}
         </ul>

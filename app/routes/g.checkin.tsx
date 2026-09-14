@@ -176,23 +176,23 @@ export default function GuideCheckin({ loaderData, actionData }: Route.Component
       </div>
 
       {actionData && "ok" in (actionData as any) && (
-        <p className="rounded-card bg-mist p-3 text-sm text-moss">{(actionData as any).ok}</p>
+        <p className="rounded-photo bg-mist p-3 text-sm text-moss">{(actionData as any).ok}</p>
       )}
       {actionData && "error" in (actionData as any) && (
-        <p role="alert" className="rounded-card bg-danger/5 p-3 text-sm text-danger">
+        <p role="alert" className="rounded-photo bg-danger/5 p-3 text-sm text-danger">
           {(actionData as any).error}
         </p>
       )}
 
       {trips.length === 0 && (
-        <p className="rounded-card border border-border bg-card p-4 text-sm text-ink-soft">
+        <p className="rounded-photo border border-border bg-card p-4 text-sm text-ink-soft">
           No trek running. This page wakes up on the morning your next one
           starts.
         </p>
       )}
 
       {[...due, ...rest].map((t: any) => (
-        <section key={t.id} className="rounded-card border border-border bg-card p-4">
+        <section key={t.id} className="rounded-photo border border-border bg-card p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="font-medium text-ink">{t.title}</p>
             <Badge
@@ -245,7 +245,7 @@ export default function GuideCheckin({ loaderData, actionData }: Route.Component
                 className="w-full rounded-button border border-border bg-paper px-3 py-2 text-base text-ink outline-none focus:border-primary"
               />
               <button
-                className="w-full rounded-card bg-pine px-6 py-4 text-lg font-medium text-paper hover:bg-moss"
+                className="w-full rounded-photo bg-chartreuse px-6 py-4 text-lg font-medium text-pine shadow-card hover:brightness-[0.97] active:scale-[0.98]"
                 disabled={busy}
               >
                 {/* Not the badge's wording: "last day — day 15" twice over

@@ -304,7 +304,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       {active ? (
         <Link
           to="/g/active"
-          className="block rounded-card border border-moss/50 bg-mist p-4"
+          className="block rounded-photo border border-moss/50 bg-mist p-4"
         >
           <p className="text-xs text-ink-soft">
             {window ? (window.where === "on" ? `On the trail — ${dayLabel(window).toLowerCase()}` : dayLabel(window)) : ""}
@@ -325,7 +325,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {nextBooking && (
-        <section className="rounded-card border border-border bg-card p-4">
+        <section className="rounded-photo border border-border bg-card p-4">
           <p className="text-xs text-ink-soft">Next trip</p>
           <p className="font-medium text-ink">{nextBooking.offering?.title}</p>
           <p className="text-sm text-ink-soft">
@@ -335,7 +335,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {payableNprPaisa > 0 && (
-        <Link to="/g/earnings" className="block rounded-card border border-moss/40 bg-mist p-4">
+        <Link to="/g/earnings" className="block rounded-photo border border-moss/40 bg-mist p-4">
           <p className="text-xs text-ink-soft">Owed to you</p>
           <p className="mt-0.5 font-mono text-xl text-ink">{formatNpr(payableNprPaisa)}</p>
           <p className="mt-0.5 text-xs text-ink-soft">Paid within 7 days of each trek ending.</p>
@@ -343,7 +343,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {backupFor.length > 0 && (
-        <section className="rounded-card border border-border bg-card p-4">
+        <section className="rounded-photo border border-border bg-card p-4">
           <p className="text-sm font-medium text-ink">
             You're the backup guide on {backupFor.length} trek{backupFor.length === 1 ? "" : "s"}
           </p>
@@ -364,22 +364,22 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Link to="/g/experiences" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+        <Link to="/g/experiences" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Your experiences →
         </Link>
-        <Link to="/g/journals" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+        <Link to="/g/journals" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Your journeys →
         </Link>
-        <Link to="/g/bookings" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+        <Link to="/g/bookings" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Booked trips →
         </Link>
-        <Link to="/g/calendar" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+        <Link to="/g/calendar" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Block dates →
         </Link>
-        <Link to="/g/earnings" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+        <Link to="/g/earnings" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Your money →
         </Link>
-        <Link to="/g/reviews" className="rounded-card border border-border bg-card p-4 text-sm font-medium">
+        <Link to="/g/reviews" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Reviews →
         </Link>
         {/* Journals are how a guide wins the next booking, so they sit with
@@ -387,7 +387,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         <Link
           to="/g/questions"
           className={cn(
-            "col-span-2 flex items-center justify-between rounded-card border p-4 text-sm font-medium",
+            "col-span-2 flex items-center justify-between rounded-photo border p-4 text-sm font-medium",
             unansweredQuestions > 0
               ? "border-moss/50 bg-mist text-ink"
               : "border-border bg-card text-ink",
@@ -403,7 +403,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
 
         <Link
           to="/g/journals"
-          className="col-span-2 rounded-card border border-moss/40 bg-mist p-4 text-sm font-medium"
+          className="col-span-2 rounded-photo bg-chartreuse p-4 text-sm font-medium text-pine shadow-card"
         >
           Write up a trek →
           <span className="mt-0.5 block text-xs font-normal text-ink-soft">
@@ -417,7 +417,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
            no open days is invisible in every dated search, and nothing on
            this phone told him that. */}
       {work && (
-        <section className="rounded-card border border-border bg-card p-4">
+        <section className="rounded-photo border border-border bg-card p-4">
           <p className="text-sm font-medium text-ink">Get more work</p>
           <ul className="mt-3 space-y-2.5 text-sm">
             <li>
@@ -477,7 +477,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       {window && checkinIsDue(window, checkedInToday) && (
         <Link
           to="/g/checkin"
-          className="block rounded-card bg-pine px-6 py-4 text-center text-lg font-medium text-paper hover:bg-moss"
+          className="block rounded-photo bg-pine px-6 py-4 text-center text-lg font-medium text-paper hover:bg-moss"
         >
           Send today&rsquo;s safety update — {dayLabel(window).toLowerCase()}
         </Link>
@@ -485,7 +485,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       {window && needsClosing(window, "active") && (
         <Link
           to="/g/checkin"
-          className="block rounded-card border border-border bg-card p-4 text-sm text-ink hover:border-moss"
+          className="block rounded-photo border border-border bg-card p-4 text-sm text-ink hover:border-moss"
         >
           <span className="font-medium">This trek is finished.</span> Close it so
           your payout goes into the next batch →
@@ -510,7 +510,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
                 <Link
                   to={`/journals/${f.slug}`}
                   prefetch="intent"
-                  className="flex items-center gap-3 rounded-card border border-border bg-card p-2.5 hover:border-sage hover:bg-mist"
+                  className="flex items-center gap-3 rounded-photo border border-border bg-card p-2.5 hover:border-sage hover:bg-mist"
                 >
                   <SmartImage
                     src={f.cover_photo_url ?? ""}
@@ -545,7 +545,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           guide can look at what they are building. */}
       <Link
         to={guide?.slug ? `/guides/${guide.slug}` : "/g/profile"}
-        className="block rounded-card border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
+        className="block rounded-photo border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
       >
         See your page the way trekkers see it →
       </Link>
@@ -570,7 +570,7 @@ function Tile({
     <Link
       to={to}
       className={cn(
-        "rounded-card border p-4",
+        "rounded-photo border p-4",
         highlight ? "border-primary bg-primary/5" : "border-border bg-card",
       )}
     >
@@ -603,7 +603,7 @@ function StatusView({
         <p className="text-sm text-ink-soft">Here’s where your application stands.</p>
       </div>
       {rejected ? (
-        <div className="rounded-card border border-danger/30 bg-danger/5 p-4">
+        <div className="rounded-photo border border-danger/30 bg-danger/5 p-4">
           <p className="font-medium text-danger">Application not approved</p>
           <p className="mt-1 text-sm text-ink-soft">
             We couldn’t verify your application this time. We’ll be in touch.
@@ -639,13 +639,13 @@ function StatusView({
       {!rejected && guide?.slug && (
         <Link
           to={`/guides/${guide.slug}`}
-          className="block rounded-card border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
+          className="block rounded-photo border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
         >
           See your page the way trekkers will see it →
         </Link>
       )}
       {checks.length > 0 && (
-        <div className="rounded-card border border-border bg-card p-4">
+        <div className="rounded-photo border border-border bg-card p-4">
           <p className="mb-2 text-sm font-medium text-ink">Verification checklist</p>
           <ul className="space-y-1.5 text-sm">
             {checks.map((c: any) => (

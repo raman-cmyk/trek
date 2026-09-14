@@ -121,7 +121,7 @@ export default function TrekkerProfile({ loaderData, actionData }: Route.Compone
       </header>
 
       {isSelf && (
-        <p className="mt-4 rounded-card bg-surface p-3 text-sm text-ink-soft">
+        <p className="mt-4 rounded-photo bg-surface p-3 text-sm text-ink-soft">
           This is what a guide sees when you ask them to take you. It is never
           public — only a guide you have asked, and our office.
         </p>
@@ -162,7 +162,7 @@ export default function TrekkerProfile({ loaderData, actionData }: Route.Compone
                 {published
                   .filter((r: any) => r.body)
                   .map((r: any) => (
-                    <li key={r.id} className="rounded-card border border-border bg-card p-4">
+                    <li key={r.id} className="rounded-photo border border-border bg-card p-4">
                       <p className="text-sm text-ink">“{r.body}”</p>
                       <p className="mt-1.5 text-xs text-ink-soft">
                         {r.author_slug ? (
@@ -211,7 +211,7 @@ export default function TrekkerProfile({ loaderData, actionData }: Route.Compone
               {treks.map((t: any) => (
                 <li
                   key={t.bookingId}
-                  className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-card border border-border bg-card p-3"
+                  className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-photo border border-border bg-card p-3"
                 >
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-ink">{t.title}</span>
@@ -252,7 +252,7 @@ export default function TrekkerProfile({ loaderData, actionData }: Route.Compone
             {isSelf ? "What guides should know about you" : "In their words"}
           </h2>
           {isSelf ? (
-            <Form method="post" className="mt-2 space-y-3 rounded-card border border-border bg-card p-4">
+            <Form method="post" className="mt-2 space-y-3 rounded-photo border border-border bg-card p-4">
               <label className="block">
                 <span className="text-sm text-ink">How much trekking have you done?</span>
                 <select
@@ -300,7 +300,7 @@ export default function TrekkerProfile({ loaderData, actionData }: Route.Compone
       )}
 
       {isGuide && empty && (
-        <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">
+        <p className="mt-6 rounded-photo bg-surface p-3 text-sm text-ink-soft">
           Nothing here yet — this is their first trip with us, and they have not
           written anything about themselves. Ask them in the messages; most
           people answer at length.

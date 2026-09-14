@@ -75,7 +75,7 @@ export default function GuideEarnings({ loaderData }: Route.ComponentProps) {
         <Sum label="Paid" note={`in ${new Date().getFullYear()}`} npr={paidThisYear} />
       </div>
 
-      <p className="rounded-card bg-surface p-3 text-sm text-ink-soft">
+      <p className="rounded-photo bg-surface p-3 text-sm text-ink-soft">
         {copy.guide.earningsExplainer} Paid within 7 days of each trek ending.
       </p>
 
@@ -89,7 +89,7 @@ export default function GuideEarnings({ loaderData }: Route.ComponentProps) {
             {upcoming.map((b: any) => (
               <li
                 key={b.id}
-                className="flex items-center justify-between gap-3 rounded-card border border-border bg-card p-3"
+                className="flex items-center justify-between gap-3 rounded-photo border border-border bg-card p-3"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">
@@ -123,7 +123,7 @@ export default function GuideEarnings({ loaderData }: Route.ComponentProps) {
             {payouts.map((p: any) => (
               <li
                 key={p.id}
-                className="flex items-center justify-between gap-3 rounded-card border border-border bg-card p-3"
+                className="flex items-center justify-between gap-3 rounded-photo border border-border bg-card p-3"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">
@@ -171,8 +171,8 @@ function Sum({
     <div
       className={
         highlight
-          ? "rounded-card border border-primary bg-primary/5 p-3"
-          : "rounded-card border border-border bg-card p-3"
+          ? "rounded-photo border border-primary bg-primary/5 p-3"
+          : "rounded-photo border border-border bg-card p-3"
       }
     >
       <p className="text-xs text-ink-soft">{label}</p>

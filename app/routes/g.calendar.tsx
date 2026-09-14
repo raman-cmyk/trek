@@ -260,7 +260,7 @@ export default function GuideCalendar({ loaderData }: Route.ComponentProps) {
       {/* The action bar appears only once something is chosen, and says what
           will happen to how many days before it happens. */}
       {pick && (
-        <div className="sticky bottom-16 z-20 rounded-card border border-border bg-card p-3 shadow-lift">
+        <div className="sticky bottom-16 z-20 rounded-photo border border-border bg-card p-3 shadow-lift">
           <p className="text-sm text-ink">
             {pick.from === pick.to ? (
               <>
