@@ -9,6 +9,7 @@ import { applyFilter, countsFor, resolveKey } from "~/lib/status-filter";
 import { DOC_FILTERS, GUIDE_FILTERS } from "~/lib/ops-filters";
 import { checkLabel } from "~/lib/guide-checks";
 import { fmtDate } from "~/lib/format";
+import { heardBreakdown, heardLine } from "~/lib/heard-about";
 import { sendEmail } from "~/lib/notify.server";
 
 /**
@@ -42,7 +43,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     admin
       .from("guides")
       .select(
-        "user_id, slug, status, tier, home_district, created_at, users(full_name, avatar_url), guide_verifications(check_type, status, notes, expires_at)",
+        "user_id, slug, status, tier, home_district, heard_about, heard_about_detail, created_at, users(full_name, avatar_url), guide_verifications(check_type, status, notes, expires_at)",
       )
       .order("status"),
     admin
@@ -61,6 +62,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       slug: g.slug,
       status: g.status as string,
       district: g.home_district as string | null,
+      // How they found us, and who sent them. Shown on the row that decides
+      // whether to verify them, because "Pemba sent me" is the single most
+      // useful sentence on this page — it is both a reference and a channel.
+      heard: heardLine(g.heard_about, g.heard_about_detail),
+      heardKnown: !!g.heard_about,
       name: g.users?.full_name ?? g.slug,
       avatar: g.users?.avatar_url ?? null,
       tier: g.tier ?? 0,
@@ -102,6 +108,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         guides: guideRows.filter((g) => g.status === "applied" || g.status === "in_review").length,
         trekkers: docRows.filter((d) => d.state === "pending").length,
       },
+      // Where guides are coming from, counted over everybody who has been
+      // asked — not just the tab on screen. Over the whole list because the
+      // answer to "is the referral loop working" must not change when
+      // somebody clicks a filter.
+      heard: heardBreakdown(guides ?? []),
     },
     { headers },
   );
@@ -153,7 +164,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsVerifications({ loaderData, actionData }: Route.ComponentProps) {
-  const { who, status, rows, counts, lanes } = loaderData as any;
+  const { who, status, rows, counts, lanes, heard } = loaderData as any;
   const act = (actionData ?? {}) as any;
   const nav = useNavigation();
   const busy = nav.state !== "idle";
@@ -187,7 +198,10 @@ export default function OpsVerifications({ loaderData, actionData }: Route.Compo
               : "No trekker documents in this list."}
           </EmptyRow>
         ) : who === "guides" ? (
-          <GuideList rows={rows} />
+          <>
+            <HeardFrom rows={heard} />
+            <GuideList rows={rows} />
+          </>
         ) : (
           <DocList rows={rows} busy={busy} />
         )}
@@ -224,6 +238,7 @@ function GuideList({ rows }: { rows: any[] }) {
                 </p>
                 <p className="text-caption text-ink-soft">
                   {r.district ?? "no district"} · applied {fmtDate(r.since)}
+                  {r.heardKnown && <> · {r.heard}</>}
                 </p>
               </div>
             </div>
@@ -378,4 +393,32 @@ function guideTone(status: string) {
   if (status === "in_review") return "amber" as const;
   if (status === "suspended" || status === "removed") return "red" as const;
   return "neutral" as const;
+}
+
+/**
+ * Where guides are coming from.
+ *
+ * One line, above the queue, because it is the answer to the only growth
+ * question that matters for a guide-first marketplace and it costs nothing to
+ * show — the rows are already loaded. Hidden entirely until somebody has
+ * answered: a chart of zeroes is furniture.
+ */
+function HeardFrom({ rows }: { rows: { value: string; label: string; count: number }[] }) {
+  if (!rows.length) return null;
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  return (
+    <div className="mb-3 border-b border-border pb-3">
+      <p className="label text-muted">How they found us</p>
+      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {rows.map((r) => (
+          <li key={r.value} className="text-ink-soft">
+            <span className="font-mono text-ink">{r.count}</span> {r.label}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-caption text-muted">
+        {total} asked. Anyone who applied before we started asking is not counted.
+      </p>
+    </div>
+  );
 }

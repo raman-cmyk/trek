@@ -2443,3 +2443,29 @@ stating where a notification goes.
 and were not, handed back to them unread, because that claim is true.
 
 877 tests green, build green.
+
+**"How did you hear about Guides of Nepal?"** Asked of every guide who
+applies, because for a guide-first marketplace the answer is the business.
+Guides do not arrive from advertising; they arrive because another guide told
+them, and knowing WHICH guide is the difference between a channel you can
+grow and a number on a dashboard.
+
+So the referral answers carry a second question — who? — and that name is the
+valuable half. Stored in two columns rather than one free-text box, so the
+channel can be counted and the person can be named. The other options exist
+to keep the referral answer honest: without "Facebook" on the list, everyone
+who saw a post picks "a guide told me" because it is closest.
+
+Required, and checked on the server as well as in the browser — a field half
+the applicants skip tells nobody anything, and `required` is a courtesy
+rather than a rule. The name box is always visible rather than revealed by
+JavaScript: a guide on a cheap Android should not need a script running to
+answer a question.
+
+It is shown where it is useful rather than filed away: on the row in the
+verification queue that decides whether to verify them, because "Pemba sent
+me" is both a reference and a channel, and as a one-line roll-up above the
+queue. Anyone who applied before the question existed is counted nowhere —
+they are not "somewhere else", they are not data.
+
+895 tests green, build green.

@@ -9,6 +9,7 @@ import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
 import { parseRegions } from "~/lib/guide-regions";
 import { parseRoutesWalked } from "~/lib/guide-routes";
 import { RoutesWalked } from "~/components/RoutesWalked";
+import { HEARD_OPTIONS, cleanDetail, heardProblem } from "~/lib/heard-about";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { emergencyPatch, parseEmergency } from "~/lib/emergency";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
@@ -152,6 +153,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   // deciding whether to verify them at all.
   const walked = parseRoutesWalked(form.get("routes_walked"));
 
+  // One question, required, because a field half the applicants skip tells
+  // nobody anything. Checked on the server as well as in the browser: the
+  // `required` attribute is a courtesy, not a rule.
+  const heardAbout = String(form.get("heard_about") ?? "");
+  const heardProblemText = heardProblem(heardAbout);
+  if (heardProblemText) return data({ error: heardProblemText }, { status: 400 });
+  const heardDetail = cleanDetail(form.get("heard_about_detail"));
+
   // 1) Auth user with a credential the guide can actually sign in with
   // (email + password, same as trekkers). Phone is stored for SMS notices.
   const { data: created, error: authErr } = await admin.auth.admin.createUser({
@@ -193,6 +202,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     years_experience: years,
     day_rate_usd_cents: Math.round(dayRateUsd * 100) || null,
     hook_line: hook,
+    heard_about: heardAbout,
+    heard_about_detail: heardDetail,
   });
   if (guideErr) {
     // Roll back the auth user so the phone can retry.
@@ -498,6 +509,50 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
             label="One line about you"
             hint="The real thing you do. “I know every teahouse from Lukla to Gorak Shep.”"
           />
+
+          {/* Where guides come from is the business, not a marketing metric:
+              almost all of them arrive because another guide told them, and
+              knowing WHICH guide is the difference between a channel you can
+              grow and a number on a dashboard. The name box is always shown
+              rather than revealed by JavaScript — this form works without it,
+              and a guide on a cheap Android should not need a script running
+              to answer a question. */}
+          <div>
+            <label className="block">
+              <span className="text-sm text-ink">How did you hear about us?</span>
+              <select
+                name="heard_about"
+                required
+                defaultValue=""
+                className="mt-1 w-full rounded-button border border-border bg-card px-3 py-2 text-ink"
+              >
+                <option value="" disabled>
+                  Choose one
+                </option>
+                {HEARD_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-2 block">
+              <span className="text-sm text-ink">
+                Who told you?
+                <span className="ml-1.5 text-xs text-ink-soft">optional</span>
+              </span>
+              <span className="mt-0.5 block text-xs text-ink-soft">
+                If a guide, a trekker or an agency sent you — their name. We
+                like to thank people.
+              </span>
+              <input
+                name="heard_about_detail"
+                type="text"
+                maxLength={120}
+                className="mt-1 w-full rounded-button border border-border bg-card px-3 py-2 text-ink"
+              />
+            </label>
+          </div>
         </Group>
 
         <div className="rounded-card border border-border bg-card p-4 text-sm text-ink-soft">
