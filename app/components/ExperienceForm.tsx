@@ -157,6 +157,15 @@ export function ExperienceForm({
   // A day hike has no route, so it has no route step. Showing one — headed
   // "The route", containing nothing — was the clearest signal that this form
   // was written for treks and everything else was squeezed in after.
+  // Read off the form rather than mirrored in state: the review step must
+  // show the number the guide actually typed, not a stale copy of it.
+  const partyRange = (() => {
+    const f = formRef.current;
+    const lo = Number((f?.elements.namedItem("min_party") as HTMLInputElement)?.value) || values?.min_party || 1;
+    const hi = Number((f?.elements.namedItem("max_party") as HTMLInputElement)?.value) || values?.max_party || 6;
+    return lo === hi ? `${lo} ${lo === 1 ? "person" : "people"}` : `${lo} to ${hi} people`;
+  })();
+
   const STEPS = needsRoute(kind)
     ? ["What it is", "Route", "Details", "Photos", "Check"]
     : ["What it is", "Details", "Photos", "Check"];
@@ -368,20 +377,30 @@ export function ExperienceForm({
       )}
 
       <Step n={stepNo("Details")} at={step} title="How long, how many, how much">
-      <div className="grid grid-cols-3 gap-3">
-        <label className={label}>
-          Days
-          <input type="number" name="days" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))} className={field} required />
-        </label>
-        <label className={label}>
-          Smallest group
-          <input type="number" name="min_party" min={1} max={16} defaultValue={values?.min_party ?? 1} className={field} required />
-        </label>
-        <label className={label}>
-          Largest group
-          <input type="number" name="max_party" min={1} max={16} defaultValue={values?.max_party ?? 6} className={field} required />
-        </label>
-      </div>
+      <label className={label}>
+        How many days
+        <input type="number" name="days" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))} className={`${field} sm:max-w-[8rem]`} required />
+      </label>
+
+      {/* ── How many people you will take. Your limit, and the booking form
+           will not let anybody exceed it. */}
+      <fieldset className="rounded border border-line p-3">
+        <legend className="px-1 text-sm font-medium text-ink">How many people</legend>
+        <p className="text-caption text-muted">
+          The most you will take at once. Nobody can request a bigger group than
+          this, and no stranger is ever added to somebody else's booking.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <label className={label}>
+            Fewest
+            <input type="number" name="min_party" min={1} max={16} defaultValue={values?.min_party ?? 1} className={field} required />
+          </label>
+          <label className={label}>
+            Most (your limit)
+            <input type="number" name="max_party" min={1} max={16} defaultValue={values?.max_party ?? 6} className={field} required />
+          </label>
+        </div>
+      </fieldset>
 
       {/* ── Where it starts. Asked for here because without it the trekker
            is left on a "Where to meet" step that nothing can complete, and
@@ -430,7 +449,15 @@ export function ExperienceForm({
       </Step>
 
       <Step n={stepNo("Check")} at={step} title="Check it over">
-        <Review values={values} kind={kind} days={days} draft={draft} photosLen={photoCount} routeName={chosen?.name} />
+        <Review
+          values={values}
+          kind={kind}
+          days={days}
+          partyRange={partyRange}
+          draft={draft}
+          photosLen={photoCount}
+          routeName={chosen?.name}
+        />
       </Step>
 
       <div className="flex items-center gap-2">
@@ -530,6 +557,7 @@ function Review({
   values,
   kind,
   days,
+  partyRange,
   draft,
   photosLen,
   routeName,
@@ -537,6 +565,8 @@ function Review({
   values?: Partial<ExperienceValues>;
   kind: string;
   days: number;
+  /** "1 to 6 people" — echoed so a guide checks their own limit. */
+  partyRange: string;
   draft: DraftLine[];
   photosLen: number;
   routeName?: string;
@@ -553,6 +583,7 @@ function Review({
         <Row k="Kind" v={kindLabel} />
         {routeName && <Row k="Route" v={routeName} />}
         <Row k="Length" v={days === 1 ? "One day" : `${days} days`} />
+        <Row k="Group size" v={partyRange} />
         <Row k="Photographs" v={`${photosLen}`} />
         <Row k="Price lines" v={`${draft.filter((l) => !l.optional).length}`} />
         {draft.some((l) => l.optional) && (

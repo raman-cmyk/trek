@@ -100,6 +100,33 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
         <div className="space-y-8">
           <header>
             <h1 className="font-display text-3xl text-ink">{o.title}</h1>
+            {/* The four things somebody asks before they read a word of the
+                description: how long, how many people, what time it starts,
+                and where from. They were scattered — the party limit was a
+                clause in a grey line, the start time was not shown at all —
+                so they are a list now. */}
+            <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-ink">
+              <li className="flex items-center gap-2">
+                <IconClock />
+                {o.kind === "trek" ? `${o.days} ${o.days === 1 ? "day" : "days"}` : "One day"}
+              </li>
+              <li className="flex items-center gap-2">
+                <IconPeople />
+                {partyWords(o.min_party, o.max_party)}
+              </li>
+              {(o as any).meet_time && (
+                <li className="flex items-center gap-2">
+                  <IconClock />
+                  Starts {String((o as any).meet_time).slice(0, 5)}
+                </li>
+              )}
+              {o.meeting_point && (
+                <li className="flex items-center gap-2">
+                  <IconPin />
+                  From {o.meeting_point}
+                </li>
+              )}
+            </ul>
             <p className="mt-1 text-sm text-ink-soft">
               {o.kind === "trek" ? `${o.days} days` : "Day experience"}
               {o.max_party ? ` · up to ${o.max_party} people` : ""}
@@ -535,4 +562,59 @@ function runWords(run: string): string {
   const dayA = Number(a.slice(8, 10));
   const dayB = Number(b.slice(8, 10));
   return `${dayA}–${dayB} ${mon}`;
+}
+
+/**
+ * "Private trip for 1 to 6 people" — the guide's own limit, said plainly.
+ *
+ * Every trip here is private to the party that books it: the guide walks with
+ * you and nobody is added to your group. That is worth stating, because on
+ * most trekking sites a price like this is a seat on somebody else's departure.
+ */
+function partyWords(min: number | null, max: number | null): string {
+  const lo = min && min > 0 ? min : 1;
+  if (!max) return `Private trip, from ${lo} ${lo === 1 ? "person" : "people"}`;
+  if (max === lo) return `Private trip for ${lo} ${lo === 1 ? "person" : "people"}`;
+  return `Private trip for ${lo} to ${max} people`;
+}
+
+const iconProps = {
+  width: 16,
+  height: 16,
+  viewBox: "0 0 20 20",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.6,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+  className: "shrink-0 text-muted",
+};
+
+function IconClock() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M10 6v4l2.5 1.6" />
+    </svg>
+  );
+}
+
+function IconPeople() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="7.5" cy="7.5" r="2.6" />
+      <path d="M3 16c0-2.3 2-3.8 4.5-3.8S12 13.7 12 16" />
+      <path d="M13.5 6.4a2.4 2.4 0 0 1 0 4.5M14.5 12.6c1.7.4 2.9 1.6 2.9 3.4" />
+    </svg>
+  );
+}
+
+function IconPin() {
+  return (
+    <svg {...iconProps}>
+      <path d="M10 17s5-4.4 5-8a5 5 0 0 0-10 0c0 3.6 5 8 5 8Z" />
+      <circle cx="10" cy="9" r="1.8" />
+    </svg>
+  );
 }
