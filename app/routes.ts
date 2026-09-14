@@ -34,6 +34,9 @@ export default [
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
     route("trips", "routes/trips._index.tsx"),
+    // The bell. Every notification also lives here, because email and SMS
+    // both depend on a third-party key this platform does not always have.
+    route("notifications", "routes/notifications.tsx"),
     // A package the guide proposed: what changed, what it costs, approve and
     // pay the deposit in one move.
     route("proposals/:id", "routes/proposals.$id.tsx"),

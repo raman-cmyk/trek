@@ -1662,3 +1662,55 @@ by light aircraft", "Challenging — Long days, real ascent, or altitude",
 
 486 tests green, typecheck green, build green. Four things from the audit are
 deliberately parked, with reasons, in docs/BACKLOG.md.
+
+## Session — why no notification has ever been delivered (2026-09-14)
+
+Raman: "None of the necessary notifications are working." Correct, and the
+cause is not a bug.
+
+**Email cannot send.** `wrangler secret list` on the live worker returns five
+secrets: CRON_SECRET, SITE_URL and the three Supabase keys. There is no
+`RESEND_API_KEY`. `email_log` holds 39 rows and every one of them reads
+`status: skipped, detail: no_api_key` — nothing has ever left the platform.
+The code is right; there is nothing to send with.
+
+**SMS cannot send.** No `SPARROW_SMS_TOKEN` either. `sendGuideSms` logs
+`[sms:stub]` and returns. Every guide-facing notification — a new request, a
+verification result, a cancellation — is SMS-first, so guides have been told
+nothing at all.
+
+**And there was no in-app channel, which corrects something I wrote earlier
+in the day.** I said every notification also had an in-app surface. That was
+true only of the two screens built for the cancellation note. The
+`notifications` table existed, with owner-read and owner-update policies and
+38 rows whose titles match email subjects — but no migration ever created it,
+nothing in this repository has ever written to it, and no screen has ever read
+it. Drift from an earlier build: the table somebody meant to fill.
+
+**The bell, built.** Migration 0068 adopts the table properly: the shape, the
+two indexes a bell needs, policies stated rather than inherited, and no insert
+policy at all — an in-app notification a client could insert is one a client
+could forge. The writer sits at the email funnel in `send.server.ts`, before
+the gate, so all twelve notifications that send an email get a row whether
+Resend is configured or not, whether the address is blocked or not. The three
+that send only SMS — a new request, a verification result, a question — call
+`inApp()` explicitly, because those reach nobody otherwise. A bell in the
+public header and in the guide header (in the header, not as a sixth tab: six
+tabs on a 360px screen are too narrow to hit), and `/notifications` with a
+mark-all-read that only marks what was on screen. `app/lib/inapp.ts` holds the
+badge count, the href resolution — own paths only, so a notification row can
+never become an open redirect — and the "3 hours ago" wording. 17 tests.
+
+499 tests green, typecheck green, build green.
+
+**🙋 Founder — two things only you can do:**
+
+1. **Get a Resend API key** and verify the sending domain, or no email will
+   ever arrive however much code we write. Steps in the reply.
+2. **Decide which chat owns this project.** There are three branches and two
+   Claude sessions building different apps on the same worker:
+   `claude/new-session-vereu4` (this one, 25 commits since the split) and
+   `claude/new-session-p6r3mp` (84 commits, last one a minute ago). Both
+   deploy to trek.raman-7d9.workers.dev. Whoever deploys last wins and the
+   other's features vanish — which is exactly what "it was working and now it
+   isn't" looks like. I have stopped deploying until you say which one wins.

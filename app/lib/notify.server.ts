@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "~/lib/supabase.server";
 import { sendEmail as send } from "~/lib/email/send.server";
 import type { EmailBlock, EmailContent } from "~/lib/email/render";
@@ -133,4 +134,43 @@ export async function sendGuideSms(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: env.SPARROW_SMS_TOKEN, to: toPhone, text }),
   }).catch(() => {});
+}
+
+/**
+ * A notification inside the app, for the moments that have no email.
+ *
+ * Every notification that sends an email gets one of these automatically, at
+ * the send funnel. Three do not send one at all — a new request, a
+ * verification result and a question, all of them SMS to a guide — and SMS
+ * needs a Sparrow token this platform does not have. Without this they reach
+ * nobody by any route.
+ *
+ * Never throws: a bell that fails must not break the booking it is about.
+ */
+export async function inApp(
+  admin: SupabaseClient,
+  args: {
+    userId: string | null | undefined;
+    kind: string;
+    title: string;
+    body?: string | null;
+    /** One of our own paths. */
+    href?: string | null;
+    about?: { type: string; id: string };
+  },
+): Promise<void> {
+  if (!args.userId) return;
+  try {
+    await admin.from("notifications").insert({
+      user_id: args.userId,
+      kind: args.kind,
+      title: args.title,
+      body: args.body ?? null,
+      href: args.href?.startsWith("/") ? args.href : null,
+      about_type: args.about?.type ?? null,
+      about_id: args.about?.id ?? null,
+    });
+  } catch {
+    // Deliberately silent.
+  }
 }

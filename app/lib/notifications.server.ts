@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendEmail, sendGuideSms } from "~/lib/notify.server";
+import { inApp, sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { opsSubject, type CancelReason } from "~/lib/cancellations";
 import { DEPOSIT_HOLD_HOURS, ENQUIRY_TTL_HOURS } from "~/lib/config";
 
@@ -50,6 +50,15 @@ export async function notifyNewEnquiry(
     g?.phone,
     `Trek: new request — ${args.offeringTitle}, ${args.startDate}, ${args.partySize}p. Open your dashboard to accept (${ENQUIRY_TTL_HOURS}h).`,
   );
+  // This one has no email at all, so without the bell it reaches nobody
+  // whenever there is no SMS token — which is now.
+  await inApp(admin, {
+    userId: args.guideId,
+    kind: "new_enquiry",
+    title: `New request — ${args.offeringTitle}`,
+    body: `${args.partySize} ${args.partySize === 1 ? "person" : "people"}, starting ${args.startDate}. You have ${ENQUIRY_TTL_HOURS} hours to answer.`,
+    href: "/g/enquiries",
+  });
 }
 
 export async function notifyEnquiryAccepted(env: Env, admin: SupabaseClient, bookingId: string) {
@@ -237,6 +246,17 @@ export async function notifyGuideVerification(
       ? "Trek: you're verified! Your profile is live. Sign in to set your calendar."
       : "Trek: we couldn't verify your application yet. Sign in to see what's missing.",
   );
+  await inApp(admin, {
+    userId: guideUserId,
+    kind: "guide_verification",
+    title: approved
+      ? "You're verified — your profile is live"
+      : "We couldn't verify your application yet",
+    body: approved
+      ? "Open your calendar and mark the days you are free. Nobody can book you until you do."
+      : "Something is missing or could not be read. Open your profile to see which document.",
+    href: approved ? "/g/calendar" : "/g/setup",
+  });
 }
 
 /**
@@ -263,6 +283,13 @@ export async function notifyGuideOfQuestion(
     g?.phone,
     `Trek: ${args.askerName} asked you "${snippet}" — answer it and it goes on your profile.`,
   );
+  await inApp(admin, {
+    userId: args.guideId,
+    kind: "guide_question",
+    title: `${args.askerName} asked you a question`,
+    body: `"${snippet}" — answer it and it goes on your profile.`,
+    href: "/g/questions",
+  });
 }
 
 /** The answer is live; tell the person who asked. */

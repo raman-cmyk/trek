@@ -34,7 +34,7 @@ const BROWSE = [
 export function Header({
   account,
 }: {
-  account?: { firstName: string; role: string; unread?: number } | null;
+  account?: { firstName: string; role: string; unread?: number; alerts?: number } | null;
 }) {
   const { code, setCode } = useMoney();
   const [menu, setMenu] = useState(false);
@@ -132,6 +132,33 @@ export function Header({
                 <MailGlyph />
                 {!!account.unread && (
                   <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-ember ring-2 ring-paper" />
+                )}
+              </NavLink>
+
+              {/* The bell. Until this existed every notification went to an
+                  email address or a phone number, through a provider with no
+                  key configured — so a guide whose client cancelled was told
+                  nothing at all. This channel needs nobody's permission. */}
+              <NavLink
+                to="/notifications"
+                prefetch="intent"
+                aria-label={
+                  account.alerts
+                    ? `Notifications, ${account.alerts} unread`
+                    : "Notifications"
+                }
+                className={({ isActive }) =>
+                  cn(
+                    "relative rounded-full p-2 transition-colors",
+                    isActive ? "bg-mist text-moss" : "text-ink-soft hover:bg-mist hover:text-ink",
+                  )
+                }
+              >
+                <BellGlyph />
+                {!!account.alerts && (
+                  <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-ember px-1 text-center text-[10px] font-semibold leading-4 text-paper ring-2 ring-paper">
+                    {account.alerts > 9 ? "9+" : account.alerts}
+                  </span>
                 )}
               </NavLink>
 
@@ -306,6 +333,25 @@ export function Header({
         </div>
       )}
     </>
+  );
+}
+
+/** The bell. Outline only — a filled one reads as an alarm. */
+function BellGlyph() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M18 15V10a6 6 0 10-12 0v5l-1.5 2.5h15L18 15z" />
+      <path d="M10 19a2 2 0 004 0" />
+    </svg>
   );
 }
 

@@ -30,17 +30,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       getSessionUser(request, env),
     ]);
   // Reflect the signed-in customer in the header (trips + sign out + unread).
-  let account: { firstName: string; role: string; unread: number } | null = null;
+  let account: {
+    firstName: string;
+    role: string;
+    unread: number;
+    alerts: number;
+  } | null = null;
   if (user) {
     const profile = await getProfile(env, user.id);
     if (profile) {
       const { createAdminClient } = await import("~/lib/supabase.server");
       const { countUnread } = await import("~/lib/unread.server");
-      const { unreadTotal } = await countUnread(createAdminClient(env), user.id);
+      const { countUnseen } = await import("~/lib/notifications-read.server");
+      const admin = createAdminClient(env);
+      const [{ unreadTotal }, alerts] = await Promise.all([
+        countUnread(admin, user.id),
+        countUnseen(admin, user.id),
+      ]);
       account = {
         firstName: (profile.full_name ?? "").split(" ")[0] || "You",
         role: profile.role,
         unread: unreadTotal,
+        alerts,
       };
     }
   }

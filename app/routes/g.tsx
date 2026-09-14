@@ -1,9 +1,10 @@
-import { Form, NavLink, Outlet, data, redirect } from "react-router";
+import { Form, Link, NavLink, Outlet, data, redirect } from "react-router";
 import type { Route } from "./+types/g";
 import { cn } from "~/lib/cn";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { countUnread } from "~/lib/unread.server";
+import { countUnseen } from "~/lib/notifications-read.server";
 
 export function meta() {
   return [{ title: "Guide dashboard" }, { name: "robots", content: "noindex" }];
@@ -15,7 +16,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // The unread count used to run after this batch rather than inside it,
   // which put a whole extra round trip on the critical path of every page in
   // the guide area. It depends on nothing above it.
-  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }] = await Promise.all([
+  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }, alerts] =
+    await Promise.all([
     admin.from("guides").select("status, slug").eq("user_id", user.id).single(),
     admin
       .from("enquiries")
@@ -23,6 +25,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .eq("guide_id", user.id)
       .eq("status", "open"),
     countUnread(admin, user.id),
+    // The bell. A guide's notifications went to SMS, and Sparrow has no token
+    // in production — so "your client cancelled" reached nobody at all.
+    countUnseen(admin, user.id),
   ]);
   return data(
     {
@@ -30,6 +35,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       status: guide?.status ?? "applied",
       enquiryCount: enquiryCount ?? 0,
       unreadTotal,
+      alerts,
     },
     { headers },
   );
@@ -69,15 +75,43 @@ const TABS = [
 ];
 
 export default function GuideLayout({ loaderData }: Route.ComponentProps) {
-  const { enquiryCount, unreadTotal } = loaderData;
+  const { enquiryCount, unreadTotal, alerts } = loaderData;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <span className="font-display text-lg">Trek Guide</span>
-        <Form method="post">
-          <button className="text-xs text-primary">Sign out</button>
-        </Form>
+        <div className="flex items-center gap-4">
+          {/* In the header, not the tab bar: a sixth tab on a 360px screen
+              makes all six too narrow to hit (CLAUDE.md rule 6). */}
+          <Link
+            to="/notifications"
+            aria-label={alerts ? `Notifications, ${alerts} unread` : "Notifications"}
+            className="relative rounded-full p-1.5 text-ink-soft hover:bg-mist hover:text-ink"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M18 15V10a6 6 0 10-12 0v5l-1.5 2.5h15L18 15z" />
+              <path d="M10 19a2 2 0 004 0" />
+            </svg>
+            {!!alerts && (
+              <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-ember px-1 text-center text-[10px] font-semibold leading-4 text-paper ring-2 ring-card">
+                {alerts > 9 ? "9+" : alerts}
+              </span>
+            )}
+          </Link>
+          <Form method="post">
+            <button className="text-xs text-primary">Sign out</button>
+          </Form>
+        </div>
       </header>
 
       <div className="flex-1 p-4 pb-24">

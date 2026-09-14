@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { bodyFromText } from "~/lib/inapp";
 import { renderEmail, type EmailContent } from "~/lib/email/render";
 
 /**
@@ -70,32 +71,87 @@ function unsubscribeUrl(env: Env, token: string): string {
 async function gate(
   admin: SupabaseClient,
   args: SendArgs,
-): Promise<{ allow: boolean; reason?: string; token?: string }> {
+): Promise<{ allow: boolean; reason?: string; token?: string; userId?: string | null }> {
   if (!args.to) return { allow: false, reason: "no_address" };
 
   const { data: u } = await admin
     .from("users")
-    .select("marketing_consent, email_prefs, email_blocked_at, unsubscribe_token")
+    .select("id, marketing_consent, email_prefs, email_blocked_at, unsubscribe_token")
     .eq(args.userId ? "id" : "email", args.userId ?? args.to)
     .maybeSingle();
 
   // A hard bounce or a spam complaint stops everything. Continuing to mail a
   // dead or hostile address is how a sending domain gets blacklisted, and it
   // would take the booking receipts down with it.
-  if (u?.email_blocked_at) return { allow: false, reason: "blocked" };
+  const userId = (args.userId ?? (u?.id as string | undefined)) ?? null;
+  if (u?.email_blocked_at) return { allow: false, reason: "blocked", userId };
 
   const token = u?.unsubscribe_token as string | undefined;
 
   if ((args.category ?? "transactional") === "transactional") {
     // A deposit receipt is not marketing. It sends.
-    return { allow: true, token };
+    return { allow: true, token, userId };
   }
-  if (!u) return { allow: false, reason: "no_consent" };
-  if (!u.marketing_consent) return { allow: false, reason: "no_consent" };
+  if (!u) return { allow: false, reason: "no_consent", userId };
+  if (!u.marketing_consent) return { allow: false, reason: "no_consent", userId };
   if (args.topic && !(u.email_prefs ?? []).includes(args.topic)) {
-    return { allow: false, reason: "topic_off" };
+    return { allow: false, reason: "topic_off", userId };
   }
-  return { allow: true, token };
+  return { allow: true, token, userId };
+}
+
+/**
+ * The same notification, inside the app.
+ *
+ * Written here rather than at each of the fifteen call sites, because here is
+ * where every one of them already passes: one seam, so a notification cannot
+ * reach email and miss the bell. Transactional only — an in-app row for a
+ * marketing send would be an advert somebody has to dismiss.
+ *
+ * Never throws and never blocks the send. A bell that fails must not be the
+ * reason a booking receipt does not go out.
+ */
+/** An absolute link on our own site, as the path a router can use. */
+function ownPath(url: string | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  try {
+    const u = new URL(url);
+    return u.pathname + (u.search ?? "") || null;
+  } catch {
+    return null;
+  }
+}
+
+async function recordInApp(
+  admin: SupabaseClient,
+  args: SendArgs,
+  userId: string | null,
+) {
+  if ((args.category ?? "transactional") !== "transactional") return;
+  if (!userId) return;
+  try {
+    await admin.from("notifications").insert({
+      user_id: userId,
+      kind: args.kind,
+      title: args.subject,
+      body: bodyFromText(
+        args.content.blocks
+          .map((b) => b.p ?? "")
+          .filter(Boolean)
+          .join(" "),
+      ),
+      // The email's own button, reduced to a path. The bell links to the same
+      // place the email would have, so the two channels never lead different
+      // ways — and an absolute URL from somewhere else is dropped rather than
+      // stored as a destination somebody will click.
+      href: ownPath(args.content.blocks.find((b) => b.button)?.button?.url),
+      about_type: args.about?.type ?? null,
+      about_id: args.about?.id ?? null,
+    });
+  } catch {
+    // Deliberately silent, as above.
+  }
 }
 
 async function record(
@@ -135,6 +191,12 @@ export async function sendEmail(
   const category = args.category ?? "transactional";
 
   const g = await gate(admin, args);
+
+  // Before the gate can stop anything. A blocked address and a missing Resend
+  // key are exactly the cases where the bell is the only channel left, so the
+  // in-app row is written whatever happens to the email.
+  await recordInApp(admin, args, g.userId ?? args.userId ?? null);
+
   if (!g.allow) {
     await record(admin, args, "skipped", g.reason);
     return { sent: false, reason: g.reason };
