@@ -25,6 +25,7 @@ import {
   type PublicJournal,
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
+import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Journal not found" }];
@@ -455,7 +456,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
 
             {!isPost && points.length >= 3 && (
               <div className="rounded-md border border-line bg-card p-3">
-                <p className="label text-muted">This trek</p>
+                <Eyebrow>This trek</Eyebrow>
                 <ElevationStrip points={points} className="mt-1" />
               </div>
             )}

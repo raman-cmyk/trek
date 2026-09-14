@@ -3,6 +3,7 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { getEnv } from "~/lib/supabase.server";
 import { TierBadge } from "~/components/public/bits";
 import { TIERS } from "~/lib/tiers";
+import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -21,7 +22,7 @@ export function loader({ context }: Route.LoaderArgs) {
 export default function Trust({ loaderData: d }: Route.ComponentProps) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <p className="label text-muted">Trust &amp; verification</p>
+      <Eyebrow>Trust &amp; verification</Eyebrow>
       <h1 className="mt-2 font-display text-display-l text-ink">
         A tier you can look up is trust. One you can't is decoration.
       </h1>

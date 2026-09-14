@@ -32,6 +32,13 @@ import { fmtDate, fmtDateShort } from "~/lib/format";
 import { openRunsByGuide } from "~/lib/browse.server";
 import { JournalCard } from "~/components/public/JournalCard";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { StatRow, StatTile } from "~/components/design/StatTile";
+import { Glyph, type ChipGlyph } from "~/components/design/Chip";
+import { Chip } from "~/components/design/Chip";
+import { PhotoCard } from "~/components/design/PhotoCard";
+import { GlassPill } from "~/components/design/Glass";
+import { KIND_GLYPH } from "~/components/public/cards";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -375,11 +382,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <HeroSearch today={today} regions={suggestions} />
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            {/* The page's one lime (docs/07): the thing to do from here. */}
             <Link
               to="/match"
               prefetch="intent"
-              className="text-white underline decoration-white/40 underline-offset-4 hover:decoration-white"
+              className="inline-flex h-11 items-center gap-2 rounded-button bg-chartreuse px-5 font-medium text-pine shadow-card transition duration-instant hover:brightness-[0.97] active:scale-[0.97]"
             >
+              <Glyph name="spark" className="text-pine" />
               {copy.home.ctaMatch} →
             </Link>
             <Link
@@ -399,18 +408,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {/* 2 — Live numbers. Mono, big, real. */}
       <section className="border-y border-line bg-mist">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-y-6 px-4 py-8 sm:grid-cols-3 lg:grid-cols-5">
-          <Stat n={String(stats.guides)} label="verified guides" />
-          <Stat n={String(stats.districts)} label="home districts" />
-          <Stat n={stats.treksLed.toLocaleString("en-US")} label="treks led" />
-          <Stat n={mr(stats.fundUsdCents)} label="to The Fund this year" href="/fund" />
-          <Stat n={mr(0)} label="taken on rescue flights" href="/safety" />
+          <Stat glyph="check" n={String(stats.guides)} label="verified guides" />
+          <Stat glyph="pin" n={String(stats.districts)} label="home districts" />
+          <Stat glyph="mountain" n={stats.treksLed.toLocaleString("en-US")} label="treks led" />
+          <Stat glyph="spark" n={mr(stats.fundUsdCents)} label="to The Fund this year" href="/fund" />
+          <Stat glyph="altitude" n={mr(0)} label="taken on rescue flights" href="/safety" />
         </div>
       </section>
 
       {/* 3 — The map. "Guides across the whole country", not a claim but a
           picture of one. */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <p className="label text-muted">Where they are</p>
+        <Eyebrow>Where they are</Eyebrow>
         <h2 className="mb-5 mt-2 max-w-[18ch] font-display text-3xl text-ink sm:text-4xl">
           <span className="wt-heavy">Guides from their own valleys.</span>
         </h2>
@@ -475,7 +484,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <div>
-              <p className="label text-muted">Proof of life</p>
+              <Eyebrow>Proof of life</Eyebrow>
               <h2 className="mt-2 max-w-[16ch] font-display text-3xl text-ink sm:text-4xl">
                 <span className="wt-heavy">Treks, as they happened.</span>
               </h2>
@@ -506,7 +515,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="label text-muted">If you already know the walk</p>
+              <Eyebrow>If you already know the walk</Eyebrow>
               <h2 className="mt-2 font-display text-3xl text-ink">
                 The routes people actually walk
               </h2>
@@ -547,37 +556,39 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* 6 — Regions, as doorways. */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <p className="label text-muted">Or start from the map in your head</p>
+        <Eyebrow>Or start from the map in your head</Eyebrow>
         <h2 className="mb-6 mt-2 font-display text-3xl text-ink">Browse by region</h2>
-        <div className="grid gap-px overflow-hidden rounded-md bg-line sm:grid-cols-2 lg:grid-cols-3">
+        {/* Doorways as pictures (docs/07): the region's own route photograph
+            where we have one, terrain where we do not — never a grey cell. */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
           {REGIONS.map((r) => (
-            <Link
+            <PhotoCard
               key={r.name}
               to={`/guides?q=${encodeURIComponent(r.name)}`}
-              prefetch="intent"
-              className="group bg-paper p-6 transition-colors hover:bg-mist"
+              photo={REGION_PHOTO[r.name] ?? null}
+              alt={`${r.name} region`}
+              aspect="aspect-[4/3]"
+              topRight={
+                regionCounts[r.name] ? (
+                  <GlassPill>
+                    <Glyph name="people" className="text-moss" />
+                    <span className="font-mono">{regionCounts[r.name]}</span> guides
+                  </GlassPill>
+                ) : undefined
+              }
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="font-display text-2xl text-ink group-hover:text-moss">
-                  {r.name}
-                </h3>
-                {regionCounts[r.name] ? (
-                  <span className="font-mono text-sm text-muted">
-                    {regionCounts[r.name]} guides
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 text-sm text-muted">{r.blurb}</p>
-            </Link>
+              <h3 className="font-display text-xl leading-tight sm:text-2xl">{r.name}</h3>
+              <p className={cn("mt-1 hidden text-sm sm:block", REGION_PHOTO[r.name] ? "text-paper/80" : "text-muted")}>{r.blurb}</p>
+            </PhotoCard>
           ))}
           <Link
             to="/routes"
             prefetch="intent"
-            className="group flex items-center bg-pine p-6 text-paper transition-colors hover:bg-moss"
+            className="group flex aspect-[4/3] items-end rounded-photo bg-pine p-4 text-paper shadow-card transition duration-quick hover:-translate-y-0.5 hover:bg-moss sm:p-5"
           >
             <div>
-              <h3 className="font-display text-2xl">Every route →</h3>
-              <p className="mt-1 text-sm text-paper/75">
+              <h3 className="font-display text-xl sm:text-2xl">Every route →</h3>
+              <p className="mt-1 hidden text-sm text-paper/75 sm:block">
                 Permits, real costs and who leads them.
               </p>
             </div>
@@ -664,15 +675,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   );
 }
 
-function Stat({ n, label, href }: { n: string; label: string; href?: string }) {
-  const body = (
-    <>
-      <p className="font-mono text-3xl leading-none text-ink sm:text-4xl">{n}</p>
-      <p className="mt-1.5 text-sm text-muted">{label}</p>
-    </>
-  );
+function Stat({ n, label, href, glyph }: { n: string; label: string; href?: string; glyph?: ChipGlyph }) {
+  // A fact as a tile (docs/07): the number big and mono, the label small.
+  const body = <StatTile surface="bare" glyph={glyph} value={n} label={label} />;
   return href ? (
-    <Link to={href} className="group block hover:text-moss">
+    <Link to={href} className="group block rounded-photo transition-colors hover:text-moss">
       {body}
     </Link>
   ) : (
@@ -702,7 +709,7 @@ function Row({
 }) {
   return (
     <section className="mx-auto max-w-6xl px-4 py-8">
-      {eyebrow && <p className="label text-muted">{eyebrow}</p>}
+      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-display text-2xl text-ink sm:text-[1.75rem]">{label}</h2>
         <Link
@@ -755,6 +762,15 @@ function interleaveByKind<T extends { kind: string }>(list: T[]): T[] {
 }
 
 /** The filter facets, in the order a person narrows: what kind, then where. */
+/** The route photograph that stands for a region — only where we have one. */
+const REGION_PHOTO: Record<string, string> = {
+  Khumbu: "/img/routes/everest-base-camp.jpg",
+  Everest: "/img/routes/everest-base-camp.jpg",
+  Annapurna: "/img/routes/annapurna-circuit.jpg",
+  Langtang: "/img/routes/langtang-valley.jpg",
+  Manaslu: "/img/routes/manaslu-circuit.jpg",
+};
+
 const KINDS = [
   { key: "", label: "Everything" },
   { key: "trek", label: "Treks" },
@@ -813,7 +829,7 @@ function ExperienceBrowser({ experiences }: { experiences: any[] }) {
     <section className="mx-auto max-w-6xl px-4 py-16">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
-          <p className="label text-muted">Not just treks</p>
+          <Eyebrow>Not just treks</Eyebrow>
           <h2 className="mt-2 font-display text-3xl text-ink">Where do you want to go?</h2>
         </div>
         <Link
@@ -828,21 +844,20 @@ function ExperienceBrowser({ experiences }: { experiences: any[] }) {
       <div className="mt-6 space-y-2">
         <div className="flex flex-wrap gap-2">
           {KINDS.filter((k) => !k.key || (kindCounts.get(k.key) ?? 0) > 0).map((k) => (
-            <button
+            <Chip
               key={k.key || "all"}
-              type="button"
+              glyph={k.key ? KIND_GLYPH[k.key] : undefined}
+              selected={kind === k.key}
               onClick={() => {
                 setKind(k.key);
                 setShowAll(false);
               }}
-              aria-pressed={kind === k.key}
-              className={chip(kind === k.key)}
             >
               {k.label}{" "}
               <span className={cn("font-mono", kind === k.key ? "text-paper/60" : "text-muted")}>
                 {kindCounts.get(k.key) ?? 0}
               </span>
-            </button>
+            </Chip>
           ))}
         </div>
         {regions.length > 1 && (
@@ -938,7 +953,7 @@ function GuideCall({ count }: { count: number }) {
       <div className="overflow-hidden rounded-md border border-line bg-card">
         <div className="grid gap-8 p-6 sm:p-10 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-14">
           <div>
-            <p className="label text-muted">For guides</p>
+            <Eyebrow>For guides</Eyebrow>
             <h2 className="mt-2 max-w-[20ch] font-display text-3xl leading-[1.05] text-ink sm:text-4xl">
               Your name on the work.
             </h2>
@@ -951,7 +966,7 @@ function GuideCall({ count }: { count: number }) {
               <Link
                 to="/apply"
                 prefetch="intent"
-                className="rounded bg-pine px-5 py-3 font-medium text-paper hover:bg-moss"
+                className="inline-flex h-12 items-center rounded-button bg-chartreuse px-5 font-medium text-pine shadow-card transition duration-instant hover:brightness-[0.97] active:scale-[0.97]"
               >
                 Apply to guide with us
               </Link>
@@ -968,22 +983,12 @@ function GuideCall({ count }: { count: number }) {
             </p>
           </div>
 
-          {/* The three answers, as a mono ledger rather than feature cards. */}
-          <dl className="divide-y divide-line border-y border-line">
-            {[
-              ["You keep", "100%", "of the rate you set"],
-              ["Paid within", "7 days", "in NPR, to your bank"],
-              ["Already guiding", String(count), "and none of them an agency"],
-            ].map(([label, figure, note]) => (
-              <div key={label} className="flex items-baseline justify-between gap-4 py-4">
-                <dt className="text-sm text-muted">{label}</dt>
-                <dd className="text-right">
-                  <span className="font-mono text-xl text-ink">{figure}</span>
-                  <span className="ml-2 text-sm text-muted">{note}</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {/* The three answers as tiles (docs/07). */}
+          <StatRow cols={3}>
+            <StatTile glyph="check" value="100%" unit="of your rate" label="You keep" />
+            <StatTile glyph="clock" value="7" unit="days, in NPR" label="Paid within" />
+            <StatTile glyph="people" value={String(count)} unit="no agencies" label="Already guiding" />
+          </StatRow>
         </div>
       </div>
     </section>

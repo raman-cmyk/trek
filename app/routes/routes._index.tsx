@@ -17,6 +17,8 @@ import {
   SORTS,
   type SortKey,
 } from "~/lib/route-cards";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { Glyph } from "~/components/design/Chip";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -163,7 +165,7 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
       {/* ── The way in ─────────────────────────────────────────────────── */}
       <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 lg:grid-cols-[0.92fr_1.08fr] lg:py-16">
         <div>
-          <p className="label text-muted">Routes</p>
+          <Eyebrow>Routes</Eyebrow>
           <h1 className="mt-3 font-display text-display-l text-ink sm:text-display-xl">
             {cards.length} routes.
             <br />
@@ -176,9 +178,9 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           <div className="mt-7 flex flex-wrap items-center gap-5">
             <Link
               to="/match"
-              className="rounded-pill bg-ink px-5 py-3 font-medium text-paper transition duration-quick hover:bg-pine"
+              className="inline-flex h-12 items-center gap-2 rounded-button bg-chartreuse px-5 font-medium text-pine shadow-card transition duration-instant hover:brightness-[0.97] active:scale-[0.97]"
             >
-              Match me to a route
+              <Glyph name="spark" /> Match me to a route
             </Link>
             <a
               href="#all-routes"
@@ -283,13 +285,13 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
       <div className="mx-auto max-w-6xl px-4 py-10" id="all-routes">
         {featured.length > 0 && (
           <>
-            <h2 className="label border-b border-line pb-2.5 text-muted">Start here</h2>
+            <Eyebrow as="h2" className="border-b border-line pb-2.5">Start here</Eyebrow>
             <div className="mt-5 grid gap-5 lg:grid-cols-3">
               {featured.map((r: any, i: number) => (
                 <RouteCard key={r.slug} route={r} featured eager={i === 0} />
               ))}
             </div>
-            <h2 className="label mt-12 border-b border-line pb-2.5 text-muted">Every route</h2>
+            <Eyebrow as="h2" className="mt-12 border-b border-line pb-2.5">Every route</Eyebrow>
           </>
         )}
 

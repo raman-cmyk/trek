@@ -8,6 +8,8 @@ import { useMoney } from "~/lib/currency-context";
 import { groupHeading, groupMoney, type GroupMember } from "~/lib/groups";
 import { fmtDate } from "~/lib/format";
 import { TripPipeline } from "~/components/TripPipeline";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { Glyph } from "~/components/design/Chip";
 
 export function meta() {
   return pageMeta({
@@ -86,19 +88,19 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-4xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="label text-muted">Going with people</p>
+          <Eyebrow>Going with people</Eyebrow>
           <h1 className="mt-2 font-display text-4xl text-ink">Your trips together</h1>
         </div>
         <Link
           to="/groups/new"
-          className="rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss"
+          className="inline-flex h-11 items-center gap-2 rounded-button bg-chartreuse px-4 text-sm font-medium text-pine shadow-card hover:brightness-[0.97]"
         >
-          Start a trip
+          <Glyph name="people" /> Start a trip
         </Link>
       </div>
 
       {groups.length === 0 ? (
-        <div className="mt-10 rounded-md border border-line bg-card p-8">
+        <div className="mt-10 rounded-photo border border-line bg-card p-8 shadow-card">
           <p className="font-display text-xl text-ink">No trips together yet.</p>
           <p className="mt-2 max-w-[54ch] text-muted">
             Start one, send the link to whoever is coming, and everyone can see
@@ -133,7 +135,7 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
                 <Link
                   to={`/groups/${g.slug}`}
                   prefetch="intent"
-                  className="block rounded-md border border-line bg-card p-4 transition-colors hover:border-sage hover:bg-mist"
+                  className="block rounded-photo border border-line bg-card p-4 shadow-card transition duration-quick hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">

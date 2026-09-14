@@ -5,6 +5,8 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { JournalCard } from "~/components/public/JournalCard";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { Chip, type ChipGlyph } from "~/components/design/Chip";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -121,30 +123,30 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
   const more = [...facets.routes, ...tags];
   const [showMore, setMore] = useState(!!(filters.route || filters.tag));
 
+  // Every filter is a URL, and every chip carries the glyph of what it
+  // filters by (docs/07): a pin for a region, a calendar for a season, the
+  // route mark for a trek.
   const chip = (label: string, params: Record<string, string>, active: boolean) => {
     const sp = new URLSearchParams({ ...filters, ...params });
     for (const [k, v] of [...sp.entries()]) if (!v) sp.delete(k);
     const qs = sp.toString();
+    const glyph: ChipGlyph | undefined =
+      "season" in params ? "calendar" : "route" in params && params.route ? "route" : "region" in params && params.region ? "pin" : undefined;
     return (
-      <Link
+      <Chip
         key={label + JSON.stringify(params)}
         to={qs ? `/journals?${qs}` : "/journals"}
-        prefetch="intent"
-        className={
-          "rounded-pill px-3 py-1.5 text-sm transition-colors " +
-          (active
-            ? "bg-pine text-paper"
-            : "border border-line bg-card text-ink hover:border-sage")
-        }
+        glyph={glyph}
+        selected={active}
       >
         {label}
-      </Link>
+      </Chip>
     );
   };
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
-      <p className="label text-muted">Trek stories</p>
+      <Eyebrow>Trek stories</Eyebrow>
       <h1 className="mt-2 max-w-[20ch] font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
         <span className="wt-heavy">Every trek, as it actually happened.</span>
       </h1>

@@ -6,6 +6,8 @@ import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { BrowseSearch } from "~/components/public/BrowseSearch";
 import { escapeLike, openRunsByGuide, parseRange } from "~/lib/browse.server";
 import { fmtDateShort } from "~/lib/format";
+import { Chip } from "~/components/design/Chip";
+import { KIND_GLYPH } from "~/components/public/cards";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -152,19 +154,14 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
           if (filters.party) params.set("party", String(filters.party));
           const qs = params.toString();
           return (
-            <Link
+            <Chip
               key={c.kind}
               to={qs ? `/experiences?${qs}` : "/experiences"}
-              prefetch="intent"
-              className={
-                "rounded-pill px-3 py-1.5 text-sm transition-colors " +
-                (kind === c.kind
-                  ? "bg-pine text-paper"
-                  : "border border-line bg-card text-ink hover:border-sage")
-              }
+              glyph={c.kind ? KIND_GLYPH[c.kind] : undefined}
+              selected={kind === c.kind}
             >
               {c.label}
-            </Link>
+            </Chip>
           );
         })}
         {narrowed && (

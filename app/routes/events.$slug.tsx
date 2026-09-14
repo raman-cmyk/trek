@@ -8,6 +8,7 @@ import { useLightbox } from "~/components/public/Lightbox";
 import { useMoney } from "~/lib/currency-context";
 import { eventDates, placesLeft } from "~/lib/events";
 import { TrustPanel } from "~/components/public/TrustPanel";
+import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   const e = (d as any)?.event;
@@ -348,7 +349,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           />
 
           <div className="rounded-md border border-line bg-card p-4">
-            <p className="label text-muted">Organised by</p>
+            <Eyebrow>Organised by</Eyebrow>
             <div className="mt-2 flex items-center gap-3">
               <SmartImage
                 src={e.organiser_avatar_url ?? ""}

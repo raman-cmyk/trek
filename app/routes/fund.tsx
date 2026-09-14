@@ -4,6 +4,7 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
 import { useMoney } from "~/lib/currency-context";
+import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -54,7 +55,7 @@ export default function Fund({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <p className="label text-muted">The Fund</p>
+      <Eyebrow>The Fund</Eyebrow>
       <h1 className="mt-2 font-display text-display-l text-ink">
         3% of every trek, spent on the trail.
       </h1>

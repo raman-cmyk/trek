@@ -8,6 +8,8 @@ import { useMoney } from "~/lib/currency-context";
 import { TierBadge } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { cn } from "~/lib/cn";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { Glyph } from "~/components/design/Chip";
 
 const REGIONS: Region[] = ["Khumbu", "Annapurna", "Langtang", "Manaslu"];
 const LANGUAGES = ["English", "German", "Spanish", "Hindi", "French"];
@@ -102,7 +104,7 @@ export default function Match({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      <p className="label text-muted">Guide matcher</p>
+      <Eyebrow>Guide matcher</Eyebrow>
       <h1 className="mt-2 font-display text-display-l text-ink">
         Five questions. Your guide.
       </h1>
@@ -111,7 +113,7 @@ export default function Match({ loaderData }: Route.ComponentProps) {
         who actually fit, and say exactly why.
       </p>
 
-      <Form method="get" className="mt-8 space-y-6 rounded-card border border-border bg-card p-5">
+      <Form method="get" className="mt-8 space-y-6 rounded-photo border border-border bg-card p-5 shadow-card">
         <input type="hidden" name="go" value="1" />
         <fieldset>
           <legend className="mb-2 text-sm font-medium text-ink">Where do you want to trek?</legend>
@@ -186,8 +188,9 @@ export default function Match({ loaderData }: Route.ComponentProps) {
               ))}
             </select>
           </label>
-          <button className="rounded-button bg-primary px-6 py-2.5 font-medium text-white hover:bg-primary-hover">
-            Match me
+          {/* The page's one lime (docs/07). */}
+          <button className="inline-flex h-11 items-center gap-2 rounded-button bg-chartreuse px-6 font-medium text-pine shadow-card transition duration-instant hover:brightness-[0.97] active:scale-[0.97]">
+            <Glyph name="spark" /> Match me
           </button>
         </div>
       </Form>

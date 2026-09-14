@@ -49,6 +49,7 @@ import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
 import { skillLabel } from "~/lib/guide-skills";
+import { Eyebrow } from "~/components/design/Eyebrow";
 
 /**
  * Anonymous visitors get the edge cache; anyone signed in gets nothing
@@ -730,7 +731,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                  the product before they met the person. */}
               {guide.bio && (
                 <section className="mt-8">
-                  <p className="label text-muted">In {first}&rsquo;s words</p>
+                  <Eyebrow>In {first}&rsquo;s words</Eyebrow>
                   <p className="mt-3 max-w-[58ch] whitespace-pre-line text-[19px] leading-relaxed text-ink">
                     {guide.bio}
                   </p>
@@ -829,7 +830,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                  tick where our office has checked it. Our travel stamps. */}
               {routeChips.length > 0 && (
                 <div className="mt-6">
-                  <p className="label text-muted">Routes {first} has walked</p>
+                  <Eyebrow>Routes {first} has walked</Eyebrow>
                   <div className="mt-2.5 flex flex-wrap gap-2">
                     {routeChips.map((r: any) => (
                       <Link
@@ -1069,7 +1070,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
 
             {/* ── Availability, the full calendar. The rail summarises it. ── */}
             <section id="availability" className="mt-12 scroll-mt-6">
-              <p className="label text-muted">Availability</p>
+              <Eyebrow>Availability</Eyebrow>
               <div className="mt-3">
                 <AvailabilityCalendar
                   openDays={openDays}

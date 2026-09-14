@@ -15,6 +15,8 @@ import {
 import { findIntent, matchesKeywords } from "~/lib/intents";
 import { membersOf } from "~/lib/categories";
 import { fmtDateShort } from "~/lib/format";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { Chip, ChipRow, Glyph } from "~/components/design/Chip";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -257,9 +259,11 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
     };
   })();
 
+  const weekEnd = new Date(Date.parse(today) + 7 * 86_400_000).toISOString().slice(0, 10);
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      {intent && <p className="label text-muted">{intent.blurb}</p>}
+      {intent && <Eyebrow>{intent.blurb}</Eyebrow>}
       <h1 className="font-display text-3xl text-ink">
         {intent ? intent.label : "Find your guide"}
       </h1>
@@ -340,14 +344,31 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
         </p>
       )}
 
-      <Link
-        to="/match"
-        prefetch="intent"
-        className="mt-4 inline-block rounded border border-line bg-mist px-4 py-2.5 text-sm text-ink hover:border-sage"
-      >
-        <span className="font-medium">Not sure who fits?</span> Answer 5 questions and we'll
-        match you →
-      </Link>
+      {/* The filters people actually reach for, as chips with a glyph (docs/07).
+          Each is a URL, so it works with JavaScript off and can be shared. */}
+      <ChipRow className="mt-4">
+        <Chip to="/guides?women=1" glyph="people" selected={filters.fWomen}>Women guiding</Chip>
+        <Chip to="/guides?tier=3" glyph="star" selected={filters.fTier === "3"}>Elite</Chip>
+        <Chip to={`/guides?from=${today}&to=${weekEnd}`} glyph="calendar" selected={filters.from === today}>Free this week</Chip>
+        {facets.languages.slice(0, 4).map((l) => (
+          <Chip key={l} to={`/guides?lang=${encodeURIComponent(l)}`} selected={filters.fLang === l}>
+            {l}
+          </Chip>
+        ))}
+      </ChipRow>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-photo bg-mist px-4 py-3">
+        <p className="text-sm text-ink">
+          <span className="font-medium">Not sure who fits?</span> Five questions, and we say who and why.
+        </p>
+        <Link
+          to="/match"
+          prefetch="intent"
+          className="inline-flex h-10 items-center gap-2 rounded-button bg-chartreuse px-4 text-sm font-medium text-pine shadow-card hover:brightness-[0.97]"
+        >
+          <Glyph name="spark" /> Match me
+        </Link>
+      </div>
 
       {guides.length === 0 ? (
         <div className="mt-10">

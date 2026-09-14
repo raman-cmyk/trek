@@ -5,6 +5,10 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { firstName } from "~/lib/names";
 import { SmartImage } from "~/components/SmartImage";
 import { TierBadge } from "~/components/public/bits";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { PhotoCard } from "~/components/design/PhotoCard";
+import { GlassPill } from "~/components/design/Glass";
+import { Glyph } from "~/components/design/Chip";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -57,7 +61,7 @@ export default function Stories({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <p className="label text-muted">Stories</p>
+      <Eyebrow>Stories</Eyebrow>
       <h1 className="mt-2 font-display text-display-l text-ink">
         Real treks. Named guides. No stock photos.
       </h1>
@@ -73,49 +77,25 @@ export default function Stories({ loaderData }: Route.ComponentProps) {
       ) : (
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((c: any) => (
-            <div key={c.slug} className="group overflow-hidden rounded-card border border-border bg-card hover:shadow-card">
-              <Link to={`/recap/${c.slug}`} prefetch="intent">
-                <SmartImage
-                  src={c.photo ?? ""}
-                  alt={c.title}
-                  width={640}
-                  height={360}
-                  className="h-40 w-full"
-                />
-                <div className="p-4 pb-2">
-                  <h2 className="font-display text-lg leading-snug text-ink group-hover:text-primary">
-                    {c.title}
-                  </h2>
-                  <p className="mt-1 font-mono text-xs text-ink-soft">
-                    {[
-                      c.days ? `${c.days} days` : null,
-                      c.altitude ? `${c.altitude.toLocaleString("en-US")}m` : null,
-                      monthYear(c.when),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
+            <PhotoCard
+              key={c.slug}
+              to={`/recap/${c.slug}`}
+              photo={c.photo}
+              alt={c.title}
+              aspect="aspect-[4/5]"
+              topLeft={c.altitude ? <GlassPill><Glyph name="altitude" className="text-moss" /><span className="font-mono">{c.altitude.toLocaleString("en-US")}</span> m</GlassPill> : undefined}
+            >
+              <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-paper/75">
+                {[c.days ? `${c.days} days` : null, monthYear(c.when)].filter(Boolean).join(" · ")}
+              </p>
+              <h2 className="mt-1 font-display text-lg leading-snug">{c.title}</h2>
+              {c.guideName && (
+                <div className="mt-2 flex items-center gap-2 text-caption text-paper/85">
+                  <SmartImage src={c.guideAvatar ?? ""} alt="" width={28} height={28} className="h-6 w-6 rounded-full ring-1 ring-paper/60" />
+                  <span>led by <span className="font-medium text-paper">{c.guideName}</span></span>
                 </div>
-              </Link>
-              {c.guideSlug && (
-                <Link
-                  to={`/guides/${c.guideSlug}`}
-                  className="flex items-center gap-2 px-4 pb-4 pt-1"
-                >
-                  <SmartImage
-                    src={c.guideAvatar ?? ""}
-                    alt={c.guideName ?? ""}
-                    width={28}
-                    height={28}
-                    className="h-7 w-7 rounded-full"
-                  />
-                  <span className="text-sm text-ink-soft">
-                    led by <span className="font-medium text-ink">{c.guideName}</span>
-                  </span>
-                  <TierBadge tier={c.guideTier} static />
-                </Link>
               )}
-            </div>
+            </PhotoCard>
           ))}
         </div>
       )}

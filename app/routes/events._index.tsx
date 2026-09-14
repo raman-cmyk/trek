@@ -5,6 +5,12 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { SmartImage } from "~/components/SmartImage";
 import { useMoney } from "~/lib/currency-context";
 import { eventDates, placesLeft } from "~/lib/events";
+import { Eyebrow } from "~/components/design/Eyebrow";
+import { Glyph } from "~/components/design/Chip";
+import { Glass, GlassPill } from "~/components/design/Glass";
+import { Fallback } from "~/components/design/Fallback";
+import { TrailScene } from "~/components/design/TrailScene";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -37,7 +43,7 @@ export default function Events({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="label text-muted">Go with a group</p>
+          <Eyebrow>Go with a group</Eyebrow>
           <h1 className="mt-2 max-w-[22ch] font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
             Trips somebody put together.
           </h1>
@@ -49,27 +55,39 @@ export default function Events({ loaderData }: Route.ComponentProps) {
         </div>
         <Link
           to="/events/new"
-          className="rounded bg-pine px-5 py-3 font-medium text-paper hover:bg-moss"
+          className="inline-flex h-12 items-center gap-2 rounded-button bg-chartreuse px-5 font-medium text-pine shadow-card transition duration-instant hover:brightness-[0.97] active:scale-[0.97]"
         >
-          Organise one
+          <Glyph name="people" /> Organise one
         </Link>
       </div>
 
       {events.length === 0 ? (
-        <div className="mt-10 rounded-md border border-line bg-card p-8">
-          <p className="font-display text-xl text-ink">No trips open just now.</p>
-          <p className="mt-2 max-w-[54ch] text-muted">
-            These come from people, so they appear when somebody organises one.
-            If you have a group and a rough idea of when, we will handle the
-            permits, find the guide, and put it on the site for you.
-          </p>
-          <Link
-            to="/events/new"
-            className="mt-4 inline-block rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss"
-          >
-            Organise one →
-          </Link>
-        </div>
+        // An empty page is still a picture of a walk (docs/07): a real route
+        // drawn as terrain, with the invitation on glass.
+        <TrailScene
+          photo={null}
+          alt="A route drawn day by day"
+          stops={AUTH_SCENE.stops}
+          pins={3}
+          height="mt-10 aspect-[4/3] sm:aspect-[21/9]"
+        >
+          <div className="absolute inset-x-4 bottom-4 sm:inset-x-6 sm:bottom-6 sm:max-w-lg">
+            <Glass className="p-5">
+              <p className="font-display text-xl text-ink">No trips open just now.</p>
+              <p className="mt-2 text-sm text-muted">
+                These come from people, so they appear when somebody organises one.
+                If you have a group and a rough idea of when, we will handle the
+                permits, find the guide, and put it on the site for you.
+              </p>
+              <Link
+                to="/events/new"
+                className="mt-4 inline-block rounded-button bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss"
+              >
+                Organise one →
+              </Link>
+            </Glass>
+          </div>
+        </TrailScene>
       ) : (
         <ul className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {events.map((e: any) => {
@@ -79,15 +97,21 @@ export default function Events({ loaderData }: Route.ComponentProps) {
                 <Link
                   to={`/events/${e.slug}`}
                   prefetch="intent"
-                  className="group flex h-full flex-col overflow-hidden rounded-card border border-line bg-card transition-colors hover:border-sage"
+                  className="group flex h-full flex-col overflow-hidden rounded-photo border border-line bg-card shadow-card transition duration-quick hover:-translate-y-0.5 hover:border-sage hover:shadow-lift"
                 >
-                  <SmartImage
-                    src={e.cover_photo_url ?? ""}
-                    alt={e.title}
-                    width={600}
-                    height={400}
-                    className="aspect-[3/2] w-full"
-                  />
+                  <div className="relative aspect-[3/2] w-full overflow-hidden bg-wheat">
+                    {e.cover_photo_url ? (
+                      <SmartImage src={e.cover_photo_url} alt={e.title} width={600} height={400} cover className="absolute inset-0 h-full w-full" imgClassName="transition duration-slow group-hover:scale-[1.03]" />
+                    ) : (
+                      <Fallback glyph="people" />
+                    )}
+                    {left !== null && (
+                      <GlassPill className="absolute left-2 top-2">
+                        <Glyph name="people" className="text-moss" />
+                        {left === 0 ? "Full" : <><span className="font-mono">{left}</span> of <span className="font-mono">{e.max_people}</span> left</>}
+                      </GlassPill>
+                    )}
+                  </div>
                   <div className="flex flex-1 flex-col p-4">
                     <p className="font-mono text-caption text-muted">
                       {eventDates(e.start_date, e.end_date)}
