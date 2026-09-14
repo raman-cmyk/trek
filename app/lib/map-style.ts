@@ -25,6 +25,20 @@
 export const MAP_STYLE = {
   version: 8 as const,
   sources: {
+    // Elevation, as real numbers rather than a picture of shadows. MapLibre
+    // reads terrarium-encoded PNGs natively, which buys two things no raster
+    // overlay can: hillshading computed on the GPU in whatever colours we
+    // like, and actual 3D relief under a pitched camera. Free, no key, and
+    // checked live — the previous attempt at shading pointed at a Wikimedia
+    // host that has been retired.
+    dem: {
+      type: "raster-dem" as const,
+      tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+      encoding: "terrarium" as const,
+      tileSize: 256,
+      maxzoom: 13,
+      attribution: "Elevation: Mapzen / AWS Open Data",
+    },
     topo: {
       type: "raster" as const,
       tiles: [
@@ -49,15 +63,44 @@ export const MAP_STYLE = {
       type: "raster" as const,
       source: "topo",
       paint: {
-        "raster-saturation": -0.55,
-        "raster-hue-rotate": 62,
-        "raster-brightness-min": 0.1,
-        "raster-brightness-max": 0.98,
-        "raster-contrast": 0.05,
-        "raster-opacity": 0.92,
+        // Much gentler than before. The old numbers desaturated a topographic
+        // map almost to grey, which is precisely what made it "flat and
+        // boring": contour lines, glacier white and forest green are the
+        // whole point of a topo tile, and the correction was erasing them.
+        // Enough hue push to belong on the page, not enough to flatten Nepal.
+        "raster-saturation": -0.18,
+        "raster-hue-rotate": 18,
+        "raster-brightness-min": 0.04,
+        "raster-brightness-max": 1,
+        "raster-contrast": 0.12,
+        "raster-opacity": 1,
+      },
+    },
+    {
+      // Shading computed from the elevation itself, in brand colours. This is
+      // the layer that makes a valley look like a valley.
+      id: "hillshade",
+      type: "hillshade" as const,
+      source: "dem",
+      paint: {
+        "hillshade-exaggeration": 0.55,
+        "hillshade-shadow-color": "#1b3b2a",
+        "hillshade-highlight-color": "#fbf9f3",
+        "hillshade-accent-color": "#4f7a3a",
+        "hillshade-illumination-anchor": "map" as const,
+        "hillshade-illumination-direction": 315,
       },
     },
   ],
+  // Under a pitched camera the horizon is otherwise a hard cut into nothing.
+  sky: {
+    "sky-color": "#bcd2e4",
+    "sky-horizon-blend": 0.6,
+    "horizon-color": "#eef1e6",
+    "horizon-fog-blend": 0.55,
+    "fog-color": "#dfe6d5",
+    "fog-ground-blend": 0.2,
+  },
 };
 
 /** Brand colours the map draws with, kept next to the style they belong to. */
@@ -70,4 +113,6 @@ export const MAP_INK = {
   start: "#4f7a3a",
   /** The top — the reason people came. */
   summit: "#b4532a",
+  /** A place you only ever flew or drove to. */
+  travel: "#8a8a80",
 };

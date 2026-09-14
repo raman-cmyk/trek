@@ -6,9 +6,13 @@ import {
   groupIsActive,
   groupStops,
   highestGroup,
+  isTravelOnly,
+  legCoords,
+  legsOfRoute,
   locatedStops,
   pinLabel,
-  routeLine,
+  spreadPins,
+  walkingBounds,
   type StopGroup,
 } from "~/lib/map-stops";
 
@@ -42,11 +46,13 @@ export function RouteMap({
   const el = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<StopGroup, HTMLElement>>(new Map());
+  const markerRefs = useRef<Map<HTMLElement, any>>(new Map());
   const [failed, setFailed] = useState(false);
   // Read inside marker event handlers, which are created once and would
   // otherwise close over the activeDay of the render that made them.
   const activeRef = useRef<number | null | undefined>(activeDay);
   activeRef.current = activeDay;
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const located = locatedStops(stops);
   const groups = groupStops(stops);
@@ -63,26 +69,38 @@ export function RouteMap({
         ]);
         if (cancelled || !el.current) return;
 
-        const lngs = located.map((s) => s.lng);
-        const lats = located.map((s) => s.lat);
+        // Framed on the WALK. Nearly every itinerary ends by flying or
+        // driving home — Lukla to Kathmandu is 156km — and including that leg
+        // in the bounds shrank the actual trek to a squiggle in the corner of
+        // a map mostly showing somewhere nobody walks.
+        const b = walkingBounds(stops)!;
         const m = new maplibregl.Map({
           container: el.current,
           style: MAP_STYLE as any,
           bounds: [
-            [Math.min(...lngs), Math.min(...lats)],
-            [Math.max(...lngs), Math.max(...lats)],
+            [b.west, b.south],
+            [b.east, b.north],
           ],
-          fitBoundsOptions: { padding: 48 },
+          fitBoundsOptions: { padding: { top: 56, right: 56, bottom: 84, left: 56 } },
           attributionControl: { compact: true },
-          dragRotate: false,
+          // Rotating and tilting is the point now that there is terrain under
+          // it: a Himalayan valley is worth looking along, not only down at.
+          dragRotate: true,
+          pitch: 48,
+          maxPitch: 72,
         });
         mapRef.current = m;
         m.on("error", () => {});
         m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-        const top = highestGroup(groups);
-        const first = groups[0];
-        const last = groups[groups.length - 1];
+        const allLegs = legsOfRoute(stops);
+        // A trailhead you flew into is still where the walk begins; Kathmandu
+        // at the end is not the finish of a trek, it is the airport.
+        const walked = groups.filter((g) => !isTravelOnly(g, allLegs));
+        const top = highestGroup(walked.length ? walked : groups);
+        const first = (walked.length ? walked : groups)[0];
+        const lastList = walked.length ? walked : groups;
+        const last = lastList[lastList.length - 1];
 
         for (const g of groups) {
           // Start, summit and finish are the three things somebody reads a
@@ -92,18 +110,30 @@ export function RouteMap({
           const isEnd = g === last && last !== first;
           const isTop = top != null && g === top && !isStart && !isEnd;
 
+          // Two elements on purpose. MapLibre owns the outer one's transform
+          // to place it on the map; anything we scale or nudge has to happen
+          // on an inner node or it fights the map for the same property.
           const node = document.createElement("div");
-          node.className =
+          const pin = document.createElement("div");
+          node.appendChild(pin);
+          pin.className =
             "flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-full border-2 " +
             "border-paper px-1.5 font-mono text-[11px] font-semibold text-paper shadow-lift " +
             "transition-transform duration-150";
-          const base = isStart ? MAP_INK.start : isTop ? MAP_INK.summit : MAP_INK.pin;
-          node.style.backgroundColor = base;
+          const onlyTravel = isTravelOnly(g, allLegs);
+          const base = onlyTravel
+            ? MAP_INK.travel
+            : isStart
+              ? MAP_INK.start
+              : isTop
+                ? MAP_INK.summit
+                : MAP_INK.pin;
+          pin.style.backgroundColor = base;
           // Kept on the node so restoring after a scrub does not repaint the
           // start pin the same dark green as every other night.
-          node.dataset.base = base;
-          node.textContent = pinLabel(g.days);
-          node.setAttribute(
+          pin.dataset.base = base;
+          pin.textContent = pinLabel(g.days);
+          pin.setAttribute(
             "aria-label",
             `${daysSentence(g.days)}: ${g.place}, ${g.altitude_m} metres`,
           );
@@ -112,27 +142,36 @@ export function RouteMap({
           // other when the whole trek is on screen, and the one underneath
           // becomes unreadable. Pointing at a pin lifts it out — cheap, and
           // it makes a crowded valley explorable rather than a clump.
-          node.addEventListener("mouseenter", () => {
+          pin.addEventListener("mouseenter", () => {
             node.style.zIndex = "3";
-            if (!groupIsActive(g, activeRef.current)) node.style.transform = "scale(1.25)";
+            if (!groupIsActive(g, activeRef.current)) pin.style.transform = "scale(1.2)";
           });
-          node.addEventListener("mouseleave", () => {
+          pin.addEventListener("mouseleave", () => {
             const on = groupIsActive(g, activeRef.current);
             node.style.zIndex = on ? "2" : "";
-            node.style.transform = on ? "scale(1.55)" : "";
+            pin.style.transform = on ? "scale(1.5)" : "";
           });
 
-          markersRef.current.set(g, node);
+          // Who keeps their number when two pins collide. The start, the
+          // top and the finish are what a trek map is read for; after that,
+          // earlier days win so the sequence stays legible from the bottom.
+          pin.dataset.priority = String(
+            isStart ? 0 : isTop ? 1 : isEnd ? 2 : 10 + g.firstDay,
+          );
 
-          const badge = isStart
-            ? "Start"
-            : isEnd
-              ? "Finish"
-              : isTop
-                ? "Highest point"
-                : "";
+          markersRef.current.set(g, pin);
 
-          new maplibregl.Marker({ element: node })
+          const badge = onlyTravel
+            ? "Getting there"
+            : isStart
+              ? "The walk starts here"
+              : isEnd
+                ? "The walk ends here"
+                : isTop
+                  ? "Highest point"
+                  : "";
+
+          const marker = new maplibregl.Marker({ element: node })
             .setLngLat([g.lng, g.lat])
             .setPopup(
               new maplibregl.Popup({ offset: 16, closeButton: false }).setHTML(
@@ -144,10 +183,53 @@ export function RouteMap({
               ),
             )
             .addTo(m);
+          // Registered after the marker exists, so the spread pass can move it.
+          markerRefs.current.set(pin, marker);
         }
+
+        // Push pins apart when they land on top of each other. Nothing is
+        // ever hidden: a day that disappears from the map is a day the reader
+        // thinks we lost, which is the complaint this is here to answer.
+        const declutterPins = () => {
+          const boxes = [];
+          for (const [g, pinEl] of markersRef.current) {
+            const pt = m.project([g.lng, g.lat]);
+            boxes.push({
+              key: pinEl,
+              x: pt.x,
+              y: pt.y,
+              w: 30,
+              h: 28,
+              // The pin being scrubbed to never moves: it is the one being
+              // looked at, so everything else gets out of its way.
+              priority: groupIsActive(g, activeRef.current)
+                ? -1
+                : Number(pinEl.dataset.priority ?? 99),
+            });
+          }
+          const moved = spreadPins(boxes, 3);
+          for (const [, pinEl] of markersRef.current) {
+            const d = moved.get(pinEl);
+            const marker = markerRefs.current.get(pinEl);
+            marker?.setOffset?.([d?.dx ?? 0, d?.dy ?? 0]);
+          }
+        };
+        m.on("move", declutterPins);
+        m.on("zoom", declutterPins);
 
         const draw = () => {
           if (m.getSource("route")) return;
+
+          // Real relief. Wrapped because a DEM tile host that is slow or
+          // blocked must not take the whole map down with it — the route and
+          // the pins are the part that has to work.
+          try {
+            m.setTerrain({ source: "dem", exaggeration: 1.35 });
+          } catch {
+            /* flat is survivable; blank is not */
+          }
+          const legs = legsOfRoute(stops);
+
           m.addSource("route", {
             type: "geojson",
             // Needed for the gradient below: MapLibre has to know how far
@@ -157,28 +239,41 @@ export function RouteMap({
               type: "Feature",
               properties: {},
               geometry: {
-                type: "LineString",
-                // Per DAY, not per place: an out-and-back has to go back down
-                // the way it came, and joining the grouped pins in order
-                // would cut the corner and draw a triangle.
-                coordinates: routeLine(stops),
+                type: "MultiLineString",
+                // Only the legs actually walked. The flight home used to be
+                // drawn as a trekking line straight across the country.
+                coordinates: legCoords(legs, "walk"),
               },
             },
           });
-          m.addLayer({
-            id: "route-casing",
-            type: "line",
-            source: "route",
-            paint: { "line-color": MAP_INK.casing, "line-width": 6, "line-opacity": 0.9 },
-            layout: { "line-cap": "round", "line-join": "round" },
-          });
-          m.addLayer({
-            id: "route-line",
-            type: "line",
-            source: "route",
-            paint: { "line-width": 3 },
-            layout: { "line-cap": "round", "line-join": "round" },
-          });
+
+          // The way in and the way home, when they are not on foot. Dashed
+          // and quiet: it is part of the trip and belongs on the map, but it
+          // is not the trek and should never be mistaken for it.
+          const travel = legCoords(legs, "travel");
+          if (travel.length) {
+            m.addSource("travel", {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "MultiLineString", coordinates: travel },
+              },
+            });
+            m.addLayer({
+              id: "travel-line",
+              type: "line",
+              source: "travel",
+              paint: {
+                "line-color": MAP_INK.line,
+                "line-width": 1.5,
+                "line-opacity": 0.35,
+                "line-dasharray": [1, 2.5],
+              },
+              layout: { "line-cap": "round" },
+            });
+          }
+
           // Which way round you walk it, without a single external asset.
           //
           // The obvious version of this is little arrow glyphs along the
@@ -206,6 +301,12 @@ export function RouteMap({
         };
         if (m.isStyleLoaded()) draw();
         else m.on("load", draw);
+        // Called directly rather than hung on 'idle'. A map whose tile host
+        // is slow or blocked never goes idle, and the pins would have stayed
+        // in a clump on exactly the connection where that matters most.
+        declutterPins();
+        const settle = setTimeout(declutterPins, 400);
+        cleanupRef.current = () => clearTimeout(settle);
       } catch {
         if (!cancelled) setFailed(true);
       }
@@ -213,7 +314,10 @@ export function RouteMap({
 
     return () => {
       cancelled = true;
+      cleanupRef.current?.();
+      cleanupRef.current = null;
       markersRef.current.clear();
+      markerRefs.current.clear();
       mapRef.current?.remove?.();
       mapRef.current = null;
     };
@@ -224,8 +328,9 @@ export function RouteMap({
   useEffect(() => {
     for (const [group, node] of markersRef.current) {
       const on = groupIsActive(group, activeDay);
-      node.style.transform = on ? "scale(1.55)" : "";
-      node.style.zIndex = on ? "2" : "";
+      node.style.transform = on ? "scale(1.5)" : "";
+      // z-index belongs on the element MapLibre positions, not the inner pin.
+      if (node.parentElement) node.parentElement.style.zIndex = on ? "2" : "";
       if (on) {
         node.style.backgroundColor = "var(--color-chartreuse)";
         node.style.color = "var(--color-pine)";
@@ -239,6 +344,9 @@ export function RouteMap({
     }
     const g = groups.find((x) => groupIsActive(x, activeDay));
     if (g && mapRef.current?.easeTo) {
+      // easeTo fires 'move', which re-runs the declutter pass — so the pin
+      // being scrubbed to always comes back at full size with its number,
+      // even if a neighbour had collapsed it a moment ago.
       mapRef.current.easeTo({ center: [g.lng, g.lat], duration: 400 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
