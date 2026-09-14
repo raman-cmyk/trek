@@ -2400,3 +2400,46 @@ span is, whether it is clear, and which days can start one are testable
 without a browser. The server now checks the whole span too.
 
 836 tests green, build green, deployed.
+
+**Take action on a flagged message, and two sections instead of one.** The
+moderation page had a single button, Dismiss, so the only thing the office
+could do about a guide handing out a WhatsApp number was to pretend it had
+not happened. It now has warn / suspend / ban, each with a required reason
+that is sent to the person word for word, and the flagged list is split into
+guides and clients — genuinely different problems that one mixed list made
+look identical.
+
+An action that restrains nobody is theatre, so `requireUser` checks for a
+live block on every signed-in request rather than only at the login screen;
+somebody suspended at ten in the morning has a session cookie that would
+otherwise last them the week. `/suspended` tells them what was decided and
+why. Suspending a guide pauses their listings and remembers their prior
+status, so lifting puts them back where they were. A failure to READ the
+block list lets people in — the safe direction is not shutting the platform.
+
+0078 also writes out `account_blocks`, which existed in production with no
+migration and no code using it.
+
+**"Nothing shows up — in app or through email."** Two faults, one symptom.
+
+The email was real, correct, and had never once left the building: all 39
+emails this platform has ever composed are logged `skipped / no_api_key`.
+Not a bug — `RESEND_API_KEY` is not set in Cloudflare.
+
+The in-app half did not exist. No table, no bell, no page. The only channel
+the platform had was an email it could not send, so a trekker whose guide
+had just accepted found out by going and looking at My Trips.
+
+Rather than adding a notify() call beside forty existing sendEmail() calls
+and forgetting some, the notification is derived from the email at the moment
+it is composed — every transactional email already knows who it is for, what
+happened, and the one link to follow. It is written BEFORE the branch that
+needs the API key, which is the whole point: the app can tell people things
+while the email channel is down, which is the state it has been in since the
+first day. The href is read out of the email body, so there is one place
+stating where a notification goes.
+
+0080 backfills from `email_log`: 39 things people were supposed to be told
+and were not, handed back to them unread, because that claim is true.
+
+877 tests green, build green.

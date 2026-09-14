@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { renderEmail, type EmailContent } from "~/lib/email/render";
+import { recordInApp } from "~/lib/inapp.server";
 import { BRAND } from "~/lib/brand";
 
 /**
@@ -140,6 +141,12 @@ export async function sendEmail(
     await record(admin, args, "skipped", g.reason);
     return { sent: false, reason: g.reason };
   }
+
+  // The in-app half, written here rather than at forty call sites — and
+  // before the branch that needs an API key, so the app can tell people
+  // things while the email channel is down. It has been down since the first
+  // day: every email this platform has composed is logged `skipped`.
+  await recordInApp(admin, args, siteUrl(env));
 
   const { html, text } = renderEmail({
     content: args.content,

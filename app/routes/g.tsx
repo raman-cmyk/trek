@@ -1,10 +1,11 @@
-import { Form, NavLink, Outlet, data } from "react-router";
+import { Form, Link, NavLink, Outlet, data } from "react-router";
 import type { Route } from "./+types/g";
 import { cn } from "~/lib/cn";
 import { checkinIsDue, needsClosing, trekDay } from "~/lib/checkin";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { countUnread } from "~/lib/unread.server";
+import { badgeLabel } from "~/lib/inapp";
 
 export function meta() {
   return [{ title: "Guide dashboard" }, { name: "robots", content: "noindex" }];
@@ -17,7 +18,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // which put a whole extra round trip on the critical path of every page in
   // the guide area. It depends on nothing above it.
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }, { data: running }] =
+  const [{ data: guide }, { count: enquiryCount }, { unreadTotal }, { data: running }, { count: news }] =
     await Promise.all([
     admin.from("guides").select("status, slug").eq("user_id", user.id).single(),
     admin
@@ -32,6 +33,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .select("id, status, start_date, end_date")
       .eq("guide_id", user.id)
       .eq("status", "active"),
+    // The bell. Guides get told things too — a booking cancelled, a listing
+    // paused, a payout sent — and until now the only channel for any of it
+    // was an email the platform could not send.
+    admin
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .is("read_at", null),
   ]);
 
   // One number: treks needing today's safety update, plus finished ones
@@ -57,6 +66,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       enquiryCount: enquiryCount ?? 0,
       unreadTotal,
       checkinDue,
+      news: news ?? 0,
     },
     { headers },
   );
@@ -93,17 +103,31 @@ const TABS = [
 ];
 
 export default function GuideLayout({ loaderData }: Route.ComponentProps) {
-  const { enquiryCount, unreadTotal, checkinDue } = loaderData;
+  const { enquiryCount, unreadTotal, checkinDue, news } = loaderData;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <span className="font-display text-lg">Guides of Nepal</span>
-        {/* Explicit action: a Form with none posts to whichever page is on
-            screen, which was a 405 on some tabs and a silent no-op on others. */}
-        <Form method="post" action="/g/logout">
-          <button className="text-xs text-primary">Sign out</button>
-        </Form>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/notifications"
+            aria-label={news ? `Notifications, ${news} new` : "Notifications"}
+            className="relative rounded-full p-1.5 text-ink-soft hover:bg-mist hover:text-ink"
+          >
+            <IconBell />
+            {!!news && (
+              <span className="absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-ember px-1 text-center text-[10px] font-medium leading-4 text-white">
+                {badgeLabel(news)}
+              </span>
+            )}
+          </Link>
+          {/* Explicit action: a Form with none posts to whichever page is on
+              screen, which was a 405 on some tabs and a silent no-op on others. */}
+          <Form method="post" action="/g/logout">
+            <button className="text-xs text-primary">Sign out</button>
+          </Form>
+        </div>
       </header>
 
       <div className="flex-1 p-4 pb-24">
@@ -232,6 +256,24 @@ function IconCalendar({ active }: IconProps) {
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" {...S(active)}>
       <rect x="3.2" y="4.8" width="13.6" height="12" rx="1.6" />
       <path d="M3.2 8.4h13.6M7 3.2v3M13 3.2v3" />
+    </svg>
+  );
+}
+
+function IconBell() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3-1.2 4.2-1.7 4.7a.5.5 0 0 0 .35.85h11.7a.5.5 0 0 0 .35-.85c-.5-.5-1.7-1.7-1.7-4.7A4.5 4.5 0 0 0 10 3Z" />
+      <path d="M8.3 16a1.9 1.9 0 0 0 3.4 0" />
     </svg>
   );
 }

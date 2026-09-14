@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Form, Link, NavLink, useLocation } from "react-router";
 import { cn } from "~/lib/cn";
+import { badgeLabel } from "~/lib/inapp";
 import { useMoney } from "~/lib/currency-context";
 import { DISPLAY_CURRENCIES, type CurrencyCode } from "~/lib/currency";
 
@@ -37,7 +38,7 @@ const BROWSE = [
 export function Header({
   account,
 }: {
-  account?: { firstName: string; role: string; unread?: number } | null;
+  account?: { firstName: string; role: string; unread?: number; news?: number } | null;
 }) {
   const { code, setCode } = useMoney();
   const [menu, setMenu] = useState(false);
@@ -138,6 +139,30 @@ export function Header({
                 <MailGlyph />
                 {!!account.unread && (
                   <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-ember ring-2 ring-paper" />
+                )}
+              </NavLink>
+
+              {/* The bell. Until now the only way the platform told anybody
+                  anything was an email it could not send, so a trekker whose
+                  guide had just accepted found out by going and looking. */}
+              <NavLink
+                to="/notifications"
+                prefetch="intent"
+                aria-label={
+                  account.news ? `Notifications, ${account.news} new` : "Notifications"
+                }
+                className={({ isActive }) =>
+                  cn(
+                    "relative rounded-full p-2 transition-colors",
+                    isActive ? "bg-mist text-moss" : "text-ink-soft hover:bg-mist hover:text-ink",
+                  )
+                }
+              >
+                <BellGlyph />
+                {!!account.news && (
+                  <span className="absolute -right-0.5 -top-0.5 min-w-[1.05rem] rounded-full bg-ember px-1 text-center text-[11px] font-medium leading-[1.05rem] text-white ring-2 ring-paper">
+                    {badgeLabel(account.news)}
+                  </span>
                 )}
               </NavLink>
 
@@ -336,6 +361,24 @@ function CloseGlyph() {
   return (
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
       <path d="M5.5 5.5l11 11M16.5 5.5l-11 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BellGlyph() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3-1.2 4.2-1.7 4.7a.5.5 0 0 0 .35.85h11.7a.5.5 0 0 0 .35-.85c-.5-.5-1.7-1.7-1.7-4.7A4.5 4.5 0 0 0 10 3Z" />
+      <path d="M8.3 16a1.9 1.9 0 0 0 3.4 0" />
     </svg>
   );
 }

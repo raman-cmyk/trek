@@ -30,17 +30,29 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       getSessionUser(request, env),
     ]);
   // Reflect the signed-in customer in the header (trips + sign out + unread).
-  let account: { firstName: string; role: string; unread: number } | null = null;
+  let account: { firstName: string; role: string; unread: number; news: number } | null = null;
   if (user) {
     const profile = await getProfile(env, user.id);
     if (profile) {
       const { createAdminClient } = await import("~/lib/supabase.server");
       const { countUnread } = await import("~/lib/unread.server");
-      const { unreadTotal } = await countUnread(createAdminClient(env), user.id);
+      const admin = createAdminClient(env);
+      const [{ unreadTotal }, { count: news }] = await Promise.all([
+        countUnread(admin, user.id),
+        // The bell's number. A count, not the rows — this runs on every page
+        // load for every signed-in person, and there is a partial index on
+        // exactly this predicate.
+        admin
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .is("read_at", null),
+      ]);
       account = {
         firstName: (profile.full_name ?? "").split(" ")[0] || "You",
         role: profile.role,
         unread: unreadTotal,
+        news: news ?? 0,
       };
     }
   }

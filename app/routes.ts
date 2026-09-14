@@ -39,6 +39,8 @@ export default [
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
     route("trips", "routes/trips._index.tsx"),
+    // Everything the platform has told you — the half that did not exist.
+    route("notifications", "routes/notifications.tsx"),
     // A package the guide proposed: what changed, what it costs, approve and
     // pay the deposit in one move.
     route("proposals/:id", "routes/proposals.$id.tsx"),
