@@ -2335,3 +2335,40 @@ and asks them to fix it and message us. A decision anyone can reverse without
 a word is not a decision anybody is tracking.
 
 817 tests green, build green, deployed.
+
+**The console was reading an error as "empty".** Three reports, one cause for
+two of them: the booking pipeline showed 0 in every column with 29 bookings
+in the database, and clicking Open on a live trek 404'd.
+
+PostgREST resolves `trekker:users(...)` by finding ONE foreign key from the
+parent to `users`. `bookings` has three — `trekker_id`, `meeting_set_by` and
+`insurance_rejected_by`. The embed is ambiguous, so the request FAILS;
+Supabase returns `{ data: null, error }`; every call site in this codebase
+destructures only `data`; and the page renders as though the database were
+empty. The second and third keys were added for ordinary features, months
+apart, and nothing anywhere said they had broken twenty-one queries.
+
+Twenty-one, across fourteen files: the pipeline, a booking's own page,
+permits, verifications, incidents, ops search, ops home, the guide's
+bookings, earnings, check-in list and active trek, the messages thread
+header, and TIMS card issuance. `ops/people/:id` already named its key, which
+is the only reason one page kept working while the pipeline beside it read
+zero — and is what identified the cause.
+
+The guard is `app/lib/embeds.test.ts`: it walks every `.select()` in the app,
+works out which table each `users(` embed hangs off — the innermost enclosing
+embed, or the selected table — and fails if that table is one of the seven
+with more than one key into `users`. The list is the schema's, from
+`pg_constraint`. Adding a foreign key can break a query in a file nobody
+touched; this is the thing that now says so.
+
+**"0 accounts" was never no accounts.** `/ops/users` reported zero with 70
+auth records. The loop asked for `perPage: 1000`, and on any error at all
+did `break` — so a refusal from the auth server and an empty platform looked
+identical. Now it asks for 200 a page and carries the failure out to the
+screen with the reason on it. Accounts created on six different days,
+including today, say the auth admin API itself works, so the oversized page
+is the likely refusal; if it is something else the page will now name it
+rather than lying quietly.
+
+818 tests green, build green, deployed.
