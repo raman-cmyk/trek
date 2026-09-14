@@ -3,6 +3,8 @@ import type { Route } from "./+types/enquiry";
 import { getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { ENQUIRY_TTL_HOURS } from "~/lib/config";
+import { arrivalError, parseArrival } from "~/lib/arrival";
+import { fmtDate } from "~/lib/format";
 
 // Action-only route: a trekker sends an enquiry from an offering page.
 export async function action({ request, context }: Route.ActionArgs) {
@@ -68,6 +70,17 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
+  // When they land in Kathmandu. Optional — most people book the trek before
+  // the flight — but checked when given, because a date after the start is a
+  // typo somebody would otherwise discover at the airport.
+  const arrival = parseArrival(form.get("arrival_date"), startDate);
+  if (arrival.problem) {
+    return data(
+      { error: arrivalError(arrival.problem, startDate, fmtDate) },
+      { status: 400, headers },
+    );
+  }
+
   const { data: enq, error } = await admin
     .from("enquiries")
     .insert({
@@ -76,6 +89,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       offering_id: offeringId,
       start_date: startDate,
       party_size: partySize,
+      arrival_date: arrival.date,
       message,
       selected_options: selectedOptions,
       status: "open",

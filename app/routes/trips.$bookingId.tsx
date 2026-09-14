@@ -20,6 +20,7 @@ import { TripPipeline } from "~/components/TripPipeline";
 import { MeetingDetails } from "~/components/MeetingDetails";
 import { MEET_KEY } from "~/lib/pipeline";
 import { meetingLine, resolveMeeting } from "~/lib/meeting";
+import { arrivalError, daysBeforeStart, parseArrival } from "~/lib/arrival";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
@@ -34,7 +35,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, meeting_point, meeting_time, meeting_note, meeting_set_at, offering:offerings(title, kind, meeting_point, meet_time, route:routes(max_altitude_m)), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, arrival_date, meeting_point, meeting_time, meeting_note, meeting_set_at, offering:offerings(title, kind, meeting_point, meet_time, route:routes(max_altitude_m)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -120,7 +121,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireUser(request, env, "trekker");
   const { data: b } = await admin
     .from("bookings")
-    .select("id, status, end_date, guide_id, offering_id")
+    .select("id, status, end_date, guide_id, offering_id, start_date, arrival_date")
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
     .maybeSingle();
@@ -263,6 +264,27 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
     }
     return data({ ok: "Thanks for your review!" }, { headers });
+  }
+
+  // The flight moves. A trekker who booked the trek in March and the flight
+  // in June needs to be able to say so without messaging anybody.
+  if (intent === "arrival") {
+    const parsed = parseArrival(form.get("arrival_date"), (b as any).start_date);
+    if (parsed.problem) {
+      return data(
+        { error: arrivalError(parsed.problem, (b as any).start_date, fmtDate) },
+        { status: 400, headers },
+      );
+    }
+    await admin.from("bookings").update({ arrival_date: parsed.date }).eq("id", b.id);
+    return data(
+      {
+        ok: parsed.date
+          ? `Saved — your guide can see you land on ${fmtDate(parsed.date)}.`
+          : "Cleared. Tell us when you know.",
+      },
+      { headers },
+    );
   }
 
   if (intent === "cancel") {
@@ -479,6 +501,36 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
               here automatically. The old green independent-trekker card no longer exists.
             </p>
           )}
+        </section>
+      )}
+
+      {/* When they land. A trek's briefing, kit check and domestic flight are
+          all planned around it, and nothing recorded it before — so it lived
+          in a chat message or in nobody's head. */}
+      {isTrek && !cancelled && (
+        <section className="mt-6">
+          <h2 className="mb-2 font-display text-xl">Your arrival in Kathmandu</h2>
+          <Form method="post" className="flex flex-wrap items-end gap-2 rounded-card border border-border bg-card p-4">
+            <input type="hidden" name="intent" value="arrival" />
+            <label className="text-sm text-ink-soft">
+              The day you land
+              <input
+                type="date"
+                name="arrival_date"
+                defaultValue={b.arrival_date ?? ""}
+                max={b.start_date}
+                className="mt-1 block rounded-button border border-border px-3 py-2 text-base text-ink"
+              />
+            </label>
+            <Button type="submit" size="sm" variant="secondary" loading={nav.state === "submitting"}>
+              Save
+            </Button>
+            <p className="w-full text-xs text-ink-soft">
+              {b.arrival_date
+                ? `${guideName} can see this. You land ${daysBeforeStart(b.arrival_date, b.start_date)} days before the trek starts — change it here if your flight moves.`
+                : `${guideName} plans your briefing and your Lukla flight around this. Leave it blank until you have booked.`}
+            </p>
+          </Form>
         </section>
       )}
 

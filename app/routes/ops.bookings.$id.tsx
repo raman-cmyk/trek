@@ -15,7 +15,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email), guide:guides(users(full_name))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, arrival_date, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email), guide:guides(users(full_name))",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -125,6 +125,9 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             <Row label="Trekker" value={b.trekker?.full_name} />
             <Row label="Guide" value={b.guide?.users?.full_name} />
             <Row label="Dates" value={`${b.start_date} → ${b.end_date}`} />
+            {/* The office files permits and books domestic flights against
+                this, so it belongs beside the dates rather than nowhere. */}
+            <Row label="Lands in KTM" value={b.arrival_date ?? "not told yet"} />
             <Row label="Party" value={`${b.party_size}`} />
             <Row label="Total" value={formatUsd(b.total_usd_cents)} />
           </dl>

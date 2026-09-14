@@ -10,6 +10,7 @@ import { Badge } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
 import { copy } from "~/lib/copy";
 import { parseMeetTime, resolveMeeting } from "~/lib/meeting";
+import { arrivalLine, isTightArrival } from "~/lib/arrival";
 
 const STATUS_TONE: Record<string, "amber" | "teal" | "green" | "neutral" | "blue"> = {
   deposit_paid: "amber",
@@ -25,7 +26,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, status, trekker_id, meeting_point, meeting_time, meeting_note, meeting_set_at, offering:offerings(title, kind, meeting_point, meet_time), trekker:users!bookings_trekker_id_fkey(full_name, country_code, phone)",
+      "id, start_date, end_date, party_size, status, trekker_id, arrival_date, meeting_point, meeting_time, meeting_note, meeting_set_at, offering:offerings(title, kind, meeting_point, meet_time), trekker:users!bookings_trekker_id_fkey(full_name, country_code, phone)",
     )
     .eq("guide_id", user.id)
     .not("status", "in", "(cancelled_trekker,cancelled_guide,cancelled_force_majeure)")
@@ -131,6 +132,20 @@ export default function GuideBookings({ loaderData, actionData }: Route.Componen
                   {firstName(b.trekker?.full_name)}{b.trekker?.country_code ? ` · ${b.trekker.country_code}` : ""} · {b.party_size}p
                 </p>
                 <p className="text-sm text-ink-soft">{fmtDateRange(b.start_date, b.end_date)}</p>
+                {/* The day they land, which is the day the briefing happens.
+                    Flagged when there is no slack: landing the morning the
+                    trek starts is a plan with nothing left in it. */}
+                {b.offering?.kind === "trek" && (
+                  <p
+                    className={
+                      isTightArrival(b.arrival_date, b.start_date)
+                        ? "text-sm font-medium text-ember"
+                        : "text-sm text-ink-soft"
+                    }
+                  >
+                    {arrivalLine(b.arrival_date, b.start_date, fmtDate)}
+                  </p>
+                )}
                 {/* The status badge says "docs pending"; this says what that
                     means and what is next, in the steps this kind of trip has. */}
                 <TripPipeline

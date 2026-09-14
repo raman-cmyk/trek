@@ -124,7 +124,7 @@ export async function acceptEnquiry(
 ): Promise<string | null> {
   const { data: enq } = await admin
     .from("enquiries")
-    .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status")
+    .select("id, trekker_id, guide_id, offering_id, start_date, party_size, status, arrival_date")
     .eq("id", enquiryId)
     .eq("guide_id", guideId)
     .eq("status", "open")
@@ -152,6 +152,8 @@ async function bookFromQuote(
     offering_id: string;
     start_date: string;
     party_size: number;
+    /** When they land in Kathmandu, if they knew when they asked. */
+    arrival_date?: string | null;
   },
   q: Quote,
 ): Promise<string> {
@@ -167,6 +169,9 @@ async function bookFromQuote(
       // The party and the length come from what was agreed, which on an
       // approved proposal is not what the offering says.
       party_size: enq.party_size,
+      // The flight, if they have booked one. Nullable, and changed from the
+      // trip page when it moves — which it does.
+      arrival_date: enq.arrival_date ?? null,
       status: "pending_deposit",
       guide_fee_usd_cents: q.guideFeeUsdCents,
       porter_fee_usd_cents: q.porterFeeUsdCents,
@@ -708,7 +713,7 @@ export async function approveProposal(
 
   const { data: enq } = await admin
     .from("enquiries")
-    .select("id, trekker_id, guide_id, offering_id, status")
+    .select("id, trekker_id, guide_id, offering_id, status, arrival_date")
     .eq("id", p.enquiry_id)
     .maybeSingle();
   if (!enq) return null;
@@ -738,6 +743,11 @@ export async function approveProposal(
       offering_id: enq.offering_id,
       start_date: p.start_date,
       party_size: p.party_size,
+      // A proposal can move the start date, so an arrival that was fine for
+      // the original dates may now be after it. Keep it only if it still
+      // lands before the walk begins.
+      arrival_date:
+        enq.arrival_date && enq.arrival_date <= p.start_date ? enq.arrival_date : null,
     },
     q,
   );

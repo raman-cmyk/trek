@@ -193,6 +193,20 @@ function ConfigBody({
             name="selected_options"
             value={JSON.stringify(selectedOptions)}
           />
+          {/* A trek starts in the mountains, not at the airport: the guide
+              plans the briefing and the domestic flight around the day you
+              land. Optional, because most people book the trek first. */}
+          {o.kind === "trek" && (
+            <label className="mb-2 block text-sm text-ink-soft">
+              When do you land in Kathmandu? <span className="text-muted">(if you know)</span>
+              <input
+                type="date"
+                name="arrival_date"
+                max={day}
+                className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+              />
+            </label>
+          )}
           <textarea
             name="message"
             rows={2}
