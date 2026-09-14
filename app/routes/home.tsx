@@ -4,7 +4,7 @@ import { copy } from "~/lib/copy";
 import { pageMeta, absoluteUrl, jsonLd, websiteLd } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
-import { guideRatings } from "~/lib/ratings.server";
+import { guideRatings, offeringRatings } from "~/lib/ratings.server";
 import { useState } from "react";
 import {
   GuideCard,
@@ -78,7 +78,7 @@ export async function loader({ context }: Route.LoaderArgs) {
       client
         .from("public_offerings")
         .select(
-          "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
+          "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, transport, activity_level, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
         ),
       client
         .from("routes")
@@ -211,10 +211,14 @@ export async function loader({ context }: Route.LoaderArgs) {
     ...o,
     region: o.route_id ? (routeById.get(o.route_id)?.region ?? null) : null,
   }));
+  // A rating per trip, for the cards in the browser below. The guide ratings
+  // above answer a different question and cannot stand in for these.
+  const tripRatings = await offeringRatings(client, experiences.map((o) => o.id));
 
   return {
     rows,
     experiences,
+    tripRatings,
     freeThisWeek: freeThisWeek.slice(0, 8),
     freeThisWeekTotal: freeThisWeek.length,
     freeRuns,
@@ -250,6 +254,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     rows,
     experiences,
+    tripRatings,
     freeThisWeek,
     freeThisWeekTotal,
     pins,
@@ -387,7 +392,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {/* 5c — The catalogue. The rows above answer "who"; this answers
           "what", and it is the only place on the homepage you can browse
           bookable things rather than people. */}
-      <ExperienceBrowser experiences={experiences} />
+      <ExperienceBrowser experiences={experiences} ratings={tripRatings} />
 
       {/* Latest from the trail — the proof-of-life feed. Real treks, dated,
           written by the guide who led them. Nothing on this page argues the
@@ -695,7 +700,13 @@ const KINDS = [
  * what is actually listed, so an empty category never appears as a chip that
  * returns nothing.
  */
-function ExperienceBrowser({ experiences }: { experiences: any[] }) {
+function ExperienceBrowser({
+  experiences,
+  ratings,
+}: {
+  experiences: any[];
+  ratings: Record<string, { value: number; count: number }>;
+}) {
   const [kind, setKind] = useState<string>("");
   const [region, setRegion] = useState<string>("");
   const [showAll, setShowAll] = useState(false);
@@ -826,7 +837,7 @@ function ExperienceBrowser({ experiences }: { experiences: any[] }) {
         <>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shown.map((o: PublicOffering) => (
-              <OfferingCard key={o.id} offering={o} />
+              <OfferingCard key={o.id} offering={o} rating={ratings[o.id]} />
             ))}
           </div>
           {!showAll && matched.length > shown.length && (

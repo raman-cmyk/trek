@@ -5,6 +5,7 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { BrowseSearch } from "~/components/public/BrowseSearch";
 import { escapeLike, openRunsByGuide, parseRange } from "~/lib/browse.server";
+import { offeringRatings } from "~/lib/ratings.server";
 import { fmtDateShort } from "~/lib/format";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
@@ -20,7 +21,7 @@ const CATEGORIES = [
 ] as const;
 
 const OFFERING_COLS =
-  "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name";
+  "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name, transport, activity_level";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -101,8 +102,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     .from("public_offerings")
     .select("id", { count: "exact", head: true });
 
+  // One rating per trip, for the cards. A grid of photographs and prices is
+  // not enough to choose on, and it is the one number every competitor's card
+  // carries.
+  const tripRatings = await offeringRatings(client, offerings.map((o) => o.id));
+
   return {
     offerings: offerings as PublicOffering[],
+    tripRatings,
     total: totalCount ?? offerings.length,
     kind,
     filters: { q, from: range?.from ?? "", to: range?.to ?? "", party },
@@ -112,7 +119,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Experiences({ loaderData }: Route.ComponentProps) {
-  const { offerings, total, kind, filters, today } = loaderData;
+  const { offerings, total, kind, filters, today, tripRatings } = loaderData;
   const narrowed = !!filters.q || !!filters.from || !!filters.party || !!kind;
 
   return (
@@ -206,7 +213,7 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {offerings.map((o) => (
-            <OfferingCard key={o.id} offering={o} />
+            <OfferingCard key={o.id} offering={o} rating={tripRatings[o.id]} />
           ))}
         </div>
       )}

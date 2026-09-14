@@ -51,3 +51,35 @@ export async function offeringsRating(
   const sum = rows.reduce((a, r) => a + r.overall, 0);
   return { value: Math.round((sum / rows.length) * 10) / 10, count: rows.length };
 }
+
+/**
+ * A rating per trip, for the cards on a browse grid.
+ *
+ * `offeringsRating` above collapses many trips into one number for a route
+ * page; this keeps them apart, because a card has to show the rating of the
+ * trip it is advertising. Every competitor's card carries one and ours carried
+ * none, which reads as "no reviews" on a trip with five.
+ */
+export async function offeringRatings(
+  client: SupabaseClient,
+  offeringIds: string[],
+): Promise<Record<string, Rating>> {
+  if (offeringIds.length === 0) return {};
+  const { data } = await client
+    .from("public_reviews")
+    .select("offering_id, overall")
+    .in("offering_id", offeringIds);
+
+  const acc: Record<string, { sum: number; count: number }> = {};
+  for (const r of (data ?? []) as Array<{ offering_id: string | null; overall: number }>) {
+    if (!r.offering_id) continue;
+    (acc[r.offering_id] ??= { sum: 0, count: 0 });
+    acc[r.offering_id].sum += r.overall;
+    acc[r.offering_id].count += 1;
+  }
+  const out: Record<string, Rating> = {};
+  for (const [id, v] of Object.entries(acc)) {
+    out[id] = { value: Math.round((v.sum / v.count) * 10) / 10, count: v.count };
+  }
+  return out;
+}

@@ -14,7 +14,7 @@ import {
   createPublicClient,
   getEnv,
 } from "~/lib/supabase.server";
-import { guideRatings } from "~/lib/ratings.server";
+import { guideRatings, offeringRatings } from "~/lib/ratings.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 import { QuestionWall } from "~/components/public/QuestionWall";
 import { validateQuestion, type PublicQuestion } from "~/lib/questions";
@@ -188,14 +188,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       ? client
           .from("offerings")
           .select(
-            "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, route:routes(slug, name)",
+            "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, transport, activity_level, included, meeting_point, cover_photo_url, route_id, route:routes(slug, name)",
           )
           .eq("guide_id", guide.user_id)
           .eq("status", "live")
       : client
           .from("public_offerings")
           .select(
-            "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
+            "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, transport, activity_level, included, meeting_point, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name",
           )
           .eq("guide_id", guide.user_id),
     client
@@ -380,6 +380,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   }
 
   const ratings = await guideRatings(client, [guide.user_id]);
+  // Her own trips, each with its own rating: the guide's average is on her
+  // header and says nothing about which of her six trips people loved.
+  const tripRatings = await offeringRatings(
+    client,
+    ((offerings ?? []) as any[]).map((o) => o.id),
+  );
 
   // The ask-me-anything wall. Answered questions only — the view enforces it,
   // so nothing pending can leak onto a public page through this loader.
@@ -447,6 +453,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     reviews: reviews ?? [],
     receipts: receipts ?? [],
     rating: ratings[guide.user_id] ?? null,
+    tripRatings,
     questions: (questions ?? []) as PublicQuestion[],
     reader,
     repeatClients,
@@ -555,6 +562,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     reviews,
     receipts,
     rating,
+    tripRatings,
     questions,
     reader,
     repeatClients,
@@ -883,7 +891,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                     <FeatureTrip o={offerings[0]} />
                   </div>
                 ) : (
-                  <OfferingGrid offerings={offerings} />
+                  <OfferingGrid offerings={offerings} ratings={tripRatings} />
                 )}
               </section>
             )}
@@ -1292,14 +1300,20 @@ function SectionHead({
  * read across a row. Cards scale, and they are already the shape a reader
  * has learned everywhere else on the site.
  */
-function OfferingGrid({ offerings }: { offerings: PublicOffering[] }) {
+function OfferingGrid({
+  offerings,
+  ratings,
+}: {
+  offerings: PublicOffering[];
+  ratings: Record<string, { value: number; count: number }>;
+}) {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? offerings : offerings.slice(0, 6);
   return (
     <>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((o) => (
-          <OfferingCard key={o.id} offering={o} />
+          <OfferingCard key={o.id} offering={o} rating={ratings[o.id]} />
         ))}
       </div>
       {!showAll && offerings.length > shown.length && (

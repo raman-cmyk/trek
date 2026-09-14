@@ -24,7 +24,7 @@ import {
   fromPerPersonUsdCents,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
-import { offeringsRating } from "~/lib/ratings.server";
+import { offeringsRating, offeringRatings } from "~/lib/ratings.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { CLIMB_ROUTES } from "~/lib/climb";
@@ -113,7 +113,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     client
       .from("public_offerings")
       .select(
-        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
+        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, transport, activity_level, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
       )
       .eq("route_id", route.id),
     // The freshness engine: every journal written on this route.
@@ -153,6 +153,12 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     client,
     ((offerings ?? []) as any[]).map((o) => o.id),
   );
+  // And one per trip, for the cards in "Book this route" — the route's own
+  // number is an average across guides and says nothing about any of them.
+  const tripRatings = await offeringRatings(
+    client,
+    ((offerings ?? []) as any[]).map((o) => o.id),
+  );
   const fromUsdCents = ((offerings ?? []) as PublicOffering[])
     .map((o) =>
       o.price_breakdown
@@ -181,6 +187,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     article,
     related,
     rating,
+    tripRatings,
     fromUsdCents,
     canonical: absoluteUrl(env.SITE_URL, `/routes/${params.slug}`),
   };
@@ -209,7 +216,8 @@ export default function RoutePage({ loaderData }: Route.ComponentProps) {
 }
 
 function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
-  const { route, permits, offerings, journals, guides, article, related } = loaderData as any;
+  const { route, permits, offerings, journals, guides, article, related, tripRatings } =
+    loaderData as any;
   const { m } = useMoney();
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const stops = (route.day_stops ?? []) as DayStop[];
@@ -513,7 +521,7 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
             <h2 className="mb-4 font-display text-2xl text-ink">Book this route</h2>
             <Rail>
               {offerings.map((o: PublicOffering) => (
-                <OfferingCard key={o.id} offering={o} />
+                <OfferingCard key={o.id} offering={o} rating={tripRatings[o.id]} />
               ))}
             </Rail>
           </section>

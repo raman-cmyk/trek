@@ -20,6 +20,7 @@ import { useMoney } from "~/lib/currency-context";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { startableNote } from "~/lib/availability";
 import { PaymentTerms } from "~/components/public/PaymentTerms";
+import { partyWords } from "~/lib/party";
 import { useTripQuote } from "~/components/public/BookingWidget";
 import { fmtDate } from "~/lib/format";
 
@@ -584,19 +585,6 @@ function runWords(run: string): string {
   return `${dayA}–${dayB} ${mon}`;
 }
 
-/**
- * "Private trip for 1 to 6 people" — the guide's own limit, said plainly.
- *
- * Every trip here is private to the party that books it: the guide walks with
- * you and nobody is added to your group. That is worth stating, because on
- * most trekking sites a price like this is a seat on somebody else's departure.
- */
-function partyWords(min: number | null, max: number | null): string {
-  const lo = min && min > 0 ? min : 1;
-  if (!max) return `Private trip, from ${lo} ${lo === 1 ? "person" : "people"}`;
-  if (max === lo) return `Private trip for ${lo} ${lo === 1 ? "person" : "people"}`;
-  return `Private trip for ${lo} to ${max} people`;
-}
 
 const iconProps = {
   width: 16,

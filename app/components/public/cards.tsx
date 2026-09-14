@@ -3,6 +3,8 @@ import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
+import { activityLevel, transportLabels } from "~/lib/offering-details";
+import { partyWords } from "~/lib/party";
 
 export interface PublicGuide {
   user_id: string;
@@ -27,6 +29,10 @@ export interface PublicOffering {
   price_usd_cents: number | null;
   price_breakdown: PriceBreakdown | null;
   max_party?: number | null;
+  min_party?: number | null;
+  /** Codes from 0066 — "On foot", "Private vehicle". */
+  transport?: string[] | null;
+  activity_level?: string | null;
   cover_photo_url: string | null;
   guide_slug: string;
   guide_name: string;
@@ -141,9 +147,18 @@ export function GuideCard({
   );
 }
 
-export function OfferingCard({ offering }: { offering: PublicOffering }) {
+export function OfferingCard({
+  offering,
+  rating,
+}: {
+  offering: PublicOffering;
+  /** This trip's own reviews. Every card we are compared with shows one. */
+  rating?: { value: number; count: number } | null;
+}) {
   const { mr } = useMoney();
   const from = offeringFromUsdCents(offering);
+  const transport = transportLabels(offering.transport).slice(0, 2);
+  const level = activityLevel(offering.activity_level);
   return (
     // Not a <Link> wrapper: the route chip below has to be its own link, and a
     // nested <a> is invalid HTML that breaks hydration. Instead the title link
@@ -186,27 +201,57 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         >
           {offering.title}
         </Link>
-        <p className="text-caption text-muted">
-          {offering.kind === "trek" ? (
-            <>
-              <span className="font-mono text-ink">{offering.days}</span> days
-            </>
-          ) : (
-            "Day experience"
+
+        {/* The rating of this trip, not of its guide. A card with no number on
+            it reads as "nobody has been", which on a trip with five reviews
+            costs the guide the booking. */}
+        {rating && rating.count > 0 ? (
+          <Stars value={rating.value} count={rating.count} />
+        ) : (
+          <p className="text-caption text-muted">No reviews yet</p>
+        )}
+
+        {/* How long, how you move, how many of you. These are the three facts
+            every card we are compared with carries and ours did not: a reader
+            scanning a grid was choosing on a photograph and a price. */}
+        <ul className="mt-0.5 space-y-0.5 text-caption text-ink-soft">
+          <li className="flex items-center gap-1.5">
+            <FactClock />
+            <span>
+              {offering.kind === "trek" ? (
+                <>
+                  <span className="font-mono text-ink">{offering.days}</span> days
+                </>
+              ) : (
+                "One day"
+              )}
+              {level && <span className="text-muted"> · {level.label}</span>}
+            </span>
+          </li>
+          {transport.length > 0 && (
+            <li className="flex items-center gap-1.5">
+              <FactVan />
+              <span>{transport.join(" · ")}</span>
+            </li>
           )}
-          {offering.route_slug && (
-            <>
-              {" · "}
-              <Link
-                to={`/routes/${offering.route_slug}`}
-                prefetch="intent"
-                className="relative z-10 text-moss underline decoration-sage underline-offset-2 hover:decoration-moss"
-              >
-                {offering.route_name}
-              </Link>
-            </>
-          )}
-        </p>
+          <li className="flex items-center gap-1.5">
+            <FactPeople />
+            <span>{partyWords(offering.min_party ?? 1, offering.max_party ?? null)}</span>
+          </li>
+        </ul>
+
+        {offering.route_slug && (
+          <p className="text-caption text-muted">
+            <Link
+              to={`/routes/${offering.route_slug}`}
+              prefetch="intent"
+              className="relative z-10 text-moss underline decoration-sage underline-offset-2 hover:decoration-moss"
+            >
+              {offering.route_name}
+            </Link>
+          </p>
+        )}
+
         {from != null && (
           // Consistent price format site-wide: "from $XX · per person" (§8).
           // Rounded — converted cents are FX noise in a grid; the breakdown on
@@ -219,6 +264,38 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         )}
       </div>
     </div>
+  );
+}
+
+/* The three marks on a card's fact list. Inline, because three 20px glyphs are
+   not worth a sprite request on a grid of twenty cards. */
+function FactClock() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function FactVan() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted" aria-hidden>
+      <path d="M3 16V8h11l4 4h3v4" />
+      <circle cx="7" cy="17" r="1.6" />
+      <circle cx="17" cy="17" r="1.6" />
+    </svg>
+  );
+}
+
+function FactPeople() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted" aria-hidden>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20c0-3 2.7-5 6-5s6 2 6 5" />
+      <path d="M16 11a3 3 0 100-6" />
+      <path d="M18 20c0-2-.7-3.4-2-4.3" />
+    </svg>
   );
 }
 
