@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
+import { locationLine } from "~/lib/message-location";
 
 /**
  * The composer. This is the piece that was missing — the old thread had a
@@ -51,6 +52,10 @@ export function Composer({
   // anyone who typed after them.
   const [photos, setPhotos] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Sharing where you are. On a trek this is not a nicety: it is how somebody
+  // finds their guide at six in the morning in Thamel, and how the office
+  // knows where a group actually is.
+  const [locating, setLocating] = useState(false);
   const busy = fetcher.state !== "idle";
 
   // Grow to five lines, then scroll.
@@ -96,6 +101,61 @@ export function Composer({
     fetcher.submit(
       { intent: "send", body, tz: browserZone(), ...(extraFields ?? {}) },
       { method: "post", action },
+    );
+  }
+
+  /**
+   * One tap: ask the phone where it is, and send it.
+   *
+   * Sent immediately rather than pinned into the box, because a location is
+   * only true for a minute and because "share location" that then needs a
+   * second press on Send is two taps for the one thing a guide does with cold
+   * hands. Whatever is already typed goes with it.
+   *
+   * Every failure gets a real sentence. "Location unavailable" tells somebody
+   * standing in a stone lodge nothing they can act on.
+   */
+  function shareLocation() {
+    if (locating || disabled) return;
+    setAttachMsg(null);
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setAttachMsg("This phone will not share a location. Type the place name instead.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const { latitude, longitude, altitude } = pos.coords;
+        const typed = value.trim();
+        const body = [
+          locationLine({
+            lat: latitude,
+            lng: longitude,
+            label: typed || null,
+            altitudeM: altitude ?? null,
+          }),
+        ].join("\n");
+        onOptimistic?.(body);
+        fetcher.submit(
+          { intent: "send", body, tz: browserZone(), ...(extraFields ?? {}) },
+          { method: "post", action },
+        );
+        setValue("");
+      },
+      (err) => {
+        setLocating(false);
+        setAttachMsg(
+          err.code === err.PERMISSION_DENIED
+            ? "Your phone is not letting this page see where you are. Turn location on for this site in your browser settings, or type the place name."
+            : err.code === err.TIMEOUT
+              ? "No fix yet — that usually means no sky. Step outside and try again."
+              : "Your phone could not work out where it is. Try again outside, or type the place name.",
+        );
+      },
+      // A minute is a long time to wait, and it is what a cold GPS in a valley
+      // needs. A cached fix up to two minutes old is fine for "I am here".
+      { enableHighAccuracy: true, timeout: 60_000, maximumAge: 120_000 },
     );
   }
 
@@ -152,6 +212,12 @@ export function Composer({
         </div>
       )}
 
+      {locating && (
+        <p className="px-3 pt-2 text-caption text-muted sm:px-4">
+          Finding you — this can take a moment on a cold start.
+        </p>
+      )}
+
       {(fetcher.data?.error || attachMsg) && (
         <p className="px-3 pt-2 text-caption text-ember sm:px-4">
           {fetcher.data?.error ?? attachMsg}
@@ -197,6 +263,17 @@ export function Composer({
           className="shrink-0 rounded-full p-2.5 text-muted hover:bg-mist hover:text-ink disabled:opacity-40"
         >
           {attaching ? <Spinner /> : <ClipIcon />}
+        </button>
+
+        <button
+          type="button"
+          onClick={shareLocation}
+          disabled={locating || disabled}
+          aria-label="Share where you are"
+          title="Share where you are"
+          className="shrink-0 rounded-full p-2.5 text-muted hover:bg-mist hover:text-ink disabled:opacity-40"
+        >
+          {locating ? <Spinner /> : <PinIcon />}
         </button>
 
         <textarea
@@ -260,6 +337,20 @@ function ClipIcon() {
     </svg>
   );
 }
+function PinIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
 function SendIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

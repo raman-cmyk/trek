@@ -14,6 +14,8 @@ import {
   TripCardSkeleton,
 } from "~/components/skeletons";
 import { StatusTabs } from "~/components/ops/StatusTabs";
+import { MessageBody } from "~/components/messages/MessageBody";
+import { Composer } from "~/components/messages/Composer";
 import { GUIDE_FILTERS } from "~/lib/ops-filters";
 
 export function meta(_: Route.MetaArgs) {
@@ -235,6 +237,28 @@ export default function Primitives() {
           <TripPipeline compact kind="trek" bookingStatus="cancelled_trekker" />
         </div>
       </Section>
+
+      <Section title="Message locations — a place you can act on, no map tiles">
+        <div className="max-w-md space-y-3">
+          {[
+            "Meet at the bridge below Jagat · 1,300 m — https://www.openstreetmap.org/?mlat=28.35139&mlon=84.61472#map=16/28.35139/84.61472",
+            "we are here now, all fine https://www.google.com/maps/@27.80556,86.71361,15z",
+            "https://www.openstreetmap.org/?mlat=27.98806&mlon=86.925#map=16/27.98806/86.925",
+            "geo:27.7172,85.324",
+            "Sending our spot https://maps.app.goo.gl/x7Kq2mNb4 — tap it",
+          ].map((body, i) => (
+            <div key={i} className="rounded-card border border-border bg-card p-3 text-sm">
+              <MessageBody body={body} />
+            </div>
+          ))}
+        </div>
+      </Section>
+      <Section title="Composer — attach, share where you are, send">
+        <div className="max-w-md rounded-card border border-border bg-card">
+          <Composer action="/_dev/primitives" placeholder="Write a message…" />
+        </div>
+      </Section>
+
     </main>
   );
 }
