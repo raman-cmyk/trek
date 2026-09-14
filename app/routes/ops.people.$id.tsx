@@ -1,4 +1,5 @@
-import { Form, Link, data, useNavigation, useSearchParams } from "react-router";
+import { Form, Link, data, redirect, useNavigation, useSearchParams } from "react-router";
+import { useState } from "react";
 import type { Route } from "./+types/ops.people.$id";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
@@ -28,6 +29,8 @@ import {
 import { PROFICIENCY_LABELS, type Proficiency } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+import { describeDeletionBlock, whyNotDeletable } from "~/lib/people";
+import { deletePerson } from "~/lib/people.server";
 
 /**
  * One person, one page.
@@ -45,7 +48,7 @@ const LIVE = ["deposit_paid", "docs_pending", "confirmed", "active"];
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const { admin, headers } = await requireOps(request, env);
+  const { user, admin, headers } = await requireOps(request, env);
   const id = params.id!;
 
   const { data: person } = await admin
@@ -229,6 +232,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return data(
     {
       person,
+      me: user.id,
       isGuide,
       guide,
       languages: (langRes as any).data ?? [],
@@ -470,6 +474,23 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "strike_remove") {
     await admin.from("guide_strikes").delete().eq("id", str("strike_id")).eq("guide_id", id);
     return data({ ok: "Strike removed." }, { headers });
+  }
+
+  if (intent === "delete") {
+    if (id === user.id) {
+      return data({ error: "You can't delete yourself." }, { status: 400, headers });
+    }
+    const result = await deletePerson(admin, id);
+    if (result.ok) {
+      const tab = result.role === "guide" ? "guides" : result.role === "ops" ? "office" : "trekkers";
+      const to = new URLSearchParams({ tab, gone: result.name });
+      return redirect(`/ops/people?${to.toString()}`, { headers });
+    }
+    if (result.reason === "has_history") {
+      return data({ error: describeDeletionBlock(result) }, { status: 400, headers });
+    }
+    if (result.reason === "not_found") return redirect("/ops/people", { headers });
+    return data({ error: "Couldn't delete them. Try again." }, { status: 500, headers });
   }
 
   if (intent === "password") {
@@ -1476,6 +1497,13 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
               once, out loud, and tell them to change it.
             </p>
           </Panel>
+
+          <DeletePanel
+            name={p.full_name}
+            isGuide={d.isGuide}
+            blocked={whyNotDeletable({ isSelf: p.id === d.me, trips: d.bookings.length })}
+            busy={busy && nav.formData?.get("intent") === "delete"}
+          />
         </div>
       )}
     </div>
@@ -1636,6 +1664,57 @@ function Stat({
       </p>
       <p className="text-xs text-ink-soft">{label}</p>
     </div>
+  );
+}
+
+/**
+ * The last thing on the edit tab, on purpose. One click opens the question,
+ * the second answers it; nothing pops over the page. Somebody with trips is
+ * told why the button is not there rather than shown one that fails.
+ */
+function DeletePanel({
+  name,
+  isGuide,
+  blocked,
+  busy,
+}: {
+  name: string;
+  isGuide: boolean;
+  blocked: string | null;
+  busy: boolean;
+}) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <Panel title="Delete this account">
+      {blocked === "That's you" ? (
+        <p className="text-sm text-ink-soft">This is your own account. Ask a colleague.</p>
+      ) : blocked ? (
+        <p className="text-sm text-ink-soft">
+          {name} has trips on the books, so the account stays as the record of
+          them.{isGuide ? " To take a guide off the platform, set their status to removed." : ""}
+        </p>
+      ) : !asking ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button size="sm" variant="danger" type="button" onClick={() => setAsking(true)}>
+            Delete {name.split(" ")[0]}
+          </Button>
+          <span className="text-xs text-ink-soft">
+            Account, profile, listings and messages go for good.
+          </span>
+        </div>
+      ) : (
+        <Form method="post" className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="intent" value="delete" />
+          <span className="text-sm">Delete {name} for good?</span>
+          <Button size="sm" variant="danger" type="submit" loading={busy} loadingText="Deleting…">
+            Yes, delete
+          </Button>
+          <Button size="sm" variant="ghost" type="button" onClick={() => setAsking(false)}>
+            Keep
+          </Button>
+        </Form>
+      )}
+    </Panel>
   );
 }
 

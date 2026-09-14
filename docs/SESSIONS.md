@@ -1241,3 +1241,40 @@ in a rolled-back transaction. 293 tests green, build green.
 through against real data — this environment cannot hold the service-role key,
 so the guide's proposer and the approval page have been driven only by types,
 tests and SQL. The first real proposal is the test.
+
+## Session — delete a person (2026-09-14)
+
+Pratik's note on the People page: there was "Add someone" and no way to take
+anyone away. Test signups and duplicates lived forever, because nothing could
+delete a `users` row that fifty tables point at.
+
+**Migration 0059** adds `ops_delete_person(uuid)`. It refuses anyone with a
+booking, payout or contract (returns the counts, so the office reads a
+sentence rather than a stack trace) and otherwise removes every dependent row
+in one transaction by walking `pg_constraint` — nullable references are
+blanked, owned rows are deleted recursively, a row that cannot stand without
+the reference (an access-log line about a deleted passport) goes. Five
+"who did this" columns (`issued_by`, `accessed_by`, `opened_by`, `editor_id`,
+`uploaded_by`) are nullable now with `on delete set null`, so the trail of what
+an office member did survives their account. Service role only.
+
+Tested against the real migrations in a scratch Postgres 16 with the demo
+seed: a guide with an enquiry, conversation, journal, group, strike and
+documents; a trekker organising a group; an office member who verified and
+struck; a guide and a trekker with a booking (both refused, nothing touched);
+an unknown id; and a call as `authenticated` (permission denied).
+
+**App:** `app/lib/people.server.ts` orders the three steps (note document
+paths → SQL → remove files → delete auth login) and `app/lib/people.ts` holds
+the words and the rule for which rows may show the button (not yourself, not
+anyone with trips) — 8 new tests. The People list has "Delete someone" next
+to "Add someone", which swaps each row's "Open" for "Delete" with an inline
+"Yes, delete / Keep"; the profile's Edit tab has the same at the bottom and
+returns to the right list with "X deleted."
+
+301 tests green, typecheck green, build green.
+
+**🙋 Founder needed:** migration 0059 is not yet applied to the live database
+(no token in this environment). Run `SBP=… REF=… scripts/remote-apply.sh
+supabase/migrations/0059_delete_person.sql`, then try deleting "joh doe" on
+/ops/people — that is the first real click.

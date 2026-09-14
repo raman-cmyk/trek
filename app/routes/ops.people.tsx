@@ -9,6 +9,8 @@ import { PENDING_CHECKS } from "~/lib/guide-checks";
 import { fmtDate } from "~/lib/format";
 import { formatUsd } from "~/lib/pricing";
 import { createAdminClient, getEnv, requireOps } from "~/lib/supabase.server";
+import { describeDeletionBlock, whyNotDeletable } from "~/lib/people";
+import { deletePerson } from "~/lib/people.server";
 
 /**
  * Everybody, in one list.
@@ -39,7 +41,7 @@ function slugify(s: string) {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const { admin, headers } = await requireOps(request, env);
+  const { user, admin, headers } = await requireOps(request, env);
   const url = new URL(request.url);
   const tab = (url.searchParams.get("tab") ?? "guides") as (typeof TABS)[number]["key"];
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 60);
@@ -112,13 +114,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   if (tab === "guides" && status) rows = rows.filter((r) => r.guide?.status === status);
 
-  return data({ tab, q, status, rows }, { headers });
+  return data({ tab, q, status, rows, me: user.id }, { headers });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  const { headers } = await requireOps(request, env);
+  const { user, headers } = await requireOps(request, env);
   const form = await request.formData();
+
+  if (form.get("intent") === "delete") {
+    const id = String(form.get("id") ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return data({ error: "Nobody picked." }, { status: 400, headers });
+    }
+    if (id === user.id) {
+      return data({ error: "You can't delete yourself." }, { status: 400, headers });
+    }
+    const result = await deletePerson(createAdminClient(env), id);
+    if (result.ok) return data({ ok: `${result.name} deleted.` }, { headers });
+    if (result.reason === "has_history") {
+      return data({ error: describeDeletionBlock(result) }, { status: 400, headers });
+    }
+    if (result.reason === "not_found") {
+      return data({ error: "They're already gone." }, { status: 404, headers });
+    }
+    return data({ error: "Couldn't delete them. Try again." }, { status: 500, headers });
+  }
+
   const role = String(form.get("role") ?? "trekker");
   const fullName = String(form.get("full_name") ?? "").trim();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
@@ -194,10 +216,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsPeople({ loaderData, actionData }: Route.ComponentProps) {
-  const { tab, q, status, rows } = loaderData;
+  const { tab, q, status, rows, me } = loaderData;
   const [params] = useSearchParams();
   const nav = useNavigation();
   const [adding, setAdding] = useState(false);
+  // Delete mode swaps the row's "Open" for a "Delete" that asks once, inline.
+  // A second click is the whole ceremony: this is the office, not the public.
+  const [removing, setRemoving] = useState(false);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const gone = params.get("gone");
+  const deleting =
+    nav.state === "submitting" && nav.formData?.get("intent") === "delete"
+      ? String(nav.formData.get("id"))
+      : null;
+  const said = actionData as { ok?: string; id?: string; error?: string } | undefined;
 
   const tabHref = (key: string) => {
     const p = new URLSearchParams(params);
@@ -210,26 +242,58 @@ export default function OpsPeople({ loaderData, actionData }: Route.ComponentPro
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl">People</h1>
-        <Button size="sm" onClick={() => setAdding((v) => !v)}>
-          {adding ? "Cancel" : "Add someone"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={removing ? "secondary" : "danger"}
+            onClick={() => {
+              setRemoving((v) => !v);
+              setConfirming(null);
+              setAdding(false);
+            }}
+          >
+            {removing ? "Done" : "Delete someone"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setAdding((v) => !v);
+              setRemoving(false);
+            }}
+          >
+            {adding ? "Cancel" : "Add someone"}
+          </Button>
+        </div>
       </div>
 
-      {actionData && "ok" in actionData && actionData.ok && (
+      {(said?.ok || gone) && (
         <div className="flex items-center justify-between rounded-md bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-          <span>{actionData.ok}</span>
-          <Link to={`/ops/people/${actionData.id}`} className="font-medium underline">
-            Open their profile →
-          </Link>
+          <span>{said?.ok ?? `${gone} deleted.`}</span>
+          {said?.id && (
+            <Link to={`/ops/people/${said.id}`} className="font-medium underline">
+              Open their profile →
+            </Link>
+          )}
+        </div>
+      )}
+      {said?.error && !adding && (
+        <div className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-800">{said.error}</div>
+      )}
+
+      {removing && (
+        <div className="rounded-md border border-ember/30 bg-ember/5 px-4 py-2 text-sm">
+          Pick who to delete. Their account, profile, listings and messages go for
+          good. Anyone with a trip on the books can't be deleted — set a guide to
+          removed instead.
         </div>
       )}
 
       {adding && (
         <Panel title="Add someone">
           <Form method="post" className="grid gap-3 sm:grid-cols-2">
-            {actionData && "error" in actionData && actionData.error && (
+            {said?.error && (
               <p className="sm:col-span-2 rounded bg-red-50 px-3 py-2 text-sm text-red-800">
-                {actionData.error}
+                {said.error}
               </p>
             )}
             <Field label="Full name" name="full_name" required />
@@ -389,12 +453,24 @@ export default function OpsPeople({ loaderData, actionData }: Route.ComponentPro
                     )}
                   </td>
                   <td className="py-2.5 text-right">
-                    <Link
-                      to={`/ops/people/${r.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      Open →
-                    </Link>
+                    {!removing ? (
+                      <Link
+                        to={`/ops/people/${r.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        Open →
+                      </Link>
+                    ) : (
+                      <DeleteCell
+                        id={r.id}
+                        name={r.name}
+                        blocked={whyNotDeletable({ isSelf: r.id === me, trips: r.trips.total })}
+                        confirming={confirming === r.id}
+                        busy={deleting === r.id}
+                        onAsk={() => setConfirming(r.id)}
+                        onKeep={() => setConfirming(null)}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}
@@ -406,6 +482,50 @@ export default function OpsPeople({ loaderData, actionData }: Route.ComponentPro
         {rows.length} shown{rows.length >= 400 ? " (first 400 — narrow with search)" : ""}.
       </p>
     </div>
+  );
+}
+
+function DeleteCell({
+  id,
+  name,
+  blocked,
+  confirming,
+  busy,
+  onAsk,
+  onKeep,
+}: {
+  id: string;
+  name: string;
+  blocked: string | null;
+  confirming: boolean;
+  busy: boolean;
+  onAsk: () => void;
+  onKeep: () => void;
+}) {
+  if (blocked) return <span className="text-xs text-ink-soft">{blocked}</span>;
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={onAsk}
+        className="font-medium text-ember hover:underline"
+      >
+        Delete
+      </button>
+    );
+  }
+  return (
+    <Form method="post" className="flex flex-wrap items-center justify-end gap-2">
+      <input type="hidden" name="intent" value="delete" />
+      <input type="hidden" name="id" value={id} />
+      <span className="text-xs text-ink-soft">Delete {name.split(" ")[0]} for good?</span>
+      <Button type="submit" size="sm" variant="danger" loading={busy} loadingText="Deleting…">
+        Yes, delete
+      </Button>
+      <Button type="button" size="sm" variant="ghost" onClick={onKeep}>
+        Keep
+      </Button>
+    </Form>
   );
 }
 

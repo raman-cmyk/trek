@@ -79,3 +79,11 @@ What the real thing needs, roughly in order:
 Read the demand first: `select count(*) from email_log where kind =
 'insurance_interest'` says how many people asked, before any of the above is
 worth paying for.
+
+## Files left behind when a guide is deleted (2026-09-14)
+
+`deletePerson` removes the private `documents` bucket files (rule 9) but not a
+deleted guide's public photos, voice intro, or journal media in the `photos`
+and audio buckets — the rows go, the objects stay, unreachable. Harmless and
+cheap today; a sweep that lists storage objects with no matching row is the
+fix when it starts to cost money.

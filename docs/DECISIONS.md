@@ -348,3 +348,28 @@ into "Permits (TIMS + park)" and "Porters" — for a food tour. Steps are now
 derived from the kind (no route step where there is no route), the length
 defaults to what that kind usually is, and a price row worth nothing is not
 shown at all.
+
+## Deleting a person means deleting them, unless money moved (2026-09-14)
+
+The People page can now delete a guide, trekker or office account, from the
+list ("Delete someone", next to "Add someone") and from the profile's Edit tab.
+Three calls were made without the founder:
+
+**Anyone with a booking, payout or contract cannot be deleted.** Those rows are
+the record of money and of a legal relationship; deleting the person would
+delete them or orphan them. The office is told why and, for a guide, pointed at
+"removed"/"suspended" status instead. This covers real accounts; the accounts
+this button exists for (test signups, duplicates, people who asked) have none.
+
+**Everything else about them goes, and what they *did* to others stays.**
+`ops_delete_person` (migration 0059) walks the foreign keys from the schema
+itself rather than a hand-kept list, so a table added next month is covered.
+Rows that belong to the person are deleted; rows that only record them as an
+actor (verified a check, issued a strike, opened an incident, edited a listing,
+viewed a passport) keep the row with the actor blanked — five such columns
+stopped being NOT NULL for that reason. Private documents are removed from the
+bucket by the app before the rows go; the auth login goes last.
+
+**Confirmation is inline, not a dialog.** One click asks "Delete X for good?"
+in the row, the second answers. The office does not need a modal to be trusted
+with a button.
