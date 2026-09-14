@@ -83,11 +83,13 @@ export function RouteMap({
           ],
           fitBoundsOptions: { padding: { top: 56, right: 56, bottom: 84, left: 56 } },
           attributionControl: { compact: true },
-          // Flat, looking down. A tilted 3D view was built and then taken
-          // out: it could not be verified anywhere before shipping, and an
-          // unseen camera angle on every route page is not worth the gamble.
-          // The relief shading gives the mountains their shape without it.
-          dragRotate: false,
+          // Tilted, and free to rotate. This was pulled once for being
+          // unverifiable here and put straight back when the founder sent a
+          // screenshot of it working: a Himalayan valley is worth looking
+          // along, not only down at.
+          dragRotate: true,
+          pitch: 52,
+          maxPitch: 75,
         });
         mapRef.current = m;
         // Swallowed deliberately: a failed tile must not throw. Note for the
@@ -223,6 +225,15 @@ export function RouteMap({
         const draw = () => {
           if (m.getSource("route")) return;
 
+          // The third dimension. Wrapped because a DEM tile host that is slow
+          // or blocked must not take the map down with it — the imagery, the
+          // trail and the pins are the parts that have to work.
+          try {
+            m.setTerrain({ source: "dem", exaggeration: 1.4 });
+          } catch {
+            /* flat is survivable; blank is not */
+          }
+
           const legs = legsOfRoute(stops);
 
           m.addSource("route", {
@@ -260,9 +271,9 @@ export function RouteMap({
               type: "line",
               source: "travel",
               paint: {
-                "line-color": MAP_INK.line,
-                "line-width": 1.5,
-                "line-opacity": 0.35,
+                "line-color": "#ffffff",
+                "line-width": 1.6,
+                "line-opacity": 0.5,
                 "line-dasharray": [1, 2.5],
               },
               layout: { "line-cap": "round" },
@@ -276,7 +287,10 @@ export function RouteMap({
             id: "route-casing",
             type: "line",
             source: "route",
-            paint: { "line-color": "#ffffff", "line-width": 7.5, "line-opacity": 0.85 },
+            // Wider and darker than it would be on paper: the trail has to
+            // hold its own over snow, bare rock and near-black forest, often
+            // within the same hundred metres.
+            paint: { "line-color": "#0d1a12", "line-width": 8, "line-opacity": 0.5 },
             layout: { "line-cap": "round", "line-join": "round" },
           });
           m.addLayer({
@@ -290,7 +304,9 @@ export function RouteMap({
               // legs are cut out of it — so the gradient version rendered
               // nothing at all, silently. The numbered pins already say which
               // way round you walk it.
-              "line-color": MAP_INK.line,
+              // Chartreuse, not the brand's forest green: over satellite
+              // imagery a dark green line is camouflage.
+              "line-color": MAP_INK.trail,
             },
             layout: { "line-cap": "round", "line-join": "round" },
           });
