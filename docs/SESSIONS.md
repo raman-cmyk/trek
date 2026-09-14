@@ -2372,3 +2372,31 @@ is the likely refusal; if it is something else the page will now name it
 rather than lying quietly.
 
 818 tests green, build green, deployed.
+
+**Picking your dates, and seeing the whole walk.** "I as a client should be
+able to select the dates I want to go on a trek before clicking request to
+book, so I can have a visual representation on the trek's timeline."
+
+The date was a dropdown of start days. A dropdown cannot show you that a
+twelve-day trek from the 20th runs to the 1st of next month, and it cannot
+show you that the guide is booked on the 27th of it. Worse, nothing stopped
+you asking for exactly that span — the request went in, and it failed days
+later when the guide pressed accept and `clashingDays` refused. The trekker
+experienced a machine's mistake as the guide letting them down.
+
+The calendar already on the page now picks, in two modes, because the two
+pages ask different questions. On an experience the trip has a length, so
+clicking a start paints the whole walk and the second month appears when the
+trip runs into it — a timeline two thirds visible is not one. Days the guide
+is free but which are too late to START a trip this long are dimmed rather
+than hidden: the guide IS free then, and a calendar that contradicts the day
+beside it is worse than one that explains itself in a tooltip. On a guide's
+page there is no trip yet, so it is a free range — first day, last day — and
+the dates travel into the message as a draft to edit and send, instead of a
+blank box and "September sometime?".
+
+The rules are in `app/lib/date-span.ts` rather than in the grid, so what a
+span is, whether it is clear, and which days can start one are testable
+without a browser. The server now checks the whole span too.
+
+836 tests green, build green, deployed.
