@@ -46,6 +46,13 @@ export const copy = {
     earningsExplainer:
       "Your fee is yours in full — Trek's 10% is added on top of the package, paid by the trekker.",
   },
+  blocked: {
+    title: "Your account is paused",
+    titleBanned: "Your account has been closed",
+    body: "Something on your account needs a person to look at it. Write to us and a human will reply.",
+    writeToUs: "Write to hello@guidesofnepal.com",
+    backHome: "Back to the home page",
+  },
   empty: {
     noEnquiries:
       "Your profile went live today. Most guides get their first enquiry within 2 weeks.",

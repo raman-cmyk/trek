@@ -87,6 +87,7 @@ const NAV = [
     items: [
       { to: "/ops/incidents", label: "Incidents", badge: "incidents" },
       { to: "/ops/moderation", label: "Moderation", badge: "moderation" },
+      { to: "/ops/blocking", label: "Blocking", badge: null },
     ],
   },
   {

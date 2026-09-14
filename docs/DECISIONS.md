@@ -373,3 +373,29 @@ bucket by the app before the rows go; the auth login goes last.
 **Confirmation is inline, not a dialog.** One click asks "Delete X for good?"
 in the row, the second answers. The office does not need a modal to be trusted
 with a button.
+
+## Blocking is a row with a story, and it keeps people out in three places (2026-09-14)
+
+Pratik asked for a Blocking tab: who is blocked, block and unblock by hand,
+permanent bans, deletion, and a filter by stage. Calls made without the founder:
+
+**A block is a row in `account_blocks`, not a flag on `users`.** The office
+needs who, why, until when, who lifted it and what they said. One open block
+per person (partial unique index); blocking somebody already blocked lifts the
+old row with a note, so "Make permanent" on a suspension is a ban that
+remembers it replaced a suspension.
+
+**Two kinds, four stages.** Suspended (dated, or open-ended until lifted) and
+banned (for good). The stage is derived, never stored: suspended, banned,
+expired (a suspension whose date passed), lifted. The filter chips are those
+stages plus "Blocked now" (suspended + banned, the default) and "Everything".
+
+**Three locks, one table.** Supabase Auth gets a matching `ban_duration` so a
+fresh sign-in fails; `requireUser` and `requireOps` ask `is_blocked()` on every
+request so an open session is sent to `/blocked` and signed out there; and a
+guide's status is set to suspended/removed while the block stands, with the
+prior status remembered and put back on unblock. Any one lock alone leaks.
+
+**Blocked people are told, in words, with a date.** `/blocked` says "paused
+until 1 October" or "closed", and where to write. It does not show the reason
+— the office writes reasons for each other.

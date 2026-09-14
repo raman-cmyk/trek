@@ -29,6 +29,7 @@ export default [
     route("insurance", "routes/insurance.tsx"),
     route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
+    route("blocked", "routes/blocked.tsx"),
     // Booking flow + account pages share the public chrome (audit: these had
     // no header/footer — My Trips was an exit-less page).
     route("checkout/:bookingId", "routes/checkout.$bookingId.tsx"),
@@ -129,6 +130,7 @@ export default [
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
     route("ops/moderation", "routes/ops.moderation.tsx"),
+    route("ops/blocking", "routes/ops.blocking.tsx"),
     route("ops/events", "routes/ops.events.tsx"),
     route("ops/journals", "routes/ops.journals.tsx"),
     route("ops/journals/:id", "routes/ops.journals.$id.tsx"),

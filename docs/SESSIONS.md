@@ -1278,3 +1278,41 @@ returns to the right list with "X deleted."
 (no token in this environment). Run `SBP=… REF=… scripts/remote-apply.sh
 supabase/migrations/0059_delete_person.sql`, then try deleting "joh doe" on
 /ops/people — that is the first real click.
+
+## Session — Blocking (2026-09-14)
+
+Pratik's second note: a Blocking tab in the ops sidebar. Until now the only
+lever against a person was a guide's status, which hid them from the site and
+let them keep signing in; a trekker could not be stopped at all.
+
+**Migration 0060** adds `account_blocks` (kind suspended/banned, reason,
+starts/ends, who blocked, who lifted and their note, the guide's prior
+status) with one open block per person enforced by a partial unique index,
+two check constraints (a ban has no end date; an end is after the start), RLS
+read for the office only, and `is_blocked(uid)` for the app. Applied and
+exercised in the scratch Postgres: dated suspension blocks, an expired one
+does not, a ban does, a second open block and a dated ban are refused, an
+`authenticated` session can ask `is_blocked` but sees no rows.
+
+**Enforcement** in three places: `blockUser` sets Supabase Auth's
+`ban_duration` (hours to the end date, a century otherwise) and a guide's
+status; `requireUser`/`requireOps` redirect a blocked session to `/blocked`,
+which signs them out and says until when; both login forms say it at the door.
+`unblockUser` lifts the row, clears the auth ban and restores the guide's
+status.
+
+**/ops/blocking**: "Block someone" is a search box (name, email, phone) with
+an inline form per match — suspend until a date, suspend until lifted, or ban
+— and a reason that is required. Filter chips: Blocked now, Suspended, Banned,
+Lifted, Everything. Per row: Unblock, Make permanent (on a suspension), Block
+again (on a lifted or expired one), Delete with the People-page rule and its
+inline confirm. The person's ops profile shows a red "suspended until…" or
+"banned" badge linking here.
+
+`app/lib/blocking.ts` holds the stage, filter, auth-duration and wording
+logic — 19 new tests. 320 tests green, typecheck green, build green.
+
+**🙋 Founder needed:** apply migrations 0059 and 0060 (`scripts/remote-apply.sh
+supabase/migrations/0059_delete_person.sql supabase/migrations/0060_account_blocks.sql`),
+then on /ops/blocking suspend a test account for a day, try to sign in as
+them, and lift it.

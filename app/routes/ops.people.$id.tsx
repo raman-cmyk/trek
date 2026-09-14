@@ -31,6 +31,7 @@ import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { describeDeletionBlock, whyNotDeletable } from "~/lib/people";
 import { deletePerson } from "~/lib/people.server";
+import { activeBlockFor } from "~/lib/blocking.server";
 
 /**
  * One person, one page.
@@ -229,10 +230,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const avail = (availRes as any).data ?? [];
 
+  const block = await activeBlockFor(admin, id);
+
   return data(
     {
       person,
       me: user.id,
+      block,
       isGuide,
       guide,
       languages: (langRes as any).data ?? [],
@@ -597,6 +601,17 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                 </Badge>
               )}
               {g && g.tier > 0 && <Badge tone="blue">Tier {g.tier}</Badge>}
+              {d.block && (
+                <Link to="/ops/blocking" title={d.block.reason}>
+                  <Badge tone="red">
+                    {d.block.kind === "banned"
+                      ? "banned"
+                      : d.block.ends_at
+                        ? `suspended until ${fmtDate(d.block.ends_at)}`
+                        : "suspended"}
+                  </Badge>
+                </Link>
+              )}
             </div>
             <p className="mt-1 text-sm text-ink-soft">
               {[p.email, p.phone, p.country_code].filter(Boolean).join(" · ") || "No contact details"}
