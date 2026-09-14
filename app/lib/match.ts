@@ -1,3 +1,4 @@
+import { inRegion, regionByKey } from "./regions";
 /**
  * Guide matcher (Feature Pack v3 Phase 5 — discovery). Pure scoring so it's
  * unit-testable: the server gathers facts, this ranks them and explains WHY
@@ -5,7 +6,15 @@
  * read them and think "this one gets me."
  */
 
-export type Region = "Khumbu" | "Annapurna" | "Langtang" | "Manaslu";
+/**
+ * A region key from app/lib/regions.ts — "everest", "mustang" and the rest.
+ *
+ * It used to be one of four literal `routes.region` values, which is why the
+ * page could only offer four. A region is a group of those values now
+ * ("Everest / Khumbu" holds both Khumbu and Solukhumbu), so the query carries
+ * the group's key and regions.ts owns the mapping.
+ */
+export type Region = string;
 
 export interface MatchQuery {
   /** null/undefined = anywhere. */
@@ -73,9 +82,9 @@ function scoreOffering(o: OfferingFact, q: MatchQuery): { score: number; reasons
   let score = 0;
   const reasons: string[] = [];
 
-  if (q.region && o.region === q.region) {
+  if (q.region && inRegion(o.region, q.region)) {
     score += 30;
-    reasons.push(`Runs ${o.title} in ${q.region}`);
+    reasons.push(`Runs ${o.title} in ${regionByKey(q.region)?.label ?? q.region}`);
   }
   if (q.month && o.seasonMonths?.includes(q.month)) {
     score += 20;

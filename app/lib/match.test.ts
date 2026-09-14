@@ -29,10 +29,10 @@ describe("guide matcher", () => {
       guideId: "star", tier: 3, rating: 5, reviewCount: 40, offerings: [annapurna],
     });
     const ranked = rankGuides([khumbuGuide, starGuide], {
-      region: "Khumbu", month: 10, groupSize: 2,
+      region: "everest", month: 10, groupSize: 2,
     });
     expect(ranked[0].guideId).toBe("khumbu");
-    expect(ranked[0].reasons.join(" ")).toContain("Khumbu");
+    expect(ranked[0].reasons.join(" ")).toContain("Everest / Khumbu");
     expect(ranked[0].reasons.join(" ")).toContain("October");
   });
 
@@ -60,7 +60,7 @@ describe("guide matcher", () => {
   it("a specific query drops guides with nothing to say", () => {
     const noSignal = guide({ guideId: "none" });
     const some = guide({ guideId: "some", offerings: [ebc] });
-    const ranked = rankGuides([noSignal, some], { region: "Khumbu", groupSize: 1 });
+    const ranked = rankGuides([noSignal, some], { region: "everest", groupSize: 1 });
     expect(ranked.map((r) => r.guideId)).toEqual(["some"]);
   });
 
@@ -69,5 +69,21 @@ describe("guide matcher", () => {
     const veteran = guide({ guideId: "vet", tier: 3, rating: 4.9, reviewCount: 12 });
     const ranked = rankGuides([newer, veteran], { groupSize: 1 });
     expect(ranked.map((r) => r.guideId)).toEqual(["vet", "new"]);
+  });
+});
+
+describe("a region is a group of route values", () => {
+  it("matches a Solukhumbu route when the trekker asked for Everest", () => {
+    const solu = guide({
+      guideId: "solu",
+      offerings: [{ ...ebc, region: "Solukhumbu" }],
+    });
+    const ranked = rankGuides([solu], { region: "everest", groupSize: 2 });
+    expect(ranked[0].reasons.join(" ")).toContain("Everest / Khumbu");
+  });
+
+  it("does not surface an Annapurna guide for an Everest query at all", () => {
+    const anna = guide({ guideId: "anna", offerings: [annapurna] });
+    expect(rankGuides([anna], { region: "everest", groupSize: 2 })).toHaveLength(0);
   });
 });

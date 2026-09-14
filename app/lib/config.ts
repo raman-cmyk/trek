@@ -14,8 +14,14 @@ export const BALANCE_AUTOCANCEL_DAYS_BEFORE = 10;
 // on a mountain when the request arrives.
 export const ENQUIRY_TTL_HOURS = 48;
 // Once accepted, the trekker has this long to pay the deposit before the hold
-// on the guide's calendar is released.
-export const DEPOSIT_HOLD_HOURS = 48;
+// on the guide's calendar is released and the booking is cancelled. Shown as a
+// live countdown on checkout, so this number and that clock are the same fact.
+//
+// Three hours, not the 48 it was: a guide who has turned other work away for
+// these dates should not wait two days to find out whether it happened. The
+// cost is that a trekker who is asleep when the acceptance lands can lose the
+// dates — see docs/DECISIONS.md.
+export const DEPOSIT_HOLD_HOURS = 3;
 
 /** v3 pricing canon: Trek's fee and The Fund, charged ON TOP of the package.
  *  The guide's fee is theirs in full. Seeded breakdowns use these same rates. */

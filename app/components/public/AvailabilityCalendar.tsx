@@ -15,6 +15,7 @@ export function AvailabilityCalendar({
   startDays,
   monthsFrom,
   months: monthCount = 2,
+  span = 1,
 }: {
   openDays: string[];
   /**
@@ -26,6 +27,13 @@ export function AvailabilityCalendar({
   monthsFrom: string;
   /** How many months to draw. Three on a trip page, two on a profile. */
   months?: number;
+  /**
+   * How many days this trip runs. It decides why a free day cannot start it —
+   * a fourteen-day trek needs a fourteen-day run, a one-day experience only
+   * needs enough notice — and the key has to say which, because "too close to
+   * the next booking" was wrong on every day trip on the site.
+   */
+  span?: number;
 }) {
   const open = new Set(openDays);
   const canStart = startDays ? new Set(startDays) : null;
@@ -53,30 +61,59 @@ export function AvailabilityCalendar({
     return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
   });
 
+  // Counted over exactly the days drawn below, so the key adds up to what is
+  // on screen rather than to the whole calendar.
+  const counts = { start: 0, open: 0, closed: 0 };
+  for (const { year, month } of months) {
+    const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    for (let day = 1; day <= last; day++) {
+      const iso = new Date(Date.UTC(year, month, day)).toISOString().slice(0, 10);
+      counts[stateOf(iso)] += 1;
+    }
+  }
+
   return (
     <div>
       {/* One tiny key. Colour alone is never a label — a green square and a
-          grey square mean nothing until you say which is which. */}
-      <ul className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-caption text-muted">
-        <li className="flex items-center gap-2">
-          <span aria-hidden="true" className={cn(dayCls("start"), "w-7 text-center text-xs")}>
-            12
+          grey square mean nothing until you say which is which.
+
+          The swatch used to be a sample cell reading "12", so all three rows
+          showed the same number and the key read as three counts of twelve.
+          It is a blank pill now, and the number beside each label is the real
+          count of days in that state on the months drawn below. */}
+      <ul className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-caption text-muted">
+        <li className="flex items-center gap-2" title={
+          canStart
+            ? "Far enough ahead for your guide to answer, and free for the whole trip."
+            : "This guide is free and taking bookings."
+        }>
+          <Swatch className={dayCls("start")} />
+          <span>
+            {canStart ? "You can start here" : "Free to book"}
+            <Count n={counts.start} />
           </span>
-          {canStart ? "This trip can start" : "Free to book"}
         </li>
         {canStart && (
-          <li className="flex items-center gap-2">
-            <span aria-hidden="true" className={cn(dayCls("open"), "w-7 text-center text-xs")}>
-              12
+          <li className="flex items-center gap-2" title={
+            span > 1
+              ? `This trip runs ${span} days, so it needs ${span} free days in a row from the day it starts.`
+              : "A trip cannot start in the next few days — your guide has to read the request first."
+          }>
+            <Swatch className={dayCls("open")} />
+            <span>
+              {span > 1
+                ? "Free, but not enough days in a row"
+                : "Free, but too soon to start"}
+              <Count n={counts.open} />
             </span>
-            Free, but too close to the next booking
           </li>
         )}
-        <li className="flex items-center gap-2">
-          <span aria-hidden="true" className={cn(dayCls("closed"), "w-7 text-center text-xs")}>
-            12
+        <li className="flex items-center gap-2" title="Either somebody has booked it, or the guide has not opened the day.">
+          <Swatch className={dayCls("closed")} />
+          <span>
+            Not available
+            <Count n={counts.closed} />
           </span>
-          Already booked, or kept free
         </li>
       </ul>
 
@@ -127,5 +164,17 @@ export function AvailabilityCalendar({
       })}
       </div>
     </div>
+  );
+}
+
+/** A blank pill, the same shape and colour as a day in that state. */
+function Swatch({ className }: { className?: string }) {
+  return <span aria-hidden="true" className={cn(className, "h-5 w-7 shrink-0")} />;
+}
+
+/** The real number of days in a state, on the months drawn. */
+function Count({ n }: { n: number }) {
+  return (
+    <span className="ml-1.5 font-mono tabular-nums text-ink-soft">{n}</span>
   );
 }

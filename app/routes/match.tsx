@@ -4,12 +4,12 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { matchGuides } from "~/lib/match.server";
 import { monthName, type MatchQuery, type Region } from "~/lib/match";
+import { REGIONS, countByRegion, regionByKey } from "~/lib/regions";
 import { useMoney } from "~/lib/currency-context";
 import { TierBadge } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { cn } from "~/lib/cn";
 
-const REGIONS: Region[] = ["Khumbu", "Annapurna", "Langtang", "Manaslu"];
 const LANGUAGES = ["English", "German", "Spanish", "Hindi", "French"];
 const BUDGETS = [
   { label: "Under $700", cents: 70000 },
@@ -46,8 +46,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const groupSize = Math.max(1, Math.min(12, Number(p.get("group") ?? 2)));
   const submitted = p.has("go");
 
+  // Every region is offered, including the ones with no route on the platform
+  // yet: a trekker looking for Rolwaling should see that we know what it is.
+  // The count travels with the chip so an empty one is not a dead end.
+  const client = createPublicClient(env);
+  const { data: allRoutes } = await client.from("routes").select("region");
+  const regionCounts = countByRegion((allRoutes ?? []) as Array<{ region: string | null }>);
+
   const q: MatchQuery = {
-    region: REGIONS.includes(region as Region) ? region : null,
+    region: regionByKey(region)?.key ?? null,
     month: month && month >= 1 && month <= 12 ? month : null,
     budgetUsdCents: budget && budget > 0 ? budget : null,
     language: language && language !== "English" ? language : null,
@@ -57,7 +64,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   let matches: Array<{ guide: any; reasons: string[]; bestOffering: any }> = [];
   if (submitted) {
-    const client = createPublicClient(env);
     const { results, guides } = await matchGuides(client, q);
     matches = results.slice(0, 6).map((r) => ({
       guide: guides.get(r.guideId),
@@ -69,19 +75,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     submitted,
     query: { ...q, groupSize, budget, language: language ?? "English" },
+    regionCounts,
     matches,
     canonical: absoluteUrl(env.SITE_URL, "/match"),
   };
 }
 
-function Chip({ name, value, current, children }: {
+function Chip({ name, value, current, children, title }: {
   name: string; value: string; current: string | null; children: React.ReactNode;
+  /** The hover explanation — twelve regions cannot each carry a subtitle. */
+  title?: string;
 }) {
   const active = current === value || (!current && value === "");
   // Styled by the radio's :checked via peer — clicking gives instant feedback
   // without waiting for a submit round-trip (audit 10.3).
   return (
-    <label className="cursor-pointer">
+    <label className="cursor-pointer" title={title}>
       <input type="radio" name={name} value={value} defaultChecked={active} className="peer sr-only" />
       <span
         className={cn(
@@ -97,7 +106,7 @@ function Chip({ name, value, current, children }: {
 }
 
 export default function Match({ loaderData }: Route.ComponentProps) {
-  const { submitted, query, matches } = loaderData as any;
+  const { submitted, query, matches, regionCounts } = loaderData as any;
   const { m } = useMoney();
 
   return (
@@ -118,9 +127,35 @@ export default function Match({ loaderData }: Route.ComponentProps) {
           <div className="flex flex-wrap gap-2">
             <Chip name="region" value="" current={query.region}>Anywhere</Chip>
             {REGIONS.map((r) => (
-              <Chip key={r} name="region" value={r} current={query.region}>{r}</Chip>
+              <Chip
+                key={r.key}
+                name="region"
+                value={r.key}
+                current={query.region}
+                title={
+                  regionCounts[r.key]
+                    ? `${r.blurb} — ${regionCounts[r.key]} ${
+                        regionCounts[r.key] === 1 ? "route" : "routes"
+                      }`
+                    : `${r.blurb} — no route on the platform yet`
+                }
+              >
+                {r.label}
+                {!regionCounts[r.key] && (
+                  <span className="ml-1.5 text-caption text-muted">soon</span>
+                )}
+              </Chip>
             ))}
           </div>
+          {/* The chosen region, in one line, so twelve chips do not need
+              twelve subtitles. */}
+          {query.region && (
+            <p className="mt-2 text-caption text-muted">
+              {regionByKey(query.region)?.blurb}
+              {!regionCounts[query.region] &&
+                " — no route here yet, so these are the guides who fit everything else you asked for."}
+            </p>
+          )}
         </fieldset>
 
         <fieldset>

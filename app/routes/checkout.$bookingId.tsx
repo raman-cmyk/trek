@@ -6,6 +6,8 @@ import { requireUser } from "~/lib/auth.server";
 import { getStripe } from "~/lib/stripe.server";
 import { fulfillDeposit } from "~/lib/booking.server";
 import { PriceBreakdown } from "~/components/public/bits";
+import { HoldTimer } from "~/components/HoldTimer";
+import { BookWithConfidence } from "~/components/BookWithConfidence";
 import { Button } from "~/components/Button";
 import { computeDeposit } from "~/lib/pricing";
 import { useMoney } from "~/lib/currency-context";
@@ -18,7 +20,7 @@ export function meta() {
 }
 
 const BOOKING_COLS =
-  "id, status, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents, permit_handling_usd_cents, logistics_usd_cents, fund_usd_cents, start_date, offering:offerings(title, kind), guide:guides(slug, tier, users(full_name))";
+  "id, status, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents, permit_handling_usd_cents, logistics_usd_cents, fund_usd_cents, start_date, hold_expires_at, offering:offerings(title, kind), guide:guides(slug, tier, users(full_name))";
 
 function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -90,6 +92,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       isMock: intent.mock,
       balance,
       today,
+      // The server's clock, so the countdown's first frame is not the
+      // browser's — a device an hour out would otherwise invent an hour of
+      // hold that does not exist.
+      serverNow: new Date().toISOString(),
       maxN: maxInstalments(today, b.start_date),
     },
     { headers },
@@ -132,7 +138,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Checkout({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, paymentIntentId, isMock, balance, today, maxN } = loaderData as any;
+  const { booking: b, paymentIntentId, isMock, balance, today, maxN, serverNow } =
+    loaderData as any;
   const guideName = (b.guide?.users?.full_name ?? "").split(" ")[0] || null;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -157,12 +164,25 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
   ];
 
   const payInFull = balance <= 0;
+  const guideFirst = (b.guide?.users?.full_name ?? "your guide").split(" ")[0];
   return (
     <main className="mx-auto max-w-md px-4 py-10">
       <h1 className="font-display text-3xl text-ink">
         {payInFull ? "Pay & confirm" : "Pay your deposit"}
       </h1>
       <p className="mt-1 text-ink-soft">{b.offering?.title}</p>
+
+      {/* The hold, counting down. It was always real — the guide's days are
+          marked held at acceptance and a sweep releases them at the deadline —
+          and the page never said so, so a booking could evaporate for a reason
+          the trekker was never shown. */}
+      <div className="mt-4">
+        <HoldTimer
+          expiresAt={b.hold_expires_at ?? null}
+          serverNow={serverNow}
+          guideFirstName={guideFirst}
+        />
+      </div>
 
       <div className="mt-6 rounded-card border border-border bg-card p-4">
         <PriceBreakdown rows={rows} total={b.total_usd_cents} />
@@ -285,6 +305,13 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
       <p className="mt-1 text-center text-xs text-ink-soft">
         Charged in USD — other currencies shown are approximate.
       </p>
+
+      {/* Doubt lives on the last screen before a card is charged, so this is
+          where the answers go. Every claim is one we can keep. */}
+      <BookWithConfidence
+        guideFirstName={guideFirst}
+        freeCancelUntil={inFreeWindow ? fmtDate(freeCancelUntil) : null}
+      />
     </main>
   );
 }

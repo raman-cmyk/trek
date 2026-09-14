@@ -592,6 +592,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 startDays={availableDays}
                 monthsFrom={monthAnchor ?? `${new Date().toISOString().slice(0, 7)}-01`}
                 months={3}
+                span={span ?? 1}
               />
             </div>
             {availableDays.length === 0 && (
