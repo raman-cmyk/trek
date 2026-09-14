@@ -190,7 +190,7 @@ function ConfigBody({
           {fetcher.data?.error && (
             <p className="mb-2 text-sm text-danger">{fetcher.data.error}</p>
           )}
-          <Button type="submit" loading={busy} disabled={!day} className="w-full">
+          <Button type="submit" variant="lime" loading={busy} disabled={!day} className="w-full">
             Request to book
           </Button>
         </fetcher.Form>
@@ -266,7 +266,7 @@ export function BookingWidget({
   return (
     <>
       {/* Desktop: sticky right-rail card */}
-      <aside className="sticky top-24 hidden rounded-card border border-border bg-card p-5 shadow-card lg:block">
+      <aside className="sticky top-24 hidden rounded-photo border border-border bg-card p-5 shadow-card lg:block">
         <p className="mb-3">
           <span className="font-mono text-2xl font-medium">
             {quote ? m(quote.headline) : "—"}
@@ -296,7 +296,7 @@ export function BookingWidget({
             </span>
             <span className="text-ink-soft"> · {unit}</span>
           </div>
-          <Button onClick={() => setSheetOpen(true)}>Request to book</Button>
+          <Button variant="lime" onClick={() => setSheetOpen(true)}>Request to book</Button>
         </div>
       </div>
 

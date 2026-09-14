@@ -15,9 +15,11 @@ import {
 } from "~/lib/experience-pricing";
 import { addOns } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
+import { TrailScene } from "~/components/design/TrailScene";
+import { FactStrip } from "~/components/design/FactStrip";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
-  const { o, photos, availableDays, reviews, rating, permitPp } = data;
+  const { o, photos, availableDays, reviews, rating, permitPp, routeStops, routeHero, routeMaxAltitude } = data;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
@@ -86,7 +88,34 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 pb-24 lg:pb-6">
-      <Carousel photos={carousel} />
+      {/* A trek opens on itself drawn as a walk (docs/07): the route's day
+          stops over the cover, or over the route's own photograph, or over
+          terrain — never the blank box most trips without a cover used to
+          show. Day experiences keep the carousel; they have no walk to draw. */}
+      {routeStops.length >= 2 ? (
+        <TrailScene
+          photo={o.cover_photo_url ?? photos[0]?.url ?? routeHero}
+          alt={o.title}
+          stops={routeStops}
+          pins={4}
+          eager
+          height="aspect-[4/3] sm:aspect-[21/9]"
+        >
+          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6">
+            <FactStrip
+              onPhoto
+              facts={[
+                { glyph: "calendar", value: o.days, unit: "days" },
+                routeMaxAltitude ? { glyph: "altitude", value: routeMaxAltitude.toLocaleString("en-US"), unit: "m" } : { value: "" },
+                o.max_party ? { glyph: "people", value: `up to ${o.max_party}` } : { value: "" },
+                (o as any).route_name ? { glyph: "route", value: (o as any).route_name } : { value: "" },
+              ]}
+            />
+          </div>
+        </TrailScene>
+      ) : (
+        <Carousel photos={carousel} />
+      )}
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
         <div className="space-y-8">
@@ -117,7 +146,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           <Link
             to={`/guides/${o.guide_slug}`}
             prefetch="intent"
-            className="flex items-center gap-4 rounded-card border border-border p-4 hover:shadow-card"
+            className="flex items-center gap-4 rounded-photo border border-border p-4 shadow-card transition duration-quick hover:-translate-y-0.5 hover:shadow-lift"
           >
             <SmartImage
               src={o.guide_avatar_url ?? ""}

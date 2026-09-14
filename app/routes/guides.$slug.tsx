@@ -50,6 +50,8 @@ import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
 import { skillLabel } from "~/lib/guide-skills";
 import { Eyebrow } from "~/components/design/Eyebrow";
+import { StatTile } from "~/components/design/StatTile";
+import type { ChipGlyph } from "~/components/design/Chip";
 
 /**
  * Anonymous visitors get the edge cache; anyone signed in gets nothing
@@ -650,7 +652,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               {/* ── The trust card: the Superhost moment. Portrait, name, and
                  the numbers that prove {first} is real — large, mono, in one
                  bordered card instead of scattered small beneath a header. */}
-              <div className="overflow-hidden rounded-md border border-line bg-card">
+              <div className="overflow-hidden rounded-photo border border-line bg-card shadow-card">
                 {/* The portrait is the point of a guide-first marketplace, so it
                   is a photograph at photograph size rather than an avatar
                   beside a name. Portrait and identity sit side by side above
@@ -691,27 +693,31 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                     {/* Two columns, not four: at four these numbers sat in a thin
                       strip and read as a stats bar. Two gives each one room to
                       be a fact. */}
-                    <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-4">
+                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line pt-4">
                       {guide.years_experience ? (
                         <BigNum
+                          glyph="calendar"
                           n={guide.years_experience}
                           label="years guiding"
                         />
                       ) : null}
                       {treksLed > 0 && (
                         <BigNum
+                          glyph="mountain"
                           n={treksLed}
                           label={treksLed === 1 ? "trek led" : "treks led"}
                         />
                       )}
                       {rating && (
                         <BigNum
+                          glyph="star"
                           n={rating.value.toFixed(1)}
                           label={`rating (${rating.count})`}
                         />
                       )}
                       {guide.median_response_mins != null && (
                         <BigNum
+                          glyph="clock"
                           n={
                             guide.median_response_mins >= 60
                               ? `~${Math.round(guide.median_response_mins / 60)} hr`
@@ -720,7 +726,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                           label="responds in"
                         />
                       )}
-                    </dl>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1152,7 +1158,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
       </div>
 
       {/* Sticky bottom bar — the rail's job, on viewports with no rail. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur lg:hidden">
+      <div className="glass fixed inset-x-0 bottom-0 z-30 border-t border-line lg:hidden">
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-2.5">
           <p className="min-w-0 flex-1 text-sm">
             {guide.day_rate_usd_cents ? (
@@ -1170,7 +1176,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
           <Form method="post" action="/conversations" className="shrink-0">
             <input type="hidden" name="guide_id" value={guide.user_id} />
             <input type="hidden" name="next" value={`/guides/${guide.slug}`} />
-            <button className="rounded border border-moss px-4 py-2 text-sm font-medium text-moss hover:bg-mist">
+            <button className="inline-flex h-10 items-center rounded-button bg-chartreuse px-4 text-sm font-medium text-pine shadow-card hover:brightness-[0.97]">
               Message
             </button>
           </Form>
@@ -1766,14 +1772,11 @@ function GuideGallery({
 }
 
 /** A trust-card number: large, mono, with its label underneath. */
-function BigNum({ n, label }: { n: number | string; label: string }) {
+function BigNum({ n, label, glyph }: { n: number | string; label: string; glyph?: ChipGlyph }) {
+  // A fact as a tile (docs/07): the number mono and big, the label in small
+  // capitals, the glyph saying what kind of fact it is.
   return (
-    <div>
-      <dd className="m-0 font-mono text-2xl leading-none text-ink sm:text-3xl">
-        {typeof n === "number" ? n.toLocaleString("en-US") : n}
-      </dd>
-      <dt className="mt-1 text-caption text-muted">{label}</dt>
-    </div>
+    <StatTile glyph={glyph} value={typeof n === "number" ? n.toLocaleString("en-US") : n} label={label} />
   );
 }
 

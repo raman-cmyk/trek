@@ -32,6 +32,9 @@ import { publishedBlocks } from "~/lib/route-blocks";
 import { RouteBlocks } from "~/components/public/RouteBlocks";
 import { Rail } from "~/components/public/Rail";
 import { ClimbRoute } from "~/components/public/ClimbRoute";
+import { TrailScene } from "~/components/design/TrailScene";
+import { FactStrip } from "~/components/design/FactStrip";
+import { Eyebrow } from "~/components/design/Eyebrow";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -293,20 +296,21 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
   return (
     <main className="pb-16">
       {/* Hero */}
-      <div className="relative">
-        <SmartImage
-          src={route.hero_photo_url ?? "/img/hero.jpg"}
-          alt={`${route.name} trek`}
-          width={1800}
-          height={900}
-          eager
-          cover
-          className="h-[42vh] w-full sm:h-[56vh]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/15" />
+      {/* The route drawn on its own photograph (docs/07): the walk as a
+          dotted line with its first day, its highest point and its last day
+          pinned — the picture every reference shares, from real day stops. */}
+      <TrailScene
+        photo={route.hero_photo_url ?? "/img/hero.jpg"}
+        alt={`${route.name} trek`}
+        stops={stops}
+        pins={4}
+        eager
+        height="h-[46vh] sm:h-[60vh]"
+        className="rounded-none"
+      >
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto max-w-5xl px-4 pb-6">
-            <p className="label text-white/70">{route.region}</p>
+            <Eyebrow tone="chartreuse">{route.region}</Eyebrow>
             <h1 className="mt-1 max-w-[18ch] font-display text-4xl leading-[1.05] text-white sm:text-6xl">
               {route.name}
             </h1>
@@ -326,14 +330,21 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
                 , who walks it
               </p>
             )}
-            <p className="mt-3 font-mono text-caption text-white/85 sm:text-sm">
-              {route.typical_days} days · {fmtMetres(route.max_altitude_m)}
-              {route.distance_km ? ` · ${route.distance_km} km` : ""} · {route.difficulty}
-              {bestMonths.length ? ` · best ${bestMonths.map((n) => MONTHS[n - 1]).join(", ")}` : ""}
-            </p>
+            <div className="mt-3">
+              <FactStrip
+                onPhoto
+                facts={[
+                  { glyph: "calendar", value: route.typical_days, unit: "days" },
+                  { glyph: "altitude", value: route.max_altitude_m?.toLocaleString("en-US"), unit: "m" },
+                  route.distance_km ? { glyph: "walk", value: route.distance_km, unit: "km" } : { value: "" },
+                  { glyph: "mountain", value: <span className="capitalize">{route.difficulty}</span> },
+                  bestMonths.length ? { glyph: "spark", value: bestMonths.map((n: number) => MONTHS[n - 1]).join(", ") } : { value: "" },
+                ]}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      </TrailScene>
 
       <div className="mx-auto max-w-5xl px-4">
         {route.summary && (

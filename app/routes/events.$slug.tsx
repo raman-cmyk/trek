@@ -9,6 +9,7 @@ import { useMoney } from "~/lib/currency-context";
 import { eventDates, placesLeft } from "~/lib/events";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { Eyebrow } from "~/components/design/Eyebrow";
+import { FactStrip } from "~/components/design/FactStrip";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   const e = (d as any)?.event;
@@ -159,14 +160,20 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto max-w-4xl px-4 pb-6">
-            <p className="label text-white/75">Group trip</p>
+            <Eyebrow tone="chartreuse">Group trip</Eyebrow>
             <h1 className="mt-1 max-w-[20ch] font-display text-3xl leading-[1.05] text-white sm:text-5xl">
               {e.title}
             </h1>
-            <p className="mt-3 font-mono text-caption text-white/85 sm:text-sm">
-              {eventDates(e.start_date, e.end_date)}
-              {e.region ? ` · ${e.region}` : ""} · max {e.max_people}
-            </p>
+            <div className="mt-3">
+              <FactStrip
+                onPhoto
+                facts={[
+                  { glyph: "calendar", value: eventDates(e.start_date, e.end_date) },
+                  e.region ? { glyph: "pin", value: e.region } : { value: "" },
+                  { glyph: "people", value: left === 0 ? "Full" : `${left} of ${e.max_people} left` },
+                ]}
+              />
+            </div>
           </div>
         </div>
       </div>

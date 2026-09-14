@@ -28,7 +28,7 @@ export async function loadOfferingDetail(
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: photos }, { data: permits }, { data: avail }, { data: reviews }] =
+  const [{ data: photos }, { data: permits }, { data: avail }, { data: reviews }, { data: routeRow }] =
     await Promise.all([
       client
         .from("offering_photos")
@@ -52,6 +52,10 @@ export async function loadOfferingDetail(
         .select("id, overall, body, published_at, author_name, author_country")
         .eq("offering_slug", slug)
         .order("published_at", { ascending: false }),
+      // The route's day stops draw the trek on its cover (docs/07).
+      o.route_id
+        ? client.from("routes").select("day_stops, hero_photo_url, max_altitude_m").eq("id", o.route_id).maybeSingle()
+        : Promise.resolve({ data: null as null | { day_stops: unknown; hero_photo_url: string | null; max_altitude_m: number | null } }),
     ]);
 
   const ratings = await guideRatings(client, [o.guide_id]);
@@ -85,6 +89,11 @@ export async function loadOfferingDetail(
     }>,
     rating: ratings[o.guide_id] ?? null,
     permitPp,
+    routeStops: (((routeRow as any)?.day_stops ?? []) as Array<{ day: number; place: string; altitude_m: number }>).filter(
+      (st) => Number(st?.altitude_m) > 0,
+    ),
+    routeHero: ((routeRow as any)?.hero_photo_url ?? null) as string | null,
+    routeMaxAltitude: ((routeRow as any)?.max_altitude_m ?? null) as number | null,
     canonical: absoluteUrl(env.SITE_URL, offeringPath(o)),
     ogImage: o.cover_photo_url ?? undefined,
   };

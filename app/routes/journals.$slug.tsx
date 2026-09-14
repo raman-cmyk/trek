@@ -26,6 +26,10 @@ import {
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { Eyebrow } from "~/components/design/Eyebrow";
+import { TrailScene } from "~/components/design/TrailScene";
+import { ProfileWithPhotos } from "~/components/design/ProfileWithPhotos";
+import { profileOf } from "~/lib/route-cards";
+import { isVideo } from "~/lib/journals";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   if (!data) return [{ title: "Journal not found" }];
@@ -272,6 +276,20 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
     running += e.photos?.length ?? 0;
   }
   const photoCount = gallery.length;
+  // The route's stops draw the hero; the journal's own days draw the profile
+  // its photographs pin to.
+  const routeStops = ((route?.day_stops ?? []) as Array<{ day: number; place: string; altitude_m: number }>).filter((st) => Number(st?.altitude_m) > 0);
+  const dayProfile = profileOf(
+    (entries as JournalEntry[])
+      .filter((e) => e.altitude_m != null)
+      .map((e) => ({ day: e.day_no, place: e.title, altitude_m: e.altitude_m as number })),
+  );
+  const pinned = (entries as JournalEntry[])
+    .map((e) => {
+      const first = (e.photos ?? []).find((ph: any) => ph?.url && !isVideo(ph));
+      return first ? { day: e.day_no, url: first.url as string, alt: (first as any).alt ?? e.title, caption: e.title } : null;
+    })
+    .filter(Boolean) as Array<{ day: number; url: string; alt: string; caption: string }>;
   // A post is one moment, not a trek: no day numerals, no elevation profile.
   const isPost = j.kind === "post";
 
@@ -280,16 +298,17 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
       {/* 1 — Cover. The title overlaps the bottom edge of the photograph
           instead of sitting politely under it (Not-AI doc §2: break the grid). */}
       <header className="relative">
-        <SmartImage
-          src={j.cover_photo_url ?? ""}
+        {/* The trek drawn on its cover (docs/07): the route's real day stops
+            as a dotted line, so the story opens on the shape of the walk. */}
+        <TrailScene
+          photo={j.cover_photo_url}
           alt={j.title}
-          width={1800}
-          height={1000}
+          stops={routeStops}
+          pins={3}
           eager
-          cover
-          className="h-[46vh] w-full sm:h-[62vh]"
+          height="h-[46vh] sm:h-[62vh]"
+          className="rounded-none"
         />
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 to-transparent" />
         <div className="mx-auto max-w-4xl px-4">
           <h1 className="relative -mt-16 max-w-[20ch] font-display text-3xl leading-[1.05] text-white [text-shadow:0_2px_20px_rgb(0_0_0/0.55)] sm:-mt-24 sm:text-5xl">
             {j.title}
@@ -394,8 +413,15 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
         {/* 5 — Elevation, from what the guide actually recorded. */}
         {!isPost && points.length >= 3 && (
           <section className="mt-14 border-t border-line pt-8">
-            <h2 className="label text-muted">How high, and when</h2>
-            <ElevationStrip points={points} className="mt-3" />
+            <Eyebrow as="h2">How high, and when</Eyebrow>
+            {/* The guide's own photographs pinned to the climb where they
+                were taken (docs/07, reference 3). Falls back to the plain
+                strip when the days have no pictures. */}
+            {dayProfile && pinned.length >= 2 ? (
+              <ProfileWithPhotos profile={dayProfile} photos={pinned} label={`${j.title}: the climb, day by day`} className="mt-10" />
+            ) : (
+              <ElevationStrip points={points} className="mt-3" />
+            )}
           </section>
         )}
 

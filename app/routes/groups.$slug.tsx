@@ -527,7 +527,8 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
             <Form method="post" action={`/groups/${group.slug}/enquire`} className="shrink-0">
               <button
                 disabled={busy || !!askBlocked}
-                className="rounded bg-pine px-4 py-2.5 text-sm font-medium text-paper hover:bg-moss disabled:cursor-not-allowed disabled:opacity-50"
+                // The page's one lime (docs/07): the step that moves the trip.
+                className="inline-flex h-11 items-center rounded-button bg-chartreuse px-4 text-sm font-medium text-pine shadow-card hover:brightness-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Ask {offering.guide_name.split(" ")[0]} to take us
               </button>
