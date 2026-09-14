@@ -8,6 +8,7 @@ import { computeExperiencePricing, type PriceBreakdown as PB , hasBreakdown } fr
 import { useMoney } from "~/lib/currency-context";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { fmtDate } from "~/lib/format";
+import { DatePicker } from "~/components/DatePicker";
 import { ENQUIRY_TTL_HOURS } from "~/lib/config";
 import {
   REFUND_BANDS,
@@ -199,11 +200,14 @@ function ConfigBody({
           {o.kind === "trek" && (
             <label className="mb-2 block text-sm text-ink-soft">
               When do you land in Kathmandu? <span className="text-muted">(if you know)</span>
-              <input
-                type="date"
+              <DatePicker
                 name="arrival_date"
+                today={new Date().toISOString().slice(0, 10)}
                 max={day}
-                className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+                label="When you land in Kathmandu"
+                placeholder="Not booked yet"
+                className="mt-1"
+                inputClassName="w-full rounded-button border border-border px-3 py-2 text-base text-ink"
               />
             </label>
           )}

@@ -1,4 +1,5 @@
 import { Form } from "react-router";
+import { DatePicker } from "~/components/DatePicker";
 
 /**
  * The hero search: where · when · how many. A plain GET to /experiences, which
@@ -54,12 +55,15 @@ export function HeroSearch({
           <label className={label} htmlFor="hero-from">
             Setting off
           </label>
-          <input
+          {/* A calendar, not a locale-shaped text field. The grid opens on the
+              month tomorrow is in and walks eighteen months forward. */}
+          <DatePicker
             id="hero-from"
-            type="date"
             name="from"
-            min={today}
-            className={`${field} font-mono text-sm`}
+            today={today}
+            label="Setting off"
+            placeholder="Any date"
+            inputClassName={`${field} py-0.5 text-sm`}
           />
         </div>
 

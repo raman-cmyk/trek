@@ -1,14 +1,40 @@
-import { Form, data } from "react-router";
+import { Form, Link, data, useSearchParams } from "react-router";
 import type { Route } from "./+types/ops.incidents";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
+import { cn } from "~/lib/cn";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+
+/**
+ * The stages an incident passes through, in that order, plus "everything".
+ *
+ * Open and monitoring were mixed into one list with closed ones, so the
+ * question the office actually has — what still needs a person — took reading
+ * every row. The counts are on the chips, because a filter that hides how
+ * many it would show is a filter you press to find out.
+ */
+const STAGES = [
+  { key: "needs_action", label: "Needs a person", match: ["open", "monitoring"] },
+  { key: "open", label: "Open", match: ["open"] },
+  { key: "monitoring", label: "Monitoring", match: ["monitoring"] },
+  { key: "closed", label: "Closed", match: ["closed"] },
+  { key: "all", label: "Everything", match: ["open", "monitoring", "closed"] },
+] as const;
+
+type StageKey = (typeof STAGES)[number]["key"];
+
+function stageFor(raw: string | null): (typeof STAGES)[number] {
+  return STAGES.find((s) => s.key === raw) ?? STAGES[0];
+}
 
 const SEV_TONE: Record<string, "amber" | "blue" | "red"> = {
   L1: "amber",
   L2: "blue",
   L3: "red",
 };
+
+/** L3 is somebody in trouble on a mountain. It goes first, whatever its age. */
+const SEV_RANK: Record<string, number> = { L1: 1, L2: 2, L3: 3 };
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -26,7 +52,26 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .in("status", ["confirmed", "active"])
       .order("start_date"),
   ]);
-  return data({ incidents: incidents ?? [], bookings: bookings ?? [] }, { headers });
+  const all = incidents ?? [];
+  const stage = stageFor(new URL(request.url).searchParams.get("stage"));
+  const counts = {
+    needs_action: all.filter((i: any) => i.status !== "closed").length,
+    open: all.filter((i: any) => i.status === "open").length,
+    monitoring: all.filter((i: any) => i.status === "monitoring").length,
+    closed: all.filter((i: any) => i.status === "closed").length,
+    all: all.length,
+  } as Record<StageKey, number>;
+
+  return data(
+    {
+      incidents: all.filter((i: any) => (stage.match as readonly string[]).includes(i.status)),
+      total: all.length,
+      stage: stage.key,
+      counts,
+      bookings: bookings ?? [],
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -59,17 +104,67 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function OpsIncidents({ loaderData }: Route.ComponentProps) {
   const incidents = loaderData.incidents as any[];
   const bookings = loaderData.bookings as any[];
+  const { stage, counts, total } = loaderData as any;
+  const [params] = useSearchParams();
+
+  const chipHref = (key: string) => {
+    const p = new URLSearchParams(params);
+    p.set("stage", key);
+    return `/ops/incidents?${p.toString()}`;
+  };
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
-        <h1 className="font-display text-2xl">Incidents</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="font-display text-2xl">Incidents</h1>
+          <p className="text-sm text-ink-soft">
+            {counts.needs_action === 0
+              ? `Nothing needs a person. ${total} on record.`
+              : `${counts.needs_action} need a person, of ${total} on record.`}
+          </p>
+        </div>
+
+        {/* The filter. Keeping the current stage in the URL means a shift
+            handover can be a pasted link. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {STAGES.map((s) => (
+            <Link
+              key={s.key}
+              to={chipHref(s.key)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-sm",
+                stage === s.key
+                  ? "border-primary bg-primary/10 font-medium text-primary"
+                  : "border-border text-ink-soft hover:bg-black/5",
+              )}
+            >
+              {s.label}
+              <span className="ml-1.5 font-mono text-xs text-ink-soft">
+                {counts[s.key as StageKey]}
+              </span>
+            </Link>
+          ))}
+        </div>
+
         <Panel>
           {incidents.length === 0 ? (
-            <EmptyRow>No incidents. Good.</EmptyRow>
+            <EmptyRow>
+              {stage === "needs_action"
+                ? "Nothing needs a person. Good."
+                : total === 0
+                  ? "No incidents. Good."
+                  : "Nothing at this stage."}
+            </EmptyRow>
           ) : (
             <ul className="divide-y divide-border">
-              {incidents.map((i) => (
+              {[...incidents]
+                .sort(
+                  (a, b) =>
+                    (SEV_RANK[b.severity] ?? 0) - (SEV_RANK[a.severity] ?? 0) ||
+                    String(a.opened_at).localeCompare(String(b.opened_at)),
+                )
+                .map((i) => (
                 <li key={i.id} className="py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>

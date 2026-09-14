@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Form } from "react-router";
 import { cn } from "~/lib/cn";
+import { DatePicker } from "~/components/DatePicker";
 
 /**
  * The browse search bar: free text + a date range, on one row.
@@ -80,24 +81,27 @@ export function BrowseSearch({
           <span className="shrink-0 basis-full text-caption text-muted sm:basis-auto">
             {dateLabel}
           </span>
-          <input
-            type="date"
+          <DatePicker
             name="from"
+            today={today}
             defaultValue={from}
-            min={today}
-            aria-label={`${dateLabel} — first day`}
-            className="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-ink outline-none"
+            label={`${dateLabel} — first day`}
+            placeholder="Any day"
+            className="min-w-0 flex-1"
+            inputClassName="w-full min-w-0 bg-transparent py-2 text-sm text-ink outline-none"
           />
           <span aria-hidden="true" className="text-muted">
             –
           </span>
-          <input
-            type="date"
+          <DatePicker
             name="to"
+            today={today}
             defaultValue={to}
-            min={from || today}
-            aria-label={`${dateLabel} — last day`}
-            className="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-ink outline-none"
+            min={from || undefined}
+            label={`${dateLabel} — last day`}
+            placeholder="Any day"
+            className="min-w-0 flex-1"
+            inputClassName="w-full min-w-0 bg-transparent py-2 text-sm text-ink outline-none"
           />
         </div>
 
