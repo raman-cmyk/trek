@@ -17,7 +17,7 @@ import { Button } from "~/components/Button";
 import { Badge } from "~/components/ops/ui";
 import { TimsCard } from "~/components/TimsCard";
 import { TripPipeline } from "~/components/TripPipeline";
-import { permitProgress } from "~/lib/pipeline";
+import { meetingTimeOf, permitProgress } from "~/lib/pipeline";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
@@ -40,7 +40,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, meeting_point, cover_photo_url, route:routes(name, region, max_altitude_m, day_stops)), guide:guides(slug, users(full_name, phone))",
+      "id, status, start_date, end_date, party_size, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, guide_id, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, meeting_point, itinerary, cover_photo_url, route:routes(name, region, max_altitude_m, day_stops)), guide:guides(slug, users(full_name, phone))",
     )
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
@@ -422,6 +422,11 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           // it: the office had issued these weeks before the track admitted it.
           permits={permitProgress(permits)}
           guideName={firstName(b.guide?.users?.full_name)}
+          // "Where to meet" is the address, agreed when the trip was booked —
+          // not a chore with no button under it.
+          meetingPoint={b.offering?.meeting_point}
+          startsOn={fmtDate(b.start_date)}
+          meetingTime={meetingTimeOf(b.offering?.itinerary)}
         />
       ) : (
         <p className="mt-6 rounded-card bg-surface p-3 text-sm text-ink-soft">

@@ -26,6 +26,7 @@ import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { TripPipeline } from "~/components/TripPipeline";
+import { meetingTimeOf } from "~/lib/pipeline";
 import { PackageCard } from "~/components/messages/PackageCard";
 import { PackageComposer } from "~/components/messages/PackageComposer";
 import { Eyebrow } from "~/components/design/Eyebrow";
@@ -97,7 +98,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     group.offering_id
       ? admin
           .from("public_offerings")
-          .select("id, slug, kind, title, days, cover_photo_url, guide_slug, guide_name, guide_avatar_url, route_name, route_slug, max_party")
+          .select("id, slug, kind, title, days, cover_photo_url, guide_slug, guide_name, guide_avatar_url, route_name, route_slug, max_party, meeting_point, itinerary")
           .eq("id", group.offering_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -862,6 +863,10 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               kind={offering?.kind}
               groupStatus={group.status}
               bookingStatus={booking?.status ?? null}
+              guideName={guide ? firstName(guide.full_name) : null}
+              meetingPoint={offering?.meeting_point}
+              startsOn={group.start_date ? fmtDate(group.start_date) : null}
+              meetingTime={meetingTimeOf(offering?.itinerary)}
             />
           </div>
 

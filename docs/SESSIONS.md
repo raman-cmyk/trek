@@ -2257,3 +2257,24 @@ stand down where the newer fields exist rather than repeating "Permits and
 real costs" twice on one page; their FAQs are still merged.
 
 750 tests green, build green, deployed.
+
+**"Where to meet" was never a chore.** On a day experience the fourth step sat
+as an open circle with no button under it, from the moment of booking until
+the day itself — so it read as something the trekker had failed to do. The
+address had in fact been agreed when they paid: "Thamel", 23 September, 18:00,
+all three already in the database.
+
+Same shape as the permits bug, so it got the same fix, generalised. A step is
+now settled when the thing it describes is settled, not when the booking
+reaches a later status — `settledSteps()` covers both the permits and the
+meeting point, and the track moves on instead of waiting for the calendar. A
+settled step keeps its hint, because a tick raises a question the line
+underneath has to answer: "Meet Pemba at Thamel — 23 Sep, 2026, 18:00."
+
+Where there genuinely is no address yet the step stays open and names who it
+is waiting on, which is the guide and not the trekker. The hour comes out of
+the guide's own itinerary (`meetingTimeOf`), which on a day trip is a list of
+times rather than days. Group trips get all of it too — the founder asked,
+and it was the same component.
+
+765 tests green, build green, deployed.

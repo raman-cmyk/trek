@@ -188,6 +188,17 @@ export interface TripState {
   permits?: PermitProgress;
   /** Who collects them. First name — this is read by the person who booked. */
   guideName?: string | null;
+  /**
+   * Where to meet, once it is settled. On a day experience this is the whole
+   * of the step called "Where to meet", and while it sat unticked with no
+   * button under it, it read as a chore the trekker had failed to do — when
+   * in fact the address had been agreed at the moment they booked.
+   */
+  meetingPoint?: string | null;
+  /** When the trip starts, formatted by the caller ("23 Sep, 2026"). */
+  startsOn?: string | null;
+  /** The hour to be there, when the itinerary gives one ("18:00"). */
+  meetingTime?: string | null;
 }
 
 /** Where the trip is on the one timeline, as a position the stages compare to. */
@@ -206,6 +217,34 @@ export function isStopped(state: TripState): boolean {
     state.groupStatus === "cancelled" ||
     String(state.bookingStatus ?? "").startsWith("cancelled")
   );
+}
+
+/**
+ * The hour a day experience starts, out of the guide's own itinerary.
+ *
+ * A day trip's itinerary is a list of times rather than days — "18:00, Meet in
+ * Thamel" — and the first of them is when to be there. A multi-day trek has no
+ * such hour, and guessing one would be worse than leaving it out.
+ */
+export function meetingTimeOf(itinerary: unknown): string | null {
+  if (!Array.isArray(itinerary)) return null;
+  for (const step of itinerary) {
+    const t = (step as any)?.time;
+    if (typeof t === "string" && t.trim()) return t.trim();
+  }
+  return null;
+}
+
+/**
+ * The steps that are finished because the thing they describe is finished,
+ * whatever the booking's status says.
+ */
+function settledSteps(state: TripState): Set<string> {
+  const settled = new Set<string>();
+  if (state.permits === "issued") settled.add("permits");
+  // "Where to meet" on a day experience, "Meeting point sent" on a day hike.
+  if ((state.meetingPoint ?? "").trim()) settled.add("confirmed");
+  return settled;
 }
 
 /**
@@ -238,11 +277,29 @@ function hintFor(
         return def.hint;
     }
   }
-  // The step after the permits becomes the current one the moment they are
-  // issued, which can be weeks before anybody walks. "Walking. Your guide
-  // checks in each day." is not true yet.
+  // "Where to meet" is not a chore — it is the address, and it was agreed when
+  // the trip was booked. Say it, rather than leaving an empty circle over a
+  // hint that reads like homework.
+  if (def.key === "confirmed") {
+    const where = (state.meetingPoint ?? "").trim();
+    if (where) {
+      const when = [state.startsOn, state.meetingTime].filter(Boolean).join(", ");
+      return when
+        ? `Meet ${state.guideName ? `${state.guideName} ` : "your guide "}at ${where} — ${when}.`
+        : `Meet ${state.guideName ? `${state.guideName} ` : "your guide "}at ${where}.`;
+    }
+    // Genuinely not settled yet. Then it IS waiting on somebody, and the
+    // person it is waiting on is the guide, not the trekker.
+    if (state.bookingStatus === "confirmed") {
+      return "Your guide sends the address and the time before the day. Message them if you want it now.";
+    }
+  }
+
+  // The step after a settled one becomes current the moment it settles, which
+  // can be weeks before anybody walks. "Walking. Your guide checks in each
+  // day." is not true yet.
   if (def.key === "active" && index === currentIndex && state.bookingStatus !== "active") {
-    return "Everything is ready. Nothing left to do before you fly.";
+    return `Everything is ready${state.startsOn ? ` for ${state.startsOn}` : ""}. Nothing left to do.`;
   }
   return def.hint;
 }
@@ -271,15 +328,24 @@ export function tripPipeline(
     if (d.at <= pos) currentIndex = i;
   });
 
-  // The permits are the one step the booking's status genuinely cannot speak
-  // for: a booking stays `confirmed` from the day the papers land until the
-  // day the trek starts, so this step sat open for weeks with the permits
-  // already issued and in the office. When the office says they are done, the
-  // track moves on rather than waiting for the departure date to say so.
-  const permitIndex = defs.findIndex((d) => d.key === "permits");
-  const permitsIssued = state.permits === "issued";
-  if (permitIndex >= 0 && permitsIssued && currentIndex === permitIndex && !finished) {
-    currentIndex = Math.min(permitIndex + 1, defs.length - 1);
+  // Steps the booking's status genuinely cannot speak for.
+  //
+  // A booking sits at `confirmed` from the day the papers land until the day
+  // the trip starts, so any step pinned to that status stays an open circle
+  // for weeks after the thing it describes is finished — the permits issued
+  // and in the office, the meeting place agreed at the moment of booking.
+  // Both read as chores nobody has done, and neither has a button, because
+  // there is nothing left to do.
+  //
+  // When the thing itself is settled the track moves on instead of waiting
+  // for the calendar.
+  const settled = settledSteps(state);
+  while (
+    !finished &&
+    currentIndex < defs.length - 1 &&
+    settled.has(defs[currentIndex].key)
+  ) {
+    currentIndex++;
   }
 
   const stages = defs.map((d, i) => {
@@ -293,7 +359,10 @@ export function tripPipeline(
       label: d.label,
       hint: hintFor(d, i, currentIndex, state),
       state: stageState,
-      emphasis: d.key === "permits" && permitsIssued && stageState === "done",
+      // A settled step keeps explaining itself after it is ticked, because a
+      // tick raises a question — who collects the permits, where do I meet —
+      // that the line underneath has to answer.
+      emphasis: settled.has(d.key) && stageState === "done",
     };
   });
 

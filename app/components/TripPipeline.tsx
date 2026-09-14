@@ -19,6 +19,9 @@ export function TripPipeline({
   bookingStatus,
   permits,
   guideName,
+  meetingPoint,
+  startsOn,
+  meetingTime,
   className,
   compact = false,
 }: {
@@ -28,6 +31,12 @@ export function TripPipeline({
   /** What the permit office has actually done, where the caller knows it. */
   permits?: PermitProgress;
   guideName?: string | null;
+  /** Where to meet, once it is settled — this is the whole "Where to meet" step. */
+  meetingPoint?: string | null;
+  /** The start date, already formatted. */
+  startsOn?: string | null;
+  /** The hour to be there, on a day experience. */
+  meetingTime?: string | null;
   className?: string;
   /** One line — the step you are on — for headers and cards. */
   compact?: boolean;
@@ -37,6 +46,9 @@ export function TripPipeline({
     bookingStatus,
     permits,
     guideName,
+    meetingPoint,
+    startsOn,
+    meetingTime,
   });
   const current = stages.find((s) => s.state === "current");
 

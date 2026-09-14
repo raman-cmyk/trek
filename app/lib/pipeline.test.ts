@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { permitProgress, previewTrack, tripPipeline, nextStep, trackFor } from "./pipeline";
+import { meetingTimeOf, permitProgress, previewTrack, tripPipeline, nextStep, trackFor } from "./pipeline";
 
 const keys = (kind: string, state: any) =>
   tripPipeline(kind, state).stages.map((s) => `${s.key}:${s.state}`);
@@ -250,5 +250,123 @@ describe("a ticked permits step still answers the question it raises", () => {
       permits: "issued",
     });
     expect(stages.find((s) => s.key === "permits")!.emphasis).toBeFalsy();
+  });
+});
+
+describe("where to meet is an address, not a chore", () => {
+  const stageOf = (stages: any[], key: string) => stages.find((s) => s.key === key);
+  const momo = {
+    bookingStatus: "confirmed",
+    meetingPoint: "Thamel",
+    startsOn: "23 Sep, 2026",
+    meetingTime: "18:00",
+    guideName: "Pemba",
+  };
+
+  it("ticks once the address is settled, which is at the moment of booking", () => {
+    // It sat as an open circle with no button under it, so it read as
+    // something the trekker had failed to do — when in fact the address was
+    // agreed when they paid.
+    const { stages } = tripPipeline("food_culture", momo);
+    expect(stageOf(stages, "confirmed").state).toBe("done");
+  });
+
+  it("says the place, the day and the hour on the step itself", () => {
+    const hint = stageOf(tripPipeline("food_culture", momo).stages, "confirmed").hint;
+    expect(hint).toContain("Thamel");
+    expect(hint).toContain("23 Sep, 2026");
+    expect(hint).toContain("18:00");
+    expect(hint).toContain("Pemba");
+  });
+
+  it("keeps explaining itself after it is ticked", () => {
+    expect(stageOf(tripPipeline("food_culture", momo).stages, "confirmed").emphasis).toBe(true);
+  });
+
+  it("copes with a place but no time", () => {
+    const hint = stageOf(
+      tripPipeline("day_hike", { bookingStatus: "confirmed", meetingPoint: "Kande" }).stages,
+      "confirmed",
+    ).hint;
+    expect(hint).toContain("Kande");
+    expect(hint).not.toContain("undefined");
+  });
+
+  it("stays open, and says who it is waiting on, when there is no address yet", () => {
+    const stage = stageOf(
+      tripPipeline("food_culture", { bookingStatus: "confirmed" }).stages,
+      "confirmed",
+    );
+    expect(stage.state).toBe("current");
+    expect(stage.hint).toContain("Your guide sends the address");
+  });
+
+  it("moves the trip on to the day itself rather than leaving nothing current", () => {
+    const { currentKey, stages } = tripPipeline("food_culture", momo);
+    expect(currentKey).toBe("active");
+    expect(stageOf(stages, "active").hint).toContain("23 Sep, 2026");
+    expect(stageOf(stages, "active").hint).not.toContain("Happening today");
+  });
+
+  it("does not tick it before the trip is even paid for", () => {
+    // A meeting point on the listing is not a confirmed booking.
+    const { stages } = tripPipeline("food_culture", {
+      bookingStatus: "pending_deposit",
+      meetingPoint: "Thamel",
+    });
+    expect(stageOf(stages, "confirmed").state).toBe("upcoming");
+  });
+
+  it("works the same for a group trip", () => {
+    const { stages } = tripPipeline("food_culture", {
+      groupStatus: "booked",
+      bookingStatus: "confirmed",
+      meetingPoint: "Thamel",
+      startsOn: "23 Sep, 2026",
+    });
+    expect(stageOf(stages, "confirmed").state).toBe("done");
+    expect(stageOf(stages, "confirmed").hint).toContain("Thamel");
+  });
+
+  it("settles the permits and the meeting point together on a trek", () => {
+    const { stages, currentKey } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      permits: "issued",
+      guideName: "Pemba",
+    });
+    expect(stages.find((s) => s.key === "permits")!.state).toBe("done");
+    expect(currentKey).toBe("active");
+  });
+
+  it("leaves a cancelled trip alone", () => {
+    const { stages } = tripPipeline("food_culture", {
+      bookingStatus: "cancelled_trekker",
+      meetingPoint: "Thamel",
+    });
+    expect(stages.find((s) => s.key === "confirmed")!.state).toBe("stopped");
+  });
+});
+
+describe("meetingTimeOf", () => {
+  it("takes the hour out of a day trip's own itinerary", () => {
+    expect(meetingTimeOf([{ time: "18:00", title: "Meet in Thamel" }])).toBe("18:00");
+  });
+
+  it("takes the first time when there are several", () => {
+    expect(meetingTimeOf([{ time: "09:00" }, { time: "13:00" }])).toBe("09:00");
+  });
+
+  it("skips a step with no time rather than stopping at it", () => {
+    expect(meetingTimeOf([{ title: "Briefing" }, { time: "07:30" }])).toBe("07:30");
+  });
+
+  it("is nothing for a trek, whose itinerary is days rather than hours", () => {
+    expect(meetingTimeOf([{ day: 1, title: "Fly to Lukla" }])).toBeNull();
+  });
+
+  it("survives anything that is not an itinerary", () => {
+    expect(meetingTimeOf(null)).toBeNull();
+    expect(meetingTimeOf("18:00")).toBeNull();
+    expect(meetingTimeOf([{ time: "   " }])).toBeNull();
   });
 });
