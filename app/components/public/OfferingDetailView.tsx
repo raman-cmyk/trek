@@ -37,7 +37,7 @@ import { fmtDate } from "~/lib/format";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
-  const { guideLanguages, moreByGuide, similar, railRatings } = data as any;
+  const { guideLanguages, moreByGuide, similar, railRatings, guideStats } = data as any;
   const { openDays, availability, span, monthAnchor, today } = data as any;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
@@ -240,6 +240,29 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 <TierBadge tier={o.guide_tier} static />
               </div>
               {rating && <Stars value={rating.value} count={rating.count} />}
+              {/* The evidence, in numbers. A tier badge says nothing to
+                  somebody who arrived from a search two seconds ago. */}
+              {guideStats && (
+                <p className="text-caption text-muted">
+                  {[
+                    guideStats.treks_completed_platform
+                      ? `${guideStats.treks_completed_platform} trips led`
+                      : null,
+                    guideStats.years_experience
+                      ? `${guideStats.years_experience} years guiding`
+                      : null,
+                    guideStats.median_response_mins
+                      ? `usually replies in ${
+                          guideStats.median_response_mins < 60
+                            ? `${guideStats.median_response_mins} min`
+                            : `${Math.round(guideStats.median_response_mins / 60)} h`
+                        }`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
               <p className="text-sm text-primary">Full profile →</p>
             </div>
           </Link>

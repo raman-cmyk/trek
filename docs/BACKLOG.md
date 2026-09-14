@@ -87,3 +87,25 @@ deleted guide's public photos, voice intro, or journal media in the `photos`
 and audio buckets — the rows go, the objects stay, unreachable. Harmless and
 cheap today; a sweep that lists storage objects with no matching row is the
 fix when it starts to cost money.
+
+## From the competitor page audit (2026-09-14)
+
+Everything else on the ToursByLocals tour page Pratik sent now exists on ours
+(see docs/SESSIONS.md). These four are the deliberate exceptions:
+
+- **Save / wishlist heart on a card.** Theirs has one; ours does not. This is a
+  real feature, not a card tweak — a `saved_offerings` table, a signed-in
+  state on every card, and a "Saved" page — so it is parked rather than
+  half-built. The card's information gap, which is what the note was about,
+  is closed.
+- **Review search and sort.** Their review block has a search box and a
+  "Sort by" control. Ours shows the spread and the reviews. With a handful of
+  reviews per trip a search box over three paragraphs is furniture; worth
+  building when a trip routinely has twenty.
+- **The SEO internal-link block** ("Attractions in Athens", "Popular tours in
+  Greece", four columns of links) at the foot of their page. We have the
+  route and region links that matter; a link farm is an SEO play to run
+  deliberately with the region pages, not a page section to copy.
+- **A start-time picker in the booking card.** Theirs lets the trekker choose;
+  ours shows the time the guide set, because on this model the guide owns
+  their day. Revisit if guides ask for it.

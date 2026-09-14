@@ -70,6 +70,15 @@ export async function loadOfferingDetail(
     .select("language, proficiency")
     .eq("guide_id", o.guide_id);
 
+  // The numbers under the guide's name. The competitor's panel carries "1,031
+  // tours · 8 years" and ours carried a tier badge, which means nothing to
+  // somebody who has just arrived from Google.
+  const { data: guideStats } = await client
+    .from("public_guides")
+    .select("years_experience, treks_completed_platform, median_response_mins, response_rate")
+    .eq("user_id", o.guide_id)
+    .maybeSingle();
+
   // Two rails at the foot of the page, which every page we are compared with
   // has and ours did not: the rest of this guide's work, and the same kind of
   // trip from somebody else. Without them the page is a dead end for a reader
@@ -135,6 +144,7 @@ export async function loadOfferingDetail(
       author_country: string | null;
     }>,
     rating: ratings[o.guide_id] ?? null,
+    guideStats: guideStats ?? null,
     guideLanguages: (langRows ?? [])
       .filter((l: { proficiency: string }) => l.proficiency !== "basic")
       .map((l: { language: string }) => l.language),
