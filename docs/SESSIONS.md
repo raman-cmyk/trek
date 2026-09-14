@@ -1498,3 +1498,31 @@ to refuse a landing after the start, on both tables.
 deployed — the tokens shared in chat were used once, then wiped from this
 environment, and they need rotating. Put the new ones in the environment
 variables and I will apply and deploy.
+
+## Session — the calendar and the incident filter (2026-09-14, later still)
+
+**A real calendar.** The hero's date field was a native input, so the browser
+chose the format: mm/dd/yyyy for a trekker in Berlin, dd/mm/yyyy for a guide in
+Kathmandu, both typing, neither able to see which day of the week the 12th is.
+`DatePicker` is a month grid — seven columns, six rows so the height never
+changes as you walk through months, the days either side greyed, arrows to
+eighteen months out, nothing selectable before tomorrow. It renders the native
+input server-side and swaps in the grid on mount, so the page still works with
+the JavaScript off; verified live, where the server sends
+`min="2026-09-15" max="2028-03-31"`. Used by the hero, both browse lanes and
+the Kathmandu arrival field. `app/lib/calendar.ts` is the arithmetic in UTC ISO
+strings, 18 tests.
+
+**Incidents filter.** Needs a person, open, monitoring, closed, everything,
+each chip carrying its count, the stage in the URL so a handover is a pasted
+link. L3 sorts first within a stage. Verified live: 3 of 4 need a person, and
+open/monitoring/closed return 1/2/1.
+
+**Applied and deployed.** Migrations 0063 and 0064 are on the live database
+(three cancellation columns, the index, both arrival columns and both checks,
+six historical cancellations backfilled and marked seen so no guide opens to a
+six-month-old alarm). Version 713acce9 is live. Checked on the site: a trek
+page reads "Pay a 20% deposit of $229", the balance line names its date, the
+arrival field is there, and the guide "replies within 48 hours".
+
+429 tests green, typecheck green, build green.
