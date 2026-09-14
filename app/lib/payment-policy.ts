@@ -117,3 +117,34 @@ export const REFUND_BANDS: ReadonlyArray<{ when: string; youGetBack: string }> =
 /** If the guide cancels, or the mountain does. */
 export const REFUND_IF_NOT_YOU =
   "If your guide cancels, or we call it off for weather or safety, you get everything back.";
+
+/**
+ * The deposit, in one line, for a reader who has not opened anything yet.
+ *
+ * `depositLine` is the sentence inside the panel; this is the subtitle on the
+ * closed row — both numbers at once, because "pay a deposit" with no second
+ * figure reads as a hidden balance.
+ */
+export function depositTeaser(
+  plan: PaymentPlan,
+  money: (cents: number) => string,
+  fmtDate: (iso: string) => string,
+): string {
+  if (plan.fullUpfront) {
+    return `${money(plan.depositUsdCents)} now — trips this soon are paid in full.`;
+  }
+  return `${money(plan.depositUsdCents)} now, ${money(plan.balanceUsdCents)} on ${fmtDate(
+    plan.balanceDueDate!,
+  )}.`;
+}
+
+/**
+ * What a cancellation gets back, said once on the closed row.
+ *
+ * Derived from the first band rather than written out again, so the summary
+ * cannot promise something the bands below it contradict.
+ */
+export const CANCELLATION_TEASER = `Cancel ${REFUND_BANDS[0].when.replace(
+  " before you start",
+  " before",
+)} and you get ${REFUND_BANDS[0].youGetBack} back.`;

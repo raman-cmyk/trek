@@ -46,7 +46,14 @@ interface QuoteResult {
   rows: { label: string; usdCents: number }[] | null; // legacy rows, or null when the full Split is shown on-page
 }
 
-function useQuote(
+/**
+ * The trip's price for the party and date on screen.
+ *
+ * Exported because the page needs the same number below the calendar as the
+ * card charges: two copies of this arithmetic is exactly how the profile and
+ * the trip page came to advertise different availability.
+ */
+export function useTripQuote(
   o: BookingWidgetOffering,
   party: number,
   breakdown?: PB | null,
@@ -110,7 +117,7 @@ function ConfigBody({
   setDay: (d: string) => void;
   returnTo: string;
 }) {
-  const quote = useQuote(o, party, breakdown, addonsPerPerson);
+  const quote = useTripQuote(o, party, breakdown, addonsPerPerson);
   const { m } = useMoney();
   const fetcher = useFetcher();
   const sent = fetcher.data?.ok;
@@ -278,7 +285,7 @@ export function BookingWidget({
   returnTo: string;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const quote = useQuote(offering, party, priceBreakdown, addonsPerPerson, day);
+  const quote = useTripQuote(offering, party, priceBreakdown, addonsPerPerson, day);
   const { m } = useMoney();
   const unit = quote?.perPerson
     ? "per person"

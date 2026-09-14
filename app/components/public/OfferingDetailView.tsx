@@ -19,11 +19,13 @@ import { addOns } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { startableNote } from "~/lib/availability";
+import { PaymentTerms } from "~/components/public/PaymentTerms";
+import { useTripQuote } from "~/components/public/BookingWidget";
 import { fmtDate } from "~/lib/format";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
-  const { openDays, availability, span, monthAnchor } = data as any;
+  const { openDays, availability, span, monthAnchor, today } = data as any;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
@@ -74,6 +76,24 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
       : 0;
   const teahouseDelta = afterTeahouse - maxP;
   const porterDelta = selected ? selected.perPersonUsdCents - afterTeahouse : 0;
+  // One shape, priced once: the card and the terms below the calendar have to
+  // name the same deposit, so they read the same quote rather than each doing
+  // its own sums.
+  const widgetOffering = {
+    id: o.id,
+    guide_id: o.guide_id,
+    kind: o.kind,
+    days: o.days,
+    price_usd_cents: o.price_usd_cents,
+    min_party: o.min_party,
+    max_party: o.max_party,
+    guide_day_rate_usd_cents: o.guide_day_rate_usd_cents,
+    permit_fees_pp_usd_cents: permitPp,
+    guide_first_name: o.guide_name.split(" ")[0],
+  };
+  const quote = useTripQuote(widgetOffering, party, effBreakdown ?? breakdown, addonsPP);
+  const partyTotalUsdCents = quote ? quote.headline * (quote.perPerson ? party : 1) : 0;
+
   const toggleAddon = (k: string) =>
     setAddons((s) => {
       const n = new Set(s);
@@ -505,6 +525,17 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 {o.guide_name.split(" ")[0]} — a guide can open days for you.
               </p>
             )}
+
+            {/* Directly under the calendar, because the two questions a reader
+                has once they have picked a day are what they pay now and what
+                happens if they cannot come. Both were inside the booking card,
+                which on a phone is a sheet behind a tap. */}
+            <PaymentTerms
+              totalUsdCents={partyTotalUsdCents}
+              day={day}
+              today={today ?? new Date().toISOString().slice(0, 10)}
+              className="mt-5"
+            />
           </section>
 
           {reviews.length > 0 && (
@@ -525,18 +556,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
         </div>
 
         <BookingWidget
-          offering={{
-            id: o.id,
-            guide_id: o.guide_id,
-            kind: o.kind,
-            days: o.days,
-            price_usd_cents: o.price_usd_cents,
-            min_party: o.min_party,
-            max_party: o.max_party,
-            guide_day_rate_usd_cents: o.guide_day_rate_usd_cents,
-            permit_fees_pp_usd_cents: permitPp,
-            guide_first_name: o.guide_name.split(" ")[0],
-          }}
+          offering={widgetOffering}
           priceBreakdown={effBreakdown ?? breakdown}
           addonsPerPerson={addonsPP}
           selectedOptions={options.filter((a) => addons.has(a.id)).map((a) => a.id)}

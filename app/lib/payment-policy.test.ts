@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  CANCELLATION_TEASER,
   REFUND_BANDS,
   balanceLine,
+  depositTeaser,
   depositLine,
   fullPaymentReason,
   paymentPlan,
@@ -74,5 +76,37 @@ describe("the refund bands shown before booking", () => {
     // the policy does not keep.
     expect(REFUND_BANDS[0].youGetBack).toContain("except the card fee");
     expect(REFUND_BANDS[3].youGetBack).toContain("nothing");
+  });
+});
+
+describe("the two rows a reader sees before opening anything", () => {
+  const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const date = (iso: string) => iso;
+
+  it("names both figures and the day the second one goes", () => {
+    const plan = paymentPlan({
+      totalUsdCents: 124_000,
+      startDate: "2026-12-01",
+      today: "2026-09-14",
+    });
+    expect(depositTeaser(plan, money, date)).toBe("$248.00 now, $992.00 on 2026-11-17.");
+  });
+
+  it("says why there is only one figure when the trip is soon", () => {
+    const plan = paymentPlan({
+      totalUsdCents: 124_000,
+      startDate: "2026-09-20",
+      today: "2026-09-14",
+    });
+    expect(depositTeaser(plan, money, date)).toBe(
+      "$1240.00 now — trips this soon are paid in full.",
+    );
+  });
+
+  it("takes the cancellation summary from the bands, so the two cannot disagree", () => {
+    expect(CANCELLATION_TEASER).toContain(REFUND_BANDS[0].youGetBack);
+    expect(CANCELLATION_TEASER).toBe(
+      "Cancel 30 days or more before and you get everything except the card fee back.",
+    );
   });
 });
