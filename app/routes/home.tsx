@@ -16,7 +16,10 @@ import { cn } from "~/lib/cn";
 import { Stars } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { HeroSearch } from "~/components/public/HeroSearch";
-import { GuideMap, type MapPin, type MapRoute } from "~/components/public/GuideMap";
+import { TrailAtlas } from "~/components/public/TrailAtlas";
+import { fanOut } from "~/lib/atlas";
+import { DISTRICT_CENTRES } from "~/lib/geo";
+import { routeLine } from "~/lib/map-stops";
 import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { INTENTS, REGIONS, matchesKeywords } from "~/lib/intents";
@@ -68,7 +71,7 @@ type HomeGuide = PublicGuide & {
 };
 
 const GUIDE_COLS =
-  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, only_with_me, gender, years_experience, day_rate_usd_cents, median_response_mins, treks_completed_platform";
+  "user_id, slug, full_name, avatar_url, home_district, regions, tier, hook_line, bio, only_with_me, gender, years_experience, day_rate_usd_cents, median_response_mins, treks_completed_platform";
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -95,7 +98,7 @@ export async function loader({ context }: Route.LoaderArgs) {
         ),
       client
         .from("routes")
-        .select("id, slug, name, region, typical_days, max_altitude_m, difficulty, sort")
+        .select("id, slug, name, region, typical_days, max_altitude_m, difficulty, sort, day_stops")
         .order("sort"),
       client
         .from("public_reviews")
@@ -249,20 +252,61 @@ export async function loader({ context }: Route.LoaderArgs) {
     .filter((g) => (freeRuns[g.user_id] ?? 0) >= 3)
     .sort((a, b) => (freeRuns[b.user_id] ?? 0) - (freeRuns[a.user_id] ?? 0));
 
-  // Map pins: one per district, with a few names for the popup.
-  const byDistrict: Record<string, HomeGuide[]> = {};
-  for (const g of all) {
-    if (g.home_district) (byDistrict[g.home_district] ??= []).push(g);
-  }
-  const pins: MapPin[] = Object.entries(byDistrict).map(([district, gs]) => ({
-    district,
-    count: gs.length,
-    sample: gs.slice(0, 3).map((g) => ({
-      slug: g.slug,
-      name: g.full_name,
-      only_with_me: g.only_with_me,
-    })),
-  }));
+  // The atlas: trails, and the people who walk them.
+  //
+  // The old version of this was one pin per district carrying a count — a map
+  // of administrative density, which is the least interesting thing we know.
+  // What we have that nobody else does is named people attached to specific
+  // trails, so that is what goes on the map.
+  const atlasTrails = (routes ?? [])
+    .map((r: any) => ({
+      slug: r.slug,
+      name: r.name,
+      region: r.region,
+      days: r.typical_days ?? null,
+      maxAltitudeM: r.max_altitude_m ?? null,
+      // Day stops carry the real walking line; a route without one cannot be
+      // drawn and is filtered out downstream rather than drawn as a dot.
+      coords: routeLine(
+        (Array.isArray(r.day_stops) ? r.day_stops : []).map((d: any) => ({
+          day: Number(d.day) || 0,
+          place: String(d.place ?? ""),
+          altitude_m: Number(d.altitude_m) || 0,
+          lat: d.lat == null ? null : Number(d.lat),
+          lng: d.lng == null ? null : Number(d.lng),
+        })),
+      ),
+    }))
+    .filter((t) => t.coords.length >= 2);
+
+  const atlasGuides = fanOut(
+    all
+      .map((g) => {
+        const centre = g.home_district
+          ? DISTRICT_CENTRES[g.home_district as keyof typeof DISTRICT_CENTRES]
+          : null;
+        if (!centre) return null;
+        return {
+          id: g.user_id,
+          slug: g.slug,
+          name: g.full_name,
+          avatar: g.avatar_url,
+          tier: g.tier ?? 0,
+          hook: g.only_with_me || g.hook_line || null,
+          district: g.home_district,
+          regions: ((g as any).regions ?? []) as string[],
+          lng: centre[0],
+          lat: centre[1],
+        };
+      })
+      .filter(Boolean) as any[],
+  );
+
+  // The strong link: a guide who sells a trip on this route is somebody you
+  // can book for it today, which is a different claim from "works nearby".
+  const atlasOfferings = ((offerings ?? []) as any[])
+    .filter((o) => o.route_slug && o.guide_id)
+    .map((o) => ({ guideId: o.guide_id as string, routeSlug: o.route_slug as string }));
 
   // The Split section uses one real trek's real numbers.
   const splitOffering =
@@ -290,8 +334,9 @@ export async function loader({ context }: Route.LoaderArgs) {
     freeThisWeek: freeThisWeek.slice(0, 8).map(pick),
     freeThisWeekTotal: freeThisWeek.length,
     freeRuns,
-    pins,
-    routes: (routes ?? []).map((r) => ({ slug: r.slug, name: r.name, region: r.region })) as MapRoute[],
+    atlasTrails,
+    atlasGuides,
+    atlasOfferings,
     routeRows,
     routeTotal: (routes ?? []).length,
     regionCounts,
@@ -302,7 +347,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     journals: (journals ?? []) as PublicJournal[],
     stats: {
       guides: all.length,
-      districts: pins.length,
+      districts: new Set(all.map((g) => g.home_district).filter(Boolean)).size,
       treksLed: all.reduce((s, g) => s + (g.treks_completed_platform ?? 0), 0),
       fundUsdCents: fund.collected,
     },
@@ -325,8 +370,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     experiences,
     freeThisWeek,
     freeThisWeekTotal,
-    pins,
-    routes,
+    atlasTrails,
+    atlasGuides,
+    atlasOfferings,
     routeRows,
     routeTotal,
     regionCounts,
@@ -416,14 +462,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
-      {/* 3 — The map. "Guides across the whole country", not a claim but a
-          picture of one. */}
+      {/* 3 — The atlas. Not "we have guides in 25 districts" — a count is a
+          claim about us. Pick a trail and meet the people who walk it, which
+          is a claim about them, and the only one that has ever sold a trek. */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <Eyebrow>Where they are</Eyebrow>
-        <h2 className="mb-5 mt-2 max-w-[18ch] font-display text-3xl text-ink sm:text-4xl">
-          <span className="wt-heavy">Guides from their own valleys.</span>
+        <Eyebrow>Where they walk</Eyebrow>
+        <h2 className="mb-2 mt-2 max-w-[20ch] font-display text-3xl text-ink sm:text-4xl">
+          <span className="wt-heavy">Pick a trail. Meet the people who walk it.</span>
         </h2>
-        <GuideMap pins={pins} routes={routes} />
+        <p className="mb-5 max-w-[52ch] text-muted">
+          Every line is a real route with real days on it. Every face is a
+          verified guide you can book by name — not an agency, and not a
+          stranger assigned to you the week you land.
+        </p>
+        <TrailAtlas
+          trails={atlasTrails}
+          guides={atlasGuides}
+          offerings={atlasOfferings}
+        />
       </section>
 
       {/* 4 — Free this week. Real availability, the most perishable thing we
