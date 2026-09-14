@@ -1526,3 +1526,49 @@ page reads "Pay a 20% deposit of $229", the balance line names its date, the
 arrival field is there, and the guide "replies within 48 hours".
 
 429 tests green, typecheck green, build green.
+
+## Session — availability everywhere, two verification queues, the party limit (2026-09-14, last)
+
+**The availability calendar was on one page out of two.** A guide's profile
+said "76 open days" and drew a calendar; the trek page offered a dropdown of
+eight dates and no calendar at all, with nothing to explain the gap. The gap is
+real — a 14-day trek can only begin where fourteen free days run together — so
+it is now printed rather than quietly filtered away: "This trip takes 14 days,
+so it can only begin where 14 free days run together — 33 of the 65 free days
+qualify." Both pages draw the same component, the trip page in three states
+(this trip can start / free but too close to the next booking / already booked),
+and the arithmetic that let them disagree moved into `app/lib/availability.ts`,
+12 tests. Verified live on the EBC trek page.
+
+**The verification queue became two queues.** It was one list of guides who had
+applied, each reduced to "2/6 passed" — which two took opening the profile, and
+a verified or rejected guide could not be reached from here at all. Trekkers'
+documents were not in the queue in any form. Guides now filter by waiting,
+applied, in review, verified and rejected, with every check itemised with its
+own outcome, a photo indicator, and the blocker named in a sentence. Trekkers
+list every passport and insurance certificate with the trip it belongs to,
+filter by waiting, verified and rejected, and are verified or turned down
+inline. Migration 0065 gives `booking_documents` a rejection — when, who, and
+why — and the why prints on the trekker's trip page beside the document with
+"upload another below". The sidebar badge counts documents waiting as well as
+guides. `app/lib/verification-queue.ts`, 15 tests. Verified live: 5 guides
+waiting, 49 verified, 5 trekker documents waiting, 17 in all.
+
+**The party limit is the guide's own question now.** It was two boxes headed
+"Smallest group" and "Largest group" inside a step about days and money, and on
+the page it was a clause in a grey line. The form asks it on its own — fewest,
+most, your limit — and says what the limit does: nobody can request a bigger
+group, and no stranger is ever added to somebody else's booking. The review
+step echoes the range so the guide checks their own number before saving. The
+experience page now leads with the four facts a reader wants before any prose:
+how long, "Private trip for 1 to 8 people", what time it starts (the `meet_time`
+stored by 0061 and never shown until now), and where from. Verified live on the
+momo crawl page, which also reads "Starts 18:00" and "From Thamel".
+
+**Applied and deployed.** Migration 0065 is on the live database. Version
+bec6f1fb is live. 456 tests green, typecheck green, build green.
+
+**🙋 Founder:** the momo crawl page says "Pay $X in full when you book" rather
+than naming a deposit — that is the rule working, not a bug: trips starting
+inside the deposit window are paid in full. The trek pages show the deposit
+percentage and amount.

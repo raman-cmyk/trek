@@ -571,3 +571,41 @@ sees the same card from their side, with the hold clock.
 optional, because most people book the trek before the flight, but constrained
 in the database to fall on or before the start. The guide's card flags the case
 with no slack in it: landing the morning the trek starts.
+
+## The availability gap is shown, not hidden (2026-09-14)
+
+Filtering a trek page's calendar down to the days the trip can start would have
+been simpler and would have left the reader with two unexplained numbers — 76
+open days on the profile, a handful of dates on the trip. The trip page draws
+three states and names the reason. A guide who is free on a Tuesday with
+bookings either side is genuinely free, and a 14-day trek genuinely cannot
+start there; both facts belong on the page.
+
+`bookableStartDays`, `firstRun` and `availabilitySummary` live in one module
+because the two pages disagreeing is exactly what happened when each owned its
+own copy of the arithmetic.
+
+## A document can be turned down, and the reason is a sentence (2026-09-14)
+
+`booking_documents` had verified or not-yet, which reads identically to "nobody
+has looked". Rejection is three columns mirroring a guide's checks — when, who,
+why — and `validateRejection` refuses a reason under four characters. "Blurred,
+we cannot read the number" is a document replaced in a minute; "rejected" alone
+is a support thread. No constraint forbids a rejected document later being
+verified: `docState` takes whichever timestamp is later, because rejected then
+re-uploaded then passed is the normal sequence.
+
+## `not_required` counts as settled (2026-09-14)
+
+A guide whose sixth check does not apply to them sat at 5/6 for ever with
+nothing to do about it, and the queue could not tell that from a check nobody
+had started. `checkTally` counts passed, failed, expired and not_required as
+finished, so "complete" means the office is done here.
+
+## The party limit is a decision, not a field (2026-09-14)
+
+Two numbered boxes among days and money read as a detail. Asked as its own
+question — fewest, most, your limit — with the consequence stated (nobody can
+request more, no stranger joins somebody else's booking), it reads as the
+guide's call, which is what it is. The public page states it as a sentence,
+"Private trip for 1 to 8 people", rather than "up to 8" in a grey byline.
