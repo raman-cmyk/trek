@@ -1,7 +1,8 @@
 import type { Route } from "./+types/treks.$slug";
 import { loadOfferingDetail } from "~/features/offering-detail.server";
 import { OfferingDetailView } from "~/components/public/OfferingDetailView";
-import { pageMeta, productLd, breadcrumbLd, jsonLd } from "~/lib/seo";
+import { parseFaqs } from "~/lib/offering-details";
+import { pageMeta, productLd, breadcrumbLd, faqLd, jsonLd } from "~/lib/seo";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 
 export async function loader({ params, context }: Route.LoaderArgs) {
@@ -40,6 +41,14 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         { name: o.title, url: data.canonical },
       ]),
     ),
+    // The guide's own answers, as a rich result. Written by the person who
+    // will be standing there, not generated — which is the difference our
+    // competitors' "AI-generated, please confirm with your guide" admits to.
+    // An empty FAQPage is an invalid rich result, so it is emitted only when
+    // the guide has actually answered something.
+    ...(parseFaqs((o as any).faqs).length
+      ? [jsonLd(faqLd(parseFaqs((o as any).faqs)))]
+      : []),
   ];
 }
 

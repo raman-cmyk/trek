@@ -9,6 +9,7 @@ import {
   refCodeWords,
   transportLabels,
   tripLanguages,
+  zipFaqs,
 } from "./offering-details";
 
 describe("how hard it is", () => {
@@ -119,5 +120,27 @@ describe("the reference a trekker quotes", () => {
     expect(refCodeWords("gn-a1b2c3")).toBeNull();
     expect(refCodeWords("")).toBeNull();
     expect(refCodeWords(null)).toBeNull();
+  });
+});
+
+describe("FAQs off paired form fields", () => {
+  it("zips a question to its answer", () => {
+    expect(
+      zipFaqs(["Is it cold?", "Is food included?"], ["At night, yes.", "Lunch is."]),
+    ).toEqual([
+      { q: "Is it cold?", a: "At night, yes." },
+      { q: "Is food included?", a: "Lunch is." },
+    ]);
+  });
+
+  it("drops the blank rows a six-row editor leaves behind", () => {
+    expect(zipFaqs(["Is it cold?", "", ""], ["At night, yes.", "", ""])).toEqual([
+      { q: "Is it cold?", a: "At night, yes." },
+    ]);
+  });
+
+  it("drops a question whose answer never got typed", () => {
+    expect(zipFaqs(["Is it cold?"], [""])).toEqual([]);
+    expect(zipFaqs(["Is it cold?"], [])).toEqual([]);
   });
 });

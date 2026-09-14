@@ -1,11 +1,15 @@
 import type { RouterContextProvider } from "react-router";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
-import { guideRatings } from "~/lib/ratings.server";
+import { guideRatings, offeringRatings } from "~/lib/ratings.server";
 import { absoluteUrl } from "~/lib/seo";
 import { offeringPath } from "~/components/public/cards";
 import { availabilitySummary, bookableStartDays } from "~/lib/availability";
 
 type Kind = "trek" | "experience";
+
+/** What an OfferingCard needs, and nothing more. */
+const CARD_COLS =
+  "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, transport, activity_level, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name";
 
 export async function loadOfferingDetail(
   context: Readonly<RouterContextProvider>,
@@ -59,7 +63,45 @@ export async function loadOfferingDetail(
   const span = isTrek ? o.days : 1;
   const startDays = bookableStartDays(openDays, span, today);
 
+  // What a trekker will hear on the day: the trip's own list when it has one,
+  // otherwise whatever this guide speaks.
+  const { data: langRows } = await client
+    .from("guide_languages")
+    .select("language, proficiency")
+    .eq("guide_id", o.guide_id);
+
+  // Two rails at the foot of the page, which every page we are compared with
+  // has and ours did not: the rest of this guide's work, and the same kind of
+  // trip from somebody else. Without them the page is a dead end for a reader
+  // who likes the guide but not this trip.
+  const [{ data: moreByGuide }, { data: similar }] = await Promise.all([
+    client
+      .from("public_offerings")
+      .select(CARD_COLS)
+      .eq("guide_id", o.guide_id)
+      .neq("id", o.id)
+      .limit(6),
+    o.route_id
+      ? client
+          .from("public_offerings")
+          .select(CARD_COLS)
+          .eq("route_id", o.route_id)
+          .neq("guide_id", o.guide_id)
+          .limit(6)
+      : client
+          .from("public_offerings")
+          .select(CARD_COLS)
+          .eq("kind", o.kind)
+          .neq("id", o.id)
+          .neq("guide_id", o.guide_id)
+          .limit(6),
+  ]);
+
   const ratings = await guideRatings(client, [o.guide_id]);
+  const railRatings = await offeringRatings(client, [
+    ...(moreByGuide ?? []).map((x: { id: string }) => x.id),
+    ...(similar ?? []).map((x: { id: string }) => x.id),
+  ]);
   const permitPp = (permits ?? []).reduce(
     (s: number, p: { cost_usd_cents: number }) => s + p.cost_usd_cents,
     0,
@@ -93,6 +135,12 @@ export async function loadOfferingDetail(
       author_country: string | null;
     }>,
     rating: ratings[o.guide_id] ?? null,
+    guideLanguages: (langRows ?? [])
+      .filter((l: { proficiency: string }) => l.proficiency !== "basic")
+      .map((l: { language: string }) => l.language),
+    moreByGuide: (moreByGuide ?? []) as any[],
+    similar: (similar ?? []) as any[],
+    railRatings,
     permitPp,
     canonical: absoluteUrl(env.SITE_URL, offeringPath(o)),
     ogImage: o.cover_photo_url ?? undefined,

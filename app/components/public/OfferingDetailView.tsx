@@ -21,11 +21,23 @@ import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import { startableNote } from "~/lib/availability";
 import { PaymentTerms } from "~/components/public/PaymentTerms";
 import { partyWords } from "~/lib/party";
+import {
+  accessibilityRows,
+  activityLevel,
+  parseFaqs,
+  refCodeWords,
+  transportLabels,
+  tripLanguages,
+} from "~/lib/offering-details";
+import { RatingSummary } from "~/components/public/RatingSummary";
+import { OfferingCard } from "~/components/public/cards";
+import { Rail } from "~/components/public/Rail";
 import { useTripQuote } from "~/components/public/BookingWidget";
 import { fmtDate } from "~/lib/format";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp } = data;
+  const { guideLanguages, moreByGuide, similar, railRatings } = data as any;
   const { openDays, availability, span, monthAnchor, today } = data as any;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
@@ -115,6 +127,45 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 pb-24 lg:pb-6">
+      {/* A trail a reader can climb. The page had breadcrumb structured data
+          for Google and nothing at all for the person — so the only way back
+          to "every Annapurna trek" was the browser button. */}
+      <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link to="/" className="hover:text-ink hover:underline">
+              Home
+            </Link>
+          </li>
+          <li aria-hidden>›</li>
+          <li>
+            <Link
+              to={o.kind === "trek" ? "/routes" : "/experiences"}
+              className="hover:text-ink hover:underline"
+            >
+              {o.kind === "trek" ? "Treks" : "Experiences"}
+            </Link>
+          </li>
+          {(o as any).route_slug && (
+            <>
+              <li aria-hidden>›</li>
+              <li>
+                <Link
+                  to={`/routes/${(o as any).route_slug}`}
+                  className="hover:text-ink hover:underline"
+                >
+                  {(o as any).route_name}
+                </Link>
+              </li>
+            </>
+          )}
+          <li aria-hidden>›</li>
+          <li aria-current="page" className="truncate text-ink">
+            {o.title}
+          </li>
+        </ol>
+      </nav>
+
       <Carousel photos={carousel} />
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -539,9 +590,74 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             />
           </section>
 
+          {/* ── How you move. Every page we are compared with has this row
+               and ours had none, so "is there a flight, and is it in the
+               price?" was a message to the guide. */}
+          {(transportLabels((o as any).transport).length > 0 ||
+            (o as any).transport_note) && (
+            <section>
+              <h2 className="font-display text-xl">Getting there and around</h2>
+              {transportLabels((o as any).transport).length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {transportLabels((o as any).transport).map((t) => (
+                    <li
+                      key={t}
+                      className="rounded-pill border border-line bg-card px-3 py-1 text-sm text-ink"
+                    >
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {(o as any).transport_note && (
+                <p className="mt-2 max-w-[62ch] text-sm text-ink-soft">
+                  {(o as any).transport_note}
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* ── The facts a reader checks last and cancels over: how hard,
+               what language, whether their knee or their mother can come, and
+               a reference to put in an email. */}
+          <OtherDetails
+            o={o}
+            languages={tripLanguages((o as any).languages, guideLanguages)}
+          />
+
+          {/* ── The questions the office answers by email every week. Also
+               FAQPage structured data, in the route's meta. */}
+          {parseFaqs((o as any).faqs).length > 0 && (
+            <section id="faq" className="scroll-mt-6">
+              <h2 className="font-display text-xl">Questions people ask</h2>
+              <ul className="mt-3 divide-y divide-line rounded-card border border-line">
+                {parseFaqs((o as any).faqs).map((f) => (
+                  <li key={f.q}>
+                    <details className="group">
+                      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-3 font-medium text-ink hover:bg-mist/50">
+                        {f.q}
+                        <span
+                          aria-hidden
+                          className="mt-0.5 shrink-0 text-muted transition-transform group-open:rotate-180"
+                        >
+                          ⌄
+                        </span>
+                      </summary>
+                      <p className="max-w-[68ch] px-3 pb-3 text-sm text-ink-soft">{f.a}</p>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {reviews.length > 0 && (
             <section className="space-y-4">
               <h2 className="font-display text-xl">Reviews</h2>
+              {/* The spread, not just the mean: a reader deciding between two
+                  strangers wants to know whether a 4.6 is everybody agreeing
+                  or two people who hated it. */}
+              <RatingSummary reviews={reviews} />
               {reviews.map((r) => (
                 <ReviewBlock
                   key={r.id}
@@ -569,7 +685,129 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           returnTo={data.canonical ? new URL(data.canonical).pathname : "/"}
         />
       </div>
+
+      {/* ── Two rails, because a reader who likes this guide but not this trip
+           had nowhere to go from here, and one who likes the trip could not
+           see who else runs it. Every page we are compared with ends with
+           both. */}
+      {moreByGuide?.length > 0 && (
+        <section className="mt-14">
+          <h2 className="font-display text-2xl text-ink">
+            More from {o.guide_name.split(" ")[0]}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            The same guide, a different trip. Same rate, same calendar.
+          </p>
+          <Rail>
+            {moreByGuide.map((x: any) => (
+              <OfferingCard key={x.id} offering={x} rating={railRatings?.[x.id]} />
+            ))}
+          </Rail>
+        </section>
+      )}
+
+      {similar?.length > 0 && (
+        <section className="mt-12">
+          <h2 className="font-display text-2xl text-ink">
+            {(o as any).route_name
+              ? `Other guides on ${(o as any).route_name}`
+              : "Trips like this one"}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            {(o as any).route_name
+              ? "The same route, led by somebody else. Compare the people, not the packages."
+              : "A different guide, the same kind of day."}
+          </p>
+          <Rail>
+            {similar.map((x: any) => (
+              <OfferingCard key={x.id} offering={x} rating={railRatings?.[x.id]} />
+            ))}
+          </Rail>
+        </section>
+      )}
     </main>
+  );
+}
+
+
+/**
+ * The row of ordinary fact a trip page is expected to carry.
+ *
+ * On the pages a trekker compares us with this is a plain labelled block near
+ * the foot: how hard it is, what your guide will speak on the day, who the
+ * trip suits, a reference to quote. Ours had none of it, so every one of those
+ * questions arrived as a message — and "not suitable if you have limited
+ * mobility" arrived after somebody had paid.
+ */
+function OtherDetails({ o, languages }: { o: any; languages: string[] }) {
+  const level = activityLevel(o.activity_level);
+  const access = accessibilityRows(o.accessibility);
+  const ref = refCodeWords(o.ref_code);
+  if (!level && languages.length === 0 && access.length === 0 && !ref) return null;
+
+  return (
+    <section>
+      <h2 className="font-display text-xl">Other details</h2>
+      <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+        {level && (
+          <div>
+            <dt className="text-caption uppercase tracking-wide text-muted">How hard it is</dt>
+            <dd className="mt-0.5 text-ink">
+              {level.label}
+              <span className="mt-0.5 block max-w-[46ch] text-sm text-ink-soft">
+                {level.blurb}
+              </span>
+            </dd>
+          </div>
+        )}
+
+        {languages.length > 0 && (
+          <div>
+            <dt className="text-caption uppercase tracking-wide text-muted">
+              Languages on the trip
+            </dt>
+            <dd className="mt-0.5 text-ink">{languages.join(", ")}</dd>
+          </div>
+        )}
+
+        {access.length > 0 && (
+          <div className="sm:col-span-2">
+            <dt className="text-caption uppercase tracking-wide text-muted">Who it suits</dt>
+            <dd className="mt-1">
+              <ul className="space-y-1 text-sm">
+                {access.map((a) => (
+                  <li key={a.label} className="flex items-start gap-2">
+                    <span
+                      aria-hidden
+                      className={a.warn ? "text-ember" : "text-moss"}
+                    >
+                      {a.warn ? "!" : "✓"}
+                    </span>
+                    <span className={a.warn ? "text-ink" : "text-ink-soft"}>{a.label}</span>
+                  </li>
+                ))}
+              </ul>
+              {o.accessibility_note && (
+                <p className="mt-2 max-w-[62ch] text-sm text-ink-soft">
+                  {o.accessibility_note}
+                </p>
+              )}
+            </dd>
+          </div>
+        )}
+
+        {ref && (
+          <div>
+            <dt className="text-caption uppercase tracking-wide text-muted">
+              Trip reference
+            </dt>
+            {/* Quote this in an email and the office finds the trip in one
+                search, instead of asking which Everest trek you mean. */}
+            <dd className="mt-0.5 font-mono text-ink">{ref}</dd>
+          </div>
+        )}
+      </dl>
+    </section>
   );
 }
 

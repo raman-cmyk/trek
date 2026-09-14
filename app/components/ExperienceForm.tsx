@@ -4,6 +4,11 @@ import { Button } from "~/components/Button";
 import { type PriceBreakdown } from "~/lib/experience-pricing";
 import { PriceBuilder, toDraft, toSeasonDraft, type DraftLine } from "~/components/PriceBuilder";
 import { PhotoGallery, type GalleryPhoto } from "~/components/PhotoGallery";
+import {
+  ACCESSIBILITY,
+  ACTIVITY_LEVELS,
+  TRANSPORT,
+} from "~/lib/offering-details";
 
 /**
  * One form for an experience, shared by the guide (/g/experiences) and the
@@ -30,6 +35,14 @@ export interface ExperienceValues {
   status: string;
   meeting_point?: string | null;
   meet_time?: string | null;
+  /** The ordinary facts a trip page carries (0066). */
+  activity_level?: string | null;
+  transport?: string[] | null;
+  transport_note?: string | null;
+  accessibility?: string[] | null;
+  accessibility_note?: string | null;
+  languages?: string[] | null;
+  faqs?: Array<{ q: string; a: string }> | null;
 }
 
 /**
@@ -167,8 +180,8 @@ export function ExperienceForm({
   })();
 
   const STEPS = needsRoute(kind)
-    ? ["What it is", "Route", "Details", "Photos", "Check"]
-    : ["What it is", "Details", "Photos", "Check"];
+    ? ["What it is", "Route", "Details", "Who it suits", "Photos", "Check"]
+    : ["What it is", "Details", "Who it suits", "Photos", "Check"];
   const stepNo = (name: string) => STEPS.indexOf(name) + 1;
   const lastStep = STEPS.length;
   /** Reveal whichever step holds the first field the browser is unhappy with,
@@ -430,6 +443,150 @@ export function ExperienceForm({
       {/* ── The money. A library of lines, and the arithmetic done for them. */}
       <PriceBuilder kind={kind} days={days} initial={draft} initialSeasons={seasonDraft} />
 
+      </Step>
+
+      {/* ── The ordinary facts a trip page is expected to carry. Every one of
+           these used to arrive as a message to the guide, and the last one —
+           who the trip does not suit — used to arrive after somebody had
+           paid. Plain checkboxes and paired inputs, so this step still posts
+           a usable answer with no JavaScript. */}
+      <Step n={stepNo("Who it suits")} at={step} title="Who it suits, and what to expect">
+        <fieldset className="rounded border border-line p-3">
+          <legend className="px-1 text-sm font-medium text-ink">How hard is it?</legend>
+          <p className="text-caption text-muted">
+            Be honest. Somebody turning back on day three is worse for you than a
+            booking you never took.
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {ACTIVITY_LEVELS.map((l) => (
+              <label key={l.key} className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="activity_level"
+                  value={l.key}
+                  defaultChecked={values?.activity_level === l.key}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium text-ink">{l.label}</span>
+                  <span className="block text-caption text-muted">{l.blurb}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="rounded border border-line p-3">
+          <legend className="px-1 text-sm font-medium text-ink">How do you travel?</legend>
+          <p className="text-caption text-muted">
+            Tick everything the trip uses. A flight nobody mentioned is the
+            commonest surprise on a bill.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {TRANSPORT.map((t) => (
+              <label key={t.key} className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  name="transport"
+                  value={t.key}
+                  defaultChecked={values?.transport?.includes(t.key)}
+                />
+                {t.label}
+              </label>
+            ))}
+          </div>
+          <label className={`${label} mt-3`}>
+            Anything to add about getting there?
+            <textarea
+              name="transport_note"
+              rows={2}
+              maxLength={600}
+              defaultValue={values?.transport_note ?? ""}
+              placeholder="The jeep to Syabrubesi is shared for the first hour."
+              className={field}
+            />
+          </label>
+        </fieldset>
+
+        <fieldset className="rounded border border-line p-3">
+          <legend className="px-1 text-sm font-medium text-ink">Who can come?</legend>
+          <p className="text-caption text-muted">
+            Tick what is true. The last two are warnings — say them here rather
+            than on the phone the week before.
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {ACCESSIBILITY.map((a) => (
+              <label key={a.key} className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  name="accessibility"
+                  value={a.key}
+                  defaultChecked={values?.accessibility?.includes(a.key)}
+                />
+                <span className={a.warn ? "text-ink" : ""}>{a.label}</span>
+              </label>
+            ))}
+          </div>
+          <label className={`${label} mt-3`}>
+            Anything else they should know?
+            <textarea
+              name="accessibility_note"
+              rows={2}
+              maxLength={600}
+              defaultValue={values?.accessibility_note ?? ""}
+              placeholder="Trails are uneven and there is no vehicle access once we start walking."
+              className={field}
+            />
+          </label>
+        </fieldset>
+
+        <label className={label}>
+          Languages on this trip
+          <span className="text-caption font-normal text-muted">
+            Leave this empty and we show every language on your profile. Fill it in
+            only if this trip is led in fewer.
+          </span>
+          <input
+            name="languages"
+            defaultValue={(values?.languages ?? []).join(", ")}
+            placeholder="English, Nepali"
+            className={field}
+          />
+        </label>
+
+        <fieldset className="rounded border border-line p-3">
+          <legend className="px-1 text-sm font-medium text-ink">
+            Questions people ask
+          </legend>
+          <p className="text-caption text-muted">
+            Answer the ones you keep answering by message. These show on your trip
+            page, and Google shows them too.
+          </p>
+          <div className="mt-2 space-y-3">
+            {Array.from({ length: 6 }, (_, i) => {
+              const f = values?.faqs?.[i];
+              return (
+                <div key={i} className="grid gap-1.5">
+                  <input
+                    name="faq_q"
+                    defaultValue={f?.q ?? ""}
+                    maxLength={200}
+                    placeholder={i === 0 ? "Is this trip just me and my guide?" : "A question"}
+                    className={field}
+                  />
+                  <textarea
+                    name="faq_a"
+                    rows={2}
+                    maxLength={1200}
+                    defaultValue={f?.a ?? ""}
+                    placeholder={i === 0 ? "Yes — nobody else is added to your group." : "Your answer"}
+                    className={field}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
       </Step>
 
       <Step n={stepNo("Photos")} at={step} title="Photographs">

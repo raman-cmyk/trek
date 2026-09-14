@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMeetTime } from "./meeting";
 import {
+  ACCESSIBILITY,
+  ACTIVITY_LEVELS,
+  TRANSPORT,
+  parseCodes,
+  zipFaqs,
+  type Faq,
+} from "./offering-details";
+import {
   fromPerPersonUsdCents,
   hasBreakdown,
   type PriceBreakdown,
@@ -29,6 +37,14 @@ export interface OfferingPatch {
   /** Where it starts, and at what time — the trekker's "Where to meet". */
   meeting_point: string | null;
   meet_time: string | null;
+  /** The ordinary facts a trip page is expected to carry (0066). */
+  activity_level: string | null;
+  transport: string[];
+  transport_note: string | null;
+  accessibility: string[];
+  accessibility_note: string | null;
+  languages: string[];
+  faqs: Faq[];
 }
 
 export interface ParsedPhoto {
@@ -85,6 +101,7 @@ export function parseExperienceForm(
   if (summary.length < 20) return { error: "Say a little more — two sentences sells better than none." };
   if (kind === "trek" && !routeId) return { error: "A trek needs its route." };
 
+  const activityRaw = String(form.get("activity_level") ?? "").trim();
   const days = num("days", 1, 60, 1);
   const min_party = num("min_party", 1, 16, 1);
   const max_party = num("max_party", 1, 16, 6);
@@ -221,6 +238,31 @@ export function parseExperienceForm(
       // rather than left to a message three weeks later.
       meeting_point: String(form.get("meeting_point") ?? "").trim().slice(0, 200) || null,
       meet_time: parseMeetTime(form.get("meet_time")),
+      // The facts a reader checks before they pay and cancels over
+      // afterwards. Codes are filtered against the closed sets the database
+      // will accept, so a stale form field cannot fail the whole save.
+      activity_level: ACTIVITY_LEVELS.some((l) => l.key === activityRaw)
+        ? activityRaw
+        : null,
+      transport: parseCodes(form.getAll("transport").map(String), TRANSPORT),
+      transport_note:
+        String(form.get("transport_note") ?? "").trim().slice(0, 600) || null,
+      accessibility: parseCodes(
+        form.getAll("accessibility").map(String),
+        ACCESSIBILITY,
+      ),
+      accessibility_note:
+        String(form.get("accessibility_note") ?? "").trim().slice(0, 600) || null,
+      // One comma-separated field on the form, but repeated fields are
+      // accepted too so the office's form can use checkboxes later without
+      // this needing to change.
+      languages: form
+        .getAll("languages")
+        .flatMap((l) => String(l).split(","))
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .slice(0, 12),
+      faqs: zipFaqs(form.getAll("faq_q"), form.getAll("faq_a")),
     },
   };
 }
@@ -276,6 +318,31 @@ export function diffOffering(
   }
   if (JSON.stringify(before?.price_breakdown ?? null) !== JSON.stringify(after?.price_breakdown ?? null)) {
     out["the price lines"] = { from: "changed", to: "changed" };
+  }
+  // The new detail fields, in the words the office reads a year later. Lists
+  // and the FAQ block are recorded as having moved rather than reproduced —
+  // nobody wants six answers rendered raw into an audit row — but "who it
+  // suits" changing is exactly the edit somebody will want to find.
+  const plain: Record<string, string> = {
+    activity_level: "how hard it is",
+    transport_note: "the travel note",
+    accessibility_note: "the access note",
+  };
+  for (const k of Object.keys(plain)) {
+    if (before?.[k] !== after?.[k]) {
+      out[plain[k]] = { from: before?.[k] ?? null, to: after?.[k] ?? null };
+    }
+  }
+  const lists: Record<string, string> = {
+    transport: "how you travel",
+    accessibility: "who it suits",
+    languages: "the languages",
+    faqs: "the questions people ask",
+  };
+  for (const k of Object.keys(lists)) {
+    const a = JSON.stringify(before?.[k] ?? null);
+    const b = JSON.stringify(after?.[k] ?? null);
+    if (a !== b) out[lists[k]] = { from: "changed", to: "changed" };
   }
   return out;
 }

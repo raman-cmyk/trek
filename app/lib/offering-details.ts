@@ -170,6 +170,23 @@ export function parseFaqs(raw: unknown, max = 12): Faq[] {
     .slice(0, max);
 }
 
+/**
+ * FAQs off paired form fields.
+ *
+ * Two arrays of inputs rather than a JSON blob, so the guide's editor still
+ * posts a usable answer when the JavaScript never arrives — which on a cheap
+ * Android over 3G is not a hypothetical. Blank rows are dropped, so a form
+ * that offers six pairs and gets two filled in saves two.
+ */
+export function zipFaqs(
+  questions: readonly unknown[],
+  answers: readonly unknown[],
+  max = 12,
+): Faq[] {
+  const rows = questions.map((q, i) => ({ q, a: answers[i] }));
+  return parseFaqs(rows, max);
+}
+
 /** Codes off a form, keeping only the ones the database will accept. */
 export function parseCodes(
   values: readonly string[],
