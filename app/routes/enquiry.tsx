@@ -4,6 +4,8 @@ import { getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { ENQUIRY_TTL_HOURS } from "~/lib/config";
 import { askOutcome, isUniqueViolation, LIVE_ASK_STATUSES } from "~/lib/ask-guard";
+import { clashingDays } from "~/lib/booking.server";
+import { spanEnd } from "~/lib/date-span";
 
 // Action-only route: a trekker sends an enquiry from an offering page.
 export async function action({ request, context }: Route.ActionArgs) {
@@ -54,12 +56,34 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
   const { data: off } = await admin
     .from("offerings")
-    .select("id, title, guide_id, min_party, max_party")
+    .select("id, title, guide_id, min_party, max_party, days")
     .eq("id", offeringId)
     .maybeSingle();
   if (!off || off.guide_id !== guideId) {
     return data({ error: "That trip isn't available." }, { status: 400, headers });
   }
+  // The WHOLE span has to be clear, not just the day they clicked. A twelve
+  // day trek from the 20th runs to the 31st, and a guide booked on the 27th
+  // cannot walk it. Until now the request went in anyway and died days later
+  // when the guide pressed accept and the calendar refused — by which point
+  // the trekker had been waiting, and the guide had to explain a machine's
+  // mistake as though it were theirs.
+  const tripDays = Math.max(1, Number(off.days) || 1);
+  const endDate = spanEnd(startDate, tripDays);
+  const taken = await clashingDays(admin, guideId, startDate, endDate);
+  if (taken.length) {
+    const first = taken.sort()[0];
+    return data(
+      {
+        error:
+          tripDays === 1
+            ? "That day has just been taken. Pick another."
+            : `Those dates run into ${readable(first)}, which is already taken. Pick another start.`,
+      },
+      { status: 409, headers },
+    );
+  }
+
   const minP = off.min_party ?? 1;
   const maxP = off.max_party ?? 12;
   if (!Number.isFinite(partySize) || partySize < minP || partySize > maxP) {
@@ -151,4 +175,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     partySize,
   });
   return data({ ok: true, enquiryId: enq.id }, { headers });
+}
+
+/** A date as a person reads it, for an error they have to act on. */
+function readable(iso: string): string {
+  return new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
 }

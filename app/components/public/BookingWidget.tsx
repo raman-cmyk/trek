@@ -8,6 +8,8 @@ import { computeExperiencePricing, type PriceBreakdown as PB , hasBreakdown } fr
 import { useMoney } from "~/lib/currency-context";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { previewTrack } from "~/lib/pipeline";
+import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
+import { daysLabel, firstTakenDay, formatSpan, spanEnd } from "~/lib/date-span";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -76,6 +78,107 @@ function useQuote(
   }, [o, party, breakdown, addonsPerPerson]);
 }
 
+/**
+ * Pick your dates on the calendar, not out of a dropdown.
+ *
+ * "I should be able to select the dates I want to go on a trek before
+ * clicking request to book, so I can have a visual representation on the
+ * trek's timeline." A list of start dates cannot show you that a twelve-day
+ * walk from the 20th runs to the 31st, or that the guide is booked on the
+ * 27th of it — and until now nothing stopped you asking for exactly that.
+ *
+ * One month at a time, because this sits in a 320px rail and in a phone
+ * sheet. The arrows move it; the trip length comes from the offering, so the
+ * span paints itself.
+ */
+function DatePick({
+  o,
+  availableDays,
+  day,
+  setDay,
+}: {
+  o: BookingWidgetOffering;
+  availableDays: string[];
+  day: string;
+  setDay: (d: string) => void;
+}) {
+  const days = Math.max(1, o.days || 1);
+  // Start where their dates are, or at the guide's first open day.
+  const [offset, setOffset] = useState(0);
+  const base = day || availableDays[0] || new Date().toISOString().slice(0, 10);
+  const anchor = monthAnchor(base, offset);
+  const end = day ? spanEnd(day, days) : "";
+  // Only possible for a date chosen before this component existed, or one
+  // that was free when the page loaded and is not now.
+  const clash = day ? firstTakenDay(day, days, availableDays) : null;
+
+  // Show the second month when the trip runs into it. The whole point is
+  // seeing the walk on a calendar; "20 Sep – 1 Oct" with only September on
+  // screen shows two thirds of the answer.
+  const showMonths = end && end.slice(0, 7) !== anchor.slice(0, 7) ? 2 : 1;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm text-ink-soft">
+          {day ? "Your dates" : days > 1 ? "Pick your first day" : "Pick a date"}
+        </span>
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => setOffset((n) => n - 1)}
+            className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => setOffset((n) => n + 1)}
+            className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
+          >
+            ›
+          </button>
+        </span>
+      </div>
+
+      <AvailabilityCalendar
+        openDays={availableDays}
+        monthsFrom={anchor}
+        months={showMonths}
+        compact
+        select="span"
+        days={days}
+        value={{ start: day || null, end: end || null }}
+        onPick={(next) => next.start && setDay(next.start)}
+      />
+
+      {/* The chosen span said in words as well as colour, because a shaded
+          row of squares is not something you can read back to yourself to
+          check. */}
+      {day && (
+        <p className="mt-2 text-sm">
+          <span className="font-medium text-ink">{formatSpan(day, end)}</span>
+          <span className="text-ink-soft"> · {daysLabel(days)}</span>
+        </p>
+      )}
+      {clash && (
+        <p className="mt-1 text-sm text-danger">
+          {o.guide_first_name} is not free on {fmtDay(clash)} — pick another start.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The yyyy-mm-01 anchor `offset` months from the month `iso` falls in. */
+function monthAnchor(iso: string, offset: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + offset, 1));
+  return `${m.getUTCFullYear()}-${String(m.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
 function ConfigBody({
   o,
   breakdown,
@@ -107,20 +210,12 @@ function ConfigBody({
   const busy = fetcher.state !== "idle";
   return (
     <div className="space-y-4">
-      <label className="block">
-        <span className="text-sm text-ink-soft">Date</span>
-        <select
-          value={day}
-          onChange={(e) => setDay(e.target.value)}
-          className="mt-1 w-full rounded-button border border-border px-3 py-2"
-        >
-          {availableDays.slice(0, 40).map((d) => (
-            <option key={d} value={d}>
-              {fmtDay(d)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <DatePick
+        o={o}
+        availableDays={availableDays}
+        day={day}
+        setDay={setDay}
+      />
 
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-soft">Party size</span>

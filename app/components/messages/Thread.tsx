@@ -83,6 +83,7 @@ export function Thread({
   trips = [],
   packages = [],
   defaultTripId = null,
+  draft = null,
 }: {
   messages: ThreadMessage[];
   partner: ThreadPartner;
@@ -100,6 +101,8 @@ export function Thread({
   packages?: PackageCardData[];
   /** The trip this conversation started from, pre-selected. */
   defaultTripId?: string | null;
+  /** Text waiting in the box — e.g. the dates picked on the guide's calendar. */
+  draft?: string | null;
 }) {
   // Their clock, and what silence means (0068). A guide is always in Nepal;
   // a trekker's zone is whatever their browser said when they last wrote.
@@ -112,7 +115,7 @@ export function Thread({
     theyAreTheGuide: !isGuide,
   });
 
-  const [prefill, setPrefill] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<string | null>(draft ?? null);
   // Which trip the next message is about. A conversation opened from a listing
   // starts on that one.
   const [about, setAbout] = useState<string>(defaultTripId ?? "");

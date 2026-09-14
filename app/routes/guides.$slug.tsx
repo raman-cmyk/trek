@@ -22,6 +22,7 @@ import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
 import { tierChecks } from "~/lib/tiers";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
+import { PickYourDates } from "~/components/public/PickYourDates";
 import {
   OfferingCard,
   offeringFromUsdCents,
@@ -1078,9 +1079,12 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
             <section id="availability" className="mt-12 scroll-mt-6">
               <Eyebrow>Availability</Eyebrow>
               <div className="mt-3">
-                <AvailabilityCalendar
+                <PickYourDates
                   openDays={openDays}
                   monthsFrom={monthAnchor}
+                  guideId={guide.user_id}
+                  guideFirstName={first}
+                  backTo={`/guides/${guide.slug}`}
                 />
               </div>
             </section>

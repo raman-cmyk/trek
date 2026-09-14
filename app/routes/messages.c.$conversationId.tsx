@@ -169,6 +169,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         breakdown: o.price_breakdown ?? null,
       })),
       conversationOfferingId: (convo as any).offering_id ?? null,
+      // Dates picked on the guide's calendar, arriving as a draft to edit and
+      // send rather than a message somebody sent on their behalf.
+      draft: (new URL(request.url).searchParams.get("ask") ?? "").slice(0, 300) || null,
       userId: user.id,
       partner,
       bookPath: isGuide ? null : bookPath || (guideRow?.slug ? `/guides/${guideRow.slug}` : null),
@@ -286,10 +289,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Conversation({ loaderData }: Route.ComponentProps) {
-  const { messages, partner, bookPath, canned, isGuide, trips, packages, conversationOfferingId } =
+  const { messages, partner, bookPath, canned, isGuide, trips, packages, conversationOfferingId, draft } =
     loaderData as any;
   return (
     <Thread
+      draft={draft}
       messages={messages}
       partner={partner}
       backTo="/messages"
