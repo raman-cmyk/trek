@@ -348,3 +348,155 @@ into "Permits (TIMS + park)" and "Porters" — for a food tour. Steps are now
 derived from the kind (no route step where there is no route), the length
 defaults to what that kind usually is, and a price row worth nothing is not
 shown at all.
+
+## Deleting a person means deleting them, unless money moved (2026-09-14)
+
+The People page can now delete a guide, trekker or office account, from the
+list ("Delete someone", next to "Add someone") and from the profile's Edit tab.
+Three calls were made without the founder:
+
+**Anyone with a booking, payout or contract cannot be deleted.** Those rows are
+the record of money and of a legal relationship; deleting the person would
+delete them or orphan them. The office is told why and, for a guide, pointed at
+"removed"/"suspended" status instead. This covers real accounts; the accounts
+this button exists for (test signups, duplicates, people who asked) have none.
+
+**Everything else about them goes, and what they *did* to others stays.**
+`ops_delete_person` (migration 0059) walks the foreign keys from the schema
+itself rather than a hand-kept list, so a table added next month is covered.
+Rows that belong to the person are deleted; rows that only record them as an
+actor (verified a check, issued a strike, opened an incident, edited a listing,
+viewed a passport) keep the row with the actor blanked — five such columns
+stopped being NOT NULL for that reason. Private documents are removed from the
+bucket by the app before the rows go; the auth login goes last.
+
+**Confirmation is inline, not a dialog.** One click asks "Delete X for good?"
+in the row, the second answers. The office does not need a modal to be trusted
+with a button.
+
+## Blocking is a row with a story, and it keeps people out in three places (2026-09-14)
+
+Pratik asked for a Blocking tab: who is blocked, block and unblock by hand,
+permanent bans, deletion, and a filter by stage. Calls made without the founder:
+
+**A block is a row in `account_blocks`, not a flag on `users`.** The office
+needs who, why, until when, who lifted it and what they said. One open block
+per person (partial unique index); blocking somebody already blocked lifts the
+old row with a note, so "Make permanent" on a suspension is a ban that
+remembers it replaced a suspension.
+
+**Two kinds, four stages.** Suspended (dated, or open-ended until lifted) and
+banned (for good). The stage is derived, never stored: suspended, banned,
+expired (a suspension whose date passed), lifted. The filter chips are those
+stages plus "Blocked now" (suspended + banned, the default) and "Everything".
+
+**Three locks, one table.** Supabase Auth gets a matching `ban_duration` so a
+fresh sign-in fails; `requireUser` and `requireOps` ask `is_blocked()` on every
+request so an open session is sent to `/blocked` and signed out there; and a
+guide's status is set to suspended/removed while the block stands, with the
+prior status remembered and put back on unblock. Any one lock alone leaks.
+
+**Blocked people are told, in words, with a date.** `/blocked` says "paused
+until 1 October" or "closed", and where to write. It does not show the reason
+— the office writes reasons for each other.
+
+## Guide setup is six screens and a score, on top of the same save code (2026-09-14)
+
+The founder showed a competitor's onboarding: a stepper with points per step,
+one topic per screen, a live preview card. Ours asked for everything on one
+long profile page, which on a 360px phone is a wall, and the dashboard's
+checklist pointed every item at that wall.
+
+**One save path.** The profile page's action moved whole into
+`saveGuideProfile` and its sections into components, so `/g/profile` and
+`/g/setup/:step` render the same forms and hit the same validation. Two doors,
+one room; nothing can drift.
+
+**Six steps to a hundred.** Photo 20, words 20, where 15, languages 10, rate
+15, first trip 20. The weights say what gets somebody booked. A step is judged
+from the rows the public page reads (`guide-setup.ts`, tested), never from a
+"done" flag, so it cannot be ticked without being true. The journal stays a
+seventh, post-page item on the dashboard rather than a step: it needs a trek.
+
+**"Save and continue" moves on only when the step is done.** A half-filled
+step stays on screen with the saved thing visible. Continue wraps round to an
+earlier skipped step rather than dropping the guide on a finished page.
+
+**The headshot now sets `users.avatar_url`.** The public card and search
+results read the avatar; the gallery reads `guide_photos`. They were never in
+step, so a guide who uploaded a face still had a blank circle in search.
+
+**A pending trip counts as listed.** The office checks it before it goes
+live, but the guide has done their part, and the wizard says so.
+
+## "Where to meet" is a fact, not a booking status (2026-09-14)
+
+Pratik's note: on a paid, confirmed momo crawl, step 4 "Where to meet" sat lit
+up with no address on the screen and no button to press. He was right twice —
+the details were never shown, and the step could never complete.
+
+**Why it was stuck.** A day experience reaches `confirmed` the moment it is
+paid for and stays there until the morning it starts, so the status could
+never tell anyone whether the address had been sent. The meeting point lived
+on the offering, printed only inside the trek pre-trek brief, with the time
+buried in the first row of the itinerary JSON.
+
+**A step may now complete on a fact.** `tripPipeline` takes
+`meetingSettled`, and the meet step (`MEET_KEY`) is done when the place and
+the time are both known. Only that step: a trek's permit step at the same
+position is genuinely ops work in progress and stays current.
+
+**A new stage state, `waiting`.** Once the address is in, what is left is the
+day itself. Marking it "current" asks the trekker to do something; leaving
+nothing current reads as finished. `waiting` is a hollow ring with no halo and
+the hint says when.
+
+**Two sources, and the screen says which.** The guide's instruction for this
+trip wins; otherwise the experience's usual start. `resolveMeeting` decides,
+and a place without a time is explicitly not an answer — a trekker cannot act
+on half of it, so the step stays open and names the missing half.
+
+**The trigger is the guide, and it is now reachable.** Their trip list has
+"Where you'll meet them", pre-filled from the experience, open until sent and
+folded away once it is. The experience form asks for the meeting point and
+start time as well, because nothing in the app captured either: every
+offering created since launch had `meeting_point` null and would have shown
+"TBC" for ever.
+
+**No RLS write policy for guides.** An update policy would have to be written
+against the whole row, so "the guide may set the meeting point" would also
+read "the guide may set total_usd_cents". These write through the service role
+after the route checks the booking is theirs.
+
+## The routes page searches in memory, over its own 24 rows (2026-09-14)
+
+Pratik: no search bar on /routes. Choices made while adding it:
+
+**Filtered in the loader, not in the query.** All 24 routes are fetched anyway
+to work out each one's "from" price, so `filterRoutes` runs over what is
+already in hand. The month and length rules are easier to state correctly — and
+to test — as TypeScript than as PostgREST, and 24 rows is not a database
+problem.
+
+**Text is AND-of-words.** "annapurna circuit" narrows to the circuit rather
+than returning every Annapurna route, and "easy annapurna" works. One
+substring match would have made two words useless.
+
+**Four controls, not a date range.** A route has no availability to search: it
+is a mountain, not a seat. What a reader has is a half-remembered name, the
+month they can travel, how long they can be away, and how hard they want it.
+So /routes gets its own search bar rather than reusing BrowseSearch.
+
+**A route with no season recorded is not out of season.** The month filter
+keeps it rather than hiding it on the strength of a missing column.
+
+**The route's `summary` is searchable, and now printed.** It was in the
+database and on no card, so matching it would have returned cards with no
+visible reason. It is the teaser where there is no article file.
+
+**A filtered view is noindex, canonical /routes.** Twenty-four routes in a
+different order is not twenty-four new pages for Google to weigh.
+
+**The headline still counts every route.** Somebody who narrowed to three is
+not looking at a site with three routes on it; what they narrowed to is the
+line under the box.

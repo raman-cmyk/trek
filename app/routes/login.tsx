@@ -1,8 +1,11 @@
 import { Form, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/login";
 import { Button } from "~/components/Button";
-import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
+import { createAdminClient, createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.server";
+import { activeBlockFor } from "~/lib/blocking.server";
+import { blockedMessage } from "~/lib/blocking";
+import { fmtDate } from "~/lib/format";
 
 export function meta() {
   return [{ title: "Sign in" }, { name: "robots", content: "noindex" }];
@@ -38,6 +41,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { data: res, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !res.user) {
     return data({ error: "Wrong email or password." }, { status: 400 });
+  }
+  const block = await activeBlockFor(createAdminClient(env), res.user.id);
+  if (block) {
+    await supabase.auth.signOut();
+    return data({ error: blockedMessage(block, fmtDate) }, { status: 403, headers });
   }
   await ensureTrekkerProfile(env, res.user);
   return redirect(safeNext(String(form.get("next") ?? "/")), { headers });

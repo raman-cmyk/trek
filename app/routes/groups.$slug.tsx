@@ -18,6 +18,9 @@ import { cn } from "~/lib/cn";
 import { firstName } from "~/lib/names";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { TripPipeline } from "~/components/TripPipeline";
+import { MeetingDetails } from "~/components/MeetingDetails";
+import { MEET_KEY } from "~/lib/pipeline";
+import { resolveMeeting } from "~/lib/meeting";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -86,14 +89,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     group.offering_id
       ? admin
           .from("public_offerings")
-          .select("id, slug, kind, title, days, cover_photo_url, guide_slug, guide_name, guide_avatar_url, route_name, route_slug, max_party")
+          .select("id, slug, kind, title, days, cover_photo_url, guide_slug, guide_name, guide_avatar_url, route_name, route_slug, max_party, meeting_point, meet_time")
           .eq("id", group.offering_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     group.booking_id
       ? admin
           .from("bookings")
-          .select("id, total_usd_cents, party_size, status, deposit_usd_cents")
+          .select("id, total_usd_cents, party_size, status, deposit_usd_cents, start_date, meeting_point, meeting_time, meeting_note, meeting_set_at")
           .eq("id", group.booking_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -308,6 +311,10 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
   const { m: money } = useMoney();
   const nav = useNavigation();
   const busy = nav.state !== "idle";
+  // Where the group meets on the day: this booking's own instruction, or the
+  // experience's usual start.
+  const guideFirstName = firstName(guide?.full_name) || "Your guide";
+  const meeting = resolveMeeting(booking, offering);
   // On a booked trip the bill is the booking's, and the seats are the party
   // that was booked — not however many people have signed in so far.
   const seats = booking ? booking.party_size : undefined;
@@ -642,6 +649,17 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               kind={offering?.kind}
               groupStatus={group.status}
               bookingStatus={booking?.status ?? null}
+              meetingSettled={meeting.settled}
+              details={{
+                [MEET_KEY]: booking ? (
+                  <MeetingDetails
+                    meeting={meeting}
+                    startDate={booking.start_date ?? group.start_date}
+                    guideFirstName={guideFirstName}
+                    askHref={`/messages/${booking.id}`}
+                  />
+                ) : null,
+              }}
             />
           </div>
 

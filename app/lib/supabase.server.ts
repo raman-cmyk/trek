@@ -5,6 +5,7 @@ import {
 } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { redirect, type RouterContextProvider } from "react-router";
+import { activeBlockFor } from "~/lib/blocking.server";
 import { cloudflareContext } from "~/context";
 
 /** Read the Cloudflare env off the request's load context. */
@@ -94,5 +95,6 @@ export async function requireOps(
   if (!profile || profile.role !== "ops") {
     throw redirect("/ops/login", { headers });
   }
+  if (await activeBlockFor(admin, user.id)) throw redirect("/blocked", { headers });
   return { user, profile, admin, headers };
 }

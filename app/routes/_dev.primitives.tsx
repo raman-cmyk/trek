@@ -206,6 +206,15 @@ export default function Primitives() {
             <p className="label text-muted">Food tour · finished</p>
             <TripPipeline className="mt-3" kind="food_culture" bookingStatus="completed" />
           </div>
+          <div className="rounded-card border border-border bg-card p-4">
+            <p className="label text-muted">Food tour · address sent, waiting for the day</p>
+            <TripPipeline
+              className="mt-3"
+              kind="food_culture"
+              bookingStatus="confirmed"
+              meetingSettled
+            />
+          </div>
         </div>
         <div className="space-y-2">
           <TripPipeline compact kind="trek" bookingStatus="docs_pending" />

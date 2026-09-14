@@ -1,8 +1,11 @@
 import { Form, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/g.login";
 import { Button } from "~/components/Button";
-import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
+import { createAdminClient, createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
+import { activeBlockFor } from "~/lib/blocking.server";
+import { blockedMessage } from "~/lib/blocking";
+import { fmtDate } from "~/lib/format";
 
 export function meta() {
   return [{ title: "Guide sign in" }, { name: "robots", content: "noindex" }];
@@ -48,6 +51,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (profile?.role !== "guide") {
     await supabase.auth.signOut();
     return data({ error: "This account isn’t registered as a guide." }, { status: 403 });
+  }
+  const block = await activeBlockFor(createAdminClient(env), res.user.id);
+  if (block) {
+    await supabase.auth.signOut();
+    return data({ error: blockedMessage(block, fmtDate) }, { status: 403, headers });
   }
   return redirect("/g", { headers });
 }

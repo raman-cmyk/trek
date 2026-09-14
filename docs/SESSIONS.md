@@ -1241,3 +1241,176 @@ in a rolled-back transaction. 293 tests green, build green.
 through against real data — this environment cannot hold the service-role key,
 so the guide's proposer and the approval page have been driven only by types,
 tests and SQL. The first real proposal is the test.
+
+## Session — delete a person (2026-09-14)
+
+Pratik's note on the People page: there was "Add someone" and no way to take
+anyone away. Test signups and duplicates lived forever, because nothing could
+delete a `users` row that fifty tables point at.
+
+**Migration 0059** adds `ops_delete_person(uuid)`. It refuses anyone with a
+booking, payout or contract (returns the counts, so the office reads a
+sentence rather than a stack trace) and otherwise removes every dependent row
+in one transaction by walking `pg_constraint` — nullable references are
+blanked, owned rows are deleted recursively, a row that cannot stand without
+the reference (an access-log line about a deleted passport) goes. Five
+"who did this" columns (`issued_by`, `accessed_by`, `opened_by`, `editor_id`,
+`uploaded_by`) are nullable now with `on delete set null`, so the trail of what
+an office member did survives their account. Service role only.
+
+Tested against the real migrations in a scratch Postgres 16 with the demo
+seed: a guide with an enquiry, conversation, journal, group, strike and
+documents; a trekker organising a group; an office member who verified and
+struck; a guide and a trekker with a booking (both refused, nothing touched);
+an unknown id; and a call as `authenticated` (permission denied).
+
+**App:** `app/lib/people.server.ts` orders the three steps (note document
+paths → SQL → remove files → delete auth login) and `app/lib/people.ts` holds
+the words and the rule for which rows may show the button (not yourself, not
+anyone with trips) — 8 new tests. The People list has "Delete someone" next
+to "Add someone", which swaps each row's "Open" for "Delete" with an inline
+"Yes, delete / Keep"; the profile's Edit tab has the same at the bottom and
+returns to the right list with "X deleted."
+
+301 tests green, typecheck green, build green.
+
+**🙋 Founder needed:** migration 0059 is not yet applied to the live database
+(no token in this environment). Run `SBP=… REF=… scripts/remote-apply.sh
+supabase/migrations/0059_delete_person.sql`, then try deleting "joh doe" on
+/ops/people — that is the first real click.
+
+## Session — Blocking (2026-09-14)
+
+Pratik's second note: a Blocking tab in the ops sidebar. Until now the only
+lever against a person was a guide's status, which hid them from the site and
+let them keep signing in; a trekker could not be stopped at all.
+
+**Migration 0060** adds `account_blocks` (kind suspended/banned, reason,
+starts/ends, who blocked, who lifted and their note, the guide's prior
+status) with one open block per person enforced by a partial unique index,
+two check constraints (a ban has no end date; an end is after the start), RLS
+read for the office only, and `is_blocked(uid)` for the app. Applied and
+exercised in the scratch Postgres: dated suspension blocks, an expired one
+does not, a ban does, a second open block and a dated ban are refused, an
+`authenticated` session can ask `is_blocked` but sees no rows.
+
+**Enforcement** in three places: `blockUser` sets Supabase Auth's
+`ban_duration` (hours to the end date, a century otherwise) and a guide's
+status; `requireUser`/`requireOps` redirect a blocked session to `/blocked`,
+which signs them out and says until when; both login forms say it at the door.
+`unblockUser` lifts the row, clears the auth ban and restores the guide's
+status.
+
+**/ops/blocking**: "Block someone" is a search box (name, email, phone) with
+an inline form per match — suspend until a date, suspend until lifted, or ban
+— and a reason that is required. Filter chips: Blocked now, Suspended, Banned,
+Lifted, Everything. Per row: Unblock, Make permanent (on a suspension), Block
+again (on a lifted or expired one), Delete with the People-page rule and its
+inline confirm. The person's ops profile shows a red "suspended until…" or
+"banned" badge linking here.
+
+`app/lib/blocking.ts` holds the stage, filter, auth-duration and wording
+logic — 19 new tests. 320 tests green, typecheck green, build green.
+
+**🙋 Founder needed:** apply migrations 0059 and 0060 (`scripts/remote-apply.sh
+supabase/migrations/0059_delete_person.sql supabase/migrations/0060_account_blocks.sql`),
+then on /ops/blocking suspend a test account for a day, try to sign in as
+them, and lift it.
+
+## Session — guide setup, one screen at a time (2026-09-14)
+
+The founder held up a competitor's onboarding (stepper, points per step,
+preview card, one topic per screen) and asked for ours to be as easy.
+
+**Refactor first.** `app/routes/g.profile.tsx` (1,162 lines, every form
+inline) became `app/lib/guide-profile.server.ts` (`loadGuideProfile`,
+`saveGuideProfile` — every intent, unchanged in behaviour) plus
+`app/components/guide/ProfileSections.tsx` (promise, story, photos, voice,
+languages, regions, routes, basics, rate & payout, quick answers, held by
+team, ask the team). The profile page is now 90 lines of composition.
+
+**Then the wizard.** `/g/setup` is the overview (each step, its points, one
+"Start" button); `/g/setup/:step` is one screen: the score bar and stepper
+at the top, the step's forms, a preview card of what a trekker sees
+(portrait, name, hook line, promise, areas, routes, languages, rate), and
+Back / Continue. `app/lib/guide-setup.ts` holds the six steps, their weights
+(sum 100), what counts as done, and where Continue goes — 14 tests. The trip
+step hands off to the experience form with `?next=/g/setup/trip`, which the
+form now honours. The dashboard's "Finish your page" reads the same score
+and links each item to its step; the profile page shows "Your page is N%
+ready — finish it step by step" until it is.
+
+Small fixes on the way: a headshot now syncs `users.avatar_url`; a pending
+trip counts as listed.
+
+Copy for the new screens is in `copy.setup`. 332 tests green, typecheck
+green, build green. No migration.
+
+**Not verified in a browser** (no Supabase credentials here): the 360px
+walk-through is the founder's to do — /g/setup on a phone, photo step first.
+
+## Session — where to meet (2026-09-14)
+
+Pratik, on the Kathmandu momo crawl: step 4 "Where to meet" unchecked on a
+paid trip, no details, nothing to press, same for group trips.
+
+**Migration 0061.** `offerings.meet_time` (backfilled from the first itinerary
+row carrying a time, which is where all 12 seeded experiences keep it — the
+momo crawl's 18:00 included), meeting columns on `bookings`
+(`meeting_point`, `meeting_time`, `meeting_note`, `meeting_set_at`,
+`meeting_set_by`), and `meet_time` appended to `public_offerings`.
+
+**`app/lib/meeting.ts`** resolves a booking's meeting details: the guide's own
+instruction for this trip, else the experience's usual start, and "settled"
+only when both the place and the time are known — 14 tests. The pipeline takes
+`meetingSettled` and completes the meet step on it, with a new `waiting` state
+for the day itself; 7 more tests cover that a trek's permit step is untouched,
+a cancelled trip ticks nothing, and a step the trip has not reached stays shut.
+
+**On screen.** `MeetingDetails` renders inside the step on the trip page and
+the group page: where, when, the time, the guide's note, and who set it. When
+it is not settled it says which half is missing and offers the thread. The
+guide's trip list gets "Where you'll meet them" (pre-filled, open until sent),
+which is the trigger. The experience form now asks for the meeting point and
+start time — nothing did, so every in-app offering had none. The group list
+and the group chat header read the same settled flag, so the step named in a
+list matches the step named inside.
+
+Verified in a scratch Postgres 16: all 61 migrations apply in order on a clean
+database with zero failures, the backfill sets 04:30 for a sunrise hike and
+18:00 for the momo crawl, and a booking on the momo crawl inherits Thamel/18:00
+then takes the guide's "Thamel Chowk, by the big pipal tree" when they send it.
+353 tests green, typecheck green, build green.
+
+**🙋 Founder needed:** three migrations are now waiting —
+`SBP=… REF=… scripts/remote-apply.sh supabase/migrations/0059_delete_person.sql
+supabase/migrations/0060_account_blocks.sql
+supabase/migrations/0061_meeting_details.sql`. Then open the momo crawl trip:
+step 4 should be ticked, with Thamel · 23 Sep 2026 · 18:00 under it.
+
+## Session — search on the routes page (2026-09-14)
+
+Pratik: "There is no search bar option in the routes pages."
+
+`app/lib/route-search.ts` is the whole search, pure: AND-of-words text over a
+route's name, region, difficulty, summary and teaser (plus "8 days" and
+"5545m", which is how people type), an exact region and difficulty, three
+length bands that cover every length with no gap, and the month you can
+travel. 19 tests. `RouteSearch` is the bar — one row with the box and a
+Search button, three selects folding behind a chip on a phone and open
+already when a filter is applied, a plain GET form so every result is a URL
+you can send to whoever you are going with and the page still works with the
+JavaScript off.
+
+The page shows "N of 24 routes" when narrowed, a real empty state with "Show
+all 24 routes", and keeps its headline count at the full 24. A filtered view
+is noindex with the canonical still /routes. Two things came with it: the
+routes' own `summary` column is now searched and printed on cards that have
+no article file, and the grid no longer holds an empty margin open under the
+"nothing matches" note.
+
+372 tests green, typecheck green, build green. No migration.
+
+**Not verified in a browser:** this environment has no Supabase credentials,
+so the page has been driven by types, tests and the build. Search "annapurna"
+and then pick October on the deployed site.

@@ -7,6 +7,7 @@ import { createAdminClient } from "~/lib/supabase.server";
 import { useMoney } from "~/lib/currency-context";
 import { groupMoney, type GroupMember } from "~/lib/groups";
 import { TripPipeline } from "~/components/TripPipeline";
+import { resolveMeeting } from "~/lib/meeting";
 
 export function meta() {
   return pageMeta({
@@ -36,7 +37,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const [{ data: groups }, { data: members }, { data: offerings }] = await Promise.all([
     admin.from("trip_groups").select("*").in("id", ids).order("created_at", { ascending: false }),
     admin.from("trip_group_members").select("*").in("group_id", ids).order("created_at"),
-    admin.from("public_offerings").select("id, title, days, kind, slug, cover_photo_url"),
+    admin
+      .from("public_offerings")
+      .select("id, title, days, kind, slug, cover_photo_url, meeting_point, meet_time"),
   ]);
 
   // Booked groups price off their booking, not off the shares that happen to
@@ -46,7 +49,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = bookingIds.length
     ? await admin
         .from("bookings")
-        .select("id, total_usd_cents, party_size, status")
+        .select(
+          "id, total_usd_cents, party_size, status, meeting_point, meeting_time, meeting_set_at",
+        )
         .in("id", bookingIds)
     : { data: [] };
   const bookingById = new Map((bookings ?? []).map((b) => [b.id, b]));
@@ -71,6 +76,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         seats: bk?.party_size ?? g.party_target,
         bookingStatus: bk?.status ?? null,
         offering: g.offering_id ? (offeringById.get(g.offering_id) ?? null) : null,
+        // So the step named here is the step named inside the group.
+        meetingSettled: resolveMeeting(
+          bk as any,
+          g.offering_id ? ((offeringById.get(g.offering_id) as any) ?? null) : null,
+        ).settled,
         youAreInvited: list.some((m) => m.user_id === user.id && m.status === "invited"),
       };
     }),
@@ -162,6 +172,7 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
                     compact
                     className="mt-3"
                     kind={g.offering?.kind}
+                    meetingSettled={g.meetingSettled}
                     groupStatus={g.status}
                     bookingStatus={g.bookingStatus}
                   />

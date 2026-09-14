@@ -1,5 +1,6 @@
 import { redirect } from "react-router";
 import { createSupabaseServerClient, createAdminClient } from "~/lib/supabase.server";
+import { activeBlockFor } from "~/lib/blocking.server";
 
 export interface SessionUser {
   id: string;
@@ -42,7 +43,10 @@ export async function requireUser(
   const profile = await getProfile(env, user.id);
   if (!profile) throw redirect(loginPath, { headers });
   if (role && profile.role !== role) throw redirect(loginPath, { headers });
-  return { user, profile, headers, admin: createAdminClient(env) };
+  const admin = createAdminClient(env);
+  // A block lands on the next request, whatever page they were on.
+  if (await activeBlockFor(admin, user.id)) throw redirect("/blocked", { headers });
+  return { user, profile, headers, admin };
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseMeetTime } from "./meeting";
 import {
   fromPerPersonUsdCents,
   hasBreakdown,
@@ -25,6 +26,9 @@ export interface OfferingPatch {
   cover_photo_url: string | null;
   price_breakdown: PriceBreakdown;
   price_usd_cents: number;
+  /** Where it starts, and at what time — the trekker's "Where to meet". */
+  meeting_point: string | null;
+  meet_time: string | null;
 }
 
 export interface ParsedPhoto {
@@ -212,6 +216,11 @@ export function parseExperienceForm(
         photos[0]?.url ?? (String(form.get("cover_photo_url") ?? "").trim() || null),
       price_breakdown,
       price_usd_cents: fromPerPersonUsdCents(price_breakdown, max_party),
+      // Where to meet. A trip whose meeting point is unknown leaves its
+      // trekker on a step nobody can complete, so it is asked for here
+      // rather than left to a message three weeks later.
+      meeting_point: String(form.get("meeting_point") ?? "").trim().slice(0, 200) || null,
+      meet_time: parseMeetTime(form.get("meet_time")),
     },
   };
 }

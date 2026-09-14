@@ -7,6 +7,14 @@ import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib
 import { monthName } from "~/lib/match";
 import { useMoney } from "~/lib/currency-context";
 import { SmartImage } from "~/components/SmartImage";
+import { RouteSearch } from "~/components/public/RouteSearch";
+import { copy } from "~/lib/copy";
+import {
+  filterRoutes,
+  isNarrowed,
+  parseRouteFilters,
+  routeFacets,
+} from "~/lib/route-search";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -18,6 +26,10 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
       description:
         "Every route we run: Everest Base Camp, Annapurna Circuit, Langtang, Manaslu, Gokyo and Mardi Himal — with honest difficulty, live permit costs, and the verified guides who lead them.",
       canonical: (data as any)?.canonical ?? "",
+      // A searched page is the same 24 routes in a different order. The
+      // canonical stays /routes and the filtered view is kept out of the
+      // index rather than competing with it.
+      noindex: (data as any)?.narrowed ?? false,
     }),
     jsonLd(
       breadcrumbLd([{ name: "Routes", url: (data as any)?.canonical ?? "" }]),
@@ -25,21 +37,24 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
+  const filters = parseRouteFilters(new URL(request.url).searchParams);
 
   const [{ data: routes }, { data: offerings }] = await Promise.all([
     client
       .from("routes")
-      .select("id, slug, name, region, typical_days, max_altitude_m, difficulty, season_months")
+      .select(
+        "id, slug, name, region, typical_days, max_altitude_m, difficulty, season_months, summary",
+      )
       .order("typical_days", { ascending: false }),
     client
       .from("public_offerings")
       .select("route_id, guide_id, price_usd_cents, price_breakdown, max_party"),
   ]);
 
-  const cards = (routes ?? []).map((r) => {
+  const all = (routes ?? []).map((r) => {
     const own = (offerings ?? []).filter((o) => o.route_id === r.id);
     const guideCount = new Set(own.map((o) => o.guide_id)).size;
     let from: number | null = null;
@@ -56,11 +71,25 @@ export async function loader({ context }: Route.LoaderArgs) {
       guideCount,
       fromUsdCents: from,
       hero: article?.hero ?? null,
-      teaser: article?.meta ?? null,
+      // The route's own summary where there is no article, so a card is never
+      // blank underneath — and so a word that matched is a word you can see.
+      teaser: article?.meta ?? r.summary ?? null,
     };
   });
 
-  return { cards, canonical: absoluteUrl(env.SITE_URL, "/routes") };
+  // Filtered here rather than in the query: there are two dozen routes, they
+  // are all fetched to price them anyway, and the month and length rules are
+  // easier to get right — and to test — in one place than as PostgREST.
+  const cards = filterRoutes(all, filters);
+
+  return {
+    cards,
+    total: all.length,
+    filters,
+    narrowed: isNarrowed(filters),
+    facets: routeFacets(all),
+    canonical: absoluteUrl(env.SITE_URL, "/routes"),
+  };
 }
 
 function seasonLabel(months: number[] | null): string {
@@ -81,20 +110,53 @@ function seasonLabel(months: number[] | null): string {
 }
 
 export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
-  const { cards } = loaderData as any;
+  const { cards, total, filters, narrowed, facets } = loaderData as any;
   const { m } = useMoney();
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
       <p className="label text-muted">Routes</p>
+      {/* The headline counts every route, searched or not: a reader who has
+          just narrowed to three is not looking at a site with three routes
+          on it. What they narrowed to is the line under the box. */}
       <h1 className="mt-2 font-display text-display-l text-ink">
-        {cards.length} routes. Zero brochure clichés.
+        {copy.routes.countAll.replace("{total}", String(total))}
       </h1>
       <p className="mt-3 max-w-[62ch] text-ink-soft">
         Every route we run, with honest difficulty, live permit costs, and the
         named guides who lead it. Pick the mountain — then pick the human.
       </p>
 
+      <RouteSearch
+        filters={filters}
+        regions={facets.regions}
+        difficulties={facets.difficulties}
+      />
+
+      {narrowed && (
+        <p className="mt-2 text-caption text-muted">
+          {copy.routes.countMatching
+            .replace("{shown}", String(cards.length))
+            .replace("{total}", String(total))}
+        </p>
+      )}
+
+      {cards.length === 0 && (
+        <div className="mt-10">
+          <p className="font-display text-xl text-ink">{copy.routes.noneHead}</p>
+          <p className="mt-1 max-w-[52ch] text-muted">{copy.routes.noneBody}</p>
+          <Link
+            to="/routes"
+            className="mt-3 inline-block rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+          >
+            {copy.routes.showAll.replace("{total}", String(total))}
+          </Link>
+        </div>
+      )}
+
+      {/* No empty grid holding its margin open under the "nothing matches"
+          note — a page that ends in a gap reads as one that broke. */}
+      {cards.length > 0 && (
       <div className="mt-8 grid gap-5 sm:grid-cols-2">
         {cards.map((r: any) => (
           <Link
@@ -137,6 +199,7 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           </Link>
         ))}
       </div>
+      )}
 
       <div className="mt-10 rounded-card border border-accent/30 bg-accent/5 p-5">
         <p className="text-ink">

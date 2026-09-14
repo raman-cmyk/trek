@@ -71,3 +71,73 @@ describe("the trip pipeline", () => {
     );
   });
 });
+
+describe("the meeting step completes itself", () => {
+  const momo = { kind: "food_culture", bookingStatus: "confirmed" };
+
+  it("sits on the trekker as the current step while the address is unknown", () => {
+    const { stages, currentKey } = tripPipeline(momo.kind, {
+      bookingStatus: momo.bookingStatus,
+      meetingSettled: false,
+    });
+    expect(currentKey).toBe("confirmed");
+    expect(stages.find((s) => s.key === "confirmed")!.state).toBe("current");
+  });
+
+  it("is done once the place and the time are known", () => {
+    const { stages, currentKey } = tripPipeline(momo.kind, {
+      bookingStatus: momo.bookingStatus,
+      meetingSettled: true,
+    });
+    expect(stages.find((s) => s.key === "confirmed")!.state).toBe("done");
+    // What is left is the day itself, which nobody has to do anything about.
+    expect(stages.find((s) => s.key === "active")!.state).toBe("waiting");
+    expect(currentKey).toBe("active");
+    expect(stages.find((s) => s.key === "done")!.state).toBe("upcoming");
+  });
+
+  it("does not tick a step the trip has not reached yet", () => {
+    const { stages } = tripPipeline(momo.kind, {
+      bookingStatus: "deposit_paid",
+      meetingSettled: true,
+    });
+    expect(stages.find((s) => s.key === "deposit")!.state).toBe("current");
+    expect(stages.find((s) => s.key === "confirmed")!.state).toBe("upcoming");
+  });
+
+  it("leaves a trek's permit step alone — it is not the meeting step", () => {
+    const { stages, currentKey } = tripPipeline("trek", {
+      bookingStatus: "confirmed",
+      meetingSettled: true,
+    });
+    expect(stages.find((s) => s.key === "permits")!.state).toBe("current");
+    expect(currentKey).toBe("permits");
+  });
+
+  it("a trip out walking has its meeting step behind it either way", () => {
+    for (const settled of [true, false]) {
+      const { stages } = tripPipeline("city", {
+        bookingStatus: "active",
+        meetingSettled: settled,
+      });
+      expect(stages.find((s) => s.key === "confirmed")!.state).toBe("done");
+      expect(stages.find((s) => s.key === "active")!.state).toBe("current");
+    }
+  });
+
+  it("a cancelled trip does not tick anything on the strength of an address", () => {
+    const { stages, stopped } = tripPipeline("food_culture", {
+      bookingStatus: "cancelled_trekker",
+      meetingSettled: true,
+    });
+    expect(stopped).toBe(true);
+    expect(stages.some((s) => s.state === "waiting")).toBe(false);
+  });
+
+  it("nextStep names the day once the address is in", () => {
+    expect(nextStep("food_culture", { bookingStatus: "confirmed", meetingSettled: true })?.label)
+      .toBe("Out with your guide");
+    expect(nextStep("food_culture", { bookingStatus: "confirmed", meetingSettled: false })?.label)
+      .toBe("Where to meet");
+  });
+});

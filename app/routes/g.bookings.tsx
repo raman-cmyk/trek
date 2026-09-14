@@ -8,6 +8,8 @@ import { firstName } from "~/lib/names";
 import { TripPipeline } from "~/components/TripPipeline";
 import { Badge } from "~/components/ops/ui";
 import { Button } from "~/components/Button";
+import { copy } from "~/lib/copy";
+import { parseMeetTime, resolveMeeting } from "~/lib/meeting";
 
 const STATUS_TONE: Record<string, "amber" | "teal" | "green" | "neutral" | "blue"> = {
   deposit_paid: "amber",
@@ -23,7 +25,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { data: bookings } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, status, trekker_id, offering:offerings(title, kind), trekker:users(full_name, country_code, phone)",
+      "id, start_date, end_date, party_size, status, trekker_id, meeting_point, meeting_time, meeting_note, meeting_set_at, offering:offerings(title, kind, meeting_point, meet_time), trekker:users(full_name, country_code, phone)",
     )
     .eq("guide_id", user.id)
     .not("status", "in", "(cancelled_trekker,cancelled_guide,cancelled_force_majeure)")
@@ -45,14 +47,39 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const form = await request.formData();
   const bookingId = String(form.get("booking_id"));
-  // Confirm this is the guide's completed booking.
+  // Confirm this is the guide's booking, whatever they are doing to it.
   const { data: b } = await admin
     .from("bookings")
     .select("id, trekker_id, status")
     .eq("id", bookingId)
     .eq("guide_id", user.id)
     .maybeSingle();
-  if (!b || b.status !== "completed") return data({ error: "Not reviewable." }, { status: 400 });
+  if (!b) return data({ error: "Not your trip." }, { status: 400, headers });
+
+  // Where to meet. This is the trigger that completes the trekker's
+  // "Where to meet" step: the moment both halves are saved, their trip page
+  // shows the address and ticks the step off.
+  if (String(form.get("intent")) === "meeting") {
+    const place = String(form.get("meeting_point") ?? "").trim().slice(0, 200);
+    const time = parseMeetTime(form.get("meeting_time"));
+    const note = String(form.get("meeting_note") ?? "").trim().slice(0, 400) || null;
+    if (!place || !time) {
+      return data({ error: copy.meeting.guideNeedBoth }, { status: 400, headers });
+    }
+    await admin
+      .from("bookings")
+      .update({
+        meeting_point: place,
+        meeting_time: time,
+        meeting_note: note,
+        meeting_set_at: new Date().toISOString(),
+        meeting_set_by: user.id,
+      })
+      .eq("id", b.id);
+    return data({ ok: copy.meeting.guideSaved }, { headers });
+  }
+
+  if (b.status !== "completed") return data({ error: "Not reviewable." }, { status: 400, headers });
 
   const overall = Number(form.get("overall") ?? 5);
   const subRatings: Record<string, number> = {
@@ -72,8 +99,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   return data({ ok: true }, { headers });
 }
 
-export default function GuideBookings({ loaderData }: Route.ComponentProps) {
+export default function GuideBookings({ loaderData, actionData }: Route.ComponentProps) {
   const bookings = loaderData.bookings as any[];
+  const said = actionData as { ok?: string; error?: string } | undefined;
   const upcoming = bookings.filter((b) => b.status !== "completed");
   const past = bookings.filter((b) => b.status === "completed");
   const nav = useNavigation();
@@ -81,6 +109,13 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
   return (
     <div className="space-y-5">
       <h1 className="font-display text-2xl text-ink">Your trips</h1>
+
+      {said?.ok && (
+        <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{said.ok}</p>
+      )}
+      {said?.error && (
+        <p className="rounded-button bg-ember/10 px-3 py-2 text-sm text-ember">{said.error}</p>
+      )}
 
       {upcoming.length > 0 && (
         <section className="space-y-2">
@@ -103,6 +138,7 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                   className="mt-1.5"
                   kind={b.offering?.kind}
                   bookingStatus={b.status}
+                  meetingSettled={resolveMeeting(b, b.offering).settled}
                 />
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {b.trekker?.phone && b.status !== "deposit_paid" && (
@@ -122,10 +158,15 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                     TIMS card
                   </a>
                 </div>
+                <MeetingForm booking={b} busy={nav.state !== "idle"} />
               </li>
             ))}
           </ul>
         </section>
+      )}
+
+      {upcoming.length === 0 && past.length === 0 && (
+        <p className="rounded-card bg-surface p-3 text-sm text-ink-soft">No trips yet.</p>
       )}
 
       {past.length > 0 && (
@@ -175,5 +216,70 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * The guide tells their trekker where to meet.
+ *
+ * Open by default until it is settled, folded away once it is: this is the
+ * last thing standing between a paid trip and a trekker who knows where to
+ * be, and a guide should not have to find it. Pre-filled from the
+ * experience's usual start, so most of the time it is one tap to confirm.
+ */
+function MeetingForm({ booking, busy }: { booking: any; busy: boolean }) {
+  const meeting = resolveMeeting(booking, booking.offering);
+  const settled = meeting.settled && !!booking.meeting_set_at;
+  return (
+    <details open={!settled} className="mt-3 border-t border-border pt-3">
+      <summary className="cursor-pointer text-sm font-medium text-primary">
+        {copy.meeting.guideTitle}
+        {settled && (
+          <span className="ml-2 font-normal text-ink-soft">
+            {meeting.place} · {meeting.time} ✓
+          </span>
+        )}
+      </summary>
+      <Form method="post" className="mt-2 space-y-2">
+        <input type="hidden" name="intent" value="meeting" />
+        <input type="hidden" name="booking_id" value={booking.id} />
+        <p className="text-sm text-ink-soft">{copy.meeting.guideBlurb}</p>
+        <label className="block text-sm text-ink-soft">
+          {copy.meeting.guidePlace}
+          <input
+            name="meeting_point"
+            defaultValue={meeting.place ?? ""}
+            required
+            maxLength={200}
+            placeholder="Thamel Chowk, by the big pipal tree"
+            className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+          />
+        </label>
+        <label className="block text-sm text-ink-soft">
+          {copy.meeting.guideTime}
+          <input
+            name="meeting_time"
+            type="time"
+            defaultValue={meeting.time ?? ""}
+            required
+            className="mt-1 block rounded-button border border-border px-3 py-2 text-base text-ink"
+          />
+        </label>
+        <label className="block text-sm text-ink-soft">
+          {copy.meeting.guideNote}
+          <textarea
+            name="meeting_note"
+            rows={2}
+            defaultValue={booking.meeting_note ?? ""}
+            maxLength={400}
+            placeholder="Wear shoes you can walk 3km in. Tell me if you cannot eat buff."
+            className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
+          />
+        </label>
+        <Button type="submit" size="sm" loading={busy}>
+          {copy.meeting.guideSave}
+        </Button>
+      </Form>
+    </details>
   );
 }
