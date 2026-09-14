@@ -42,7 +42,7 @@ export interface AtlasTrail {
   /** The walking line. */
   coords: [number, number][];
   /** The named, located stops on it — what place search actually searches. */
-  places?: { day: number; name: string; lng: number; lat: number }[];
+  places?: { day: number; name: string; lng: number; lat: number; altitudeM: number }[];
 }
 
 /** How a guide came to be attached to a trail. The reason is shown. */

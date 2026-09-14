@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { MAP_INK, MAP_STYLE } from "~/lib/map-style";
+import { attachContours } from "~/lib/map-contours";
 import {
   guidesForTrail,
   linkLabel,
@@ -18,6 +19,11 @@ import {
   searchPlaces,
   type AtlasPlace,
 } from "~/lib/atlas-search";
+import {
+  elevationProfile,
+  placeAlongLine,
+  profileRange,
+} from "~/lib/trail-geometry";
 import { cn } from "~/lib/cn";
 
 /**
@@ -82,6 +88,40 @@ export function TrailAtlas({
     () => new Map(activeGuides.map((g) => [g.guide.id, g.kind])),
     [activeGuides],
   );
+
+  /**
+   * Where each face belongs at this moment.
+   *
+   * Nobody's home district. Choose a trek and the people who run it walk out
+   * of their villages and stand ON the route, spaced along it in order —
+   * which is the difference between a map of where guides live and a picture
+   * of a specific walk with specific people on it. Everybody else stays home
+   * and dims.
+   */
+  const positions = useMemo(() => {
+    const at = new Map<string, [number, number]>();
+    for (const g of guides) at.set(g.id, [g.lng, g.lat]);
+    if (activeTrail && activeGuides.length) {
+      const spots = placeAlongLine(activeTrail.coords, activeGuides.length);
+      activeGuides.forEach((g, i) => spots[i] && at.set(g.guide.id, spots[i]));
+    }
+    return at;
+  }, [guides, activeTrail, activeGuides]);
+
+  /** The walk in section — the most decision-useful thing we know about it. */
+  const profile = useMemo(
+    () =>
+      activeTrail
+        ? elevationProfile(
+            (activeTrail.places ?? []).map((p) => ({
+              day: p.day,
+              place: p.name,
+              altitudeM: p.altitudeM,
+            })),
+          )
+        : null,
+    [activeTrail],
+  );
   const gazetteer = useMemo(
     () => buildGazetteer({ trails, districts }),
     [trails, districts],
@@ -116,7 +156,18 @@ export function TrailAtlas({
     const m = mapRef.current;
     const b = trailBounds(trail);
     if (!m || !b) return;
-    m.fitBounds(b, { padding: 90, pitch: 55, bearing: -18, duration: 2600 });
+    // Asymmetric padding, because the furniture is asymmetric: the trail rail
+    // owns the left edge on a laptop and the profile the bottom right. Even
+    // padding put guides underneath both.
+    const wide = m.getContainer().clientWidth >= 640;
+    m.fitBounds(b, {
+      padding: wide
+        ? { left: 300, top: 80, right: 90, bottom: 150 }
+        : { left: 40, top: 70, right: 40, bottom: 190 },
+      pitch: 55,
+      bearing: -18,
+      duration: 2600,
+    });
   }, []);
 
   // Build the map once.
@@ -145,6 +196,9 @@ export function TrailAtlas({
           dragRotate: true,
         });
         mapRef.current = m;
+        // Swallowed on purpose: a tile host having a bad day must not spam a
+        // visitor's console. When debugging, log it here — an empty handler
+        // has hidden two real faults on this map already.
         m.on("error", () => {});
 
         const build = () => {
@@ -197,6 +251,33 @@ export function TrailAtlas({
             paint: { "line-color": MAP_INK.trail, "line-width": 3.6 },
             layout: { "line-cap": "round", "line-join": "round" },
           });
+          // The trek's own name, along its own line. The only text this map
+          // carries — the Esri label overlay that used to scatter half-drawn
+          // single words over the mountains is gone.
+          m.addLayer({
+            id: "trail-label",
+            type: "symbol",
+            source: "trails",
+            filter: ["==", ["get", "slug"], ""],
+            layout: {
+              "symbol-placement": "line-center",
+              "text-field": ["get", "name"],
+              "text-size": 13,
+              "text-font": ["Noto Sans Bold"],
+              "text-letter-spacing": 0.04,
+              "text-max-angle": 40,
+            },
+            paint: {
+              "text-color": "#12210f",
+              "text-halo-color": MAP_INK.trail,
+              "text-halo-width": 2,
+              "text-halo-blur": 0.4,
+            },
+          });
+
+          // Contours last, so they sit under nothing that matters and over
+          // the imagery they describe.
+          void attachContours(m, "outside-dim");
           setReady(true);
         };
         // 'styledata', not 'load': load waits for a complete render, which
@@ -269,8 +350,11 @@ export function TrailAtlas({
     };
   }, [ready, guides]);
 
-  // Who is lit, who is quiet. Classes only — no marker is created or
-  // destroyed here, so the map never blinks.
+  // Who is lit, who is quiet, and where everybody is standing.
+  //
+  // Classes and coordinates only — no marker is created or destroyed here, so
+  // the map never blinks and the walk onto the trail is a movement rather
+  // than a disappearance and a reappearance somewhere else.
   useEffect(() => {
     for (const [id, mk] of markers.current) {
       const node: HTMLElement | undefined = mk.getElement?.();
@@ -280,10 +364,14 @@ export function TrailAtlas({
       node.classList.toggle("is-on", Boolean(kind));
       node.classList.toggle("is-sells", kind === "sells");
       node.classList.toggle("is-open", open);
+      // Somebody is chosen, and this is not them: get out of the way.
+      node.classList.toggle("is-hushed", Boolean(active) && !kind);
       // A face nobody is looking at must not sit on top of one they are.
       node.style.zIndex = open ? "4" : kind ? "3" : "1";
+      const at = positions.get(id);
+      if (at) mk.setLngLat(at);
     }
-  }, [onTrail, openGuide, ready, guides]);
+  }, [onTrail, openGuide, ready, guides, positions, active]);
 
   // The trail highlight: the chosen trail, or — if somebody is open — every
   // trail that person walks.
@@ -291,7 +379,7 @@ export function TrailAtlas({
     const m = mapRef.current;
     if (!m || !ready) return;
     const lit = openPersonTrails.length ? openPersonTrails : active ? [active] : [];
-    for (const id of ["trail-active", "trail-active-casing"]) {
+    for (const id of ["trail-active", "trail-active-casing", "trail-label"]) {
       if (m.getLayer(id)) {
         m.setFilter(id, ["in", ["get", "slug"], ["literal", lit]]);
       }
@@ -397,8 +485,19 @@ export function TrailAtlas({
             thumb already is. Our own places only — every hit is somewhere we
             can take you. */}
         {ready && (
-          <div className="absolute inset-x-3 top-3 sm:left-auto sm:right-3 sm:w-72">
-            <div className="glass-dark rounded-card">
+          <div className="absolute inset-x-3 top-3 sm:left-auto sm:right-3 sm:w-80">
+            <div className="flex items-center gap-2 rounded-full bg-white px-4 shadow-lift ring-1 ring-black/5">
+              <svg
+                aria-hidden
+                viewBox="0 0 20 20"
+                className="h-5 w-5 shrink-0 text-muted"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <circle cx="9" cy="9" r="6" />
+                <path d="m13.5 13.5 3.5 3.5" strokeLinecap="round" />
+              </svg>
               <label className="sr-only" htmlFor="atlas-search">
                 Search a place in Nepal
               </label>
@@ -407,7 +506,7 @@ export function TrailAtlas({
                 type="search"
                 autoComplete="off"
                 value={query}
-                placeholder="Search a place — Manang, Namche…"
+                placeholder="Search a place in Nepal"
                 onChange={(e) => {
                   setQuery(e.target.value);
                   setHit(0);
@@ -427,7 +526,7 @@ export function TrailAtlas({
                     setQuery("");
                   }
                 }}
-                className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/55 focus:outline-none"
+                className="w-full bg-transparent py-3 text-base text-ink placeholder:text-muted focus:outline-none"
               />
             </div>
             {query.trim() !== "" && (
@@ -493,10 +592,55 @@ export function TrailAtlas({
           </div>
         )}
 
+        {/* The walk, in section.
+            A summit height is a number; this is the shape of getting there,
+            which is the thing that actually decides whether a trek is for
+            you. Everest Base Camp and Mardi Himal both "go up" — one of them
+            goes up for a fortnight, and you can see which at a glance. */}
+        {ready && activeTrail && profile && !openPerson && (
+          // On a phone this sits ABOVE the trail rail, not on top of it: the
+          // first version buried the one control that picks a trek, which is
+          // the worst thing a supporting panel can do. It is also cut down
+          // there — name, range and the shape, which is the part that
+          // actually communicates.
+          <div className="pointer-events-none absolute inset-x-3 bottom-[8.25rem] sm:bottom-11 sm:left-auto sm:right-3 sm:w-64">
+            <div className="glass-dark rounded-card p-3">
+              <p className="text-sm font-medium text-white">{activeTrail.name}</p>
+              <p className="text-caption text-white/70">{profileRange(profile)}</p>
+              <svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                className="mt-1.5 h-8 w-full sm:mt-2 sm:h-12"
+                aria-hidden
+              >
+                <path d={profile.area} fill={MAP_INK.trail} opacity="0.22" />
+                <path
+                  d={profile.path}
+                  fill="none"
+                  stroke={MAP_INK.trail}
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {profile.peak && (
+                <p className="hidden text-caption text-white/70 sm:block">
+                  Highest: {profile.peak.place} ·{" "}
+                  {profile.peak.altitudeM.toLocaleString("en-US")} m
+                </p>
+              )}
+              <p className="sr-only">
+                Elevation profile for {activeTrail.name}: {profileRange(profile)}.
+              </p>
+            </div>
+          </div>
+        )}
+
         {ready && active && (
-          // Not bottom-right: the guide card lives there now, and a hint
-          // underneath a card is a hint nobody reads.
-          <p className="pointer-events-none absolute bottom-3 left-72 hidden text-caption text-white/70 lg:block">
+          // Not bottom-right: the profile and the guide card live there now,
+          // and a hint underneath a card is a hint nobody reads.
+          <p className="pointer-events-none absolute bottom-3 left-72 hidden text-caption text-white/70 xl:block">
             {touring ? "Touring Nepal — pick a trail to stop" : "Drag to look around"}
           </p>
         )}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DayStop } from "./ElevationScrubber";
 import { MAP_INK, MAP_STYLE } from "~/lib/map-style";
+import { attachContours } from "~/lib/map-contours";
 import {
   daysSentence,
   groupIsActive,
@@ -233,6 +234,9 @@ export function RouteMap({
           } catch {
             /* flat is survivable; blank is not */
           }
+          // Contours: on a single-route map they are the whole story, because
+          // this is the zoom where "how steep is day nine" is the question.
+          void attachContours(m, "outside-dim");
 
           const legs = legsOfRoute(stops);
 

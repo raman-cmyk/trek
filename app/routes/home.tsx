@@ -286,6 +286,7 @@ export async function loader({ context }: Route.LoaderArgs) {
           name: String(d.place).trim(),
           lng: Number(d.lng),
           lat: Number(d.lat),
+          altitudeM: Number(d.altitude_m) || 0,
         })),
     }))
     .filter((t) => t.coords.length >= 2);

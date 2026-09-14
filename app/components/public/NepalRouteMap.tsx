@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { NEPAL_BOUNDS, ROUTE_LINES } from "~/lib/geo";
 import { MAP_STYLE } from "~/lib/map-style";
+import { attachContours } from "~/lib/map-contours";
 import { Skeleton } from "~/components/skeletons/Shimmer";
 import { cn } from "~/lib/cn";
 
@@ -106,25 +107,16 @@ export function NepalRouteMap({ routes }: { routes: MappedRoute[] }) {
           // ── Relief, if the world will give it to us ──────────────────
           // A public DEM host that is slow, rate-limited or blocked must cost
           // us the relief and nothing else.
+          // The shared style already carries the DEM, the hillshade and the
+          // colour relief. This used to add a SECOND source with the same id,
+          // which throws — and the catch below swallowed it, so this map has
+          // been flat since the day the shared style grew its own elevation.
           try {
-            m.addSource("dem", {
-              type: "raster-dem",
-              tiles: ["https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png"],
-              encoding: "terrarium",
-              tileSize: 256,
-              maxzoom: 12,
-              attribution: "Elevation: Mapzen / AWS Terrain Tiles",
-            } as any);
             m.setTerrain({ source: "dem", exaggeration: 1.4 });
-            m.addLayer({
-              id: "hillshade",
-              type: "hillshade",
-              source: "dem",
-              paint: { "hillshade-exaggeration": 0.45 },
-            });
           } catch {
             // Flat it is.
           }
+          void attachContours(m, "outside-dim");
 
           // ── The routes ───────────────────────────────────────────────
           m.addSource("routes", {
@@ -177,7 +169,7 @@ export function NepalRouteMap({ routes }: { routes: MappedRoute[] }) {
               "symbol-placement": "line-center",
               "text-field": ["get", "name"],
               "text-size": 12,
-              "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+              "text-font": ["Noto Sans Bold"],
             },
             paint: {
               "text-color": "#1b3b2a",
@@ -255,7 +247,10 @@ export function NepalRouteMap({ routes }: { routes: MappedRoute[] }) {
 
       {/* The name under the cursor, and a way in on a phone where there is no
           hover to speak of. */}
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap gap-1.5">
+      {/* Clear of the credit. The attribution wraps to two lines on a narrow
+          map and was covering this row completely — the third overlay on this
+          site to be eaten by it, so the clearance is deliberate here. */}
+      <div className="pointer-events-none absolute inset-x-3 bottom-11 flex flex-wrap gap-1.5">
         {drawn.slice(0, 8).map((r) => (
           <Link
             key={r.slug}

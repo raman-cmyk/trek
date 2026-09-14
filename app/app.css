@@ -418,14 +418,14 @@ a, button, input, select, textarea, label, summary {
   padding: 0;
   line-height: 0;
   transition:
-    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 200ms ease;
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms ease;
 }
 
-/* Every guide is on the map at all times, so the default state has to be
-   quiet enough that fifty of them read as a scattering of people across
-   Nepal rather than clutter. Small, dimmed, no label — the face IS the
-   label. Lit only when they are on the trail you are looking at. */
+/* Every guide is on the map at all times, so the resting state has to be
+   quiet enough that fifty of them read as people scattered across Nepal
+   rather than clutter. Small, LIGHT GREEN, no label — the face is the
+   label. */
 .atlas-face-ring {
   display: grid;
   place-items: center;
@@ -434,45 +434,62 @@ a, button, input, select, textarea, label, summary {
   border-radius: 999px;
   overflow: hidden;
   background: var(--color-mist);
-  border: 1.5px solid rgba(255, 255, 255, 0.75);
-  box-shadow: 0 1px 6px rgba(13, 26, 18, 0.45);
-  opacity: 0.72;
+  border: 1.5px solid rgba(200, 241, 105, 0.85);
+  box-shadow: 0 1px 6px rgba(10, 20, 16, 0.55);
+  opacity: 0.8;
   transition:
-    width 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 200ms ease,
-    border-color 200ms ease;
+    width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms ease,
+    border-color 260ms ease,
+    border-width 260ms ease,
+    box-shadow 260ms ease;
 }
 
+/* On the chosen trek: DARK GREEN outline, thick, with a chartreuse halo so
+   pine does not disappear into a pine forest. This is the contrast the whole
+   selection is for — these are the people you can walk this route with. */
 .atlas-face.is-on .atlas-face-ring {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   opacity: 1;
-  border-color: rgba(255, 255, 255, 0.95);
+  border-width: 3px;
+  border-color: var(--color-pine);
+  box-shadow:
+    0 0 0 2px rgba(200, 241, 105, 0.9),
+    0 4px 14px rgba(10, 20, 16, 0.6);
 }
 
-/* The one claim we make on this map: this guide sells this trek. */
-.atlas-face.is-sells .atlas-face-ring {
-  border-color: var(--color-chartreuse);
-  box-shadow:
-    0 0 0 2px rgba(200, 241, 105, 0.35),
-    0 2px 10px rgba(13, 26, 18, 0.5);
+/* Somebody is chosen and this is not them. Hushed hard rather than merely
+   dimmed: half-lit faces beside lit ones read as a rendering fault, and the
+   contrast is the point of selecting anything. */
+.atlas-face.is-hushed {
+  opacity: 0.4;
+}
+.atlas-face.is-hushed .atlas-face-ring {
+  width: 16px;
+  height: 16px;
+  border-width: 1px;
+  filter: saturate(0.4);
 }
 
 .atlas-face.is-open .atlas-face-ring {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   opacity: 1;
-  border-color: var(--color-chartreuse);
+  border-width: 3px;
+  border-color: var(--color-pine);
   box-shadow:
-    0 0 0 3px rgba(200, 241, 105, 0.45),
-    0 4px 16px rgba(13, 26, 18, 0.6);
+    0 0 0 3px var(--color-chartreuse),
+    0 6px 20px rgba(10, 20, 16, 0.7);
 }
 
 .atlas-face:hover,
 .atlas-face:focus-visible {
   transform: scale(1.12);
 }
+.atlas-face:hover,
+.atlas-face:focus-visible,
 .atlas-face:hover .atlas-face-ring,
 .atlas-face:focus-visible .atlas-face-ring {
   opacity: 1;
@@ -502,6 +519,7 @@ a, button, input, select, textarea, label, summary {
 
 @media (max-width: 640px) {
   .atlas-face-ring { width: 18px; height: 18px; }
-  .atlas-face.is-on .atlas-face-ring { width: 32px; height: 32px; }
-  .atlas-face.is-open .atlas-face-ring { width: 40px; height: 40px; }
+  .atlas-face.is-on .atlas-face-ring { width: 34px; height: 34px; }
+  .atlas-face.is-open .atlas-face-ring { width: 44px; height: 44px; }
+  .atlas-face.is-hushed .atlas-face-ring { width: 13px; height: 13px; }
 }
