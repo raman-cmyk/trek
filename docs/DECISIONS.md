@@ -528,6 +528,19 @@ with two. The point is to fail in CI before a migration reaches anybody.
 migrations; a local database that lacks them passes tests the real one fails.
 Nothing reads them yet, and the comment on the column says why it matters.
 
+## One commit, two branch names (2026-09-14)
+
+The double-deploy happened a second time, and worse: a deploy from
+`claude/new-session-vereu4` — a branch strictly behind `claude/app-build-lgnkqo`
+— put the site back before the merge, so the foreign-key fix, the cancellation
+work, the deposit copy, the calendar, the verification queues and the party
+limit all vanished at once while every page still returned 200.
+
+The cause is two workspaces with two branch names for one project. Both branch
+names now point at the same commit, and the rule is that they stay that way:
+whichever checkout deploys, it builds the same thing. A revert is then
+impossible rather than merely unlikely.
+
 ## Deploying from two places reverts one of them (2026-09-14)
 
 Two deploys went out 78 seconds apart: mine, then one from the founder's
