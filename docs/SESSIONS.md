@@ -2469,3 +2469,96 @@ queue. Anyone who applied before the question existed is counted nowhere —
 they are not "somewhere else", they are not data.
 
 895 tests green, build green.
+
+## 2026-09-14 — What happens if they cannot come, said under every Book button
+
+A trekker in Berlin is about to send money to a stranger in Nepal for a walk
+four months away. The one question in their head is not on the page: what if
+I can't come? Every competitor answers it beside the calendar. We answered it
+nowhere.
+
+So the widget now carries two blocks under the dates — what the deposit does,
+and what happens if the trip is cancelled — plus a full policy page behind
+them. The free-cancellation window is named, with the date it ends for the
+dates they actually picked, because "free cancellation up to 30 days before"
+is a rule and "free until 12 October" is an answer.
+
+Every number in that copy is produced by running `computeCancellation`, not
+typed. A refund policy that says one thing on the page and does another in
+the refund is worse than no policy on the page, and copy drifts from code the
+moment they are allowed to disagree.
+
+907 tests green, build green, deployed.
+
+## 2026-09-14 — One filter panel for guides, experiences and routes
+
+Three browse pages had grown three different filter layouts, none of which
+fit a phone. They now share one panel that opens over the page, with the same
+filters that were already there — nothing new to learn, one place to learn it.
+
+Built on `<details>` rather than React state, so it opens, filters and
+submits with JavaScript off, which is the state of every crawler that decides
+whether we rank. Verified with JS disabled.
+
+922 tests green, build green, deployed.
+
+## 2026-09-14 — Maps: one pin per place, real ground, and a route that reads
+
+The founder found the bug by using the thing: on Annapurna, Day 2 and Day 11
+are the same village, so pin 11 sat on top of pin 1 and the numbers appeared
+to skip. Days sharing a place are now one pin listing every day it serves,
+and pins that merely crowd each other are nudged apart — never far enough to
+lie about where the village is.
+
+The basemap went from flat vector tiles to Esri satellite imagery with a
+terrarium DEM under it, hillshade, and sky. A trek map whose background is
+grey does not sell a mountain.
+
+Two bugs of the same family were fixed under it. The route was drawn on
+MapLibre's `load` event, which never fires when tiles are slow or blocked —
+so on a bad connection the map arrived with no route on it, silently. It
+draws on `styledata` now. And the route included the flight home, which drew
+a straight line across the country and made an eleven-day walk look like a
+mistake; travel legs are excluded from the walking line and the bounds.
+
+Honest limit: this sandbox's software GL does not draw MapLibre line layers
+(proved with a bright red test line through known coordinates that also did
+not appear). Pins, terrain, hillshade and imagery were verified in a browser
+here; the trail line itself was not, and needs the founder's eyes.
+
+959 tests green, build green, deployed.
+
+## 2026-09-14 — The homepage map stops counting and starts introducing
+
+The map on the homepage showed bubbles with a number of guides per district.
+That is a statistic. Nobody books a bubble, and the whole positioning of this
+company is that you pick a person, not an agency — so the largest element on
+the front page was arguing the opposite case.
+
+It is now a trail atlas: pick a trail, meet the people who walk it. Satellite
+terrain, the trail on it, and the guides who work it standing on the map as
+faces. Tap a face, get a card, go meet them. A slow auto-tour moves between
+trails until the viewer touches the map, then stops for good — an ambient
+thing that never fights the person using it.
+
+The join is deliberately two-tier and deliberately visible. A guide who
+actually sells an offering on that route gets the chartreuse ring; a guide
+whose listed regions merely cover it does not. `guide_route_experience` had
+two rows in it and was useless; offerings→route covers 44 guides across 7
+routes, and regions carry the rest. The distinction is kept in the UI because
+the alternative is implying someone is bookable on a trail when they are not,
+and that is the one promise this marketplace cannot break.
+
+Guides sharing a trailhead are fanned around a circle so faces never stack —
+the same bug as the day pins, one level up. MapLibre only loads once the
+section approaches the viewport, since most visitors never scroll that far
+and it is 1.2 MB. With JavaScript off the section is a list of trails and the
+guides on them, which is what a crawler needs anyway.
+
+Verified in a browser at 1100px and 390px: the fly-to, the faces, the names,
+the sells ring, the rail, the satellite relief. On mobile the rail was hidden
+entirely behind the two-line attribution bar — the control for the whole
+experience, invisible — and now sits above it. The trail line itself is still
+unverifiable here (see above) and wants the founder's eyes.
+
+985 tests green, build green, deployed.
