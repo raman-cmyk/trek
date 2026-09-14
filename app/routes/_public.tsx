@@ -5,6 +5,7 @@ import { Header } from "~/components/public/Header";
 import { Footer } from "~/components/public/Footer";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
+import { TripIntentDialog } from "~/components/public/TripIntentDialog";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -112,6 +113,12 @@ export default function PublicLayout({ loaderData }: Route.ComponentProps) {
         <Outlet />
       </div>
       <Footer routes={loaderData.routes} data={loaderData.footer} />
+
+      {/* "When are you coming to Nepal?", three seconds in, once per browser,
+          and never to somebody who already has an account with us. Mounted
+          here rather than on the homepage because most first visits arrive
+          from search on a guide or a route, not on the front door. */}
+      <TripIntentDialog signedIn={Boolean(loaderData.account)} />
     </div>
   );
 }
