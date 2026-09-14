@@ -2587,3 +2587,88 @@ rail, because Cloudflare had cached the HTML. A cache-busted request showed
 the truth. A verification that reads a cache is not a verification.
 
 991 tests green, build green, deployed.
+
+## 2026-09-14 — Everyone on the map, and a search box that only knows Nepal
+
+"The map should show all the guides. Make it small so it does not look
+cluttered, no mark, clean mapping, search a place feature."
+
+The atlas was showing only the guides on the trail you happened to be looking
+at, and rebuilding every marker whenever that changed — so the country was
+empty between trails and the faces flickered on each step of the tour. All 48
+placeable guides are on the map now, always, and the markers are built once
+and restyled rather than torn down.
+
+The uncluttering is a size rule: a guide nobody is looking at is a 22px dot at
+72% opacity with no name on it, a guide on the active trail lifts to 40px, and
+the one you tapped goes to 48px. Measured in a browser, not eyeballed. Fifty
+faces at 22px read as a scattering of people across a country; fifty at 40px
+with labels was the mess being complained about. The face is the label.
+
+Tapping anybody now lights every trail THEY walk rather than only the selected
+one — the reverse of the rail, and the thing that makes having everyone on the
+map worth the pixels: the country becomes browsable by person, which is the
+positioning.
+
+Search is deliberately not a geocoder. A general one needs a key, a rate limit
+and a round trip per keystroke, and answers "Base Camp" with somewhere in
+Alaska. This searches our own gazetteer — 24 trails, 166 located villages
+lifted from the itineraries, the regions, the districts our guides live in.
+Instant, offline, and every hit is somewhere this company can actually take
+you. Names fold past case, accents and punctuation, because Ghorepani reaches
+us spelled three ways and a search that only matches our spelling tells people
+we do not go there. A village on four itineraries is one row reading "On
+Annapurna Circuit and Nar Phu Valley", not four identical rows that look like
+a bug.
+
+Verified at 1200px: 48 faces, 12 lit, 10 carrying the sells ring; rings
+measured at 22 and 40px; "manang" and "namche" both resolve and fly the
+camera; an unmatched query says so rather than listing the country. The guide
+card was sitting under the attribution bar — the same bug as the rail, one
+week later — and now clears it.
+
+## 2026-09-14 — Asking a stranger when they are coming, and making them an account
+
+Three seconds after somebody lands, the one question that decides everything
+downstream: when are you coming to Nepal?
+
+Most people cannot answer it, and that is the whole design problem. So there
+are three first-class answers — exact dates, a season, and "no idea yet" — and
+the third is the one that matters. A popup that will not let you say "I don't
+know" teaches people to type a date they invented, and then the business plans
+around fiction. "Just looking" is real data about a real visitor and is stored
+as itself rather than as a made-up date we would go on to act on.
+
+Then the email, and the account is made for them: no password chosen at a
+popup, no second form. What they get is a row and a sign-in link. Nobody is
+signed in by this and the account is created unconfirmed, because anybody can
+type a stranger's address into a popup — an account you can use because
+someone else typed your email is a hole, not an account. Clicking the emailed
+link is what proves the address.
+
+The lead is written FIRST and everything after it is allowed to fail. Creating
+an auth user can fail for a dozen reasons outside our control, and somebody
+who has just said they are coming in October is worth keeping whether or not
+Auth was having a good afternoon. An email that already has an account is
+found and never touched.
+
+Season windows roll over properly and are tested rather than typed: asked in
+December, "autumn" means next year; asked in January, "winter" is the one you
+are standing in; February knows about leap years. The read-back in the dialog
+is generated from the same function, so what they are told we heard cannot
+drift from what we saved.
+
+marketing_consent stays false. The copy promises no newsletter and the row
+agrees with the copy.
+
+Verified against production rather than a mock: three real posts to the live
+endpoint created two accounts and three intent rows with the right
+mode-specific fields, the second answer from a returning email reused the
+existing account instead of duplicating it, a bad submission returned both
+problems at once, and GET returns 405. In-app notifications landed for all
+three. The emails logged `skipped` — RESEND_API_KEY is still unset, which is
+exactly why the notification is derived from the email rather than sent beside
+it. All probe rows, users and auth users were deleted afterwards and the
+deletion verified.
+
+1044 tests green, build green, deployed.
