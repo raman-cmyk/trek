@@ -4,6 +4,8 @@ import type { Route } from "./+types/signup";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.server";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta() {
   return [
@@ -153,7 +155,7 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
   const countryName = [...POPULAR, ...MORE].find(([c]) => c === v.country)?.[1] ?? v.country;
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-paper">
+    <div className="relative flex min-h-screen flex-col bg-paper">
       {/* Already signed in? Say so instead of redirecting them somewhere else,
           which is indistinguishable from the page being broken. */}
       {signedInAs && (
@@ -197,7 +199,9 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
         )}
       </header>
 
-      <div className="flex flex-1 items-center justify-center px-5 pb-24">
+      {/* The form sits in the split card beside a real route (docs/07): the
+          first thing a new trekker sees is the kind of walk they came for. */}
+      <AuthSplit scene={AUTH_SCENE} className="min-h-0 flex-1 py-6 sm:py-8">
         <form onSubmit={submitStep} key={step} className="w-full max-w-md animate-fade-rise">
           <p className="label text-moss">
             Step {step + 1} of {STEPS.length}
@@ -339,7 +343,7 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
             <p className="mt-4 text-sm text-muted">Selected: {countryName}</p>
           )}
         </form>
-      </div>
-    </main>
+      </AuthSplit>
+    </div>
   );
 }

@@ -1,4 +1,6 @@
 import { Form, data, redirect, useNavigation } from "react-router";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 import type { Route } from "./+types/ops.login";
 import { Button } from "~/components/Button";
 import {
@@ -62,8 +64,10 @@ export default function OpsLogin({ actionData, loaderData }: Route.ComponentProp
   const nav = useNavigation();
   const busy = nav.state !== "idle";
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="font-display text-3xl text-ink">Guides of Nepal Ops</h1>
+    <AuthSplit scene={AUTH_SCENE}>
+      <h1 className="font-display text-3xl text-ink sm:text-4xl">
+        <span className="wt-light">Guides of Nepal</span> <span className="wt-heavy">Ops.</span>
+      </h1>
       <p className="mt-1 text-ink-soft">Sign in to the operations console.</p>
       <Form method="post" className="mt-6 space-y-4">
         <label className="block">
@@ -95,10 +99,10 @@ export default function OpsLogin({ actionData, loaderData }: Route.ComponentProp
         {actionData?.error && (
           <p className="text-sm text-danger">{actionData.error}</p>
         )}
-        <Button type="submit" loading={busy} className="w-full">
+        <Button type="submit" size="lg" loading={busy} className="w-full">
           Sign in
         </Button>
       </Form>
-    </main>
+    </AuthSplit>
   );
 }

@@ -5,6 +5,8 @@ import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 import { homePathFor } from "~/lib/super-admin";
 import { passwordProblem } from "~/lib/password";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta() {
   return [{ title: "Set a new password" }, { name: "robots", content: "noindex" }];
@@ -86,9 +88,9 @@ export default function Reset({ loaderData, actionData }: Route.ComponentProps) 
 
   if (!ready) {
     return (
-      <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
-        <h1 className="font-display text-3xl text-ink">
-          {expired ? "That link has expired" : "Nothing to do here"}
+      <AuthSplit scene={AUTH_SCENE}>
+        <h1 className="font-display text-3xl text-ink sm:text-4xl">
+          {expired ? "That link has expired." : "Nothing to do here."}
         </h1>
         <p className="mt-2 text-ink-soft">
           {expired
@@ -101,13 +103,15 @@ export default function Reset({ loaderData, actionData }: Route.ComponentProps) 
         >
           Send me a link →
         </Link>
-      </main>
+      </AuthSplit>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
-      <h1 className="font-display text-3xl text-ink">Set a new password</h1>
+    <AuthSplit scene={AUTH_SCENE}>
+      <h1 className="font-display text-3xl text-ink sm:text-4xl">
+        <span className="wt-light">Set a new</span> <span className="wt-heavy">password.</span>
+      </h1>
       <p className="mt-1 text-ink-soft">
         Pick something you will remember. You are signed in already — this is
         the last step.
@@ -138,10 +142,10 @@ export default function Reset({ loaderData, actionData }: Route.ComponentProps) 
         {actionData && "error" in actionData && (actionData as any).error && (
           <p className="text-sm text-danger">{(actionData as any).error}</p>
         )}
-        <Button type="submit" loading={busy} className="w-full">
+        <Button type="submit" size="lg" loading={busy} className="w-full">
           Save it and continue
         </Button>
       </Form>
-    </main>
+    </AuthSplit>
   );
 }

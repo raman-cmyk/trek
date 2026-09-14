@@ -3,6 +3,8 @@ import type { Route } from "./+types/g.login";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta() {
   return [{ title: "Guide sign in" }, { name: "robots", content: "noindex" }];
@@ -62,8 +64,10 @@ export default function GuideLogin({ loaderData, actionData }: Route.ComponentPr
   const signedInAs = (loaderData as any)?.signedInAs ?? null;
 
   return (
-    <main className="mx-auto max-w-sm px-4 py-16">
-      <h1 className="font-display text-3xl text-ink">Guide sign in</h1>
+    <AuthSplit scene={AUTH_SCENE}>
+      <h1 className="font-display text-3xl text-ink sm:text-4xl">
+        <span className="wt-light">Guide</span> <span className="wt-heavy">sign in.</span>
+      </h1>
       <p className="mt-2 text-ink-soft">
         Use the email and password you set when you applied.
       </p>
@@ -119,8 +123,8 @@ export default function GuideLogin({ loaderData, actionData }: Route.ComponentPr
         <a href="/apply" className="text-primary hover:underline">
           Apply here
         </a>
-        . Forgotten your password? Message our team — we'll reset it for you.
+        .
       </p>
-    </main>
+    </AuthSplit>
   );
 }

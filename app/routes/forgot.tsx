@@ -5,6 +5,8 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { sendEmail } from "~/lib/notify.server";
 import { resetSentMessage } from "~/lib/password";
 import { BRAND } from "~/lib/brand";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta() {
   return [{ title: "Forgot your password" }, { name: "robots", content: "noindex" }];
@@ -69,8 +71,10 @@ export default function Forgot({ actionData }: Route.ComponentProps) {
   const sent = actionData && "sent" in actionData ? (actionData as any).sent : null;
 
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
-      <h1 className="font-display text-3xl text-ink">Forgot your password</h1>
+    <AuthSplit scene={AUTH_SCENE}>
+      <h1 className="font-display text-3xl text-ink sm:text-4xl">
+        <span className="wt-light">Forgot your</span> <span className="wt-heavy">password.</span>
+      </h1>
 
       {sent ? (
         <>
@@ -104,7 +108,7 @@ export default function Forgot({ actionData }: Route.ComponentProps) {
             {actionData && "error" in actionData && (actionData as any).error && (
               <p className="text-sm text-danger">{(actionData as any).error}</p>
             )}
-            <Button type="submit" loading={busy} className="w-full">
+            <Button type="submit" size="lg" loading={busy} className="w-full">
               Send me a link
             </Button>
           </Form>
@@ -116,6 +120,6 @@ export default function Forgot({ actionData }: Route.ComponentProps) {
           ← Back to sign in
         </Link>
       </p>
-    </main>
+    </AuthSplit>
   );
 }

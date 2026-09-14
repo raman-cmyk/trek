@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { cn } from "~/lib/cn";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "lime";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
@@ -10,6 +10,9 @@ const variants: Record<Variant, string> = {
     "bg-card text-ink border border-border hover:border-ink-soft hover:shadow-lift",
   ghost: "bg-transparent text-ink hover:bg-black/5",
   danger: "bg-ember text-white hover:brightness-95",
+  // The signature: one per viewport (docs/07). Chartreuse on pine type, the
+  // way the references put their single "go" button in lime.
+  lime: "bg-chartreuse text-pine hover:brightness-[0.97] shadow-card",
 };
 
 const sizes: Record<Size, string> = {

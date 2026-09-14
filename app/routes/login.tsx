@@ -3,6 +3,8 @@ import type { Route } from "./+types/login";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.server";
+import { AuthSplit } from "~/components/design/AuthSplit";
+import { AUTH_SCENE } from "~/lib/auth-scene";
 
 export function meta() {
   return [{ title: "Sign in" }, { name: "robots", content: "noindex" }];
@@ -52,8 +54,10 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
   const next = loaderData?.next ?? "/";
 
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center px-6">
-      <h1 className="font-display text-3xl text-ink">Welcome back</h1>
+    <AuthSplit scene={AUTH_SCENE}>
+      <h1 className="font-display text-3xl text-ink sm:text-4xl">
+        <span className="wt-light">Welcome</span> <span className="wt-heavy">back.</span>
+      </h1>
       <p className="mt-1 text-ink-soft">Sign in to your Guides of Nepal account.</p>
       <p className="mt-2 text-sm text-ink-soft">
         New to Guides of Nepal?{" "}
@@ -98,10 +102,10 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
         {actionData && "error" in actionData && (actionData as any).error && (
           <p className="text-sm text-danger">{(actionData as any).error}</p>
         )}
-        <Button type="submit" loading={busy} className="w-full">
+        <Button type="submit" size="lg" loading={busy} className="w-full">
           Sign in
         </Button>
       </Form>
-    </main>
+    </AuthSplit>
   );
 }

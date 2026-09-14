@@ -39,6 +39,13 @@ export function SmartImage({
   imgClassName?: string;
 }) {
   const [loaded, setLoaded] = useState(false);
+  // Whether React is running yet. Until it is, the image must simply be
+  // visible: the fade-in below is gated on an onLoad handler that does not
+  // exist before hydration, so the server-rendered <img> was arriving at
+  // opacity 0 and staying there — with JavaScript off, every photograph on
+  // the site was invisible, and on teahouse wifi the browser had painted the
+  // picture seconds before the bundle arrived to let anyone see it.
+  const [hydrated, setHydrated] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   // No src means NO <img>. `src=""` is not "no image" to a browser — it
   // resolves against the current URL, fetches the HTML page, fails to decode
@@ -52,6 +59,7 @@ export function SmartImage({
   // never fires on the client. Reconcile against the actual element state.
   useEffect(() => {
     if (imgRef.current?.complete) setLoaded(true);
+    setHydrated(true);
   }, []);
 
   // Without a source, render the placeholder alone: warm wheat and contour
@@ -106,7 +114,9 @@ export function SmartImage({
         onLoad={() => setLoaded(true)}
         className={cn(
           "h-full w-full object-cover transition-opacity duration-base ease-out-soft",
-          loaded ? "opacity-100" : "opacity-0",
+          // Hidden only in the one window where hiding buys a cross-fade:
+          // React is up, and the bytes are still on their way.
+          hydrated && !loaded ? "opacity-0" : "opacity-100",
           imgClassName,
         )}
       />
