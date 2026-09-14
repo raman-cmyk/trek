@@ -12,6 +12,7 @@ import { CheckinButton } from "~/components/guide/CheckinButton";
 import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
+import { setupProgress } from "~/lib/guide-setup";
 
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -32,13 +33,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     { count: offeringCount },
     { count: journalCount },
     { count: routeCount },
+    { count: headshotCount },
   ] = await Promise.all([
     // Every column any part of this page wants from the guide's own row,
     // fetched once.
     admin
       .from("guides")
       .select(
-        "slug, status, tier, median_response_mins, only_with_me, bio, day_rate_usd_cents, guide_verifications(check_type, status), users(avatar_url)",
+        "slug, status, tier, median_response_mins, only_with_me, hook_line, bio, regions, day_rate_usd_cents, payout_account, guide_verifications(check_type, status), users(avatar_url)",
       )
       .eq("user_id", user.id)
       .single(),
@@ -60,11 +62,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .from("guide_languages")
       .select("language", { count: "exact", head: true })
       .eq("guide_id", user.id),
+    // A listed trip counts while the office checks it — the guide has done
+    // their part, and the wizard says so.
     admin
       .from("offerings")
       .select("id", { count: "exact", head: true })
       .eq("guide_id", user.id)
-      .eq("status", "live"),
+      .neq("status", "removed"),
     admin
       .from("journals")
       .select("id", { count: "exact", head: true })
@@ -73,6 +77,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .from("guide_route_experience")
       .select("route_id", { count: "exact", head: true })
       .eq("guide_id", user.id),
+    admin
+      .from("guide_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("guide_id", user.id)
+      .eq("kind", "headshot"),
   ]);
 
   const me = guide as any;
@@ -163,52 +172,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }
   }
 
+  const progress = setupProgress({
+    hasPhoto: !!(me as any)?.users?.avatar_url || (headshotCount ?? 0) > 0,
+    promise: me?.only_with_me ?? null,
+    hook: me?.hook_line ?? null,
+    bio: me?.bio ?? null,
+    regions: (me?.regions ?? []).length,
+    routes: routeCount ?? 0,
+    languages: langCount ?? 0,
+    dayRateCents: me?.day_rate_usd_cents ?? null,
+    payoutAccount: me?.payout_account ?? null,
+    offerings: offeringCount ?? 0,
+  });
+  // The journal is the one thing worth asking for after the page is done.
   const setup = [
-    {
-      key: "photo",
-      done: !!(me as any)?.users?.avatar_url,
-      label: "Add your photo",
-      note: "Trekkers pick a face. This is the whole product.",
-      to: "/g/profile",
-    },
-    {
-      key: "promise",
-      done: !!me?.only_with_me?.trim(),
-      label: "Write your one promise",
-      note: "One thing only you offer. Your words — we do not tidy them.",
-      to: "/g/profile",
-    },
-    {
-      key: "rate",
-      done: !!me?.day_rate_usd_cents,
-      label: "Set your day rate",
-      note: "You keep all of it. Trek adds its fee on top.",
-      to: "/g/profile",
-    },
-    {
-      key: "languages",
-      done: (langCount ?? 0) > 0,
-      label: "List your languages",
-      note: "It is how people filter. Missing here means missing from the search.",
-      to: "/g/profile",
-    },
-    {
-      key: "routes",
-      done: (routeCount ?? 0) > 0,
-      label: "Add the routes you've walked",
-      note: "How many times you have led each one. It is the first line trekkers read.",
-      to: "/g/profile",
-    },
-    {
-      key: "trip",
-      done: (offeringCount ?? 0) > 0,
-      label: "List a trip",
-      note: "The thing people book. Start with the trek you run most.",
-      // Straight to the form. This said "list a trip" and opened the profile
-      // page, which does not list trips — the one instruction on the screen
-      // led away from the thing it was asking for.
-      to: "/g/experiences/new",
-    },
+    ...progress.steps.map((s) => ({
+      key: s.key,
+      done: s.done,
+      label: s.label,
+      note: s.hint,
+      to: `/g/setup/${s.key}`,
+    })),
     {
       key: "journal",
       done: (journalCount ?? 0) > 0,

@@ -63,6 +63,7 @@ export default [
     route("g/calendar", "routes/g.calendar.tsx"),
     route("g/earnings", "routes/g.earnings.tsx"),
     route("g/profile", "routes/g.profile.tsx"),
+    route("g/setup/:step?", "routes/g.setup.tsx"),
     route("g/questions", "routes/g.questions.tsx"),
     route("g/messages", "routes/g.messages.tsx"),
     route("g/active", "routes/g.active.tsx"),

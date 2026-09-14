@@ -50,7 +50,10 @@ export async function action({ request, context }: Route.ActionArgs) {
     guide_id: user.id,
     note: `New experience to review: ${patch.title}`,
   });
-  return redirect("/g/experiences", { headers });
+  // Back to wherever sent them, so long as it is one of our own pages.
+  const next = new URL(request.url).searchParams.get("next") ?? "";
+  const to = next.startsWith("/g/") && !next.startsWith("//") ? next : "/g/experiences";
+  return redirect(to, { headers });
 }
 
 export default function NewExperience({ loaderData, actionData }: Route.ComponentProps) {

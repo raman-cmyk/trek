@@ -1316,3 +1316,35 @@ logic — 19 new tests. 320 tests green, typecheck green, build green.
 supabase/migrations/0059_delete_person.sql supabase/migrations/0060_account_blocks.sql`),
 then on /ops/blocking suspend a test account for a day, try to sign in as
 them, and lift it.
+
+## Session — guide setup, one screen at a time (2026-09-14)
+
+The founder held up a competitor's onboarding (stepper, points per step,
+preview card, one topic per screen) and asked for ours to be as easy.
+
+**Refactor first.** `app/routes/g.profile.tsx` (1,162 lines, every form
+inline) became `app/lib/guide-profile.server.ts` (`loadGuideProfile`,
+`saveGuideProfile` — every intent, unchanged in behaviour) plus
+`app/components/guide/ProfileSections.tsx` (promise, story, photos, voice,
+languages, regions, routes, basics, rate & payout, quick answers, held by
+team, ask the team). The profile page is now 90 lines of composition.
+
+**Then the wizard.** `/g/setup` is the overview (each step, its points, one
+"Start" button); `/g/setup/:step` is one screen: the score bar and stepper
+at the top, the step's forms, a preview card of what a trekker sees
+(portrait, name, hook line, promise, areas, routes, languages, rate), and
+Back / Continue. `app/lib/guide-setup.ts` holds the six steps, their weights
+(sum 100), what counts as done, and where Continue goes — 14 tests. The trip
+step hands off to the experience form with `?next=/g/setup/trip`, which the
+form now honours. The dashboard's "Finish your page" reads the same score
+and links each item to its step; the profile page shows "Your page is N%
+ready — finish it step by step" until it is.
+
+Small fixes on the way: a headshot now syncs `users.avatar_url`; a pending
+trip counts as listed.
+
+Copy for the new screens is in `copy.setup`. 332 tests green, typecheck
+green, build green. No migration.
+
+**Not verified in a browser** (no Supabase credentials here): the 360px
+walk-through is the founder's to do — /g/setup on a phone, photo step first.

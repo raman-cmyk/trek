@@ -399,3 +399,32 @@ prior status remembered and put back on unblock. Any one lock alone leaks.
 **Blocked people are told, in words, with a date.** `/blocked` says "paused
 until 1 October" or "closed", and where to write. It does not show the reason
 — the office writes reasons for each other.
+
+## Guide setup is six screens and a score, on top of the same save code (2026-09-14)
+
+The founder showed a competitor's onboarding: a stepper with points per step,
+one topic per screen, a live preview card. Ours asked for everything on one
+long profile page, which on a 360px phone is a wall, and the dashboard's
+checklist pointed every item at that wall.
+
+**One save path.** The profile page's action moved whole into
+`saveGuideProfile` and its sections into components, so `/g/profile` and
+`/g/setup/:step` render the same forms and hit the same validation. Two doors,
+one room; nothing can drift.
+
+**Six steps to a hundred.** Photo 20, words 20, where 15, languages 10, rate
+15, first trip 20. The weights say what gets somebody booked. A step is judged
+from the rows the public page reads (`guide-setup.ts`, tested), never from a
+"done" flag, so it cannot be ticked without being true. The journal stays a
+seventh, post-page item on the dashboard rather than a step: it needs a trek.
+
+**"Save and continue" moves on only when the step is done.** A half-filled
+step stays on screen with the saved thing visible. Continue wraps round to an
+earlier skipped step rather than dropping the guide on a finished page.
+
+**The headshot now sets `users.avatar_url`.** The public card and search
+results read the avatar; the gallery reads `guide_photos`. They were never in
+step, so a guide who uploaded a face still had a blank circle in search.
+
+**A pending trip counts as listed.** The office checks it before it goes
+live, but the guide has done their part, and the wizard says so.
