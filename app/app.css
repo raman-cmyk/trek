@@ -331,3 +331,75 @@ a, button, input, select, textarea, label, summary {
 @media (prefers-reduced-motion: reduce) {
   .trail-line-draw { animation: none; stroke-dashoffset: 0; }
 }
+
+/* ── The filter panel ────────────────────────────────────────────────────
+   A <details> dressed as a dialog. It opens and closes with no script, the
+   controls inside are plain form fields, and Apply is a GET submit — so a
+   filtered page stays a link you can send someone, and the whole thing works
+   with JavaScript off, which is the rule for anything public here.
+
+   Everything below is presentation. With no CSS at all it degrades to a
+   disclosure with a form in it, which is still usable. */
+.filter-sheet > summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-sheet[open] .filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  /* Behind the panel, above the page. Tapping it does nothing on purpose —
+     an invisible close target that swallows a mis-tap is worse than a visible
+     X, and the Esc key still closes a details in every browser that supports
+     it natively. */
+}
+
+.filter-sheet[open] .filter-panel {
+  position: fixed;
+  z-index: 61;
+  inset-inline: 0;
+  bottom: 0;
+  max-height: min(86vh, 44rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card);
+  border-top: 1px solid var(--color-line);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: 0 -12px 40px -12px color-mix(in srgb, var(--color-ink) 35%, transparent);
+  animation: filter-rise 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* On a screen with room, it is a centred dialog rather than a sheet — which
+   is what Viator shows, and what a filter panel on a laptop should be. */
+@media (min-width: 640px) {
+  .filter-sheet[open] .filter-panel {
+    inset: 50% auto auto 50%;
+    translate: -50% -50%;
+    width: min(38rem, calc(100vw - 2rem));
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-photo, 20px);
+    animation: filter-pop 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@keyframes filter-rise {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+
+@keyframes filter-pop {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+
+/* Somebody who has asked for less movement gets the panel, not the entrance. */
+@media (prefers-reduced-motion: reduce) {
+  .filter-sheet[open] .filter-panel {
+    animation: none;
+  }
+}

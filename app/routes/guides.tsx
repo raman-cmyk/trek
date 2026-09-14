@@ -5,6 +5,7 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { GuideCard, type PublicGuide } from "~/components/public/cards";
 import { BrowseSearch } from "~/components/public/BrowseSearch";
+import { FilterSheet } from "~/components/public/FilterSheet";
 import {
   escapeLike,
   guideIdsMatchingText,
@@ -220,6 +221,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         ? { key: intent.key, label: intent.label, blurb: intent.blurb }
         : null,
     today,
+    search: new URL(request.url).search,
     canonical: absoluteUrl(env.SITE_URL, "/guides"),
   };
 }
@@ -228,7 +230,46 @@ const SELECT_CLS =
   "rounded border border-line bg-card px-3 py-2 text-sm text-ink";
 
 export default function Guides({ loaderData }: Route.ComponentProps) {
-  const { guides, ratings, langMap, totalGuides, facets, filters, intent, today } = loaderData;
+  const { guides, ratings, langMap, totalGuides, facets, filters, intent, today, search } =
+    loaderData;
+  const params = new URLSearchParams(search);
+  // The lists come from the rows on the page: offering a language nobody
+  // speaks or a district with no guides is a dead end dressed as a choice.
+  const guideGroups = [
+    {
+      param: "tier",
+      title: "How far we have checked them",
+      type: "one" as const,
+      anyLabel: "Any",
+      options: [
+        { value: "1", label: "Verified", hint: "Licence and ID checked" },
+        { value: "2", label: "Trusted", hint: "Checked, plus a track record here" },
+        { value: "3", label: "Elite", hint: "Our highest tier" },
+      ],
+    },
+    {
+      param: "lang",
+      title: "Languages",
+      type: "one" as const,
+      anyLabel: "Any language",
+      showFirst: 6,
+      options: facets.languages.map((l: string) => ({ value: l, label: l })),
+    },
+    {
+      param: "district",
+      title: "Where they are from",
+      type: "one" as const,
+      anyLabel: "Anywhere",
+      showFirst: 8,
+      options: facets.districts.map((d: string) => ({ value: d, label: d })),
+    },
+    {
+      param: "women",
+      title: "Who you walk with",
+      type: "many" as const,
+      options: [{ value: "1", label: "Women guides" }],
+    },
+  ];
   const narrowed =
     !!filters.q ||
     !!filters.from ||
@@ -288,40 +329,18 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
         today={today}
         placeholder="Annapurna, Sherpa, German, Pokhara…"
         dateLabel="Free between"
-        hidden={{ intent: intent?.key ?? "" }}
+        hidden={{
+          intent: intent?.key ?? "",
+          tier: filters.fTier,
+          lang: filters.fLang,
+          district: filters.fDistrict,
+          women: filters.fWomen ? "1" : "",
+        }}
       >
-        <label className="flex cursor-pointer items-center gap-2 rounded border border-line bg-card px-3 py-2 text-sm text-ink has-[:checked]:border-moss has-[:checked]:bg-moss/10">
-          <input
-            type="checkbox"
-            name="women"
-            value="1"
-            defaultChecked={filters.fWomen}
-            className="accent-moss"
-          />
-          Women guides
-        </label>
-        <select name="tier" defaultValue={filters.fTier} className={SELECT_CLS}>
-          <option value="">Any tier</option>
-          <option value="1">✓ Verified</option>
-          <option value="2">✓✓ Trusted</option>
-          <option value="3">★ Elite</option>
-        </select>
-        <select name="lang" defaultValue={filters.fLang} className={SELECT_CLS}>
-          <option value="">Any language</option>
-          {facets.languages.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
-        <select name="district" defaultValue={filters.fDistrict} className={SELECT_CLS}>
-          <option value="">Any district</option>
-          {facets.districts.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
+        {/* Four selects lined up beside a search box is a toolbar, not a
+            filter: nothing tells you what is on, and the fifth one would not
+            have fitted. They live in the panel below now. Sort stays here —
+            it is not a filter, it is an order. */}
         <select name="sort" defaultValue={filters.sort} className={SELECT_CLS}>
           <option value="recommended">Recommended</option>
           <option value="price">Price</option>
@@ -336,6 +355,16 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
           </Link>
         )}
       </BrowseSearch>
+
+      <div className="mt-3">
+        <FilterSheet
+          groups={guideGroups}
+          params={params}
+          resultCount={guides.length}
+          action="/guides"
+          keep={["q", "from", "to", "sort", "intent", "category"]}
+        />
+      </div>
 
       {filters.from && (
         <p className="mt-2 text-caption text-muted">

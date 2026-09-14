@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { FilterSheet } from "~/components/public/FilterSheet";
 import { Link } from "react-router";
 import type { Route } from "./+types/routes._index";
 import { pageMeta, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
@@ -48,7 +49,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
 
@@ -135,17 +136,49 @@ export async function loader({ context }: Route.LoaderArgs) {
       days: c.typical_days,
       maxAltitudeM: c.max_altitude_m,
     })),
+    search: new URL(request.url).search,
     canonical: absoluteUrl(env.SITE_URL, "/routes"),
   };
 }
 
 export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
-  const { cards, mapped, guideCount, band } = loaderData as any;
-  const [region, setRegion] = useState("all");
-  const [grade, setGrade] = useState("all");
+  const { cards, mapped, guideCount, band, search } = loaderData as any;
+  // In the URL rather than in useState: a page filtered to Langtang was not a
+  // link you could send anybody, and a reload threw it away.
+  const params = new URLSearchParams(search);
+  const region = params.get("region") || "all";
+  const grade = params.get("grade") || "all";
   const [sort, setSort] = useState<SortKey>("altitude");
 
   const regions = useMemo(() => regionsOf(cards), [cards]);
+  const routeGroups = useMemo(
+    () => [
+      {
+        param: "region",
+        title: "Where in Nepal",
+        type: "one" as const,
+        anyLabel: "Anywhere",
+        showFirst: 8,
+        options: regions.map((r: any) => ({
+          value: r.region,
+          label: r.region,
+          count: r.count,
+        })),
+      },
+      {
+        param: "grade",
+        title: "How hard",
+        type: "one" as const,
+        anyLabel: "Any grade",
+        // Capitalised for the panel; the values stay as the data has them.
+        options: GRADES.map((g) => ({
+          value: g,
+          label: g.charAt(0).toUpperCase() + g.slice(1),
+        })),
+      },
+    ],
+    [regions],
+  );
   const list = useMemo(
     () => sortCards(cards.filter((c: any) => matches(c, region, grade)), sort),
     [cards, region, grade, sort],
@@ -218,29 +251,18 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           row scrolls sideways instead, and the sort collapses to a select. */}
       <div className="sticky top-0 z-30 border-y border-line bg-paper/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-2.5">
-          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-            <Pill on={region === "all"} onClick={() => setRegion("all")}>
-              All regions
-            </Pill>
-            {regions.map((r: any) => (
-              <Pill key={r.region} on={region === r.region} onClick={() => setRegion(r.region)}>
-                {r.region} <span className="font-mono opacity-60">{r.count}</span>
-              </Pill>
-            ))}
-          </div>
-
-          <div className="mt-2 flex items-center justify-between gap-3">
-            {/* No bleed to the screen edge here: the sort control sits at the
-                end of this row, and a word half-under it reads as a bug. */}
-            <div className="no-scrollbar flex min-w-0 gap-1 overflow-x-auto pr-2 sm:flex-wrap sm:pr-0">
-              <Ghost on={grade === "all"} onClick={() => setGrade("all")}>
-                All grades
-              </Ghost>
-              {GRADES.map((g) => (
-                <Ghost key={g} on={grade === g} onClick={() => setGrade(g)}>
-                  <span className="capitalize">{g}</span>
-                </Ghost>
-              ))}
+          <div className="flex items-center justify-between gap-3">
+            {/* Fourteen regions and four grades used to be two scrolling rows
+                pinned to the top of a 360px screen. One panel, and the bar
+                gets its height back. */}
+            <div className="min-w-0">
+              <FilterSheet
+                groups={routeGroups}
+                params={params}
+                resultCount={list.length}
+                action="/routes"
+                keep={[]}
+              />
             </div>
 
             <div className="flex shrink-0 items-center gap-3">
@@ -306,16 +328,12 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
             <p className="text-muted">
               Nothing at that grade in {region === "all" ? "Nepal" : region} — yet.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                setRegion("all");
-                setGrade("all");
-              }}
-              className="mt-4 rounded-pill border border-line bg-card px-4 py-2 text-sm font-medium text-ink hover:border-moss hover:text-moss"
+            <Link
+              to="/routes"
+              className="mt-4 inline-block rounded-pill border border-line bg-card px-4 py-2 text-sm font-medium text-ink hover:border-moss hover:text-moss"
             >
               Clear the filters
-            </button>
+            </Link>
           </div>
         )}
 
@@ -371,50 +389,4 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
   );
 }
 
-function Pill({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={`shrink-0 whitespace-nowrap rounded-pill border px-3.5 py-1.5 text-caption transition duration-quick ${
-        on
-          ? "border-pine bg-pine text-paper"
-          : "border-line bg-card text-muted hover:border-sage hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
-function Ghost({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={`shrink-0 whitespace-nowrap rounded-pill px-3 py-1.5 text-caption transition duration-quick ${
-        on ? "bg-ink text-paper" : "text-muted hover:bg-mist hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}

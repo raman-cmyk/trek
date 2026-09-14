@@ -4,6 +4,7 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { BrowseSearch } from "~/components/public/BrowseSearch";
+import { FilterSheet } from "~/components/public/FilterSheet";
 import { escapeLike, openRunsByGuide, parseRange } from "~/lib/browse.server";
 import { fmtDateShort } from "~/lib/format";
 import { Chip } from "~/components/design/Chip";
@@ -20,6 +21,36 @@ const CATEGORIES = [
   { kind: "adventure", label: "Adventure" },
   { kind: "city", label: "City" },
 ] as const;
+
+/**
+ * Bands, not sliders.
+ *
+ * "Two weeks off" is how somebody plans a trip; 11.5 days is not. Bands also
+ * survive being in a URL, which a slider position does not, so a filtered
+ * page stays a link somebody can send.
+ */
+const LENGTH_BANDS = [
+  { value: "1", label: "One day", min: 1, max: 1 },
+  { value: "2-7", label: "2 to 7 days", min: 2, max: 7 },
+  { value: "8-14", label: "8 to 14 days", min: 8, max: 14 },
+  { value: "15", label: "15 days or more", min: 15, max: Infinity },
+];
+
+const PRICE_BANDS = [
+  { value: "0-50", label: "Under $50", min: 0, max: 49 },
+  { value: "50-150", label: "$50 to $150", min: 50, max: 150 },
+  { value: "150-600", label: "$150 to $600", min: 150, max: 600 },
+  { value: "600", label: "$600 and up", min: 600, max: Infinity },
+];
+
+function inBand(
+  bands: { value: string; min: number; max: number }[],
+  value: string,
+  n: number,
+): boolean {
+  const b = bands.find((x) => x.value === value);
+  return !!b && n >= b.min && n <= b.max;
+}
 
 const OFFERING_COLS =
   "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, route_slug, route_name";
@@ -42,6 +73,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const kind = p.get("kind") ?? "";
   const q = (p.get("q") ?? "").trim().slice(0, 80);
   const range = parseRange(p.get("from"), p.get("to"), today);
+  // Length and price, as bands rather than sliders: "8 to 14 days" is how
+  // somebody with two weeks off actually thinks, and a slider on a phone is
+  // a fight. Applied after the query because the rows are already here.
+  const lengthBands = p.getAll("length").filter((v) => LENGTH_BANDS.some((b) => b.value === v));
+  const priceBands = p.getAll("price").filter((v) => PRICE_BANDS.some((b) => b.value === v));
   const partyRaw = Number(p.get("party"));
   const party = Number.isFinite(partyRaw) && partyRaw >= 1 ? Math.min(16, Math.floor(partyRaw)) : 0;
 
@@ -99,6 +135,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     offerings = offerings.filter((o) => (runs[o.guide_id] ?? 0) >= Math.max(1, o.days));
   }
 
+  if (lengthBands.length) {
+    offerings = offerings.filter((o) =>
+      lengthBands.some((b) => inBand(LENGTH_BANDS, b, o.days ?? 0)),
+    );
+  }
+  if (priceBands.length) {
+    offerings = offerings.filter((o) =>
+      priceBands.some((b) => inBand(PRICE_BANDS, b, Math.round((o.price_usd_cents ?? 0) / 100))),
+    );
+  }
+
   const { count: totalCount } = await client
     .from("public_offerings")
     .select("id", { count: "exact", head: true });
@@ -108,13 +155,54 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     total: totalCount ?? offerings.length,
     kind,
     filters: { q, from: range?.from ?? "", to: range?.to ?? "", party },
+    search: new URL(request.url).search,
     today,
     canonical: absoluteUrl(env.SITE_URL, "/experiences"),
   };
 }
 
 export default function Experiences({ loaderData }: Route.ComponentProps) {
-  const { offerings, total, kind, filters, today } = loaderData;
+  const { offerings, total, kind, filters, today, search } = loaderData;
+  const params = new URLSearchParams(search);
+  // Built here rather than in the component so the options can carry counts
+  // from the rows that are actually on the page.
+  const groups = [
+    {
+      param: "kind",
+      title: "Kind of trip",
+      type: "one" as const,
+      anyLabel: "Any kind",
+      options: CATEGORIES.filter((c) => c.kind).map((c) => ({
+        value: c.kind,
+        label: c.label,
+      })),
+    },
+    {
+      param: "length",
+      title: "How long",
+      type: "many" as const,
+      options: LENGTH_BANDS.map((b) => ({ value: b.value, label: b.label })),
+    },
+    {
+      param: "price",
+      title: "Price per person",
+      type: "many" as const,
+      options: PRICE_BANDS.map((b) => ({ value: b.value, label: b.label })),
+    },
+    {
+      param: "party",
+      title: "How many of you",
+      type: "one" as const,
+      anyLabel: "Any size",
+      options: [
+        { value: "1", label: "Just me" },
+        { value: "2", label: "Two of us" },
+        { value: "4", label: "Four" },
+        { value: "6", label: "Six" },
+        { value: "8", label: "Eight or more" },
+      ],
+    },
+  ];
   const narrowed = !!filters.q || !!filters.from || !!filters.party || !!kind;
 
   return (
@@ -164,14 +252,18 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
             </Chip>
           );
         })}
-        {narrowed && (
-          <Link
-            to="/experiences"
-            className="self-center px-2 py-1.5 text-sm text-moss underline underline-offset-4"
-          >
-            Clear
-          </Link>
-        )}
+      </div>
+
+      {/* One panel for every filter that is not a pill. The pills stay because
+          "show me the day hikes" should be one tap, not a dialog. */}
+      <div className="mt-3">
+        <FilterSheet
+          groups={groups}
+          params={params}
+          resultCount={offerings.length}
+          action="/experiences"
+          keep={["q", "from", "to"]}
+        />
       </div>
 
       {(filters.from || !!filters.party) && (
