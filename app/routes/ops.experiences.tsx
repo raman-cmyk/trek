@@ -138,7 +138,7 @@ export default function OpsExperiences({ loaderData, actionData }: Route.Compone
           </thead>
           <tbody className="divide-y divide-line">
             {rows.map((r: any) => (
-              <tr key={r.id} className="hover:bg-mist/40">
+              <tr key={r.id} className="align-top hover:bg-mist/40">
                 <td className="px-3 py-2">
                   <Link to={`/ops/experiences/${r.id}`} className="font-medium text-primary hover:underline">
                     {r.title}
@@ -219,13 +219,16 @@ export default function OpsExperiences({ loaderData, actionData }: Route.Compone
  */
 function PauseButton({ id }: { id: string }) {
   return (
-    <details className="group relative">
-      <summary className="cursor-pointer list-none rounded border border-line px-3 py-1 text-xs hover:bg-mist">
+    <details className="group ml-auto w-fit">
+      <summary className="w-fit cursor-pointer list-none rounded border border-line px-3 py-1 text-xs hover:bg-mist">
         Pause
       </summary>
+      {/* In the flow, not floating: the table scrolls horizontally, and an
+          absolutely-positioned box inside a scroll container is clipped on
+          the last row. The row growing taller is the honest way to do it. */}
       <Form
         method="post"
-        className="absolute right-0 z-10 mt-1 w-72 space-y-2 rounded-md border border-line bg-card p-3 text-left shadow-lift"
+        className="mt-2 w-64 space-y-2 rounded-md border border-line bg-paper p-3 text-left"
       >
         <input type="hidden" name="id" value={id} />
         <label className="block text-xs font-medium text-ink" htmlFor={`reason-${id}`}>
