@@ -18,7 +18,7 @@ async function loadParticipant(request: Request, env: Env, bookingId: string) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, status, trekker_id, guide_id, start_date, end_date, party_size, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, avatar_url, last_seen_at)",
+      "id, status, trekker_id, guide_id, start_date, end_date, party_size, deposit_usd_cents, hold_expires_at, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, avatar_url, last_seen_at)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -116,6 +116,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         partySize: booking.party_size ?? 1,
         statusLabel: statusLabel(booking.status),
         href: isGuide ? `/g/bookings` : `/trips/${booking.id}`,
+        // The one moment this conversation has something to do: agreed, and
+        // waiting on the money. The link lives here so nobody has to go and
+        // find the email it was in.
+        awaitingDeposit: booking.status === "pending_deposit",
+        depositLabel: booking.deposit_usd_cents
+          ? `$${(booking.deposit_usd_cents / 100).toFixed(2)}`
+          : null,
+        holdExpiresAt: (booking as any).hold_expires_at ?? null,
       },
       canned,
       isGuide,

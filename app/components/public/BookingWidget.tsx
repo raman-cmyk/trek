@@ -7,6 +7,16 @@ import { computePricing } from "~/lib/pricing";
 import { computeExperiencePricing, type PriceBreakdown as PB , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { TrustPanel } from "~/components/public/TrustPanel";
+import { fmtDate } from "~/lib/format";
+import { ENQUIRY_TTL_HOURS } from "~/lib/config";
+import {
+  REFUND_BANDS,
+  REFUND_IF_NOT_YOU,
+  balanceLine,
+  depositLine,
+  fullPaymentReason,
+  paymentPlan,
+} from "~/lib/payment-policy";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -153,6 +163,12 @@ function ConfigBody({
         </p>
       ) : null}
 
+      {/* What you actually pay, and when. The page priced the trip to the
+          rupee and then said nothing about the deposit until checkout — so a
+          guest could not find out what percentage they were committing to,
+          which is the question everybody asks before they send anything. */}
+      {quote && day && <PaymentPolicy totalUsdCents={quote.headline * (quote.perPerson ? party : 1)} day={day} />}
+
       {availableDays.length === 0 ? (
         <p className="rounded-button bg-amber-50 px-3 py-2 text-sm text-amber-800">
           No open dates right now — message {o.guide_first_name} above and they can
@@ -160,8 +176,8 @@ function ConfigBody({
         </p>
       ) : sent ? (
         <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Request sent to {o.guide_first_name}. They have 24 hours to reply — we’ll
-          email you.
+          Request sent to {o.guide_first_name}. They have {ENQUIRY_TTL_HOURS} hours
+          to reply — we’ll email you.
         </p>
       ) : (
         <fetcher.Form method="post" action="/enquiry">
@@ -200,14 +216,17 @@ function ConfigBody({
         title="What happens when you send this"
         items={[
           {
-            label: `${o.guide_first_name} reads it and replies within 24 hours.`,
+            label: `${o.guide_first_name} reads it and replies within ${ENQUIRY_TTL_HOURS} hours.`,
             note: "You talk first. Your card is not asked for until you both agree.",
           },
           {
             label: "Your dates are held while they answer.",
             note: "Nobody else can book those days out from under you.",
           },
-          { label: "Cancel free until 30 days before you leave." },
+          {
+            label: "Cancel 30 or more days before and you get it all back.",
+            note: "Except the card fee, which the bank keeps. Closer in, less comes back — the exact bands are above.",
+          },
         ]}
       />
     </div>
@@ -301,5 +320,42 @@ export function BookingWidget({
         />
       </Sheet>
     </>
+  );
+}
+
+/**
+ * The money terms, before anybody commits to anything.
+ *
+ * Three sentences and the bands: what is taken now, what is taken later and
+ * when, and what comes back if the trip does not happen. Priced for the date
+ * and party actually selected, because "20% of what?" is the whole question.
+ */
+function PaymentPolicy({ totalUsdCents, day }: { totalUsdCents: number; day: string }) {
+  const { m } = useMoney();
+  const today = new Date().toISOString().slice(0, 10);
+  const plan = paymentPlan({ totalUsdCents, startDate: day, today });
+  const balance = balanceLine(plan, m, fmtDate);
+  const why = fullPaymentReason(plan);
+  return (
+    <details className="rounded-button border border-border bg-paper px-3 py-2 text-sm">
+      <summary className="cursor-pointer font-medium text-ink">
+        {depositLine(plan, m)}
+      </summary>
+      <div className="mt-2 space-y-2 text-ink-soft">
+        {balance && <p>{balance}</p>}
+        {why && <p>{why}</p>}
+        <div>
+          <p className="font-medium text-ink">If you cancel</p>
+          <ul className="mt-1 space-y-0.5">
+            {REFUND_BANDS.map((b) => (
+              <li key={b.when}>
+                {b.when}: <span className="text-ink">{b.youGetBack}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5">{REFUND_IF_NOT_YOU}</p>
+        </div>
+      </div>
+    </details>
   );
 }

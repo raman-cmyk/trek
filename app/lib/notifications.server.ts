@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { opsSubject, type CancelReason } from "~/lib/cancellations";
+import { DEPOSIT_HOLD_HOURS, ENQUIRY_TTL_HOURS } from "~/lib/config";
 
 /** Where the office reads its post. */
 const OPS_EMAIL = "hello@guidesofnepal.com";
@@ -47,7 +48,7 @@ export async function notifyNewEnquiry(
   await sendGuideSms(
     env,
     g?.phone,
-    `Trek: new request — ${args.offeringTitle}, ${args.startDate}, ${args.partySize}p. Open your dashboard to accept (24h).`,
+    `Trek: new request — ${args.offeringTitle}, ${args.startDate}, ${args.partySize}p. Open your dashboard to accept (${ENQUIRY_TTL_HOURS}h).`,
   );
 }
 
@@ -58,7 +59,7 @@ export async function notifyEnquiryAccepted(env: Env, admin: SupabaseClient, boo
     env,
     c.trekkerEmail,
     `${c.guideName} accepted — pay your deposit to lock it in`,
-    `Good news: ${c.guideName} accepted your request for ${c.title} (${c.startDate}).\n\nPay your deposit within 24 hours to hold the dates:\n${env.SITE_URL}/checkout/${bookingId}`,
+    `Good news: ${c.guideName} accepted your request for ${c.title} (${c.startDate}).\n\nPay your deposit within ${DEPOSIT_HOLD_HOURS} hours to hold the dates:\n${env.SITE_URL}/checkout/${bookingId}`,
     { kind: "enquiry_accepted" },
   );
 }

@@ -9,8 +9,13 @@ export const FX_RATE_NPR = 133; // NPR per 1 USD
 export const BALANCE_CHARGE_DAYS_BEFORE = 14;
 // Unpaid balance auto-cancels at this many days before start.
 export const BALANCE_AUTOCANCEL_DAYS_BEFORE = 10;
-// Accepted enquiry hold TTL before it expires back to open.
-export const ENQUIRY_TTL_HOURS = 24;
+// How long a request to book stands before it expires back to nothing. The
+// guide has this long to answer; 24 hours was not enough for a guide who is
+// on a mountain when the request arrives.
+export const ENQUIRY_TTL_HOURS = 48;
+// Once accepted, the trekker has this long to pay the deposit before the hold
+// on the guide's calendar is released.
+export const DEPOSIT_HOLD_HOURS = 48;
 
 /** v3 pricing canon: Trek's fee and The Fund, charged ON TOP of the package.
  *  The guide's fee is theirs in full. Seeded breakdowns use these same rates. */

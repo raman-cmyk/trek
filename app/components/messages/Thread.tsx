@@ -35,6 +35,12 @@ export interface ThreadBooking {
   partySize: number;
   statusLabel: string;
   href: string;
+  /** Agreed and waiting on the deposit — the one moment the thread can act. */
+  awaitingDeposit?: boolean;
+  /** What the deposit is, already formatted. */
+  depositLabel?: string | null;
+  /** When the hold on the guide's calendar runs out. */
+  holdExpiresAt?: string | null;
 }
 
 /** Traveller-side openers. Deliberately the four things people actually ask. */
@@ -96,6 +102,7 @@ export function Thread({
 
       <div className="min-h-0 overflow-y-auto px-3 py-4 sm:px-4">
         {booking && <BookingBanner booking={booking} />}
+        {booking && <DepositCallout booking={booking} isGuide={Boolean(isGuide)} />}
 
         {empty ? (
           <EmptyThread
@@ -302,6 +309,51 @@ function BookingBanner({ booking }: { booking: ThreadBooking }) {
         {booking.statusLabel}
       </span>
     </Link>
+  );
+}
+
+/**
+ * The link, in the conversation.
+ *
+ * A trip gets agreed in the thread and then the only way to pay for it was an
+ * email — so a trekker who was already talking to their guide had to go and
+ * find one. The guide sees the same card the other way round: what is
+ * outstanding and how long the dates are held for.
+ */
+function DepositCallout({ booking, isGuide }: { booking: ThreadBooking; isGuide: boolean }) {
+  if (!booking.awaitingDeposit) return null;
+  const hours = booking.holdExpiresAt
+    ? Math.max(0, Math.round((Date.parse(booking.holdExpiresAt) - Date.now()) / 3600_000))
+    : null;
+  const held =
+    hours === null
+      ? null
+      : hours === 0
+        ? "The hold on these dates has run out."
+        : `The dates are held for another ${hours} ${hours === 1 ? "hour" : "hours"}.`;
+
+  if (isGuide) {
+    return (
+      <div className="mx-auto mb-4 max-w-2xl rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm">
+        <p className="font-medium text-ink">You accepted. Waiting on the deposit.</p>
+        <p className="mt-0.5 text-caption text-muted">
+          {booking.depositLabel ? `${booking.depositLabel} to pay. ` : ""}
+          {held}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto mb-4 max-w-2xl rounded-lg border border-moss/40 bg-moss/5 px-3.5 py-2.5">
+      <p className="text-sm font-medium text-ink">Your trip is agreed. Pay the deposit to confirm it.</p>
+      {held && <p className="mt-0.5 text-caption text-muted">{held}</p>}
+      <Link
+        to={`/checkout/${booking.id}`}
+        className="mt-2 inline-block rounded-button bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+      >
+        {booking.depositLabel ? `Pay ${booking.depositLabel} now` : "Pay the deposit"}
+      </Link>
+    </div>
   );
 }
 

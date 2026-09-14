@@ -3,7 +3,7 @@ import { computePricing, computeDeposit, type PriceBreakdown } from "~/lib/prici
 import { partyAmounts, type PriceBreakdown as ExperienceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
-import { FX_RATE_NPR } from "~/lib/config";
+import { DEPOSIT_HOLD_HOURS, FX_RATE_NPR } from "~/lib/config";
 import type { StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
 
@@ -182,7 +182,7 @@ async function bookFromQuote(
       fund_usd_cents: q.fundUsdCents,
       // Accepted holds expire if the deposit isn't paid (released by the
       // enquiry-expiry sweep — audit B3).
-      hold_expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
+      hold_expires_at: new Date(Date.now() + DEPOSIT_HOLD_HOURS * 3600_000).toISOString(),
     })
     .select("id")
     .single();
