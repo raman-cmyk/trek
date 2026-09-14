@@ -6,12 +6,18 @@ import {
   linkLabel,
   rankTrails,
   trailGuideLabel,
+  trailsForGuide,
   tourStops,
   trailBounds,
   trailFacts,
   type AtlasGuide,
   type AtlasTrail,
 } from "~/lib/atlas";
+import {
+  buildGazetteer,
+  searchPlaces,
+  type AtlasPlace,
+} from "~/lib/atlas-search";
 import { cn } from "~/lib/cn";
 
 /**
@@ -38,10 +44,12 @@ export function TrailAtlas({
   trails,
   guides,
   offerings,
+  districts = [],
 }: {
   trails: AtlasTrail[];
   guides: AtlasGuide[];
   offerings: { guideId: string; routeSlug: string }[];
+  districts?: { name: string; lng: number; lat: number; guides: number }[];
 }) {
   const el = useRef<HTMLDivElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -53,6 +61,8 @@ export function TrailAtlas({
   const [active, setActive] = useState<string | null>(null);
   const [touring, setTouring] = useState(true);
   const [openGuide, setOpenGuide] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [hit, setHit] = useState(0);
 
   const ranked = useMemo(
     () => rankTrails(trails, guides, offerings),
@@ -66,6 +76,29 @@ export function TrailAtlas({
   const activeGuides = useMemo(
     () => (activeTrail ? guidesForTrail(activeTrail, guides, offerings) : []),
     [activeTrail, guides, offerings],
+  );
+  /** Everyone on the active trail, by id, so a marker can ask about itself. */
+  const onTrail = useMemo(
+    () => new Map(activeGuides.map((g) => [g.guide.id, g.kind])),
+    [activeGuides],
+  );
+  const gazetteer = useMemo(
+    () => buildGazetteer({ trails, districts }),
+    [trails, districts],
+  );
+  const openPerson = useMemo(
+    () => guides.find((g) => g.id === openGuide) ?? null,
+    [guides, openGuide],
+  );
+  /**
+   * Tap anybody and their trails light up — including the ones they walk that
+   * you were not looking at. That is the reverse of the rail and the reason
+   * every guide is on the map at once: the country is browsable by person,
+   * not only by route.
+   */
+  const openPersonTrails = useMemo(
+    () => (openPerson ? trailsForGuide(openPerson, trails, offerings) : []),
+    [openPerson, trails, offerings],
   );
 
   // 900kB of MapLibre does not download until the atlas is nearly on screen.
@@ -189,49 +222,84 @@ export function TrailAtlas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [near]);
 
-  // The chosen trail: highlight it, and hang the faces on it.
+  /**
+   * Every guide, once, and then never rebuilt.
+   *
+   * The first version hung markers on the active trail and tore them all down
+   * on every change, so the country was empty between trails and the faces
+   * flickered on each tour step. Building them once and restyling is both
+   * calmer and what the founder asked for: everybody is on the map, all the
+   * time, small enough that fifty of them is a scattering rather than a mess.
+   */
   useEffect(() => {
-    const m = mapRef.current;
-    if (!m || !ready) return;
-    for (const id of ["trail-active", "trail-active-casing"]) {
-      if (m.getLayer(id)) m.setFilter(id, ["==", ["get", "slug"], active ?? ""]);
-    }
-    if (m.getLayer("trail-all")) {
-      m.setPaintProperty("trail-all", "line-opacity", active ? 0.18 : 0.5);
-    }
-
-    for (const [, mk] of markers.current) mk.remove();
-    markers.current.clear();
-    if (!activeTrail) return;
-
+    if (!ready || !mapRef.current) return;
+    let cancelled = false;
     (async () => {
       const maplibregl = await import("maplibre-gl");
-      for (const { guide, kind } of activeGuides) {
+      const m = mapRef.current;
+      if (cancelled || !m) return;
+      for (const guide of guides) {
+        if (markers.current.has(guide.id)) continue;
         const node = document.createElement("button");
         node.type = "button";
         node.className = "atlas-face";
-        node.setAttribute("aria-label", `${guide.name} — ${linkLabel(kind)}`);
+        node.setAttribute("aria-label", guide.name);
+        node.title = guide.name;
         node.innerHTML = `
-          <span class="atlas-face-ring ${kind === "sells" ? "is-sells" : ""}">
+          <span class="atlas-face-ring">
             ${
               guide.avatar
                 ? `<img src="${escapeAttr(guide.avatar)}" alt="" loading="lazy" />`
                 : `<span class="atlas-face-initial">${escapeHtml(guide.name.slice(0, 1))}</span>`
             }
-          </span>
-          <span class="atlas-face-name">${escapeHtml(firstWord(guide.name))}</span>`;
+          </span>`;
         node.addEventListener("click", (e) => {
           e.stopPropagation();
+          setTouring(false);
           setOpenGuide((cur) => (cur === guide.id ? null : guide.id));
         });
-        const mk = new maplibregl.Marker({ element: node })
-          .setLngLat([guide.lng, guide.lat])
-          .addTo(m);
-        markers.current.set(guide.id, mk);
+        markers.current.set(
+          guide.id,
+          new maplibregl.Marker({ element: node }).setLngLat([guide.lng, guide.lat]).addTo(m),
+        );
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, ready, activeTrail]);
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, guides]);
+
+  // Who is lit, who is quiet. Classes only — no marker is created or
+  // destroyed here, so the map never blinks.
+  useEffect(() => {
+    for (const [id, mk] of markers.current) {
+      const node: HTMLElement | undefined = mk.getElement?.();
+      if (!node) continue;
+      const kind = onTrail.get(id);
+      const open = id === openGuide;
+      node.classList.toggle("is-on", Boolean(kind));
+      node.classList.toggle("is-sells", kind === "sells");
+      node.classList.toggle("is-open", open);
+      // A face nobody is looking at must not sit on top of one they are.
+      node.style.zIndex = open ? "4" : kind ? "3" : "1";
+    }
+  }, [onTrail, openGuide, ready, guides]);
+
+  // The trail highlight: the chosen trail, or — if somebody is open — every
+  // trail that person walks.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !ready) return;
+    const lit = openPersonTrails.length ? openPersonTrails : active ? [active] : [];
+    for (const id of ["trail-active", "trail-active-casing"]) {
+      if (m.getLayer(id)) {
+        m.setFilter(id, ["in", ["get", "slug"], ["literal", lit]]);
+      }
+    }
+    if (m.getLayer("trail-all")) {
+      m.setPaintProperty("trail-all", "line-opacity", lit.length ? 0.18 : 0.5);
+    }
+  }, [active, ready, openPersonTrails]);
 
   // Fly when the choice changes.
   useEffect(() => {
@@ -250,7 +318,33 @@ export function TrailAtlas({
     return () => clearInterval(t);
   }, [ready, touring, tour]);
 
-  const chosen = activeGuides.find((g) => g.guide.id === openGuide);
+  const results = useMemo(
+    () => (query.trim() ? searchPlaces(gazetteer, query) : []),
+    [gazetteer, query],
+  );
+  const openKind = onTrail.get(openGuide ?? "") ?? null;
+
+  /** Go to a searched place — and select its trek, if it belongs to one. */
+  const goTo = useCallback(
+    (place: AtlasPlace) => {
+      setTouring(false);
+      setQuery("");
+      setHit(0);
+      setOpenGuide(null);
+      if (place.kind === "trail" && place.trailSlug) {
+        setActive(place.trailSlug);
+        return;
+      }
+      setActive(place.trailSlug ?? null);
+      mapRef.current?.flyTo?.({
+        center: [place.lng, place.lat],
+        zoom: place.zoom,
+        pitch: 55,
+        duration: 2200,
+      });
+    },
+    [],
+  );
 
   return (
     <div ref={wrap}>
@@ -299,26 +393,110 @@ export function TrailAtlas({
           </div>
         )}
 
-        {/* The person you tapped. */}
-        {chosen && (
-          <div className="absolute right-3 top-3 w-64 rounded-card border border-line bg-card p-4 shadow-lift">
-            <p className="font-medium text-ink">{chosen.guide.name}</p>
-            <p className="text-caption text-muted">{linkLabel(chosen.kind)}</p>
-            {chosen.guide.hook && (
-              <p className="mt-1.5 text-sm text-ink-soft">“{chosen.guide.hook}”</p>
+        {/* Search. Top-right on a laptop, across the top on a phone, where a
+            thumb already is. Our own places only — every hit is somewhere we
+            can take you. */}
+        {ready && (
+          <div className="absolute inset-x-3 top-3 sm:left-auto sm:right-3 sm:w-72">
+            <div className="glass-dark rounded-card">
+              <label className="sr-only" htmlFor="atlas-search">
+                Search a place in Nepal
+              </label>
+              <input
+                id="atlas-search"
+                type="search"
+                autoComplete="off"
+                value={query}
+                placeholder="Search a place — Manang, Namche…"
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setHit(0);
+                }}
+                onKeyDown={(e) => {
+                  if (!results.length) return;
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setHit((h) => (h + 1) % results.length);
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setHit((h) => (h - 1 + results.length) % results.length);
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    goTo(results[hit] ?? results[0]);
+                  } else if (e.key === "Escape") {
+                    setQuery("");
+                  }
+                }}
+                className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder:text-white/55 focus:outline-none"
+              />
+            </div>
+            {query.trim() !== "" && (
+              <ul className="mt-1 overflow-hidden rounded-card border border-line bg-card shadow-lift">
+                {results.length === 0 && (
+                  <li className="px-3 py-2 text-caption text-muted">
+                    Nowhere we walk by that name — yet.
+                  </li>
+                )}
+                {results.map((place, i) => (
+                  <li key={place.id}>
+                    <button
+                      type="button"
+                      onMouseEnter={() => setHit(i)}
+                      onClick={() => goTo(place)}
+                      className={cn(
+                        "block w-full px-3 py-2 text-left",
+                        i === hit ? "bg-mist" : "hover:bg-mist",
+                      )}
+                    >
+                      <span className="block text-sm font-medium text-ink">{place.name}</span>
+                      <span className="block text-caption text-muted">{place.sub}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* The person you tapped. Anybody on the map, not only the people on
+            the trail you happened to be looking at. */}
+        {openPerson && (
+          <div className="absolute inset-x-3 bottom-20 rounded-card border border-line bg-card p-4 shadow-lift sm:inset-x-auto sm:bottom-11 sm:right-3 sm:w-64">
+            <button
+              type="button"
+              onClick={() => setOpenGuide(null)}
+              aria-label="Close"
+              className="float-right -mr-1 -mt-1 px-1 text-muted hover:text-ink"
+            >
+              ×
+            </button>
+            <p className="font-medium text-ink">{openPerson.name}</p>
+            <p className="text-caption text-muted">
+              {openKind
+                ? linkLabel(openKind)
+                : openPersonTrails.length
+                  ? `Walks ${openPersonTrails.length} ${openPersonTrails.length === 1 ? "trek" : "treks"} on this map`
+                  : openPerson.district
+                    ? `Based in ${openPerson.district}`
+                    : "Verified guide"}
+            </p>
+            {openPerson.hook && (
+              <p className="mt-1.5 text-sm text-ink-soft">“{openPerson.hook}”</p>
             )}
             <Link
-              to={`/guides/${chosen.guide.slug}`}
+              to={`/guides/${openPerson.slug}`}
               prefetch="intent"
               className="mt-3 inline-block text-sm font-medium text-moss underline underline-offset-4"
             >
-              Meet {firstWord(chosen.guide.name)} →
+              Meet {firstWord(openPerson.name)} →
             </Link>
           </div>
         )}
 
         {ready && active && (
-          <p className="pointer-events-none absolute right-3 bottom-3 hidden text-caption text-white/70 sm:block">
+          // Not bottom-right: the guide card lives there now, and a hint
+          // underneath a card is a hint nobody reads.
+          <p className="pointer-events-none absolute bottom-3 left-72 hidden text-caption text-white/70 lg:block">
             {touring ? "Touring Nepal — pick a trail to stop" : "Drag to look around"}
           </p>
         )}

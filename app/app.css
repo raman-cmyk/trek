@@ -411,36 +411,73 @@ a, button, input, select, textarea, label, summary {
    when they merely work the region — because the map must not promise
    something the booking flow then refuses. */
 .atlas-face {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
+  display: block;
   cursor: pointer;
   background: none;
   border: 0;
   padding: 0;
-  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.atlas-face:hover,
-.atlas-face:focus-visible {
-  transform: scale(1.08);
-  z-index: 3;
+  line-height: 0;
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
 }
 
+/* Every guide is on the map at all times, so the default state has to be
+   quiet enough that fifty of them read as a scattering of people across
+   Nepal rather than clutter. Small, dimmed, no label — the face IS the
+   label. Lit only when they are on the trail you are looking at. */
 .atlas-face-ring {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
   overflow: hidden;
   background: var(--color-mist);
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 10px rgba(13, 26, 18, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 6px rgba(13, 26, 18, 0.45);
+  opacity: 0.72;
+  transition:
+    width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease,
+    border-color 200ms ease;
 }
-.atlas-face-ring.is-sells {
+
+.atlas-face.is-on .atlas-face-ring {
+  width: 40px;
+  height: 40px;
+  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.95);
+}
+
+/* The one claim we make on this map: this guide sells this trek. */
+.atlas-face.is-sells .atlas-face-ring {
   border-color: var(--color-chartreuse);
-  box-shadow: 0 0 0 2px rgba(200, 241, 105, 0.35), 0 2px 10px rgba(13, 26, 18, 0.5);
+  box-shadow:
+    0 0 0 2px rgba(200, 241, 105, 0.35),
+    0 2px 10px rgba(13, 26, 18, 0.5);
 }
+
+.atlas-face.is-open .atlas-face-ring {
+  width: 48px;
+  height: 48px;
+  opacity: 1;
+  border-color: var(--color-chartreuse);
+  box-shadow:
+    0 0 0 3px rgba(200, 241, 105, 0.45),
+    0 4px 16px rgba(13, 26, 18, 0.6);
+}
+
+.atlas-face:hover,
+.atlas-face:focus-visible {
+  transform: scale(1.12);
+}
+.atlas-face:hover .atlas-face-ring,
+.atlas-face:focus-visible .atlas-face-ring {
+  opacity: 1;
+}
+
 .atlas-face-ring img {
   width: 100%;
   height: 100%;
@@ -448,20 +485,23 @@ a, button, input, select, textarea, label, summary {
 }
 .atlas-face-initial {
   font-weight: 600;
+  font-size: 11px;
   color: var(--color-pine);
 }
-
-.atlas-face-name {
-  font-size: 11px;
-  line-height: 1.1;
-  font-weight: 500;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(13, 26, 18, 0.9);
-  white-space: nowrap;
+.atlas-face.is-on .atlas-face-initial,
+.atlas-face.is-open .atlas-face-initial {
+  font-size: 15px;
 }
 
-/* On a phone the faces crowd; the name is the first thing to go. */
+@media (prefers-reduced-motion: reduce) {
+  .atlas-face,
+  .atlas-face-ring {
+    transition: none;
+  }
+}
+
 @media (max-width: 640px) {
-  .atlas-face-ring { width: 32px; height: 32px; }
-  .atlas-face-name { display: none; }
+  .atlas-face-ring { width: 18px; height: 18px; }
+  .atlas-face.is-on .atlas-face-ring { width: 32px; height: 32px; }
+  .atlas-face.is-open .atlas-face-ring { width: 40px; height: 40px; }
 }

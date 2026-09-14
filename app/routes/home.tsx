@@ -276,6 +276,17 @@ export async function loader({ context }: Route.LoaderArgs) {
           lng: d.lng == null ? null : Number(d.lng),
         })),
       ),
+      // The villages themselves, which is what a person types into a search
+      // box. "Namche" is a place someone has heard of; "everest-base-camp"
+      // is a slug we invented.
+      places: (Array.isArray(r.day_stops) ? r.day_stops : [])
+        .filter((d: any) => d.lat != null && d.lng != null && String(d.place ?? "").trim())
+        .map((d: any) => ({
+          day: Number(d.day) || 0,
+          name: String(d.place).trim(),
+          lng: Number(d.lng),
+          lat: Number(d.lat),
+        })),
     }))
     .filter((t) => t.coords.length >= 2);
 
@@ -301,6 +312,22 @@ export async function loader({ context }: Route.LoaderArgs) {
       })
       .filter(Boolean) as any[],
   );
+
+  // Where our guides live, for place search. Not drawn on the map — the old
+  // district bubbles were exactly what we removed — but somebody typing
+  // "Solukhumbu" should still land somewhere.
+  const districtGuideCounts: Record<string, number> = {};
+  for (const g of all) {
+    if (g.home_district) {
+      districtGuideCounts[g.home_district] = (districtGuideCounts[g.home_district] ?? 0) + 1;
+    }
+  }
+  const atlasDistricts = Object.entries(districtGuideCounts)
+    .map(([name, guides]) => {
+      const centre = DISTRICT_CENTRES[name as keyof typeof DISTRICT_CENTRES];
+      return centre ? { name, lng: centre[0], lat: centre[1], guides } : null;
+    })
+    .filter(Boolean) as { name: string; lng: number; lat: number; guides: number }[];
 
   // The strong link: a guide who sells a trip on this route is somebody you
   // can book for it today, which is a different claim from "works nearby".
@@ -337,6 +364,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     atlasTrails,
     atlasGuides,
     atlasOfferings,
+    atlasDistricts,
     routeRows,
     routeTotal: (routes ?? []).length,
     regionCounts,
@@ -373,6 +401,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     atlasTrails,
     atlasGuides,
     atlasOfferings,
+    atlasDistricts,
     routeRows,
     routeTotal,
     regionCounts,
@@ -479,6 +508,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           trails={atlasTrails}
           guides={atlasGuides}
           offerings={atlasOfferings}
+          districts={atlasDistricts}
         />
       </section>
 
