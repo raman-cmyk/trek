@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cleanReason, pauseProblem } from "~/lib/pause";
 import {
   fromPerPersonUsdCents,
   hasBreakdown,
@@ -292,4 +293,87 @@ export async function logOfferingEdit(
   } catch {
     /* an audit write must never be the reason an edit fails to save */
   }
+}
+
+/**
+ * Taking a listing off the market, with a reason attached.
+ *
+ * One implementation for both places the office can do it — the list and the
+ * editor — because two pause buttons that record different things is exactly
+ * the drift the audit trail exists to prevent.
+ *
+ * The reason is written three times on purpose: onto the row, so the office
+ * sees it wherever the listing appears; into offering_edits, so it survives
+ * the listing going live again; and to the guide, whose income this is.
+ */
+export async function pauseOffering(
+  admin: SupabaseClient,
+  args: { offeringId: string; editorId: string; reason: string },
+): Promise<{ error?: string; title?: string; guideId?: string }> {
+  const problem = pauseProblem(args.reason);
+  if (problem) return { error: problem };
+  const reason = cleanReason(args.reason);
+
+  const { data: before } = await admin
+    .from("offerings")
+    .select("title, guide_id, status")
+    .eq("id", args.offeringId)
+    .maybeSingle();
+
+  const { error } = await admin
+    .from("offerings")
+    .update({
+      status: "paused",
+      paused_reason: reason,
+      paused_at: new Date().toISOString(),
+      paused_by: args.editorId,
+    })
+    .eq("id", args.offeringId);
+  if (error) return { error: error.message };
+
+  await logOfferingEdit(admin, {
+    offeringId: args.offeringId,
+    editorId: args.editorId,
+    editorRole: "ops",
+    changed: {
+      status: { from: before?.status ?? null, to: "paused" },
+      paused_reason: { from: null, to: reason },
+    },
+  });
+  return { title: before?.title ?? "", guideId: before?.guide_id ?? undefined };
+}
+
+/**
+ * Back on the market.
+ *
+ * The reason is cleared because it described a pause that is over, and a
+ * stale reason sitting on a live listing is worse than none. What happened
+ * stays in offering_edits, which nobody can edit.
+ */
+export async function unpauseOffering(
+  admin: SupabaseClient,
+  args: { offeringId: string; editorId: string },
+): Promise<{ error?: string; title?: string; guideId?: string }> {
+  const { data: before } = await admin
+    .from("offerings")
+    .select("title, guide_id, status, paused_reason")
+    .eq("id", args.offeringId)
+    .maybeSingle();
+
+  const { error } = await admin
+    .from("offerings")
+    .update({ status: "live", paused_reason: null, paused_at: null, paused_by: null })
+    .eq("id", args.offeringId);
+  if (error) return { error: error.message };
+
+  await logOfferingEdit(admin, {
+    offeringId: args.offeringId,
+    editorId: args.editorId,
+    editorRole: "ops",
+    changed: {
+      status: { from: before?.status ?? null, to: "live" },
+      paused_reason: { from: before?.paused_reason ?? null, to: null },
+    },
+  });
+  return { title: before?.title ?? "", guideId: before?.guide_id ?? undefined };
 }

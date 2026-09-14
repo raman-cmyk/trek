@@ -68,7 +68,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const { data: offering } = await admin
     .from("offerings")
-    .select("id, status, title")
+    .select("id, status, title, paused_reason, paused_by")
     .eq("id", params.id)
     .eq("guide_id", user.id)
     .maybeSingle();
@@ -78,9 +78,27 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (!["live", "paused"].includes(offering.status)) {
       return data({ error: "Only a live experience can be paused." }, { status: 400, headers });
     }
+    // A guide hiding their own trip — because they are on a trek, or the
+    // dates are wrong — is theirs to undo. A listing the OFFICE took down is
+    // not: putting it back with one tap would undo a decision without
+    // addressing the thing that caused it, and would leave the office
+    // arguing with the guide about who turned it back on.
+    if (intent === "unpause" && offering.paused_by) {
+      return data(
+        {
+          error:
+            "Our office paused this one. Fix what they asked for and message us — we will put it back the same day.",
+        },
+        { status: 400, headers },
+      );
+    }
     await admin
       .from("offerings")
-      .update({ status: intent === "pause" ? "paused" : "live" })
+      .update(
+        intent === "pause"
+          ? { status: "paused", paused_at: new Date().toISOString(), paused_by: null, paused_reason: null }
+          : { status: "live", paused_at: null, paused_by: null, paused_reason: null },
+      )
       .eq("id", offering.id);
     return data(
       { ok: intent === "pause" ? "Paused — hidden from the site until you turn it back on." : "Live again." },
@@ -126,6 +144,22 @@ export default function EditExperience({ loaderData, actionData }: Route.Compone
         )}
       </div>
 
+      {/* The office took it down. The guide has to see why, in their words,
+          before anything else on the page — this is their income. */}
+      {offering.status === "paused" && offering.paused_by && (
+        <section className="rounded-card border border-ember/30 bg-ember/5 p-4">
+          <p className="label text-ember">Our office paused this</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-sm text-ink">
+            {offering.paused_reason ||
+              "No reason was written down. Message us and we will tell you what happened."}
+          </p>
+          <p className="mt-2 text-sm text-ink-soft">
+            Nobody can book it until it goes back up. Put this right, save your
+            changes, then message us — we will put it back the same day.
+          </p>
+        </section>
+      )}
+
       {actionData && "ok" in actionData && (
         <p className="rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{(actionData as any).ok}</p>
       )}
@@ -158,7 +192,7 @@ export default function EditExperience({ loaderData, actionData }: Route.Compone
         busy={nav.state !== "idle"}
       />
 
-      {["live", "paused"].includes(offering.status) && (
+      {["live", "paused"].includes(offering.status) && !offering.paused_by && (
         <form method="post" className="border-t border-line pt-4">
           <input type="hidden" name="intent" value={offering.status === "live" ? "pause" : "unpause"} />
           <button className="text-sm text-muted underline underline-offset-4 hover:text-ink">

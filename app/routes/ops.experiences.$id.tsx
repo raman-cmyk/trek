@@ -1,4 +1,4 @@
-import { Link, data, useNavigation } from "react-router";
+import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.experiences.$id";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
@@ -6,9 +6,16 @@ import {
   diffOffering,
   logOfferingEdit,
   parseExperienceForm,
+  pauseOffering,
   saveOfferingPhotos,
+  unpauseOffering,
 } from "~/lib/offerings.server";
-import { notifyListingEdited } from "~/lib/notifications.server";
+import {
+  notifyListingEdited,
+  notifyListingLive,
+  notifyListingPaused,
+} from "~/lib/notifications.server";
+import { PAUSE_REASON_MAX, pausedFor } from "~/lib/pause";
 import { Badge } from "~/components/ops/ui";
 import { firstName } from "~/lib/names";
 
@@ -34,6 +41,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("offering_id", params.id)
     .order("sort");
   if (!offering) throw new Response("Not found", { status: 404 });
+  // Every time this listing went up or came down, and why. The reason on the
+  // row describes the pause it is in now; this is the decision trail the
+  // office argues from a month later.
+  const { data: history } = await admin
+    .from("offering_edits")
+    .select("changed, created_at, editor:users!offering_edits_editor_id_fkey(full_name)")
+    .eq("offering_id", params.id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const pauses = (history ?? []).filter((h: any) => h.changed?.status);
   return data(
     {
       offering: {
@@ -41,6 +58,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         photos: (opsPhotos ?? []).map((p: any) => ({ url: p.url, alt: p.alt_text })),
       },
       routes: routes ?? [],
+      pauses,
+      now: new Date().toISOString(),
     },
     { headers },
   );
@@ -52,10 +71,40 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "save");
 
-  if (["approve", "pause", "unpause"].includes(intent)) {
-    const next = intent === "pause" ? "paused" : "live";
-    await admin.from("offerings").update({ status: next }).eq("id", params.id);
-    return data({ ok: next === "live" ? "Live." : "Paused." }, { headers });
+  if (intent === "pause") {
+    const res = await pauseOffering(admin, {
+      offeringId: params.id!,
+      editorId: user.id,
+      reason: String(form.get("reason") ?? ""),
+    });
+    if (res.error) return data({ error: res.error }, { status: 400, headers });
+    if (res.guideId) {
+      await notifyListingPaused(env, admin, {
+        guideId: res.guideId,
+        offeringId: params.id!,
+        title: res.title ?? "",
+        reason: String(form.get("reason") ?? "").trim(),
+      });
+    }
+    return data({ ok: "Paused. The guide has been told why." }, { headers });
+  }
+
+  if (intent === "unpause") {
+    const res = await unpauseOffering(admin, { offeringId: params.id!, editorId: user.id });
+    if (res.error) return data({ error: res.error }, { status: 400, headers });
+    if (res.guideId) {
+      await notifyListingLive(env, admin, {
+        guideId: res.guideId,
+        offeringId: params.id!,
+        title: res.title ?? "",
+      });
+    }
+    return data({ ok: "Live again." }, { headers });
+  }
+
+  if (intent === "approve") {
+    await admin.from("offerings").update({ status: "live" }).eq("id", params.id);
+    return data({ ok: "Live." }, { headers });
   }
 
   const { patch, photos, error } = parseExperienceForm(form);
@@ -96,7 +145,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsExperienceEdit({ loaderData, actionData }: Route.ComponentProps) {
-  const { offering, routes } = loaderData as any;
+  const { offering, routes, pauses, now } = loaderData as any;
   const nav = useNavigation();
   return (
     <div className="max-w-2xl space-y-5">
@@ -132,6 +181,92 @@ export default function OpsExperienceEdit({ loaderData, actionData }: Route.Comp
             Approve — put it live
           </button>
         </form>
+      )}
+
+      {/* Off the market, and the reason it came off — at the top, because it
+          is the first thing anybody opening this page needs to know. */}
+      {offering.status === "paused" && (
+        <div className="rounded-card border border-ember/30 bg-ember/5 p-4">
+          <p className="label text-ember">Paused — nobody can book this</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-sm text-ink">
+            {offering.paused_reason || (
+              <span className="italic text-muted">
+                No reason was recorded. It was paused before the office started writing one down.
+              </span>
+            )}
+          </p>
+          {pausedFor(offering.paused_at, now) && (
+            <p className="mt-1 text-caption text-muted">Off the market since {pausedFor(offering.paused_at, now)}.</p>
+          )}
+          <form method="post" className="mt-3">
+            <input type="hidden" name="intent" value="unpause" />
+            <button className="rounded bg-moss px-4 py-2 text-sm font-medium text-white hover:bg-pine">
+              Put it back live
+            </button>
+          </form>
+        </div>
+      )}
+
+      {offering.status === "live" && (
+        <details className="rounded-card border border-line bg-card p-4">
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            Take this off the market
+          </summary>
+          <Form method="post" className="mt-3 space-y-2">
+            <input type="hidden" name="intent" value="pause" />
+            <label className="block text-sm text-ink" htmlFor="pause-reason">
+              Why is it coming down?
+            </label>
+            <textarea
+              id="pause-reason"
+              name="reason"
+              rows={3}
+              required
+              maxLength={PAUSE_REASON_MAX}
+              placeholder="The summit photo is not his — it is off a stock site."
+              className="w-full rounded border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-moss"
+            />
+            <p className="text-caption text-muted">
+              The guide is sent this by SMS and email, so write it to them.
+            </p>
+            <button className="rounded bg-ember px-4 py-2 text-sm font-medium text-white hover:opacity-90">
+              Pause it
+            </button>
+          </Form>
+        </details>
+      )}
+
+      {/* The decision trail: every time this listing went up or came down. */}
+      {pauses.length > 0 && (
+        <details className="rounded-card border border-line bg-card p-4">
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            On and off the market ({pauses.length})
+          </summary>
+          <ul className="mt-3 divide-y divide-line text-sm">
+            {pauses.map((h: any, i: number) => (
+              <li key={i} className="py-2">
+                <p className="text-ink">
+                  <span className="font-medium">
+                    {h.changed.status.to === "paused" ? "Paused" : "Put back live"}
+                  </span>{" "}
+                  <span className="text-ink-soft">
+                    by {h.editor?.full_name ?? "the office"} ·{" "}
+                    {new Date(h.created_at).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                </p>
+                {h.changed.paused_reason?.to && (
+                  <p className="mt-0.5 whitespace-pre-wrap text-ink-soft">
+                    {h.changed.paused_reason.to}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <ExperienceForm

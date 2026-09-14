@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
+import { pauseSms } from "~/lib/pause";
 import { BRAND, SMS_PREFIX } from "~/lib/brand";
 
 /**
@@ -283,6 +284,57 @@ export async function notifyListingEdited(
       { kind: "listing_edited" },
     );
   }
+}
+
+/**
+ * The guide, told their listing is off the market and why.
+ *
+ * This is the one notification in the app that costs somebody money, so it
+ * carries the actual reason rather than "there was a problem", and it ends
+ * with the link to the page where they can fix it. A guide who finds out by
+ * noticing the bookings stopped is a guide who leaves.
+ */
+export async function notifyListingPaused(
+  env: Env,
+  admin: SupabaseClient,
+  args: { guideId: string; offeringId: string; title: string; reason: string },
+) {
+  const { data: g } = await admin
+    .from("users")
+    .select("phone, email")
+    .eq("id", args.guideId)
+    .maybeSingle();
+  const url = `${env.SITE_URL}/g/experiences/${args.offeringId}`;
+  await sendGuideSms(env, g?.phone, pauseSms(args.title, args.reason, url));
+  if (g?.email) {
+    await sendEmail(
+      env,
+      g.email,
+      `We've paused your listing: ${args.title}`,
+      `We have taken "${args.title}" off the marketplace for now. Nobody can book it until it goes back up.\n\nWhy:\n${args.reason}\n\nPut it right and tell us — we'll put it back:\n${url}\n\nIf you think this is a mistake, reply to this email and a person will read it.`,
+      { kind: "listing_paused" },
+    );
+  }
+}
+
+/**
+ * Back on the market — worth a word, because the guide was told it came down.
+ */
+export async function notifyListingLive(
+  env: Env,
+  admin: SupabaseClient,
+  args: { guideId: string; offeringId: string; title: string },
+) {
+  const { data: g } = await admin
+    .from("users")
+    .select("phone, email")
+    .eq("id", args.guideId)
+    .maybeSingle();
+  await sendGuideSms(
+    env,
+    g?.phone,
+    `${SMS_PREFIX}: "${args.title.slice(0, 30)}" is back on the marketplace. People can book it again.`,
+  );
 }
 
 /**
