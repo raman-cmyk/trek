@@ -27,7 +27,6 @@ import { briefHeading, tripNoun } from "~/lib/pre-trek";
 import { dialable, emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
 import { TrailScene } from "~/components/design/TrailScene";
 import { FactStrip } from "~/components/design/FactStrip";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { StatRow, StatTile } from "~/components/design/StatTile";
 import { cn } from "~/lib/cn";
 
@@ -342,9 +341,6 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         height="mt-3 aspect-[4/3] sm:aspect-[16/9]"
       >
         <div className={cn("absolute inset-x-0 bottom-0 p-4 sm:p-5", b.offering?.cover_photo_url ? "text-paper" : "text-ink")}>
-          <Eyebrow tone={b.offering?.cover_photo_url ? "chartreuse" : "moss"}>
-            with {firstName(b.guide?.users?.full_name)}
-          </Eyebrow>
           <h1 className="mt-1 font-display text-2xl leading-tight sm:text-3xl">{b.offering?.title}</h1>
           <div className="mt-2">
             <FactStrip

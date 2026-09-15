@@ -29,7 +29,6 @@ import { TripPipeline } from "~/components/TripPipeline";
 import { meetingTimeOf } from "~/lib/pipeline";
 import { PackageCard } from "~/components/messages/PackageCard";
 import { PackageComposer } from "~/components/messages/PackageComposer";
-import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -857,7 +856,6 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               "docs_pending" is an ops word; this is the same fact in the
               words the group and the guide would use. */}
           <div className="rounded-md border border-line bg-card p-4">
-            <Eyebrow>Where this trip is</Eyebrow>
             <TripPipeline
               className="mt-3"
               kind={offering?.kind}
@@ -940,7 +938,6 @@ export default function GroupPage({ loaderData, actionData }: Route.ComponentPro
               which nobody could do, because a share is paid into a booking
               that did not exist yet. */}
           <div className="rounded-md border border-line bg-card p-4">
-            <Eyebrow>Where you are</Eyebrow>
             <ol className="mt-2 space-y-2">
               {GROUP_STEPS.map((s, i) => {
                 const at = GROUP_STEPS.findIndex((x) => x.key === step);
@@ -1091,8 +1088,7 @@ function JoinInvite({
 }) {
   return (
     <main className="mx-auto max-w-xl px-4 py-16">
-      <Eyebrow>You have been invited</Eyebrow>
-      <h1 className="mt-2 font-display text-4xl text-ink">
+      <h1 className="font-display text-4xl text-ink">
         {groupHeading({ name: group.name, offeringTitle: offering?.title ?? null }).title}
       </h1>
       <p className="mt-3 text-body-l text-ink">

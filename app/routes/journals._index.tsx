@@ -5,7 +5,6 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { JournalCard } from "~/components/public/JournalCard";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { Chip, type ChipGlyph } from "~/components/design/Chip";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
@@ -146,8 +145,7 @@ export default function Journals({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
-      <Eyebrow>Trek stories</Eyebrow>
-      <h1 className="mt-2 max-w-[20ch] font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
+      <h1 className="max-w-[20ch] font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
         <span className="wt-heavy">Every trek, as it actually happened.</span>
       </h1>
       <p className="mt-4 max-w-[58ch] text-body-l text-ink">

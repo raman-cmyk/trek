@@ -5,7 +5,6 @@ import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { SmartImage } from "~/components/SmartImage";
 import { useMoney } from "~/lib/currency-context";
 import { eventDates, placesLeft } from "~/lib/events";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { Glyph } from "~/components/design/Chip";
 import { Glass, GlassPill } from "~/components/design/Glass";
 import { Fallback } from "~/components/design/Fallback";
@@ -43,8 +42,7 @@ export default function Events({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-6xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Eyebrow>Go with a group</Eyebrow>
-          <h1 className="mt-2 max-w-[22ch] font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
+          <h1 className="max-w-[22ch] font-display text-4xl leading-[1.05] text-ink sm:text-5xl">
             Trips somebody put together.
           </h1>
           <p className="mt-4 max-w-[56ch] text-body-l text-ink">

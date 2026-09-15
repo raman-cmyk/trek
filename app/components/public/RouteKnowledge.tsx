@@ -1,4 +1,3 @@
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { Glyph, type ChipGlyph } from "~/components/design/Chip";
 import { StatRow, StatTile } from "~/components/design/StatTile";
 import { legsOf, totalAscent, totalDescent, type DayLeg, type RouteStop } from "~/lib/trek-day";
@@ -30,7 +29,7 @@ export function Highlights({ items }: { items: string[] }) {
   if (!items?.length) return null;
   return (
     <section className="mt-12">
-      <Eyebrow as="h2">Why this one</Eyebrow>
+      <h2 className="font-display text-2xl text-ink">Why this one</h2>
       <ul className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
         {items.map((h, i) => (
           <li key={i} className="flex gap-3 text-ink">
@@ -48,7 +47,7 @@ export function Overview({ text, name }: { text: string | null; name: string }) 
   if (!text?.trim()) return null;
   return (
     <section className="mt-12">
-      <Eyebrow as="h2">The walk</Eyebrow>
+      <h2 className="font-display text-2xl text-ink">The walk</h2>
       <div className="mt-3 max-w-[64ch] space-y-4 text-body-l text-ink">
         {text.split(/\n{2,}/).map((p, i) => (
           <p key={i}>{p.trim()}</p>
@@ -85,7 +84,7 @@ export function DayByDay({
   return (
     <section className="mt-12">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <Eyebrow as="h2">Day by day</Eyebrow>
+        <h2 className="font-display text-2xl text-ink">Day by day</h2>
         <p className="font-mono text-caption text-muted">
           <span className="text-ink">{totalAscent(stops).toLocaleString("en-US")} m</span> up ·{" "}
           <span className="text-ink">{totalDescent(stops).toLocaleString("en-US")} m</span> down
@@ -262,7 +261,7 @@ export function GettingThere({
 
   return (
     <section className="mt-12">
-      <Eyebrow as="h2">On this route</Eyebrow>
+      <h2 className="font-display text-2xl text-ink">On this route</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {rows.map((r) => (
           <div key={r.id} className="rounded-photo border border-line bg-card p-5">
@@ -287,7 +286,7 @@ export function Packing({ route, extra }: { route: RouteFacts; extra?: string[] 
   const groups = packingList(route);
   return (
     <section className="mt-12">
-      <Eyebrow as="h2">What to pack</Eyebrow>
+      <h2 className="font-display text-2xl text-ink">What to pack</h2>
       <p className="mt-3 max-w-[62ch] text-ink-soft">
         For a walk of this length at this height. Everything here is buyable or
         rentable in Kathmandu and Pokhara for a fraction of what it costs at
@@ -347,7 +346,7 @@ export function KnowBeforeYouGo({ route }: { route: RouteFacts }) {
   const sections = knowBeforeYouGo(route);
   return (
     <section className="mt-12">
-      <Eyebrow as="h2">Before you go</Eyebrow>
+      <h2 className="font-display text-2xl text-ink">Before you go</h2>
       <p className="mt-3 max-w-[62ch] text-ink-soft">
         The honest answers, for this route at this height. Ask your guide
         anything that is not here — they answer on their own profile, in public,

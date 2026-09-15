@@ -7,7 +7,6 @@ import { firstName } from "~/lib/names";
 import { groupHeading } from "~/lib/groups";
 import { SmartImage } from "~/components/SmartImage";
 import { Badge } from "~/components/ops/ui";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { PhotoCard } from "~/components/design/PhotoCard";
 import { Glass, GlassPill } from "~/components/design/Glass";
 import { Glyph } from "~/components/design/Chip";
@@ -163,7 +162,6 @@ export default function MyTrips({ loaderData }: Route.ComponentProps) {
                 prefetch="intent"
                 className="block rounded-card border border-moss/50 bg-mist p-4 hover:border-moss"
               >
-                <Eyebrow tone="moss">Waiting for you</Eyebrow>
                 <p className="mt-1 font-medium text-ink">
                   {firstName(p.guideName) || "Your guide"} suggested a plan —{" "}
                   {p.days} {p.days === 1 ? "day" : "days"} for {p.party_size}, starting{" "}

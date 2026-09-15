@@ -13,7 +13,6 @@ import type { AuthScene } from "~/components/design/AuthSplit";
 export const AUTH_SCENE: AuthScene = {
   photo: "/img/routes/langtang-valley.jpg",
   alt: "The Langtang valley, walking towards Kyanjin Gompa",
-  eyebrow: "Langtang · a real route, day by day",
   title: "Langtang Valley",
   to: "/routes/langtang-valley",
   stops: [

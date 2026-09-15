@@ -16,7 +16,6 @@ import {
 import { findIntent, matchesKeywords } from "~/lib/intents";
 import { membersOf } from "~/lib/categories";
 import { fmtDateShort } from "~/lib/format";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { Chip, ChipRow, Glyph } from "~/components/design/Chip";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
@@ -304,7 +303,6 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      {intent && <Eyebrow>{intent.blurb}</Eyebrow>}
       <h1 className="font-display text-3xl text-ink">
         {intent ? intent.label : "Find your guide"}
       </h1>

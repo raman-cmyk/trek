@@ -5,7 +5,6 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { getEnv } from "~/lib/supabase.server";
 import { FX_RATE_NPR, TREK_FEE_PCT } from "~/lib/config";
 import { formatUsd } from "~/lib/pricing";
-import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -60,8 +59,7 @@ export default function Hosts({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-12">
-      <Eyebrow>For guides</Eyebrow>
-      <h1 className="mt-2 max-w-[20ch] font-display text-display-l text-ink">
+      <h1 className="max-w-[20ch] font-display text-display-l text-ink">
         Your name. Your rate. Your clients.
       </h1>
       <p className="mt-4 max-w-[62ch] text-body-l text-ink">

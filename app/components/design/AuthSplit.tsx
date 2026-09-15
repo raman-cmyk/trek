@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { cn } from "~/lib/cn";
 import type { TrailStop } from "~/lib/trail";
-import { Eyebrow } from "./Eyebrow";
 import { FactStrip, type Fact } from "./FactStrip";
 import { TrailScene } from "./TrailScene";
 
@@ -9,7 +8,6 @@ export interface AuthScene {
   photo: string;
   alt: string;
   title: string;
-  eyebrow: string;
   stops: TrailStop[];
   facts: Fact[];
   /** Where the picture leads, for the one link on it. */
@@ -71,7 +69,6 @@ export function AuthSplit({
             className="rounded-none md:rounded-[20px]"
           >
             <div className="absolute inset-x-0 bottom-0 hidden p-5 md:block">
-              <Eyebrow tone="chartreuse">{scene.eyebrow}</Eyebrow>
               <p className="mt-1 font-display text-2xl text-paper">
                 {scene.to ? (
                   <Link to={scene.to} className="hover:underline">

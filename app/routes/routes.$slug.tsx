@@ -33,7 +33,6 @@ import { Rail } from "~/components/public/Rail";
 import { ClimbRoute } from "~/components/public/ClimbRoute";
 import { TrailScene } from "~/components/design/TrailScene";
 import { FactStrip } from "~/components/design/FactStrip";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { DayByDay, GettingThere, Highlights, Overview, Packing, TripFacts } from "~/components/public/RouteKnowledge";
 import { RouteBriefing } from "~/components/public/RouteBriefing";
 import { knowBeforeYouGo } from "~/lib/trek-knowledge";
@@ -326,7 +325,6 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
       >
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto max-w-5xl px-4 pb-6">
-            <Eyebrow tone="chartreuse">{route.region}</Eyebrow>
             <h1 className="mt-1 max-w-[18ch] font-display text-4xl leading-[1.05] text-white sm:text-6xl">
               {route.name}
             </h1>

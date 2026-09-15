@@ -25,7 +25,6 @@ import {
   type PublicJournal,
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { TrailScene } from "~/components/design/TrailScene";
 import { ProfileWithPhotos } from "~/components/design/ProfileWithPhotos";
 import { profileOf } from "~/lib/route-cards";
@@ -413,7 +412,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
         {/* 5 — Elevation, from what the guide actually recorded. */}
         {!isPost && points.length >= 3 && (
           <section className="mt-14 border-t border-line pt-8">
-            <Eyebrow as="h2">How high, and when</Eyebrow>
+            <h2 className="font-display text-2xl text-ink">How high, and when</h2>
             {/* The guide's own photographs pinned to the climb where they
                 were taken (docs/07, reference 3). Falls back to the plain
                 strip when the days have no pictures. */}
@@ -482,7 +481,6 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
 
             {!isPost && points.length >= 3 && (
               <div className="rounded-md border border-line bg-card p-3">
-                <Eyebrow>This trek</Eyebrow>
                 <ElevationStrip points={points} className="mt-1" />
               </div>
             )}

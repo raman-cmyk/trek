@@ -8,7 +8,6 @@ import { useMoney } from "~/lib/currency-context";
 import { groupHeading, groupMoney, type GroupMember } from "~/lib/groups";
 import { fmtDate } from "~/lib/format";
 import { TripPipeline } from "~/components/TripPipeline";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { Glyph } from "~/components/design/Chip";
 
 export function meta() {
@@ -88,8 +87,7 @@ export default function Groups({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-4xl px-4 py-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Eyebrow>Going with people</Eyebrow>
-          <h1 className="mt-2 font-display text-4xl text-ink">Your trips together</h1>
+          <h1 className="font-display text-4xl text-ink">Your trips together</h1>
         </div>
         <Link
           to="/groups/new"

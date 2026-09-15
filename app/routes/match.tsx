@@ -8,7 +8,6 @@ import { useMoney } from "~/lib/currency-context";
 import { TierBadge } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { cn } from "~/lib/cn";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { Glyph } from "~/components/design/Chip";
 
 const REGIONS: Region[] = ["Khumbu", "Annapurna", "Langtang", "Manaslu"];
@@ -104,8 +103,7 @@ export default function Match({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      <Eyebrow>Guide matcher</Eyebrow>
-      <h1 className="mt-2 font-display text-display-l text-ink">
+      <h1 className="font-display text-display-l text-ink">
         Five questions. Your guide.
       </h1>
       <p className="mt-3 max-w-[60ch] text-ink-soft">

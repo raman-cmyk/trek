@@ -5,7 +5,6 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { firstName } from "~/lib/names";
 import { SmartImage } from "~/components/SmartImage";
 import { TierBadge } from "~/components/public/bits";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { PhotoCard } from "~/components/design/PhotoCard";
 import { GlassPill } from "~/components/design/Glass";
 import { Glyph } from "~/components/design/Chip";
@@ -61,8 +60,7 @@ export default function Stories({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <Eyebrow>Stories</Eyebrow>
-      <h1 className="mt-2 font-display text-display-l text-ink">
+      <h1 className="font-display text-display-l text-ink">
         Real treks. Named guides. No stock photos.
       </h1>
       <p className="mt-3 max-w-[62ch] text-ink-soft">

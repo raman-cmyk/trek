@@ -4,7 +4,6 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { computeExperiencePricing, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
-import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
@@ -43,8 +42,7 @@ export default function Transparency({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <Eyebrow>Pricing</Eyebrow>
-      <h1 className="mt-2 font-display text-display-l text-ink">
+      <h1 className="font-display text-display-l text-ink">
         Every line, printed.
       </h1>
       <p className="mt-4 max-w-[62ch] text-body-l text-ink">

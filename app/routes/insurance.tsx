@@ -6,7 +6,6 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { getSessionUser } from "~/lib/auth.server";
 import { evaluatePolicy, altitudeThresholdM, type PolicyAnswers } from "~/lib/insurance";
 import { cn } from "~/lib/cn";
-import { Eyebrow } from "~/components/design/Eyebrow";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -108,8 +107,7 @@ export default function Insurance({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
-      <Eyebrow tone="moss">Nepal · 2026 rule</Eyebrow>
-      <h1 className="mt-2 font-display text-display-l text-ink">Does your policy qualify?</h1>
+      <h1 className="font-display text-display-l text-ink">Does your policy qualify?</h1>
       <p className="mt-3 max-w-[68ch] text-body-l text-ink">
         Since 2026, you must show insurance covering <strong>high-altitude trekking</strong> and{" "}
         <strong>emergency helicopter evacuation</strong> before a permit or TIMS card is issued.

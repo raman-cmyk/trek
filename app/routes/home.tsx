@@ -35,7 +35,6 @@ import { fmtDate, fmtDateShort } from "~/lib/format";
 import { openRunsByGuide } from "~/lib/browse.server";
 import { JournalCard } from "~/components/public/JournalCard";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { StatRow, StatTile } from "~/components/design/StatTile";
 import { Glyph, type ChipGlyph } from "~/components/design/Chip";
 import { Chip } from "~/components/design/Chip";
@@ -496,8 +495,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           claim about us. Pick a trail and meet the people who walk it, which
           is a claim about them, and the only one that has ever sold a trek. */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <Eyebrow>Where they walk</Eyebrow>
-        <h2 className="mb-2 mt-2 max-w-[20ch] font-display text-3xl text-ink sm:text-4xl">
+        <h2 className="mb-2 max-w-[20ch] font-display text-3xl text-ink sm:text-4xl">
           <span className="wt-heavy">Pick a trail. Meet the people who walk it.</span>
         </h2>
         <p className="mb-5 max-w-[52ch] text-muted">
@@ -517,7 +515,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           know, so it goes above the evergreen rows. */}
       {freeThisWeek.length > 0 && (
         <Row
-          eyebrow="Available now"
           label="Who's free for your dates"
           blurb={`${freeThisWeekTotal} guides with open days between now and ${fmtDateShort(
             weekEnd,
@@ -571,8 +568,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <div>
-              <Eyebrow>Proof of life</Eyebrow>
-              <h2 className="mt-2 max-w-[16ch] font-display text-3xl text-ink sm:text-4xl">
+              <h2 className="max-w-[16ch] font-display text-3xl text-ink sm:text-4xl">
                 <span className="wt-heavy">Treks, as they happened.</span>
               </h2>
             </div>
@@ -602,8 +598,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <section className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <Eyebrow>If you already know the walk</Eyebrow>
-              <h2 className="mt-2 font-display text-3xl text-ink">
+              <h2 className="font-display text-3xl text-ink">
                 The routes people actually walk
               </h2>
             </div>
@@ -643,8 +638,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* 6 — Regions, as doorways. */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <Eyebrow>Or start from the map in your head</Eyebrow>
-        <h2 className="mb-6 mt-2 font-display text-3xl text-ink">Browse by region</h2>
+        <h2 className="mb-6 font-display text-3xl text-ink">Browse by region</h2>
         {/* Doorways as pictures (docs/07): the region's own route photograph
             where we have one, terrain where we do not — never a grey cell. */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
@@ -776,7 +770,6 @@ function Stat({ n, label, href, glyph }: { n: string; label: string; href?: stri
 
 /** A horizontal row of guides framed as a human choice, not a category. */
 function Row({
-  eyebrow,
   label,
   blurb,
   count,
@@ -785,7 +778,6 @@ function Row({
   ratings,
   langMap,
 }: {
-  eyebrow?: string;
   label: string;
   blurb: string;
   count?: number;
@@ -796,7 +788,6 @@ function Row({
 }) {
   return (
     <section className="mx-auto max-w-6xl px-4 py-8">
-      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-display text-2xl text-ink sm:text-[1.75rem]">{label}</h2>
         <Link
@@ -923,8 +914,7 @@ function ExperienceBrowser({
     <section className="mx-auto max-w-6xl px-4 py-16">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div>
-          <Eyebrow>Not just treks</Eyebrow>
-          <h2 className="mt-2 font-display text-3xl text-ink">Where do you want to go?</h2>
+          <h2 className="font-display text-3xl text-ink">Where do you want to go?</h2>
         </div>
         <Link
           to="/experiences"
@@ -1047,8 +1037,7 @@ function GuideCall({ count }: { count: number }) {
       <div className="overflow-hidden rounded-md border border-line bg-card">
         <div className="grid gap-8 p-6 sm:p-10 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-14">
           <div>
-            <Eyebrow>For guides</Eyebrow>
-            <h2 className="mt-2 max-w-[20ch] font-display text-3xl leading-[1.05] text-ink sm:text-4xl">
+            <h2 className="max-w-[20ch] font-display text-3xl leading-[1.05] text-ink sm:text-4xl">
               Your name on the work.
             </h2>
             <p className="mt-4 max-w-[52ch] text-body-l text-ink">

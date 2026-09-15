@@ -8,7 +8,6 @@ import { useLightbox } from "~/components/public/Lightbox";
 import { useMoney } from "~/lib/currency-context";
 import { eventDates, placesLeft } from "~/lib/events";
 import { TrustPanel } from "~/components/public/TrustPanel";
-import { Eyebrow } from "~/components/design/Eyebrow";
 import { FactStrip } from "~/components/design/FactStrip";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
@@ -160,7 +159,6 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
         <div className="absolute inset-x-0 bottom-0">
           <div className="mx-auto max-w-4xl px-4 pb-6">
-            <Eyebrow tone="chartreuse">Group trip</Eyebrow>
             <h1 className="mt-1 max-w-[20ch] font-display text-3xl leading-[1.05] text-white sm:text-5xl">
               {e.title}
             </h1>
@@ -356,7 +354,6 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           />
 
           <div className="rounded-md border border-line bg-card p-4">
-            <Eyebrow>Organised by</Eyebrow>
             <div className="mt-2 flex items-center gap-3">
               <SmartImage
                 src={e.organiser_avatar_url ?? ""}
