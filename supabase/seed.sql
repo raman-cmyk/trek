@@ -270,12 +270,21 @@ insert into public.incidents (booking_id, severity, summary, status, opened_by, 
    '33333333-3333-3333-3333-000000000001',
    '[{"at":"day 3","actor":"guide","action":"Reported mild AMS, descended to Samdo"}]'::jsonb);
 
--- Dev-only: give the ops console a working local login. Seed data is stripped
--- before production (M9); only this ops account is loginable.
---   email: ops@example.com   password: opsdevpass123
+-- Dev-only logins. Seed data is stripped before production (M9); only these
+-- accounts are loginable.
+--   email: ops@example.com     password: opsdevpass123    (ops console)
+--   email: marco@example.com   password: trekdevpass123   (trekker)
+--
+-- The trekker matters as much as the office one: the booking flow can only be
+-- tested end to end — request while signed out, sign in, request replayed —
+-- with an account somebody can actually sign into.
 update auth.users
   set encrypted_password = extensions.crypt('opsdevpass123', extensions.gen_salt('bf'))
   where id = '33333333-3333-3333-3333-000000000001';
+update auth.users
+  set encrypted_password = extensions.crypt('trekdevpass123', extensions.gen_salt('bf')),
+      email_confirmed_at = coalesce(email_confirmed_at, now())
+  where id = '22222222-2222-2222-2222-000000000004';
 
 -- ============ M5 GUIDE DASHBOARD DATA (Pemba = guide 001) ============
 -- Open enquiries awaiting Pemba's accept/decline.

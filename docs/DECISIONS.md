@@ -685,3 +685,24 @@ different mark. Listing "not suitable if you have limited mobility" as a green
 tick beside "service animals welcome" is how somebody books a trip they then
 have to cancel — and the guide, not the platform, is the one who has to make
 that phone call.
+
+## A request to book survives its own sign-in (2026-09-15)
+
+The alternative was to keep the form filled in and let the trekker press the
+button again, which is what desktop accidentally did. That is a worse promise:
+on a phone the form is in a sheet that closes, and "press it again" is the
+instruction a booking flow should never need to give.
+
+Parked in a signed cookie rather than in the URL or in the database. The URL
+would put a trip, a date and a party size into every log and referrer between
+here and the login page. A database row would need cleaning up after every
+abandoned sign-in, and would exist before anybody had agreed to anything.
+
+The cookie is signed with the service-role key, and the signature is the small
+half of the safety. The large half is that `submitEnquiry` revalidates the
+replay exactly as it validates a fresh POST: one path, so a parked request
+cannot be the one that skips a check.
+
+Thirty minutes, and the cookie's Max-Age matches the payload's own expiry, so
+neither can outlive the other and leave a request that looks valid to one half
+of the code and stale to the other.

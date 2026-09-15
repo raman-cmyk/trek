@@ -1714,3 +1714,43 @@ never become an open redirect — and the "3 hours ago" wording. 17 tests.
    deploy to trek.raman-7d9.workers.dev. Whoever deploys last wins and the
    other's features vanish — which is exactly what "it was working and now it
    isn't" looks like. I have stopped deploying until you say which one wins.
+
+## Session — the booking request that did not survive signing in (2026-09-15)
+
+Pratik, on a phone: pick a date on the momo crawl, tap "Request to book", get
+sent to the login page, sign in — and land back on the calendar with nothing
+sent. He read it as mobile-only. It was not: `/enquiry` did
+`throw redirect("/login?next=" + return_to)` and dropped the form, so desktop
+lost the request too. Desktop just left the filled-in form on screen, so
+re-sending was one click; on a phone the form is a bottom sheet that closes
+behind you, and the tap looked like it had done nothing at all.
+
+The request is parked now and sent afterwards. `/enquiry` packs it into a
+cookie signed with the service-role key — HttpOnly, Secure, SameSite=Lax so it
+survives the redirect back, thirty minutes so it cannot surface days later on
+a shared laptop — and redirects to `/login?next=/enquiry/resume`. That route
+replays it the moment a session exists, clears the cookie whatever happened,
+and lands on My trips with the outcome. `/signup` carries `next` too, so
+somebody creating an account mid-booking gets the same thing.
+
+The replay is not trusted. `submitEnquiry` in `app/lib/enquiry.server.ts` is
+now the single path a fresh POST and a replay both take, so a trip whose party
+limits moved while they were signing up fails with the same message a fresh
+request would give. `unpackPending` checks every field on the way back — ids
+that are not ids, a party of 900, a `returnTo` pointing off-site, a stamp from
+the future. The signature is not what makes that safe; it stops a crafted
+cookie becoming a request the trekker never made and then finds in My trips.
+
+**Verified live, the whole flow, against production:** POST `/enquiry` signed
+out → 302 to `/login?next=/enquiry/resume` with the parked cookie; POST
+`/login` → 302 to `/enquiry/resume`; that → 302 to `/trips?sent=1` with the
+cookie cleared; My trips reads "Request sent. Your guide has 48 hours to reply";
+and the row is in the database — momo crawl, 20 Oct, party of three, with the
+message intact. Everything that used to be lost survived. The test enquiry and
+its notification were then deleted.
+
+`marco@example.com` has a password in seed.sql now (`trekdevpass123`,
+dev-only, alongside the ops one) because this flow cannot be tested end to end
+without a trekker anybody can sign in as.
+
+538 tests green, typecheck green, build green. Version f677783f live.
