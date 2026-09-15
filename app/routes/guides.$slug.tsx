@@ -907,7 +907,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                  before the reader had decided there was one; this names what
                  is on offer and lets them decide. */}
             {offerings.length > 0 && (
-              <section className="mt-14">
+              <section id="trips" className="mt-14 scroll-mt-6">
                 <SectionHead
                   title={`Here's what ${first} provides`}
                   meta={`${offerings.length} ${offerings.length === 1 ? "trip" : "trips"} ${pn.subject} runs`}
@@ -1185,14 +1185,28 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
               Message
             </button>
           </Form>
-          {offerings[0] && (
+          {/* "See trips" used to deep-link into offerings[0] — whichever
+              offering happened to sort first, which for most guides is their
+              trek. So a guide who also runs a food tour and a heritage walk
+              had two thirds of their work unreachable from the one button on
+              a phone, under a plural label. It goes to the list now; only a
+              guide with a single trip is taken straight to it, and then the
+              label says so. */}
+          {offerings.length === 1 ? (
             <Link
               to={`/${offerings[0].kind === "trek" ? "treks" : "experiences"}/${offerings[0].slug}`}
               className="shrink-0 rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
             >
-              See trips
+              See the trip
             </Link>
-          )}
+          ) : offerings.length > 1 ? (
+            <a
+              href="#trips"
+              className="shrink-0 rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+            >
+              See all {offerings.length}
+            </a>
+          ) : null}
         </div>
       </div>
     </main>
