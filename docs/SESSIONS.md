@@ -2744,3 +2744,146 @@ sitting on top of the trail rail — burying the one control that picks a trek,
 which is the worst thing a supporting panel can do — and now stacks above it.
 
 1076 tests green, build green, deployed.
+
+## 2026-09-15 — Two sessions, one worker
+
+The founder asked why the live site had "gone 100 steps back". It had: the
+homepage was showing the pre-rename "Trek." wordmark and the old count-bubble
+map. Not a cache — two Claude sessions have been building this repo in
+parallel from a common ancestor (`96a2429`), both deploying to the same
+Cloudflare worker. Whichever finished last is what the public sees. Mine went
+out at 23:53; the other line went out at 23:57.
+
+Neither branch contained the other: 91 commits against 28. Worse, both had
+independently built in-app notifications AND the deposit-and-cancellation
+block under the calendar — the same features, twice, by two agents who could
+not see each other.
+
+Rather than start a redeploy war, both heads were pinned as branches nothing
+writes to (`backup/2026-09-15-*`). Annotated tags were the first choice; the
+session token is scoped to its own branch and cannot push tags, so branches
+created through the GitHub API stand in. `docs/PARALLEL-SESSIONS.md` records
+the split.
+
+The part git does not protect: **migration numbers 0059-0068 are each used
+twice**, for unrelated migrations, and three features were built on both
+sides with different numbers. Production was checked and is intact — one
+`notifications` table, and `account_blocks` a workable hybrid whose `kind`
+check happens to allow the `warned` value the moderation feature needs. That
+was luck. Two sessions writing DDL to one database is not safe in general.
+
+By the end of the day the other session had started committing to THIS
+branch, which is the convergence we wanted; its work was rebased in and both
+lines now build and deploy together.
+
+## 2026-09-15 — The password you can say down a phone line, and a record that you did
+
+`/ops/users` could already mint a random password. What it could not do is set
+a CHOSEN one, which is the case that comes up: a guide on a phone in Namche,
+on a call, who needs something they can type now. Reading out
+"juniper-lantern-marigold-4417" down a bad line is not that.
+
+Typed passwords are checked for what goes wrong when a human fills in an admin
+box in a hurry — too short, the same few characters, an invisible leading
+space, or one of the words people reach for when they think a password is
+temporary. Temporary passwords are the ones that live for two years.
+
+Setting a password and signing in as somebody were the two most dangerous
+capabilities here and neither left any trace. `admin_actions` (0084) records
+who, whom and when, and deliberately never the password — not hashed, not
+masked, not a prefix. `auditNote()` takes no password argument and a test
+asserts its arity, because a function that cannot see the secret cannot leak
+it. RLS on, zero policies: an audit log the audited can edit is not one.
+
+0085 then dropped its own foreign keys. There are no orphan auth accounts
+today, but the first one would fail the FK and go unrecorded — and a broken
+account is exactly what an admin reaches for.
+
+Two smaller things. "Forgot it?" beside the password label was easy to miss;
+all three sign-in pages say "Forgot password?" now. And `/forgot` was telling
+people to check an inbox that could never receive anything: RESEND_API_KEY is
+unset, so every reset link for the life of this platform has gone nowhere. It
+says so plainly now — checked after the work above so both paths take the same
+branches, and worded as a fact about our mail setup rather than about the
+person, so it still leaks nothing about whether an account exists.
+
+## 2026-09-15 — A food tour is not a trek
+
+A food tour in Kathmandu was headed "A few quick things before the trek", and
+underneath it told the customer to bring shoes with grip because "Nepali
+trails are stone", and warned them about the sun "at this altitude". They were
+going out to eat.
+
+Everything here was a trek once, so the word got written into headings and
+advice as though it were the only thing we sell. `tripNoun()` decides the word
+once — trek, hike, food tour, tour, day out, and "trip" for a kind nobody has
+taught it about yet, which is true of all of them.
+
+The non-trek brief split by kind instead of being one lump. A food tour gets:
+come hungry, say what you cannot eat BEFORE the day so the route can change
+rather than your dinner, drink only what your guide hands you, shoes you can
+slip off at every door. A city tour gets temples, uneven brick and valley
+dust. A day hike keeps the walking advice, because for a hike it is right —
+and a low hike no longer warns about altitude it never reaches.
+
+Wrong advice is worse than none: it teaches people the brief is boilerplate,
+and then they skip the section that mattered.
+
+## 2026-09-15 — Making the admin area cheap to add to and hard to break
+
+"Make sure the backend admin area can be built easily." The cost is not the
+typing — it is that the two ways to get an ops screen wrong both fail
+silently, and a silently failing admin page still renders.
+
+This area has shipped that bug three times. `/ops/users` said "0 accounts" on
+a live site with 71. `/ops/pipeline` showed nothing with live treks in it. A
+live trek opened as a 404. Every one was `const { data } = await admin...`,
+which throws the error away. The write side is worse: a rejected update
+returns a result rather than throwing, so a failed save and a successful one
+are indistinguishable and the ops person simply clicks again. A count found
+**33 writes across ops that never check whether they worked.**
+
+So the correct version is now the shorter one to type: `rows()`, `one()`,
+`write()`, `writeAll()` in `app/lib/ops.server.ts`, each taking the thing in
+the reader's own words and handing back a sentence instead of a blank page.
+`knownCause()` translates the four failures this codebase actually hits,
+including the embed ambiguity behind all three incidents.
+
+`app/lib/ops-pages.test.ts` fails the build when a new ops page fires an
+unchecked write, or is added to the router but not the sidebar — reachable
+only by typing the URL. It was proved by injecting that exact mistake into a
+page, watching the test fail, and restoring. The allowlist of pages written
+before the helpers is a ratchet: a name that no longer offends, or no longer
+exists, fails the test.
+
+`docs/OPS-PAGES.md` is the recipe, and CLAUDE.md points at it.
+`ops.incidents.tsx` is the worked example — including rendering the error,
+because a stored error nobody displays is still silent. On that page it is
+the difference between "nobody is in trouble" and "we cannot see who is".
+
+The other 16 legacy pages were deliberately left: a 16-file refactor would
+have collided with the other session mid-flight. The ratchet converts them as
+they are touched.
+
+## 2026-09-15 — Whose calendar is it
+
+"I can see my own free dates, but I cannot tell whether the guide is free or
+not." Two faults, and the calendar had both.
+
+It never said whose availability it showed. The key read "Free" and "Taken" —
+free for whom? On a guide's page it is the guide's diary, so it says "Pemba is
+free" and "Pemba is booked" now, in the legend, the tooltips and the
+screen-reader text. All three callers already had the name and none were
+passing it.
+
+And the two states were nearly the same colour: free a tint at 15% opacity,
+booked plain text at 40%. Two pale greys, on a phone, to somebody who has
+never seen this calendar. Free is now filled, outlined and bold; booked is
+struck through. The strike carries as much as the fill, because colour alone
+is not a label.
+
+Nothing changed about what the calendar knows. The open days were always
+there. They were indistinguishable, which for the question this widget exists
+to answer is the same as being absent.
+
+1188 tests green, build green, deployed.
