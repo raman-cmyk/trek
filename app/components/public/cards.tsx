@@ -220,23 +220,35 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
             <span className="font-mono font-semibold">{mr(from)}</span>
           </GlassPill>
         )}
-        {/* Guide chip — full name — overlapping the photo edge (§8). Static:
-            the whole card is already a link, and a nested <a> is invalid HTML
-            that breaks hydration. Tapping the chip opens the trip, which is
-            the right destination from here anyway. */}
-        <div className="absolute -bottom-3 left-3">
-          <GuideChip
-            slug={offering.guide_slug}
-            name={offering.guide_name}
-            avatarUrl={offering.guide_avatar_url}
-            tier={offering.guide_tier}
-            overlap
-            fullName
-            static
-          />
-        </div>
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-3 pt-5">
+
+      {/* Guide chip — first name — overlapping the photo edge (§8).
+          The full name was truncating to "Aakash K…" in a 165px card on a
+          phone, which is worse than the first name it was trying to improve
+          on. The face and the first name are the identity here; the full
+          name is on the page this card links to.
+          It used to be `absolute -bottom-3` INSIDE the image wrapper, which
+          is `overflow-hidden` for the rounded corners and the hover zoom. So
+          the bottom twelve pixels of a forty-pixel pill were sliced off on
+          every card on the site — the guide's name cut through the middle,
+          on the one element whose whole job is to say a real person runs
+          this. Out of the clipping box and pulled up by a margin instead.
+
+          Static: the whole card is already a link, and a nested <a> is
+          invalid HTML that breaks hydration. Tapping the chip opens the trip,
+          which is the right destination from here anyway. */}
+      <div className="relative z-10 -mt-3 ml-3 mr-3 max-w-[calc(100%-1.5rem)]">
+        <GuideChip
+          slug={offering.guide_slug}
+          name={offering.guide_name}
+          avatarUrl={offering.guide_avatar_url}
+          tier={offering.guide_tier}
+          overlap
+          static
+        />
+      </div>
+
+      <div className="flex flex-1 flex-col gap-1 p-3 pt-2">
         <Link
           to={offeringPath(offering)}
           prefetch="intent"

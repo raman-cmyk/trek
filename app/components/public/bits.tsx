@@ -98,14 +98,20 @@ export function GuideChip({
         alt={name}
         width={32}
         height={32}
-        className="h-7 w-7 rounded-full"
+        className="h-7 w-7 shrink-0 rounded-full"
       />
-      <span className="font-medium text-ink">{fullName ? name : name.split(" ")[0]}</span>
+      {/* One line, always. Constrained inside a card at 390px this used to
+          wrap — "Mingma / Dorje Sherpa" — turning a pill into a two-line
+          lozenge and shoving the title down. Ellipsis is the right loss
+          here: the card is a link to the page that spells the name out. */}
+      <span className="min-w-0 truncate font-medium text-ink">
+        {fullName ? name : name.split(" ")[0]}
+      </span>
       {verified && <span className="text-moss">✓</span>}
     </>
   );
   const cls = cn(
-    "inline-flex items-center gap-1.5 rounded-full bg-card/95 py-1 pl-1 pr-2.5 text-sm shadow-card backdrop-blur",
+    "inline-flex max-w-full items-center gap-1.5 rounded-full bg-card/95 py-1 pl-1 pr-2.5 text-sm shadow-card backdrop-blur",
     // Avatar frame (§6): sage ring + paper gap; moss ring when verified.
     overlap && "ring-2 ring-offset-2 ring-offset-paper",
     overlap && (verified ? "ring-moss" : "ring-sage"),
