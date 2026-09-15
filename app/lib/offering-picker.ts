@@ -3,6 +3,7 @@ import {
   hasBreakdown,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
+import { listPriceUsdCents } from "~/lib/list-price";
 
 /**
  * Choosing a trip from a list where the same trek appears once per guide.
@@ -28,6 +29,8 @@ export interface PickableOffering {
   price_usd_cents?: number | null;
   price_breakdown?: unknown;
   max_party?: number | null;
+  /** The price is quoted at the party the trip page opens with. */
+  min_party?: number | null;
 }
 
 export interface PickOption {
@@ -63,11 +66,14 @@ export function angleOf(title: string, routeName: string | null | undefined): st
   return rest;
 }
 
-/** Cheapest per-person price, however this offering happens to be priced. */
+/**
+ * The per-person price this offering will quote, however it is priced.
+ *
+ * Was the four-person figure while every page opened at one — see
+ * app/lib/list-price.ts.
+ */
 export function priceOf(o: PickableOffering): number | null {
-  const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
-  if (hasBreakdown(bd)) return fromPerPersonUsdCents(bd, o.max_party ?? undefined);
-  return o.price_usd_cents ?? null;
+  return listPriceUsdCents(o as any);
 }
 
 /**

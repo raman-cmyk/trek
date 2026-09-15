@@ -68,7 +68,26 @@ describe("priceOf", () => {
         fund_pct: 0,
       },
     });
-    expect(priceOf(priced)).toBe(20000);
+    // The whole guide fee: this trip has no minimum, so its page opens at one
+    // person and that is what one person pays. It used to answer 20000 — the
+    // two-person figure — while the page charged 40000.
+    expect(priceOf(priced)).toBe(40000);
+  });
+
+  it("splits the fee when the trip cannot be booked alone", () => {
+    const pair = o({
+      min_party: 2,
+      max_party: 4,
+      price_breakdown: {
+        guide_fee_total_usd_cents: 40000,
+        permits_usd_cents: 0,
+        porters_usd_cents: 0,
+        logistics_usd_cents: 0,
+        trek_pct: 0,
+        fund_pct: 0,
+      },
+    });
+    expect(priceOf(pair)).toBe(20000);
   });
 
   it("falls back to the flat price, and to nothing at all", () => {

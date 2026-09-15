@@ -18,10 +18,9 @@ import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { JournalCard } from "~/components/public/JournalCard";
 import { ElevationScrubber, type DayStop } from "~/components/public/ElevationScrubber";
 import { RouteMap } from "~/components/public/RouteMap";
-import { ExperienceSplit } from "~/components/Split";
+import { RouteOperators } from "~/components/public/RouteOperators";
+import { listPriceUsdCents } from "~/lib/list-price";
 import {
-  partyAmounts,
-  fromPerPersonUsdCents,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
 import { offeringsRating } from "~/lib/ratings.server";
@@ -35,7 +34,9 @@ import { ClimbRoute } from "~/components/public/ClimbRoute";
 import { TrailScene } from "~/components/design/TrailScene";
 import { FactStrip } from "~/components/design/FactStrip";
 import { Eyebrow } from "~/components/design/Eyebrow";
-import { DayByDay, GettingThere, Highlights, KnowBeforeYouGo, Overview, Packing, TripFacts } from "~/components/public/RouteKnowledge";
+import { DayByDay, GettingThere, Highlights, Overview, Packing, TripFacts } from "~/components/public/RouteKnowledge";
+import { RouteBriefing } from "~/components/public/RouteBriefing";
+import { knowBeforeYouGo } from "~/lib/trek-knowledge";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -120,7 +121,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     client
       .from("public_offerings")
       .select(
-        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
+        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
       )
       .eq("route_id", route.id),
     // The freshness engine: every journal written on this route.
@@ -169,12 +170,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     client,
     ((offerings ?? []) as any[]).map((o) => o.id),
   );
-  const fromUsdCents = ((offerings ?? []) as PublicOffering[])
-    .map((o) =>
-      o.price_breakdown
-        ? fromPerPersonUsdCents(o.price_breakdown as PriceBreakdown, o.max_party)
-        : null,
-    )
+  // The cheapest price actually quoted on this route — the same figure the
+  // trip pages and the comparison table show, so the route's headline cannot
+  // undercut the trips inside it.
+  const fromUsdCents = ((offerings ?? []) as any[])
+    .map((o) => listPriceUsdCents(o))
     .filter((n): n is number => n != null)
     .sort((a, b) => a - b)[0] ?? null;
 
@@ -299,10 +299,6 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
   };
 
   // The Split uses a real listing on this route, not a made-up number.
-  const priced = (offerings as PublicOffering[]).find((o) => o.price_breakdown);
-  const split = priced?.price_breakdown
-    ? partyAmounts(priced.price_breakdown as PriceBreakdown, 2)
-    : null;
 
   return (
     <main className="pb-16">
@@ -432,33 +428,13 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
           </section>
         )}
 
-        {/* What it costs, split */}
-        {split && priced && (
-          <section className="mt-12">
-            <h2 className="font-display text-2xl text-ink">What it costs</h2>
-            <p className="mt-1 text-sm text-muted">
-              Real numbers from{" "}
-              <Link to={`/treks/${priced.slug}`} className="text-moss hover:underline">
-                {priced.title}
-              </Link>
-              , two people sharing.
-            </p>
-            <div className="mt-4 rounded-md border border-line bg-card p-5">
-              <ExperienceSplit
-                amounts={{
-                  guide: split.guideUsdCents,
-                  permits: split.permitsUsdCents,
-                  porters: split.portersUsdCents,
-                  logistics: split.logisticsUsdCents,
-                  trek: split.trekUsdCents,
-                  fund: split.fundUsdCents,
-                }}
-                total={split.totalUsdCents}
-                showAmounts
-              />
-            </div>
-          </section>
-        )}
+        {/* Who sells this walk, and for what.
+            This was a price breakdown — guide, permits, porters, fee, fund —
+            which belongs on a trip page where it explains a real quote. A
+            route page is where somebody decides who to walk with, so the
+            comparison this platform exists to make possible goes here
+            instead. */}
+        <RouteOperators offerings={offerings as any} routeName={route.name} />
 
         {/* Twelve-month heatmap */}
         {months.length === 12 && (
@@ -532,7 +508,13 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
 
         <Packing route={routeFacts} extra={route.packing_extra} />
 
-        <KnowBeforeYouGo route={routeFacts} />
+        {/* Was twelve accordions with icons picked from whatever the design
+            system had spare. Now the answers are open and grouped by when
+            they matter — see app/components/public/RouteBriefing.tsx. */}
+        <RouteBriefing
+          sections={knowBeforeYouGo(routeFacts)}
+          maxAltitudeM={routeFacts.maxAltitudeM}
+        />
 
         {/* Guides who run it */}
         {guides.length > 0 && (

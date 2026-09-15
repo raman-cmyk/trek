@@ -63,7 +63,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     client
       .from("public_offerings")
       .select(
-        "route_id, guide_id, guide_slug, guide_name, guide_avatar_url, cover_photo_url, price_usd_cents, price_breakdown, max_party",
+        "route_id, guide_id, guide_slug, guide_name, guide_avatar_url, cover_photo_url, price_usd_cents, price_breakdown, max_party, min_party",
       ),
     client.from("public_guides").select("user_id", { count: "exact", head: true }),
   ]);

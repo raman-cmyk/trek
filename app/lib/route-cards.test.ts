@@ -105,14 +105,37 @@ describe("priceSpread", () => {
   });
 
   it("prefers the breakdown's per-person total over the flat price", () => {
-    // A guide fee of $400 split across a party of two is $200 each — not the
-    // $9,999.99 sitting in the flat column from before the breakdown existed.
+    // The $400 guide fee, not the $9,999.99 sitting in the flat column from
+    // before the breakdown existed. This trip has no minimum, so its page
+    // opens at one person and that is the figure a reader will be quoted —
+    // the range used to show the two-person split and then charge double.
     const s = priceSpread([
       {
         route_id: "r",
         guide_id: "a",
         price_usd_cents: 999999,
         max_party: 2,
+        price_breakdown: {
+          guide_fee_total_usd_cents: 40000,
+          permits_usd_cents: 0,
+          porters_usd_cents: 0,
+          logistics_usd_cents: 0,
+          trek_pct: 0,
+          fund_pct: 0,
+        },
+      },
+    ]);
+    expect(s.lo).toBe(40000);
+  });
+
+  it("splits the fee when the trip cannot be walked alone", () => {
+    const s = priceSpread([
+      {
+        route_id: "r",
+        guide_id: "a",
+        price_usd_cents: null,
+        min_party: 2,
+        max_party: 4,
         price_breakdown: {
           guide_fee_total_usd_cents: 40000,
           permits_usd_cents: 0,

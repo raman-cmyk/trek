@@ -4,6 +4,7 @@ import {
   hasBreakdown,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
+import { listPriceUsdCents } from "~/lib/list-price";
 
 /**
  * What a route card is made of.
@@ -94,6 +95,8 @@ export interface Offering {
   price_usd_cents: number | null;
   price_breakdown?: unknown;
   max_party?: number | null;
+  /** The price is quoted at the party the trip page opens with. */
+  min_party?: number | null;
 }
 
 export interface Spread {
@@ -115,10 +118,9 @@ export function priceSpread(offerings: Offering[]): Spread {
 
   for (const o of offerings) {
     if (o.guide_id) guides.add(o.guide_id);
-    const bd = (o.price_breakdown ?? null) as PriceBreakdown | null;
-    const price = hasBreakdown(bd)
-      ? fromPerPersonUsdCents(bd, o.max_party ?? null)
-      : (o.price_usd_cents ?? null);
+    // The same figure the trip page quotes, so a route card's range and the
+    // prices inside it cannot disagree (app/lib/list-price.ts).
+    const price = listPriceUsdCents(o as any);
     if (price == null || price <= 0) continue;
     if (lo == null || price < lo) lo = price;
     if (hi == null || price > hi) hi = price;

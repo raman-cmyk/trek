@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
+import { listPriceUsdCents } from "~/lib/list-price";
 import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
 import { Fallback } from "~/components/design/Fallback";
 import { GlassPill } from "~/components/design/Glass";
@@ -71,12 +72,14 @@ export function offeringPath(o: { kind: string; slug: string }) {
 }
 
 export function offeringFromUsdCents(o: PublicOffering): number | null {
-  // v3: an experience's price is its packaged breakdown total (cheapest per
-  // person = largest sensible group), NOT day_rate × days.
-  if (hasBreakdown(o.price_breakdown)) {
-    return fromPerPersonUsdCents(o.price_breakdown, o.max_party ?? undefined);
-  }
-  return o.price_usd_cents;
+  // The figure the trip page will quote when somebody lands on it.
+  //
+  // This used to price the guide fee split four ways while the page opens at
+  // the party the trip allows — usually one. On Pemba's Everest trek that is
+  // a $630 guide fee advertised as $157 and charged as $630: a card price
+  // nobody could buy. app/lib/list-price.ts is now the single definition and
+  // the page reads the same arithmetic.
+  return listPriceUsdCents(o);
 }
 
 export function GuideCard({
@@ -209,7 +212,11 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         </GlassPill>
         {from != null && (
           <GlassPill className="absolute right-2 top-2">
-            <span className="text-muted">from</span>
+            {/* No "from". It is the price this trip quotes for the party it
+                opens with; a group splits the guide fee and the trip page
+                shows that next to the control that does it. Promising a
+                floor on the card and a bigger number one click later is the
+                bug this replaced. */}
             <span className="font-mono font-semibold">{mr(from)}</span>
           </GlassPill>
         )}
@@ -261,7 +268,9 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
         {from != null && (
           // "per person" completes the pill on the photograph; the number is
           // up there, where a grid is scanned.
-          <p className="mt-auto pt-1 text-caption text-muted">per person</p>
+          <p className="mt-auto pt-1 text-caption text-muted">
+            per person{(offering.max_party ?? 1) > 1 ? " · less in a group" : ""}
+          </p>
         )}
       </div>
     </div>
