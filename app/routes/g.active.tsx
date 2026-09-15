@@ -1,6 +1,8 @@
 import { Link, data } from "react-router";
 import type { Route } from "./+types/g.active";
 import { getEnv } from "~/lib/supabase.server";
+import { rows } from "~/lib/ops.server";
+import { isUnderway, pickActiveTrip } from "~/lib/active-trip";
 import { requireUser } from "~/lib/auth.server";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
@@ -22,16 +24,44 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { user, admin, headers } = await requireUser(request, env, "guide");
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: b } = await admin
-    .from("bookings")
-    .select(
-      "id, start_date, end_date, party_size, trekker:users!bookings_trekker_id_fkey(full_name, phone, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone), offering:offerings(title, itinerary, route:routes(day_stops))",
-    )
-    .eq("guide_id", user.id)
-    .eq("status", "active")
-    .order("start_date")
-    .limit(1)
-    .maybeSingle();
+  /**
+   * Which trek, and whose.
+   *
+   * This page carries a trekker's phone number and their emergency contact,
+   * so the booking it shows has to be the one the guide asked for. It used to
+   * take the earliest booking still marked 'active' — and a trek that ended
+   * in August and was never closed is still 'active', so a guide on the trail
+   * in September was handed a different party's details.
+   *
+   * Every query below is scoped to this guide, so ?booking cannot be used to
+   * read somebody else's trek: an id belonging to another guide simply finds
+   * nothing.
+   */
+  const SELECT =
+    "id, start_date, end_date, party_size, status, trekker:users!bookings_trekker_id_fkey(full_name, phone, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone), offering:offerings(title, itinerary, route:routes(day_stops))";
+
+  const wanted = new URL(request.url).searchParams.get("booking");
+  const mine = await rows<any>(
+    admin
+      .from("bookings")
+      .select(SELECT)
+      .eq("guide_id", user.id)
+      .in("status", ["active", "confirmed"])
+      .order("start_date", { ascending: false })
+      .limit(50),
+    "your treks",
+  );
+
+  const named = wanted ? mine.rows.find((r) => r.id === wanted) : null;
+  const b =
+    named ??
+    (() => {
+      const pick = pickActiveTrip(
+        mine.rows.map((r: any) => ({ id: r.id, startDate: r.start_date, endDate: r.end_date })),
+        today,
+      );
+      return pick ? mine.rows.find((r: any) => r.id === pick.id) ?? null : null;
+    })();
 
   let checkedInToday = false;
   if (b) {
@@ -43,7 +73,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .maybeSingle();
     checkedInToday = !!ci;
   }
-  return data({ booking: b, today, checkedInToday }, { headers });
+  return data(
+    {
+      booking: b,
+      today,
+      checkedInToday,
+      // So the page can say "this one finished in August" rather than
+      // presenting a closed trek as the one you are on.
+      underway: isUnderway(
+        b ? { id: b.id, startDate: b.start_date, endDate: b.end_date } : null,
+        today,
+      ),
+      loadError: mine.error,
+    },
+    { headers },
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -69,7 +113,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function GuideActive({ loaderData }: Route.ComponentProps) {
-  const { booking: b, today, checkedInToday } = loaderData as any;
+  const { booking: b, today, checkedInToday, underway, loadError } = loaderData as any;
 
   if (!b) {
     return (
@@ -100,6 +144,29 @@ export default function GuideActive({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="space-y-5 pb-8">
+
+      {loadError && (
+        <p role="alert" className="rounded-photo bg-ember/10 p-3 text-sm text-ember">
+          {loadError}
+        </p>
+      )}
+
+      {/* This screen carries a trekker's phone and their emergency contact,
+          so it has to be honest about WHICH trek it is showing. A trek that
+          ended and was never closed is still 'active' in the database, and
+          presenting one as "on the trail" is how a guide ends up reading the
+          wrong party's details. */}
+      {!underway && (
+        <p className="rounded-photo border border-border bg-mist p-3 text-sm text-ink-soft">
+          This trek is not running today — it is {fmtDate(b.start_date)}
+          {b.end_date ? ` to ${fmtDate(b.end_date)}` : ""}. Close it when it is
+          done, or open the one you are on from{" "}
+          <Link to="/g/checkin" className="text-primary hover:underline">
+            today's check-in
+          </Link>
+          .
+        </p>
+      )}
       <div>
         <h1 className="font-display text-2xl text-ink">{b.offering?.title}</h1>
         <p className="mt-1 text-sm text-ink-soft">

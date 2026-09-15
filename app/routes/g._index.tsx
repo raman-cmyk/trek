@@ -1,4 +1,5 @@
 import { Link, data } from "react-router";
+import { activeTripHref, pickActiveTrip } from "~/lib/active-trip";
 import type { Route } from "./+types/g._index";
 import { getEnv } from "~/lib/supabase.server";
 import {
@@ -99,13 +100,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       { count: openDays },
       { count: unreplied },
     ] = await Promise.all([
+      // Not limit(1) with no order — that returned whichever row the planner
+      // felt like, and an August trek nobody closed is still 'active'. Pull
+      // the open ones and let pickActiveTrip decide which is today's.
       admin
         .from("bookings")
         .select("id, start_date, end_date, offering:offerings(title)")
         .eq("guide_id", user.id)
         .eq("status", "active")
-        .limit(1)
-        .maybeSingle(),
+        .order("start_date", { ascending: false })
+        .limit(50),
       admin
         .from("bookings")
         .select("id, start_date, status, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name)")
@@ -144,7 +148,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .not("published_at", "is", null)
         .is("guide_reply", null),
     ]);
-    active = act;
+    // `act` is now a list of open treks, not one arbitrary row. Choose the
+    // one happening today — an August trek nobody closed is still 'active'.
+    {
+      const picked = pickActiveTrip(
+        (act ?? []).map((r: any) => ({ id: r.id, startDate: r.start_date, endDate: r.end_date })),
+        today,
+      );
+      active = picked ? (act ?? []).find((r: any) => r.id === picked.id) ?? null : null;
+    }
     nextBooking = next;
     enquiries = count ?? 0;
     unansweredQuestions = qCount ?? 0;
@@ -372,7 +384,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
 
       {active ? (
         <Link
-          to="/g/active"
+          to={activeTripHref(active.id)}
           className="block rounded-photo border border-moss/50 bg-mist p-4"
         >
           <p className="text-xs text-ink-soft">

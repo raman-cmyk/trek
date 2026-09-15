@@ -1,4 +1,5 @@
 import { Form, Link, data, useNavigation } from "react-router";
+import { activeTripHref } from "~/lib/active-trip";
 import type { Route } from "./+types/g.checkin";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
@@ -302,9 +303,13 @@ export default function GuideCheckin({ loaderData, actionData }: Route.Component
             </p>
           )}
 
+          {/* Name the booking. Every one of these links used to point at a
+              bare /g/active, so a guide with three open treks got the same
+              one whichever they tapped — and that page carries a party's
+              emergency contact. */}
           {t.window.where === "on" && (
             <Link
-              to="/g/active"
+              to={activeTripHref(t.id)}
               className="mt-2 inline-block text-sm text-primary hover:underline"
             >
               Open the trek →
