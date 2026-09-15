@@ -2,6 +2,7 @@ import { Eyebrow } from "~/components/design/Eyebrow";
 import { Glyph, type ChipGlyph } from "~/components/design/Chip";
 import { StatRow, StatTile } from "~/components/design/StatTile";
 import { legsOf, totalAscent, totalDescent, type DayLeg, type RouteStop } from "~/lib/trek-day";
+import { dayDetail, routeHigh } from "~/lib/trek-day-detail";
 import {
   knowBeforeYouGo,
   packingList,
@@ -79,6 +80,7 @@ export function DayByDay({
   const legs = legsOf(stops);
   if (legs.length === 0) return null;
   const anyEstimated = legs.some((l) => l.hours && l.hoursEstimated);
+  const high = routeHigh(stops);
 
   return (
     <section className="mt-12">
@@ -91,19 +93,17 @@ export function DayByDay({
       </div>
 
       <ul className="mt-3 divide-y divide-line overflow-hidden rounded-photo border border-line bg-card">
-        {legs.map((l) => (
+        {legs.map((l, i) => (
           <li key={l.day}>
-            <details
-              className="group"
-              onToggle={(e) =>
-                onDayChange?.((e.currentTarget as HTMLDetailsElement).open ? l.day : null)
-              }
-              open={activeDay === l.day || undefined}
+            <div
+              className={cn("group", activeDay === l.day && "bg-mist/40")}
+              onMouseEnter={() => onDayChange?.(l.day)}
+              onMouseLeave={() => onDayChange?.(null)}
             >
               {/* Fixed columns, not a right-aligned huddle: a reader compares
                   day four's climb against day seven's by running an eye down
                   the page, which only works if the numbers line up. */}
-              <summary className="grid cursor-pointer grid-cols-[1.75rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 px-4 py-3 hover:bg-mist sm:grid-cols-[1.75rem_minmax(0,1fr)_7.5rem_6rem_5rem]">
+              <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 px-4 pt-3 sm:grid-cols-[1.75rem_minmax(0,1fr)_7.5rem_6rem_5rem]">
                 <span className="font-mono text-sm text-muted">{l.day}</span>
                 <span className="min-w-0 font-medium text-ink">
                   {l.place}
@@ -114,19 +114,65 @@ export function DayByDay({
                   )}
                 </span>
                 <DayFacts leg={l} />
-              </summary>
-              {(l.note || l.sleep) && (
-                <div className="px-4 pb-3 pl-[3.25rem] text-sm">
-                  {l.note && <p className="text-ink-soft">{l.note}</p>}
+              </div>
+              {/* Open, not behind a click.
+                  These descriptions were written and stored all along — "Rice
+                  terraces, waterfalls, warm air", "Into the gorge" — and the
+                  row hid them, so twelve days read as twelve rows of bare
+                  numbers. Alongside them, what the altitudes mean: derived
+                  from the exact figures we store, with the rule named, never
+                  invented. */}
+              <div className="px-4 pb-3.5 pl-[3.25rem] text-sm">
+                {l.note && <p className="max-w-[62ch] text-ink-soft">{l.note}</p>}
+
+                {dayDetail({
+                  day: l.day,
+                  place: l.place,
+                  altitude_m: l.altitude_m,
+                  up: l.up,
+                  down: l.down,
+                  rest: l.rest,
+                  sleptAtM: i > 0 ? legs[i - 1].altitude_m : null,
+                  routeHighM: high,
+                }).map((d) => (
+                  <p
+                    key={d.text}
+                    className={cn(
+                      "mt-1.5 flex max-w-[62ch] gap-2",
+                      d.tone === "watch" ? "text-ink" : "text-muted",
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full",
+                        d.tone === "watch"
+                          ? "bg-ember"
+                          : d.tone === "relief"
+                            ? "bg-moss"
+                            : "bg-sage",
+                      )}
+                    />
+                    <span>{d.text}</span>
+                  </p>
+                ))}
+
+                <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-muted">
                   {l.sleep && (
-                    <p className="mt-1 flex items-center gap-1.5 text-muted">
+                    <span className="flex items-center gap-1.5">
                       <Glyph name="tent" className="text-moss" />
                       {l.sleep}
-                    </p>
+                    </span>
                   )}
-                </div>
-              )}
-            </details>
+                  {l.km != null && (
+                    <span className="font-mono">{l.km} km</span>
+                  )}
+                  <span className="font-mono">
+                    sleeps at {l.altitude_m.toLocaleString("en-US")} m
+                  </span>
+                </p>
+              </div>
+            </div>
           </li>
         ))}
       </ul>
