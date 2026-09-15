@@ -11,6 +11,14 @@
 -- one at the end, so CREATE OR REPLACE VIEW is legal and nothing that selects
 -- by name changes.
 
+-- NOTE (corrected in the same session it was written): this view was first
+-- written by copying the definition live in production, which already carried
+-- nine columns added by a second Claude session working in parallel
+-- (activity_level, transport, faqs, ref_code and the rest). Those columns have
+-- no migration on this branch, so a fresh clone would have failed right here on
+-- a view referencing columns nothing had created. They are removed here and
+-- adopted properly in 0088, which re-creates the view with all of them.
+
 DROP VIEW IF EXISTS public.public_offerings CASCADE;
 
 CREATE VIEW public.public_offerings AS
@@ -46,15 +54,6 @@ CREATE VIEW public.public_offerings AS
     r.name AS route_name,
     r.region AS route_region,
     o.updated_at,
-    o.meet_time,
-    o.activity_level,
-    o.transport,
-    o.transport_note,
-    o.accessibility,
-    o.accessibility_note,
-    o.languages,
-    o.faqs,
-    o.ref_code,
     g.years_experience AS guide_years_experience
    FROM offerings o
      JOIN guides g ON g.user_id = o.guide_id

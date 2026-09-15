@@ -16,10 +16,23 @@ import {
 import { addOns } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { TrailScene } from "~/components/design/TrailScene";
+import { Rail } from "~/components/public/Rail";
+import { tripItinerary } from "~/lib/trip-itinerary";
+import { RatingSummary } from "~/components/public/RatingSummary";
+import { OfferingCard } from "~/components/public/cards";
+import {
+  accessibilityRows,
+  activityLevel,
+  parseFaqs,
+  refCodeWords,
+  transportLabels,
+  tripLanguages,
+} from "~/lib/offering-details";
 import { FactStrip } from "~/components/design/FactStrip";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp, routeStops, routeHero, routeMaxAltitude } = data;
+  const { guideLanguages, guideStats, alsoByGuide, alsoOnRoute, railRatings } = data;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
@@ -79,15 +92,36 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
       ? photos
       : [{ url: o.cover_photo_url ?? "", alt_text: o.title, credit_name: null }]
   ).map((p) => ({ url: p.url, alt: p.alt_text, credit: p.credit_name }));
-  const itinerary: Array<{
-    day?: number;
-    time?: string;
-    title: string;
-    body?: string;
-  }> = Array.isArray(o.itinerary) ? o.itinerary : [];
+  // A fourteen-day trek used to answer "what do I do for two weeks?" with the
+  // one line its guide had typed, while the route it walks held all fourteen
+  // days one table away. Falls back to those, and says so.
+  const { steps: itinerary, source: itinerarySource } = tripItinerary(
+    o.itinerary,
+    (data as any).routeDayStops,
+    o.kind === "trek" ? o.days : 1,
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 pb-24 lg:pb-6">
+      {/* A trail a reader can climb. The page emitted BreadcrumbList data for
+          Google and showed the reader nothing — so somebody who landed here
+          from a search had no way up except the back button. */}
+      <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted">
+        <Link to={o.kind === "trek" ? "/treks" : "/experiences"} className="hover:text-ink">
+          {o.kind === "trek" ? "Treks" : "Experiences"}
+        </Link>
+        {(o as any).route_slug && (
+          <>
+            <span aria-hidden className="px-1.5">/</span>
+            <Link to={`/routes/${(o as any).route_slug}`} className="hover:text-ink">
+              {(o as any).route_name}
+            </Link>
+          </>
+        )}
+        <span aria-hidden className="px-1.5">/</span>
+        <span className="text-ink">{o.title}</span>
+      </nav>
+
       {/* A trek opens on itself drawn as a walk (docs/07): the route's day
           stops over the cover, or over the route's own photograph, or over
           terrain — never the blank box most trips without a cover used to
@@ -162,6 +196,13 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                 <TierBadge tier={o.guide_tier} static />
               </div>
               {rating && <Stars value={rating.value} count={rating.count} />}
+              {/* The evidence, not just the badge.
+                  This panel said "Led by Pemba" beside a tier badge, which
+                  means nothing to somebody who arrived from a search two
+                  seconds ago. Trips led, years guiding and how fast they
+                  answer are the three things that make a stranger in Nepal a
+                  person you would send money to. */}
+              <GuideNumbers stats={guideStats} />
               <p className="text-sm text-primary">Full profile →</p>
             </div>
           </Link>
@@ -380,9 +421,31 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
 
           {itinerary.length > 0 && (
             <section>
-              <h2 className="mb-3 font-display text-xl">
+              <h2 className="mb-1 font-display text-xl">
                 {o.kind === "trek" ? "Itinerary" : "What you'll do"}
               </h2>
+              {/* Whose plan this is. The route's standard stages printed as
+                  this guide's own is a small lie that becomes a complaint on
+                  day three. */}
+              {itinerarySource === "route" && (
+                <p className="mb-3 max-w-[60ch] text-caption text-muted">
+                  The standard stages for{" "}
+                  {(o as any).route_slug ? (
+                    <Link
+                      to={`/routes/${(o as any).route_slug}`}
+                      prefetch="intent"
+                      className="text-moss underline decoration-sage underline-offset-2 hover:decoration-moss"
+                    >
+                      {(o as any).route_name}
+                    </Link>
+                  ) : (
+                    "this route"
+                  )}
+                  . {o.guide_name.split(" ")[0]} may vary them for weather, for
+                  how you are walking, or to keep you off the busiest days —
+                  ask before you book.
+                </p>
+              )}
               <ol className="space-y-2">
                 {itinerary.map((it, i) => (
                   <li key={i} className="rounded-card border border-border p-3">
@@ -436,9 +499,71 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </section>
           )}
 
+          {/* ── How you move.
+               "Is there a flight to Lukla, and is it in the price?" was a
+               message to the guide on every single trek, because the page did
+               not say. Every page we are compared with answers it in a row. */}
+          {(transportLabels((o as any).transport).length > 0 || (o as any).transport_note) && (
+            <section>
+              <h2 className="mb-2 font-display text-xl">Getting there and around</h2>
+              {transportLabels((o as any).transport).length > 0 && (
+                <ul className="flex flex-wrap gap-2">
+                  {transportLabels((o as any).transport).map((t) => (
+                    <li
+                      key={t}
+                      className="rounded-pill border border-line bg-card px-3 py-1 text-sm text-ink"
+                    >
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {(o as any).transport_note && (
+                <p className="mt-2 max-w-[62ch] text-sm text-ink-soft">
+                  {(o as any).transport_note}
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* ── The facts a reader checks last and cancels over. */}
+          <OtherDetails o={o} languages={tripLanguages((o as any).languages, guideLanguages)} />
+
+          {/* ── The questions the office answers by email every week. */}
+          {parseFaqs((o as any).faqs).length > 0 && (
+            <section id="faq" className="scroll-mt-6">
+              <h2 className="mb-3 font-display text-xl">Questions people ask</h2>
+              <ul className="divide-y divide-line rounded-card border border-line">
+                {parseFaqs((o as any).faqs).map((f) => (
+                  <li key={f.q}>
+                    {/* <details>, so every answer is in the HTML and on the
+                        page with no JavaScript — which is both how Google
+                        reads it and how it works on a 3G phone. */}
+                    <details className="group">
+                      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-3 font-medium text-ink hover:bg-mist/50">
+                        {f.q}
+                        <span
+                          aria-hidden
+                          className="mt-0.5 shrink-0 text-muted transition-transform duration-quick group-open:rotate-180"
+                        >
+                          ⌄
+                        </span>
+                      </summary>
+                      <p className="max-w-[68ch] px-3 pb-3 text-sm text-ink-soft">{f.a}</p>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {reviews.length > 0 && (
             <section className="space-y-4">
               <h2 className="font-display text-xl">Reviews</h2>
+              {/* The spread, not only its mean: somebody deciding between two
+                  strangers wants to know whether a 4.6 is everybody agreeing
+                  or two people who hated it. */}
+              <RatingSummary reviews={reviews} />
               {reviews.map((r) => (
                 <ReviewBlock
                   key={r.id}
@@ -484,6 +609,163 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           returnTo={data.canonical ? new URL(data.canonical).pathname : "/"}
         />
       </div>
+
+      {/* ── Two rails, because this page used to be a dead end.
+           Somebody who likes the guide but not this trip wants their other
+           work; somebody who likes the route but not the guide wants to see
+           who else walks it. Every page we are compared with ends with both,
+           and on a platform whose argument is that you pick a person, the
+           second rail is the argument itself. */}
+      {alsoByGuide.length > 0 && (
+        <section className="mt-14">
+          <h2 className="font-display text-2xl text-ink">
+            More from {o.guide_name.split(" ")[0]}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            The same guide, a different trip — same rate, same calendar.
+          </p>
+          <div className="mt-4">
+            <Rail>
+              {alsoByGuide.map((x: any) => (
+                <OfferingCard key={x.id} offering={x} rating={railRatings[x.guide_id]} />
+              ))}
+            </Rail>
+          </div>
+        </section>
+      )}
+
+      {alsoOnRoute.length > 0 && (
+        <section className="mt-12">
+          <h2 className="font-display text-2xl text-ink">
+            {(o as any).route_name
+              ? `Other guides on ${(o as any).route_name}`
+              : "Trips like this one"}
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            {(o as any).route_name
+              ? "The same route, led by somebody else. Compare the people, not the packages."
+              : "A different guide, the same kind of day."}
+          </p>
+          <div className="mt-4">
+            <Rail>
+              {alsoOnRoute.map((x: any) => (
+                <OfferingCard key={x.id} offering={x} rating={railRatings[x.guide_id]} />
+              ))}
+            </Rail>
+          </div>
+        </section>
+      )}
     </main>
+  );
+}
+
+/**
+ * Trips led, years guiding, how fast they answer.
+ *
+ * Only what we actually hold: a guide with no completed trips on the platform
+ * shows years and a response time, not a zero. A zero here is worse than a
+ * gap — it reads as a guide nobody has ever booked, when it usually means a
+ * guide who joined last week.
+ */
+function GuideNumbers({
+  stats,
+}: {
+  stats: {
+    years_experience: number | null;
+    treks_completed_platform: number | null;
+    median_response_mins: number | null;
+  } | null;
+}) {
+  if (!stats) return null;
+  const bits: string[] = [];
+  if (stats.treks_completed_platform && stats.treks_completed_platform > 0) {
+    bits.push(
+      `${stats.treks_completed_platform} ${stats.treks_completed_platform === 1 ? "trip" : "trips"} led here`,
+    );
+  }
+  if (stats.years_experience && stats.years_experience > 0) {
+    bits.push(`${stats.years_experience} years guiding`);
+  }
+  if (stats.median_response_mins && stats.median_response_mins > 0) {
+    const m = stats.median_response_mins;
+    bits.push(`replies in about ${m < 60 ? `${m} min` : `${Math.round(m / 60)} hr`}`);
+  }
+  if (bits.length === 0) return null;
+  return <p className="mt-0.5 text-sm text-muted">{bits.join(" · ")}</p>;
+}
+
+/**
+ * The row of ordinary fact a trip page is expected to carry.
+ *
+ * On the pages a trekker compares us with this is a plain labelled block near
+ * the foot: how hard it is, what your guide will speak on the day, who the
+ * trip suits, a reference to quote in an email. Ours had none of it, so every
+ * one of those questions arrived as a message — and "not suitable if you have
+ * limited mobility" arrived after somebody had already paid.
+ */
+function OtherDetails({ o, languages }: { o: any; languages: string[] }) {
+  const level = activityLevel(o.activity_level);
+  const access = accessibilityRows(o.accessibility);
+  const ref = refCodeWords(o.ref_code);
+  if (!level && languages.length === 0 && access.length === 0 && !ref) return null;
+
+  return (
+    <section>
+      <h2 className="font-display text-xl">Other details</h2>
+      <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+        {level && (
+          <div>
+            <dt className="label text-muted">How hard it is</dt>
+            <dd className="mt-0.5 text-ink">
+              {level.label}
+              <span className="mt-0.5 block max-w-[46ch] text-sm text-ink-soft">
+                {level.blurb}
+              </span>
+            </dd>
+          </div>
+        )}
+
+        {languages.length > 0 && (
+          <div>
+            <dt className="label text-muted">Languages on the trip</dt>
+            <dd className="mt-0.5 text-ink">{languages.join(", ")}</dd>
+          </div>
+        )}
+
+        {access.length > 0 && (
+          <div className="sm:col-span-2">
+            <dt className="label text-muted">Who it suits</dt>
+            <dd className="mt-1">
+              {/* Cautions sort last and carry a different mark. "Not suitable
+                  if you have limited mobility" as a green tick beside "service
+                  animals welcome" is how somebody books a trip they then have
+                  to cancel. */}
+              <ul className="space-y-1 text-sm">
+                {access.map((a) => (
+                  <li key={a.label} className="flex items-start gap-2">
+                    <span aria-hidden className={a.warn ? "text-ember" : "text-moss"}>
+                      {a.warn ? "!" : "✓"}
+                    </span>
+                    <span className={a.warn ? "text-ink" : "text-ink-soft"}>{a.label}</span>
+                  </li>
+                ))}
+              </ul>
+              {o.accessibility_note && (
+                <p className="mt-2 max-w-[62ch] text-sm text-ink-soft">{o.accessibility_note}</p>
+              )}
+            </dd>
+          </div>
+        )}
+
+        {ref && (
+          <div>
+            <dt className="label text-muted">Trip reference</dt>
+            {/* Quote this in an email and the office finds the trip in one
+                search, instead of asking which Everest trek you mean. */}
+            <dd className="mt-0.5 font-mono text-ink">{ref}</dd>
+          </div>
+        )}
+      </dl>
+    </section>
   );
 }

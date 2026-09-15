@@ -8,6 +8,10 @@ import { offeringPath } from "~/components/public/cards";
 
 type Kind = "trek" | "experience";
 
+/** What a card on the two foot rails draws — nothing more (docs/07 §8). */
+const OFFERING_CARD_COLS =
+  "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, guide_years_experience, route_slug, route_name";
+
 export async function loadOfferingDetail(
   context: Readonly<RouterContextProvider>,
   slug: string,
@@ -61,7 +65,48 @@ export async function loadOfferingDetail(
         : Promise.resolve({ data: null as null | { day_stops: unknown; hero_photo_url: string | null; max_altitude_m: number | null } }),
     ]);
 
+  // The tier of fact the page was missing, and the two rails at its foot.
+  //
+  // docs/MERGE-HANDOVER.md §5: measured against the pages a trekker in Berlin
+  // compares us with, this page answered none of "what will my guide speak",
+  // "who is this guide", "what else do they run", "who else runs this route".
+  // The last two matter most: the page used to be a dead end, and a dead end
+  // on the one screen where somebody is deciding is an expensive thing.
+  const [
+    { data: guideLangs },
+    { data: guideRow },
+    { data: alsoByGuide },
+    { data: alsoOnRoute },
+  ] = await Promise.all([
+    client.from("guide_languages").select("language").eq("guide_id", o.guide_id),
+    client
+      .from("public_guides")
+      .select("years_experience, treks_completed_platform, median_response_mins")
+      .eq("user_id", o.guide_id)
+      .maybeSingle(),
+    client
+      .from("public_offerings")
+      .select(OFFERING_CARD_COLS)
+      .eq("guide_id", o.guide_id)
+      .neq("id", o.id)
+      .limit(6),
+    o.route_id
+      ? client
+          .from("public_offerings")
+          .select(OFFERING_CARD_COLS)
+          .eq("route_id", o.route_id)
+          .neq("guide_id", o.guide_id)
+          .limit(6)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
   const ratings = await guideRatings(client, [o.guide_id]);
+  // One query for every guide on the two rails, so their cards carry a rating
+  // for the same reason the browse grid does.
+  const railGuideIds = [
+    ...new Set([...(alsoByGuide ?? []), ...(alsoOnRoute ?? [])].map((r: any) => r.guide_id)),
+  ];
+  const railRatings = railGuideIds.length ? await guideRatings(client, railGuideIds) : {};
   const permitPp = (permits ?? []).reduce(
     (s: number, p: { cost_usd_cents: number }) => s + p.cost_usd_cents,
     0,
@@ -101,10 +146,29 @@ export async function loadOfferingDetail(
       author_country: string | null;
     }>,
     rating: ratings[o.guide_id] ?? null,
+    railRatings,
+    alsoByGuide: (alsoByGuide ?? []) as any[],
+    alsoOnRoute: (alsoOnRoute ?? []) as any[],
+    // Empty means "whatever this guide speaks", which is the normal case —
+    // only a trip deliberately led in a subset stores its own (0088).
+    guideLanguages: ((guideLangs ?? []) as Array<{ language: string }>).map((g) => g.language),
+    guideStats: (guideRow ?? null) as null | {
+      years_experience: number | null;
+      treks_completed_platform: number | null;
+      median_response_mins: number | null;
+    },
     permitPp,
     routeStops: (((routeRow as any)?.day_stops ?? []) as Array<{ day: number; place: string; altitude_m: number }>).filter(
       (st) => Number(st?.altitude_m) > 0,
     ),
+    // Every stop, unfiltered. routeStops above drops the altitude-less ones
+    // because TrailScene draws a height profile and cannot plot them — but a
+    // day-by-day still has to list the day you spend in Kathmandu.
+    routeDayStops: ((routeRow as any)?.day_stops ?? []) as Array<{
+      day: number;
+      place: string;
+      altitude_m: number | null;
+    }>,
     routeHero: ((routeRow as any)?.hero_photo_url ?? null) as string | null,
     routeMaxAltitude: ((routeRow as any)?.max_altitude_m ?? null) as number | null,
     canonical: absoluteUrl(env.SITE_URL, offeringPath(o)),

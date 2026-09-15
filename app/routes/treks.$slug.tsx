@@ -1,7 +1,8 @@
 import type { Route } from "./+types/treks.$slug";
 import { loadOfferingDetail } from "~/features/offering-detail.server";
+import { parseFaqs } from "~/lib/offering-details";
 import { OfferingDetailView } from "~/components/public/OfferingDetailView";
-import { pageMeta, productLd, breadcrumbLd, jsonLd } from "~/lib/seo";
+import { pageMeta, productLd, breadcrumbLd, jsonLd, faqLd } from "~/lib/seo";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 
 export async function loader({ params, context, request }: Route.LoaderArgs) {
@@ -48,6 +49,12 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
         { name: o.title, url: data.canonical },
       ]),
     ),
+    // FAQPage, but only where a guide has actually answered something. An
+    // empty FAQPage is a structured-data error in Search Console, and a rich
+    // result promising answers that are not on the page is worse than none.
+    ...(parseFaqs((o as any).faqs).length > 0
+      ? [jsonLd(faqLd(parseFaqs((o as any).faqs)))]
+      : []),
   ];
 }
 
