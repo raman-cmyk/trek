@@ -192,11 +192,23 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-2xl text-ink">Everyone's logins</h1>
-        <p className="text-sm text-ink-soft">
-          <span className="font-mono">{total}</span> accounts ·{" "}
-          <span className="font-mono">{thisWeek}</span> signed in this week ·{" "}
-          <span className="font-mono">{never}</span> never signed in. Only you see this page.
-        </p>
+        {/* Counts only when the count means something. The page used to print
+            "0 accounts · 0 signed in this week" directly above an alert
+            saying the accounts could not be read — three confident numbers
+            derived from a failed query. A statistic computed from nothing is
+            not a small cosmetic problem: it is the page asserting the
+            platform is empty. */}
+        {listError ? (
+          <p className="text-sm text-ink-soft">
+            The account list could not be loaded, so there are no numbers to show.
+          </p>
+        ) : (
+          <p className="text-sm text-ink-soft">
+            <span className="font-mono">{total}</span> accounts ·{" "}
+            <span className="font-mono">{thisWeek}</span> signed in this week ·{" "}
+            <span className="font-mono">{never}</span> never signed in. Only you see this page.
+          </p>
+        )}
       </div>
 
       {/* The accounts could not be read at all. Said out loud, with the
@@ -274,7 +286,12 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
 
       <Panel>
         {rows.length === 0 ? (
-          <EmptyRow>Nobody matches.</EmptyRow>
+          /* "Nobody matches" is a claim about the data. When the query failed
+             we do not know whether anybody matches, and saying so is the
+             difference between an empty search and a broken directory. */
+          <EmptyRow>
+            {listError ? "Nothing could be read — see the error above." : "Nobody matches."}
+          </EmptyRow>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

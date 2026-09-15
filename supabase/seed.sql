@@ -203,10 +203,20 @@ insert into public.reviews (booking_id, author_id, subject_id, direction, overal
 
 -- ============ M2 OPS DATA ============
 -- Applicant guides awaiting verification (won't appear in public_guides).
+-- The empty-string token columns are NOT optional — see the note on the first
+-- auth.users insert above. This block omitted them, so these two rows went in
+-- with NULLs, and ONE NULL token is enough to make GoTrue's admin listUsers
+-- fail for EVERY account: /ops/users reported "Database error finding users"
+-- and then "0 accounts" on a platform with 72. Migration 0086 repairs any
+-- database that already has them.
 insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
-                        created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+                        created_at, updated_at, raw_app_meta_data, raw_user_meta_data,
+                        confirmation_token, recovery_token, email_change_token_new,
+                        email_change, email_change_token_current, phone_change,
+                        phone_change_token, reauthentication_token)
 select '00000000-0000-0000-0000-000000000000', v.id, 'authenticated', 'authenticated',
-       v.email, now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb
+       v.email, now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+       '', '', '', '', '', '', '', ''
 from (values
   ('11111111-1111-1111-1111-000000000013'::uuid,'gyaljen@example.com'),
   ('11111111-1111-1111-1111-000000000014'::uuid,'maya@example.com')
