@@ -121,7 +121,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     client
       .from("public_offerings")
       .select(
-        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents",
+        "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, min_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, guide_years_experience",
       )
       .eq("route_id", route.id),
     // The freshness engine: every journal written on this route.

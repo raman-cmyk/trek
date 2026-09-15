@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ratingLine, reviewsLabel, starText } from "./card-rating";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 describe("ratingLine", () => {
   it("shows the rating when there is one", () => {
@@ -61,5 +63,45 @@ describe("reviewsLabel", () => {
   it("gets the noun right for a screen reader", () => {
     expect(reviewsLabel(1)).toBe("1 review");
     expect(reviewsLabel(12)).toBe("12 reviews");
+  });
+});
+
+/**
+ * The fallback line needs a column, and a column is easy to lose.
+ *
+ * "New here · 14 years guiding" only appears if the loader actually selected
+ * guide_years_experience. It shipped once without it, on all four pages, and
+ * nothing failed — every review-less card just quietly read "No reviews yet",
+ * including for guides with a twenty-year career. There is no type error and
+ * no runtime error to catch it: an unselected column is simply `undefined`,
+ * and ratingLine treats undefined years as "no years", by design.
+ *
+ * So the guard is on the select string itself. Any page that renders an
+ * OfferingCard must ask the database for the column that card reads.
+ */
+describe("the pages that render an OfferingCard", () => {
+  const dir = join(import.meta.dirname, "..", "routes");
+  const pages = readdirSync(dir).filter((f) => {
+    if (!f.endsWith(".tsx") || f.startsWith("_dev.")) return false;
+    return /<OfferingCard[\s/>]/.test(readFileSync(join(dir, f), "utf8"));
+  });
+
+  it("is the set of pages we think it is", () => {
+    // If this fails a new page started rendering the card. Add it, then make
+    // sure its select carries the column — that is what the next test checks.
+    expect(pages.sort()).toEqual(
+      ["experiences.tsx", "guides.$slug.tsx", "home.tsx", "routes.$slug.tsx"].sort(),
+    );
+  });
+
+  it.each(pages)("%s selects guide_years_experience", (page) => {
+    const src = readFileSync(join(dir, page), "utf8");
+    // Only the public_offerings view carries the column — it is the guide row
+    // joined on. The one other select here, a guide previewing their own
+    // unpublished page, reads the base `offerings` table, which has no
+    // guide_* columns at all and never did.
+    const selects = src.match(/"id, slug, kind[^"]*guide_tier[^"]*"/g) ?? [];
+    expect(selects.length).toBeGreaterThan(0);
+    for (const s of selects) expect(s).toContain("guide_years_experience");
   });
 });
