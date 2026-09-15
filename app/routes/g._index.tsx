@@ -301,67 +301,12 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
 
       <SetupChecklist steps={setup} />
 
-      {active ? (
-        <Link
-          to="/g/active"
-          className="block rounded-photo border border-moss/50 bg-mist p-4"
-        >
-          <p className="text-xs text-ink-soft">
-            {window ? (window.where === "on" ? `On the trail — ${dayLabel(window).toLowerCase()}` : dayLabel(window)) : ""}
-          </p>
-          <p className="mt-0.5 font-medium text-ink">{active.offering?.title}</p>
-          <p className="mt-1 text-sm text-primary">Open the trek →</p>
-        </Link>
-      ) : (
-        <section className="grid grid-cols-2 gap-3">
-          <Tile to="/g/enquiries" label="Open enquiries" value={enquiries} highlight={enquiries > 0} />
-          <Tile
-            to="/g/bookings"
-            label="Next trip"
-            value={nextBooking ? nextBooking.offering?.title ?? "—" : "None yet"}
-            small
-          />
-        </section>
-      )}
-
-      {nextBooking && (
-        <section className="rounded-photo border border-border bg-card p-4">
-          <p className="text-xs text-ink-soft">Next trip</p>
-          <p className="font-medium text-ink">{nextBooking.offering?.title}</p>
-          <p className="text-sm text-ink-soft">
-            {firstName(nextBooking.trekker?.full_name)} · {fmtDate(nextBooking.start_date)}
-          </p>
-        </section>
-      )}
-
-      {payableNprPaisa > 0 && (
-        <Link to="/g/earnings" className="block rounded-photo border border-moss/40 bg-mist p-4">
-          <p className="text-xs text-ink-soft">Owed to you</p>
-          <p className="mt-0.5 font-mono text-xl text-ink">{formatNpr(payableNprPaisa)}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">Paid within 7 days of each trek ending.</p>
-        </Link>
-      )}
-
-      {backupFor.length > 0 && (
-        <section className="rounded-photo border border-border bg-card p-4">
-          <p className="text-sm font-medium text-ink">
-            You're the backup guide on {backupFor.length} trek{backupFor.length === 1 ? "" : "s"}
-          </p>
-          <p className="mt-0.5 text-xs text-ink-soft">
-            If the lead guide can't go, you step in. Keep these dates in mind.
-          </p>
-          <ul className="mt-2 space-y-1 text-sm">
-            {backupFor.map((o: any) => (
-              <li key={o.id} className="flex justify-between gap-2">
-                <span className="truncate text-ink">{o.title}</span>
-                <span className="shrink-0 text-ink-soft">
-                  for {o.guide?.users?.full_name?.split(" ")[0] ?? "a guide"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* The order of this page is the founder's, and it is the order a
+          guide actually works in: first the six places they go, then the
+          trip that is next, then the two things somebody is waiting on them
+          for, then the trek they are on, then the money, and last the
+          advice about winning more work. It holds whether or not the setup
+          checklist is still showing above it. */}
 
       <div className="grid grid-cols-2 gap-3">
         <Link to="/g/experiences" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
@@ -382,6 +327,19 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         <Link to="/g/reviews" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
           Reviews →
         </Link>
+      </div>
+
+      {nextBooking && (
+        <section className="rounded-photo border border-border bg-card p-4">
+          <p className="text-xs text-ink-soft">Next trip</p>
+          <p className="font-medium text-ink">{nextBooking.offering?.title}</p>
+          <p className="text-sm text-ink-soft">
+            {firstName(nextBooking.trekker?.full_name)} · {fmtDate(nextBooking.start_date)}
+          </p>
+        </section>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
         {/* Journals are how a guide wins the next booking, so they sit with
             the money links, not buried in profile settings. */}
         <Link
@@ -411,6 +369,59 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           </span>
         </Link>
       </div>
+
+      {active ? (
+        <Link
+          to="/g/active"
+          className="block rounded-photo border border-moss/50 bg-mist p-4"
+        >
+          <p className="text-xs text-ink-soft">
+            {window ? (window.where === "on" ? `On the trail — ${dayLabel(window).toLowerCase()}` : dayLabel(window)) : ""}
+          </p>
+          <p className="mt-0.5 font-medium text-ink">{active.offering?.title}</p>
+          <p className="mt-1 text-sm text-primary">Open the trek →</p>
+        </Link>
+      ) : (
+        <section className="grid grid-cols-2 gap-3">
+          <Tile to="/g/enquiries" label="Open enquiries" value={enquiries} highlight={enquiries > 0} />
+          <Tile
+            to="/g/bookings"
+            label="Next trip"
+            value={nextBooking ? nextBooking.offering?.title ?? "—" : "None yet"}
+            small
+          />
+        </section>
+      )}
+
+      {backupFor.length > 0 && (
+        <section className="rounded-photo border border-border bg-card p-4">
+          <p className="text-sm font-medium text-ink">
+            You're the backup guide on {backupFor.length} trek{backupFor.length === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            If the lead guide can't go, you step in. Keep these dates in mind.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {backupFor.map((o: any) => (
+              <li key={o.id} className="flex justify-between gap-2">
+                <span className="truncate text-ink">{o.title}</span>
+                <span className="shrink-0 text-ink-soft">
+                  for {o.guide?.users?.full_name?.split(" ")[0] ?? "a guide"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {payableNprPaisa > 0 && (
+        <Link to="/g/earnings" className="block rounded-photo border border-moss/40 bg-mist p-4">
+          <p className="text-xs text-ink-soft">Owed to you</p>
+          <p className="mt-0.5 font-mono text-xl text-ink">{formatNpr(payableNprPaisa)}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">Paid within 7 days of each trek ending.</p>
+        </Link>
+      )}
+
       {/* ── How the next booking comes ─────────────────────────────────
            Not a score, not a percentage: three real numbers, each with the
            thing to do about it. The calendar one matters most — a guide with
