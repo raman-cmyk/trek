@@ -124,7 +124,20 @@ export default function GuideEnquiries({ loaderData, actionData }: Route.Compone
   const msg = actionData as any;
   return (
     <div className="space-y-4">
-      <h1 className="font-display text-2xl text-ink">Requests</h1>
+      {/* The count and the order, said out loud.
+          The list is sorted by deadline — answer the one that runs out
+          first — and on a phone only two cards fit. So a guide with three
+          requests saw two, with nothing telling them there was a third or
+          why it was last. That is how a request goes unanswered. */}
+      <div>
+        <h1 className="font-display text-2xl text-ink">Requests</h1>
+        {enquiries.length > 0 && (
+          <p className="text-sm text-ink-soft">
+            {enquiries.length} waiting on you
+            {enquiries.length > 1 ? " — the one that runs out first is at the top" : ""}.
+          </p>
+        )}
+      </div>
       {msg?.error && (
         <p className="rounded-photo bg-ember/10 p-3 text-sm text-ember">{msg.error}</p>
       )}
