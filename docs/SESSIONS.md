@@ -2887,3 +2887,67 @@ there. They were indistinguishable, which for the question this widget exists
 to answer is the same as being absent.
 
 1188 tests green, build green, deployed.
+## Session — handover from the second session (2026-09-15, closing)
+
+This session ran in parallel with the one that owns this branch, and that was
+the mistake behind most of today's confusion: two agents, one Cloudflare
+worker, one database. Five deploys reverted each other and the live site
+flipped between two different applications depending on who pushed last. From
+now on there is one session and one deployer. Everything below is on this
+branch and verified.
+
+**Verified by running the app, not just by tests.** `wrangler dev --local`
+against the production database, every public page loaded, and the specific
+claims checked in the rendered HTML — because a green build says nothing about
+whether a page renders. Three checks failed on the first pass and one of them
+was a real bug (below).
+
+Pushed here today:
+
+- **The card price is now the page price.** A card priced the trip with the
+  guide fee split four ways — `min(max_party, 4)` — while the trip page opens
+  at the party the trip allows, almost always one. Pemba's Everest trek was
+  advertised at $157 and charged at $1,148. `app/lib/list-price.ts` is the
+  single definition — "what this page will say when somebody lands on it" —
+  and the card, the route card's range, the route headline and the picker all
+  read it. Verified live: comparison table $1,148, trek page $1,148.08, card
+  $1,148. "from" is gone, because it promised a floor and then showed a bigger
+  number one click later.
+- **Before-you-go is a briefing, not twelve accordions.** The icons were
+  assigned from whatever the design system had spare, so a tick meant
+  insurance *and* money and a spark meant rescue *and* food *and* charging;
+  behind them sat 8,000 characters nobody clicked twelve times to read.
+  Grouped by when each answer matters, and shown.
+- **The route page's price breakdown is now who sells the walk** — every guide
+  on the route with their own angle, days and price, sorted, cheapest marked.
+  A breakdown explains a real quote on a trip page; on a route page it
+  answered a question nobody asked.
+- **The day list says what each day does to you.** The descriptions were
+  written and stored all along ("Into the gorge") and the row hid them. Now
+  open, plus what the altitudes mean — the first night above 2,500m, a
+  sleeping gain over the 500m-a-night guidance, the highest night, what a rest
+  day is for — each derived from stored altitudes against published guidance,
+  with the rule printed.
+
+**The bug that only a real page load found:** the first-night-above-2,500m
+warning fired on a *crossing*, so Everest Base Camp — which starts at
+Phakding, 2,610m — said nothing at all. The routes that fly straight into
+altitude were the ones getting no warning. Fixed and tested both ways.
+
+**🙋 Founder — what is NOT on this branch.** The other branch,
+`claude/new-session-vereu4`, holds 25 commits that were never merged, and
+`docs/MERGE-HANDOVER.md` there lists them in priority order. Two matter:
+
+1. **A request to book is still lost when a trekker signs in.** `/enquiry`
+   redirects to the login page and drops the form; they come back to an empty
+   one. This loses bookings and the fix is five self-contained files.
+2. **Nine homepage bugs** from Pratik's list — the guide's name truncating
+   before the district, cards in a row not lining up, five different "see all"
+   labels, "1 guides", the map opening over India — are fixed there, not here.
+
+Also standing: no `RESEND_API_KEY` and no `SPARROW_SMS_TOKEN` on the worker,
+so no notification has ever been delivered by email or SMS;
+`guidesofnepal.com` has been stuck `initializing` in Cloudflare for hours with
+the registrar side correct, and needs "Check nameservers now" pressed; and
+Workers Paid at $5/month would end the Error 1102 class of failure rather than
+just making it rarer.

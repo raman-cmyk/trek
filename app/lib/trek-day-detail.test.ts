@@ -56,8 +56,17 @@ describe("what a day does to you", () => {
     expect(d.length).toBeLessThanOrEqual(2);
   });
 
-  it("says nothing on day one, when there is no night before it", () => {
+  it("says nothing on a day one that starts low", () => {
     expect(dayDetail({ ...base, day: 1, altitude_m: 840, sleptAtM: null })).toEqual([]);
+  });
+
+  it("warns on a day one that is already high — the Lukla case", () => {
+    // Everest Base Camp starts at Phakding, 2,610m. The first version only
+    // fired on a crossing, so the routes that fly straight into altitude were
+    // the ones it said nothing about.
+    const d = dayDetail({ ...base, day: 1, place: "Phakding", altitude_m: 2_610, sleptAtM: null });
+    expect(d[0].tone).toBe("watch");
+    expect(d[0].text).toContain("starts above 2,500m");
   });
 
   it("uses the bands altitude medicine uses", () => {

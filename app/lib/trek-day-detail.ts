@@ -75,13 +75,19 @@ export function dayDetail(d: DayFactsIn): DayDetail[] {
       text: `You sleep ${m(gain)} higher than last night. Above ${m(GAIN_RULE_FLOOR_M)} the usual guidance is ${NIGHTLY_GAIN_M}m a night, so this one is over it — expect your guide to walk you higher and bring you back down.`,
     });
   } else if (
-    d.sleptAtM != null &&
-    d.sleptAtM < AMS_FLOOR_M &&
-    d.altitude_m >= AMS_FLOOR_M
+    d.altitude_m >= AMS_FLOOR_M &&
+    (d.sleptAtM == null || d.sleptAtM < AMS_FLOOR_M)
   ) {
+    // Either they cross the line tonight, or — on a trek that flies straight
+    // in, like Everest Base Camp starting at Phakding, 2,610m — they were
+    // already over it on day one. The first version only fired on a crossing
+    // and so said nothing at all on exactly the routes that begin high.
     out.push({
       tone: "watch",
-      text: `Tonight is the first night above ${m(AMS_FLOOR_M)}, where altitude starts to matter. Drink more than you want to and tell your guide about any headache.`,
+      text:
+        d.sleptAtM == null
+          ? `This trek starts above ${m(AMS_FLOOR_M)}, where altitude already matters. Drink more than you want to from the first day and tell your guide about any headache.`
+          : `Tonight is the first night above ${m(AMS_FLOOR_M)}, where altitude starts to matter. Drink more than you want to and tell your guide about any headache.`,
     });
   } else if (d.down >= 800 && d.sleptAtM != null && d.sleptAtM >= GAIN_RULE_FLOOR_M) {
     out.push({
