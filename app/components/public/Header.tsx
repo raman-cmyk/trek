@@ -62,6 +62,16 @@ export function Header({
         ? { to: "/ops", label: "Ops" }
         : { to: "/trips", label: "My trips" };
 
+  /**
+   * "My profile", beside "My trips".
+   *
+   * The trekker profile is the only page that answers "what does a guide see
+   * about me?" and nothing linked to it, so it was unreachable unless you
+   * knew your own uuid. Guides and ops already have their own profile inside
+   * their dashboards, so this is for trekkers only.
+   */
+  const showProfile = Boolean(account) && account?.role !== "guide" && account?.role !== "ops";
+
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-line bg-paper/90 backdrop-blur-md">
@@ -189,6 +199,16 @@ export function Header({
                 {dash.label}
               </NavLink>
 
+              {showProfile && (
+                <NavLink
+                  to="/me"
+                  prefetch="intent"
+                  className="hidden whitespace-nowrap rounded-pill border border-line px-3.5 py-1.5 text-[15px] font-medium text-ink transition-colors hover:border-sage lg:inline-block"
+                >
+                  My profile
+                </NavLink>
+              )}
+
               <Form method="post" action="/logout" className="hidden lg:block">
                 <button
                   className="whitespace-nowrap rounded-pill px-2.5 py-1.5 text-[15px] text-ink-soft transition-colors hover:text-ink"
@@ -275,6 +295,14 @@ export function Header({
                   >
                     {dash.label}
                   </Link>
+                  {showProfile && (
+                    <Link
+                      to="/me"
+                      className="rounded-pill border border-line px-4 py-2 text-[15px] font-medium text-ink"
+                    >
+                      My profile
+                    </Link>
+                  )}
                   {account.role !== "guide" && account.role !== "ops" && (
                     <Link
                       to="/groups"
