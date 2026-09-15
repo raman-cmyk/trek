@@ -16,6 +16,7 @@ import { cn } from "~/lib/cn";
 import { Stars } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { HeroSearch } from "~/components/public/HeroSearch";
+import { AscentStats } from "~/components/public/AscentStats";
 import { TrailAtlas } from "~/components/public/TrailAtlas";
 import { fanOut } from "~/lib/atlas";
 import { DISTRICT_CENTRES } from "~/lib/geo";
@@ -373,6 +374,13 @@ export async function loader({ context }: Route.LoaderArgs) {
     splitOffering,
     review: (reviews ?? [])[0] ?? null,
     journals: (journals ?? []) as PublicJournal[],
+    // Four real guides for the numbers band. "49 verified guides" is an
+    // abstraction; four people looking at you is the argument this company
+    // makes, and their photographs are already loaded.
+    statFaces: all
+      .filter((g) => g.avatar_url)
+      .slice(0, 4)
+      .map((g) => ({ slug: g.slug, name: g.full_name, avatar: g.avatar_url })),
     stats: {
       guides: all.length,
       districts: new Set(all.map((g) => g.home_district).filter(Boolean)).size,
@@ -411,6 +419,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     review,
     journals,
     stats,
+    statFaces,
     suggestions,
     today,
     weekEnd,
@@ -480,29 +489,41 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </p>
       </section>
 
-      {/* 2 — Live numbers. Mono, big, real. */}
-      <section className="border-y border-line bg-mist">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-y-6 px-4 py-8 sm:grid-cols-3 lg:grid-cols-5">
-          <Stat glyph="check" n={String(stats.guides)} label="verified guides" />
-          <Stat glyph="pin" n={String(stats.districts)} label="home districts" />
-          <Stat glyph="mountain" n={stats.treksLed.toLocaleString("en-US")} label="treks led" />
-          <Stat glyph="spark" n={mr(stats.fundUsdCents)} label="to The Fund this year" href="/fund" />
-          <Stat glyph="altitude" n={mr(0)} label="taken on rescue flights" href="/safety" />
-        </div>
-      </section>
+      {/* 2 — Live numbers, as a climb rather than five identical tiles.
+          See AscentStats for why. The order is the ascent: the rescue-flight
+          number is last and highest because it is the one that is about
+          whether you come home. */}
+      <AscentStats
+        faces={statFaces}
+        stats={[
+          { glyph: "check", value: String(stats.guides), label: "verified guides", href: "/guides" },
+          { glyph: "pin", value: String(stats.districts), label: "home districts" },
+          { glyph: "mountain", value: stats.treksLed.toLocaleString("en-US"), label: "treks led" },
+          { glyph: "spark", value: mr(stats.fundUsdCents), label: "to The Fund this year", href: "/fund" },
+          { glyph: "altitude", value: mr(0), label: "taken on rescue flights", href: "/safety", summit: true },
+        ]}
+      />
 
       {/* 3 — The atlas. Not "we have guides in 25 districts" — a count is a
           claim about us. Pick a trail and meet the people who walk it, which
           is a claim about them, and the only one that has ever sold a trek. */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="mb-2 max-w-[20ch] font-display text-3xl text-ink sm:text-4xl">
-          <span className="wt-heavy">Pick a trail. Meet the people who walk it.</span>
-        </h2>
-        <p className="mb-5 max-w-[52ch] text-muted">
-          Every line is a real route with real days on it. Every face is a
-          verified guide you can book by name — not an agency, and not a
-          stranger assigned to you the week you land.
-        </p>
+        {/* Heading left, the sentence that explains it right. Both used to be
+            left-aligned at half the width, which left a column of nothing down
+            the right of the page for no reason — the heading was not big
+            enough to earn the space and the paragraph was not long enough to
+            fill it. Two columns close the gap and put the explanation at the
+            reader's eye instead of under their chin. Stacked on a phone. */}
+        <div className="mb-5 grid items-end gap-x-10 gap-y-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+          <h2 className="max-w-[20ch] font-display text-3xl text-ink sm:text-4xl lg:text-[2.75rem]">
+            <span className="wt-heavy">Pick a trail. Meet the people who walk it.</span>
+          </h2>
+          <p className="max-w-[52ch] text-muted lg:pb-1.5">
+            Every line is a real route with real days on it. Every face is a
+            verified guide you can book by name — not an agency, and not a
+            stranger assigned to you the week you land.
+          </p>
+        </div>
         <TrailAtlas
           trails={atlasTrails}
           guides={atlasGuides}

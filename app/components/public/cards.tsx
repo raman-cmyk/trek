@@ -144,39 +144,56 @@ export function GuideCard({
         {/* Stacked at every width: beside the district the name truncated to
             "Pemb…" on a four-up grid, and a guide's name is the one thing on
             the card that must never be cut. */}
-        <div className="mt-2.5 flex flex-col gap-0.5">
-          <p className="font-display text-xl leading-tight text-ink sm:text-2xl">
-            {guide.full_name}
-          </p>
-          {guide.home_district && (
-            <p className="flex shrink-0 items-center gap-1 text-sm text-muted">
-              <PinMark />
-              {guide.home_district}
+        {/* Everything below the quote is one block pinned to the bottom of the
+            card, and every row in it is always present.
+
+            Both halves of that matter. The quote is the guide's own words, so
+            it runs two lines or three depending on what they said — and with
+            the name simply following it, a row of cards put Tenzing's name
+            forty pixels above Mingma's. Pinning the block means the quote takes
+            the slack at the top and every name, district, rating and rate lands
+            on the same line across the row, whatever anyone wrote.
+
+            The rating row used to appear only for guides who have one, which
+            reintroduced the same shift a row lower — so a guide with no reviews
+            says so on that line instead of vanishing from it. */}
+        <div className="mt-auto pt-2.5">
+          <div className="flex flex-col gap-0.5">
+            <p className="font-display text-xl leading-tight text-ink sm:text-2xl">
+              {guide.full_name}
             </p>
-          )}
-        </div>
-        {rating && rating.count > 0 && (
-          <div className="mt-1.5">
-            <Stars value={rating.value} count={rating.count} />
+            {guide.home_district && (
+              <p className="flex shrink-0 items-center gap-1 text-sm text-muted">
+                <PinMark />
+                {guide.home_district}
+              </p>
+            )}
           </div>
-        )}
-        {/* Bottom row pinned so every card in a row is equal height (§8). */}
-        <div className="mt-auto flex items-baseline justify-between gap-2 pt-2">
-          {rating && rating.count > 0 ? (
+          {/* One line, always, whichever state it is in. A fixed height rather
+              than trusting the two to match: "Be the first to review" wrapped
+              to two lines in a 211px card and pushed the rate row 35px below
+              its neighbours' — the same misalignment one row lower, which is
+              the whole thing this block exists to prevent. */}
+          <div className="mt-1.5 flex h-5 items-center">
+            {rating && rating.count > 0 ? (
+              <Stars value={rating.value} count={rating.count} />
+            ) : (
+              <span className="truncate text-sm text-muted">No reviews yet</span>
+            )}
+          </div>
+          <div className="flex items-baseline justify-between gap-2 pt-2">
             <span className="truncate text-sm text-muted">
               {languages && languages.length > 0 ? languages.slice(0, 3).join(", ") : ""}
             </span>
-          ) : (
-            <span className="text-sm text-muted">Be the first</span>
-          )}
-          {guide.day_rate_usd_cents && (
-            <span className="shrink-0 text-sm text-muted">
-              <span className="font-mono font-medium text-ink">
-                {mr(guide.day_rate_usd_cents)}
+            {guide.day_rate_usd_cents && (
+              <span className="shrink-0 text-sm text-muted">
+                <span className="font-mono font-medium text-ink">
+                  {mr(guide.day_rate_usd_cents)}
+                </span>
+                /day
               </span>
-              /day
-            </span>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </Link>

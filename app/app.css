@@ -557,3 +557,84 @@ a, button, input, select, textarea, label, summary {
   .atlas-face.is-open .atlas-face-ring { width: 44px; height: 44px; }
   .atlas-face.is-hushed .atlas-face-ring { width: 13px; height: 13px; }
 }
+
+/* ── The ascent band (AscentStats).
+
+   The five homepage numbers are waypoints on a ridgeline rather than five
+   identical tiles. Two pieces of motion, both once-only and both gated on the
+   band being reached:
+
+   · the ridge draws itself left to right, which is the direction the numbers
+     are read in and the direction a profile is walked in;
+   · each waypoint rises into place behind it, staggered, so the eye arrives at
+     the summit last — which is where the number that actually matters is.
+
+   `--ascent-floor` is the height of the ridge strip at the foot of the band.
+   It is BOTH the SVG's height and the unit each number is lifted by (times its
+   own fraction, in AscentStats.tsx) — one value, so a number always lands on
+   the line instead of near it. Zero below `sm`, where the layout stacks and a
+   ridge across 360px would be a scribble. */
+:root {
+  --ascent-floor: 0px;
+}
+
+/* lg only. Below it the grid is three columns or two, and one fixed ridge
+   cannot pass through the feet of both a five-column row and a three-column
+   one — so the smaller layouts get an ordinary, level row of numbers rather
+   than a line that misses them. */
+@media (min-width: 1024px) {
+  :root {
+    --ascent-floor: 116px;
+  }
+}
+
+.ascent-ridge {
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 1400;
+}
+
+.ascent-ridge.is-drawn {
+  animation: ascent-draw 1100ms var(--ease-out-soft) forwards;
+}
+
+@keyframes ascent-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ascent-waypoint {
+  opacity: 0;
+}
+
+.ascent-waypoint.is-lit {
+  animation: ascent-rise var(--duration-base) var(--ease-out-soft) both;
+}
+
+@keyframes ascent-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* No drawing, no rising. The band is simply there, at full height — the
+   information was never in the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ascent-ridge,
+  .ascent-ridge.is-drawn {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+  .ascent-waypoint,
+  .ascent-waypoint.is-lit {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+}
