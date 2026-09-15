@@ -2951,3 +2951,89 @@ so no notification has ever been delivered by email or SMS;
 the registrar side correct, and needs "Check nameservers now" pressed; and
 Workers Paid at $5/month would end the Error 1102 class of failure rather than
 just making it rarer.
+
+---
+
+## 15 Sept 2026, evening — the card's last line, and the trip page's missing tier
+
+### The guide's rating, in place of a pricing footnote
+
+Every experience card ended with "per person · less in a group". It is true of
+every card on the site, so it carried nothing, and it spent a card's last line
+on a pricing footnote on a platform whose argument is that you pick a person.
+That line now reads `★ 4.9 (12)`.
+
+`app/lib/card-rating.ts` never invents a number. A guide with no reviews is not
+a 0.0 and not a blank: it falls back to "New here · 14 years guiding", or "No
+reviews yet" where we do not hold the years.
+
+**A bug this uncovered.** The fallback shipped dead — `guide_years_experience`
+was not on `public_offerings` at all, so all 38 review-less cards on
+`/experiences` read "No reviews yet", including for guides with twenty-year
+careers. Nothing failed: an unselected column is `undefined`, and `ratingLine`
+treats undefined years as "no years" by design, so there was no type error and
+no runtime error. The guard test reads the select strings themselves, because
+neither the compiler nor Postgres will complain about a column nobody asked
+for. Proved by dropping the column and watching it fail.
+
+Live now: 18 cards with stars, 38 with "New here · N years guiding", none with
+"No reviews yet".
+
+### The trip page
+
+The momo crawl page was a hero photo, a "What you'll do" containing one line,
+two included items and one review.
+
+**Most of the fix was already written.** The other session built it on
+`claude/new-session-vereu4` and handed it over in `docs/MERGE-HANDOVER.md` §5.
+`app/lib/offering-details.ts` came across wholesale with its 19 tests; the
+rendering was re-applied inside this branch's design system, which is what that
+doc asks for. Added: getting there and around, how hard it is in words, the
+languages on the trip, who it suits (cautions last, with a different mark), a
+trip reference, the questions people ask as `<details>` plus `FAQPage` data
+emitted only where a guide has answered something, the rating spread rather
+than only its mean, the guide's numbers under their name, a breadcrumb a reader
+can climb, and two rails at the foot of a page that was a dead end.
+
+**The day-by-day is new.** Measured on production: every live trek carries one
+itinerary entry or none, while the route it walks holds a full set of day
+stops. "Everest Base Camp, the classic 14 days" answered "what do I do for two
+weeks?" with one line, with fourteen days of the answer one table away.
+`app/lib/trip-itinerary.ts` falls back to the route's stops when the guide's
+own is thinner than the trip is long, and the page says whose plan it is — a
+route's standard stages printed as this guide's own is a small lie that becomes
+a complaint on day three. A guide's words still win at half length. Langtang
+now shows eight days with altitudes; it showed one line this morning.
+
+### Migrations
+
+0088 adopts the other branch's columns (0066 there, renumbered), 0089 the
+backfill. Both were already applied to production from that branch and every
+statement is idempotent, so this is the history catching up with a schema the
+database has had for a day.
+
+0087 was corrected in the same session it was written. It had been built by
+copying the view definition live in production, which already carried those
+nine columns — so a fresh clone would have failed on a view referencing columns
+nothing had created. It no longer mentions them; 0088 re-creates the view once
+they exist.
+
+### 🙋 Founder — the thing behind "the website went 100 steps back"
+
+The two branches have now diverged to **111 commits here, 33 there**, and both
+sessions deploy to the same worker. Whoever deploys last decides which of two
+different applications the site is. That is not a theory: it is why the
+experience page looked thin to you this evening — this branch was deployed, and
+the sections were on the other one. Three of those 33 commits are now ported;
+thirty are not, and `docs/MERGE-HANDOVER.md` §1 is still the expensive one — a
+booking request is lost when a trekker signs in.
+
+`MERGE-HANDOVER.md` §7 is the rule to adopt: **one deployer.**
+
+Also still standing, unchanged: no `RESEND_API_KEY` and no `SPARROW_SMS_TOKEN`
+on the worker, so password resets and trip-intent links go nowhere. And the
+Cloudflare API token, the Supabase personal access token and the database
+password are all in these two transcripts and want revoking once the updates
+stop.
+
+Green: typecheck clean, 1267 tests, `npm run build` passing, deployed.
