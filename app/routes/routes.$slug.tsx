@@ -23,7 +23,7 @@ import { listPriceUsdCents } from "~/lib/list-price";
 import {
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
-import { offeringsRating } from "~/lib/ratings.server";
+import { guideRatings, offeringsRating } from "~/lib/ratings.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { CLIMB_ROUTES } from "~/lib/climb";
@@ -170,6 +170,13 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     client,
     ((offerings ?? []) as any[]).map((o) => o.id),
   );
+
+  // The guides who run this route, and what people said about them. The card
+  // line under each title is their rating, not a pricing footnote.
+  const guideRatingsById = await guideRatings(
+    client,
+    [...new Set((offerings ?? []).map((o: any) => o.guide_id).filter(Boolean))],
+  );
   // The cheapest price actually quoted on this route — the same figure the
   // trip pages and the comparison table show, so the route's headline cannot
   // undercut the trips inside it.
@@ -189,6 +196,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   related = rel ?? [];
 
   return {
+    guideRatingsById,
     route,
     blocks: publishedBlocks((blockRows ?? []) as any),
     permits: permits ?? [],
@@ -279,7 +287,8 @@ function BuiltRoutePage({
 }
 
 function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
-  const { route, permits, offerings, journals, guides, article, related } = loaderData as any;
+  const { route, permits, offerings, journals, guides, article, related, guideRatingsById } =
+    loaderData as any;
   const { m } = useMoney();
   const [activeDay, setActiveDay] = useState<number | null>(null);
   const stops = (route.day_stops ?? []) as DayStop[];
@@ -579,7 +588,11 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
             <h2 className="mb-4 font-display text-2xl text-ink">Book this route</h2>
             <Rail>
               {offerings.map((o: PublicOffering) => (
-                <OfferingCard key={o.id} offering={o} />
+                <OfferingCard
+                  key={o.id}
+                  offering={o}
+                  rating={guideRatingsById[(o as any).guide_id]}
+                />
               ))}
             </Rail>
           </section>

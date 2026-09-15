@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { guideRatings } from "~/lib/ratings.server";
 import type { Route } from "./+types/experiences";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
@@ -150,7 +151,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     .from("public_offerings")
     .select("id", { count: "exact", head: true });
 
+  // What other people said about each guide on this page. One query for the
+  // whole grid — the card line that used to read "per person · less in a
+  // group" says this instead.
+  const ratings = await guideRatings(
+    client,
+    [...new Set(offerings.map((o: any) => o.guide_id).filter(Boolean))],
+  );
+
   return {
+    ratings,
     offerings: offerings as PublicOffering[],
     total: totalCount ?? offerings.length,
     kind,
@@ -162,7 +172,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Experiences({ loaderData }: Route.ComponentProps) {
-  const { offerings, total, kind, filters, today, search } = loaderData;
+  const { offerings, total, kind, filters, today, search, ratings } = loaderData;
   const params = new URLSearchParams(search);
   // Built here rather than in the component so the options can carry counts
   // from the rows that are actually on the page.
@@ -295,7 +305,7 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {offerings.map((o) => (
-            <OfferingCard key={o.id} offering={o} />
+            <OfferingCard key={o.id} offering={o} rating={ratings[(o as any).guide_id]} />
           ))}
         </div>
       )}

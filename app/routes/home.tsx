@@ -562,7 +562,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {/* 5c — The catalogue. The rows above answer "who"; this answers
           "what", and it is the only place on the homepage you can browse
           bookable things rather than people. */}
-      <ExperienceBrowser experiences={experiences} />
+      <ExperienceBrowser experiences={experiences} ratings={ratings} />
 
       {/* Latest from the trail — the proof-of-life feed. Real treks, dated,
           written by the guide who led them. Nothing on this page argues the
@@ -877,7 +877,14 @@ const KINDS = [
  * what is actually listed, so an empty category never appears as a chip that
  * returns nothing.
  */
-function ExperienceBrowser({ experiences }: { experiences: any[] }) {
+function ExperienceBrowser({
+  experiences,
+  ratings,
+}: {
+  experiences: any[];
+  /** Guide ratings by guide id — the card's last line. */
+  ratings: Record<string, { value: number; count: number }>;
+}) {
   const [kind, setKind] = useState<string>("");
   const [region, setRegion] = useState<string>("");
   const [showAll, setShowAll] = useState(false);
@@ -1007,7 +1014,7 @@ function ExperienceBrowser({ experiences }: { experiences: any[] }) {
         <>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shown.map((o: PublicOffering) => (
-              <OfferingCard key={o.id} offering={o} />
+              <OfferingCard key={o.id} offering={o} rating={ratings[(o as any).guide_id]} />
             ))}
           </div>
           {!showAll && matched.length > shown.length && (

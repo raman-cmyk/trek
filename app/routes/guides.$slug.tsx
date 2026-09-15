@@ -917,7 +917,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                     <FeatureTrip o={offerings[0]} />
                   </div>
                 ) : (
-                  <OfferingGrid offerings={offerings} />
+                  <OfferingGrid offerings={offerings} rating={rating} />
                 )}
               </section>
             )}
@@ -1379,14 +1379,21 @@ function SectionHead({
  * read across a row. Cards scale, and they are already the shape a reader
  * has learned everywhere else on the site.
  */
-function OfferingGrid({ offerings }: { offerings: PublicOffering[] }) {
+function OfferingGrid({
+  offerings,
+  rating,
+}: {
+  offerings: PublicOffering[];
+  /** Every trip on this page is this guide's, so one rating serves them all. */
+  rating?: { value: number; count: number } | null;
+}) {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? offerings : offerings.slice(0, 6);
   return (
     <>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((o) => (
-          <OfferingCard key={o.id} offering={o} />
+          <OfferingCard key={o.id} offering={o} rating={rating} />
         ))}
       </div>
       {!showAll && offerings.length > shown.length && (

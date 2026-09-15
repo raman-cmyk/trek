@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { ratingLine, reviewsLabel, starText, type CardRating } from "~/lib/card-rating";
 import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
@@ -37,6 +38,8 @@ export interface PublicOffering {
   guide_avatar_url: string | null;
   guide_tier: number;
   guide_day_rate_usd_cents: number | null;
+  /** Carries the "New here · 14 years guiding" line when there are no reviews. */
+  guide_years_experience?: number | null;
   route_slug?: string | null;
   route_name?: string | null;
   /** Selected only where they are displayed — the compare table. */
@@ -180,9 +183,17 @@ export function GuideCard({
   );
 }
 
-export function OfferingCard({ offering }: { offering: PublicOffering }) {
+export function OfferingCard({
+  offering,
+  rating,
+}: {
+  offering: PublicOffering;
+  /** The guide's rating. Absent is normal — a new guide has none. */
+  rating?: CardRating | null;
+}) {
   const { mr } = useMoney();
   const from = offeringFromUsdCents(offering);
+  const line = ratingLine(rating, offering.guide_years_experience);
   return (
     // Not a <Link> wrapper: the route chip below has to be its own link, and a
     // nested <a> is invalid HTML that breaks hydration. Instead the title link
@@ -277,13 +288,28 @@ export function OfferingCard({ offering }: { offering: PublicOffering }) {
             </>
           )}
         </p>
-        {from != null && (
-          // "per person" completes the pill on the photograph; the number is
-          // up there, where a grid is scanned.
-          <p className="mt-auto pt-1 text-caption text-muted">
-            per person{(offering.max_party ?? 1) > 1 ? " · less in a group" : ""}
-          </p>
-        )}
+        {/* What other people said about the guide.
+            This line used to read "per person · less in a group" — a pricing
+            footnote, true of every card, and so carrying no information at
+            all. On a platform whose argument is that you pick a person, it is
+            the wrong thing to spend the last line on. The price is already on
+            the photograph, where a grid is scanned. */}
+        <p className="mt-auto flex items-center gap-1 pt-1 text-caption text-muted">
+          {line.stars != null ? (
+            <>
+              <span aria-hidden className="text-ember">
+                ★
+              </span>
+              <span className="font-mono font-medium text-ink">{starText(line.stars)}</span>
+              <span>({line.count})</span>
+              <span className="sr-only">
+                {reviewsLabel(line.count)} for {offering.guide_name}
+              </span>
+            </>
+          ) : (
+            <span>{line.text}</span>
+          )}
+        </p>
       </div>
     </div>
   );
