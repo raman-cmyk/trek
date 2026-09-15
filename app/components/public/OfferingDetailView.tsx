@@ -465,6 +465,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             guide_day_rate_usd_cents: o.guide_day_rate_usd_cents,
             permit_fees_pp_usd_cents: permitPp,
             guide_first_name: o.guide_name.split(" ")[0],
+            title: o.title,
           }}
           priceBreakdown={effBreakdown ?? breakdown}
           addonsPerPerson={addonsPP}
@@ -476,6 +477,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           ]}
           party={party}
           setParty={setParty}
+          standing={data.standing ?? null}
           day={day}
           setDay={setDay}
           availableDays={availableDays}

@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { cn } from "~/lib/cn";
+import { askNotice } from "~/lib/standing-ask";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
@@ -24,6 +26,8 @@ export interface BookingWidgetOffering {
   guide_day_rate_usd_cents: number | null;
   permit_fees_pp_usd_cents: number;
   guide_first_name: string;
+  /** Used to search for other guides running the same thing after a decline. */
+  title?: string;
 }
 
 function fmtDay(iso: string) {
@@ -193,6 +197,7 @@ function ConfigBody({
   day,
   setDay,
   returnTo,
+  standing,
 }: {
   o: BookingWidgetOffering;
   breakdown?: PB | null;
@@ -205,12 +210,51 @@ function ConfigBody({
   day: string;
   setDay: (d: string) => void;
   returnTo: string;
+  standing?: {
+    status: string;
+    startDate: string;
+    expiresAt: string | null;
+    bookingStatus: string | null;
+  } | null;
 }) {
   const quote = useQuote(o, party, breakdown, addonsPerPerson);
   const { m } = useMoney();
   const fetcher = useFetcher();
-  const sent = fetcher.data?.ok;
   const busy = fetcher.state !== "idle";
+
+  /**
+   * What we already know about this trekker and this trip.
+   *
+   * The database first, because it is the version that survives a refresh.
+   * The fetcher only overrides it for the second between the request landing
+   * and the page revalidating — without that the button would appear to do
+   * nothing on a slow connection, which is exactly the population this has
+   * to work for.
+   */
+  const notice = fetcher.data?.ok
+    ? {
+        state: "waiting" as const,
+        tone: "waiting" as const,
+        text: fetcher.data?.booked
+          ? `You already have this booked with ${o.guide_first_name} for these dates — it is in My trips.`
+          : fetcher.data?.already
+            ? `You already asked ${o.guide_first_name} about these dates — it is in My trips, waiting on them.`
+            : `Request sent to ${o.guide_first_name}. It is in My trips until they answer, and we will email you.`,
+        offerOtherDates: false,
+        offerOtherGuides: false,
+        canAskAgain: false,
+      }
+    : askNotice(
+        standing
+          ? {
+              status: standing.status,
+              startDate: standing.startDate,
+              expiresAt: standing.expiresAt,
+            }
+          : null,
+        standing?.bookingStatus ?? null,
+        o.guide_first_name,
+      );
   return (
     <div className="space-y-4">
       <DatePick
@@ -257,41 +301,63 @@ function ConfigBody({
           No open dates right now — message {o.guide_first_name} above and they can
           open their calendar for you.
         </p>
-      ) : sent ? (
-        <p className="rounded-button bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {fetcher.data?.booked
-            ? `You already have this trip booked with ${o.guide_first_name} for these dates — it is in My trips.`
-            : fetcher.data?.already
-              ? `You already asked ${o.guide_first_name} about these dates — it is in My trips, waiting on them.`
-              : `Request sent to ${o.guide_first_name}. They have 24 hours to reply, and it is in My trips until they do.`}
+      ) : notice.canAskAgain && notice.state !== "none" ? (
+        /* The answer was no, or nobody answered. Say so, keep the guide, and
+           put the next step in reach — then leave the form open underneath,
+           because asking again after a no is a normal thing to do and the
+           guards deliberately allow it. */
+        <>
+          <div className="rounded-button bg-mist px-3 py-2 text-sm text-ink-soft">
+            <p>{notice.text}</p>
+            {notice.offerOtherGuides && (
+              /* A real search, not a dead end: /guides takes free-text that
+                 already matches routes and trips, plus a date range. So this
+                 asks the only question worth asking after a no — who else
+                 runs this, and who is free then. */
+              <Link
+                to={`/guides?${new URLSearchParams({
+                  ...(o.title ? { q: o.title } : {}),
+                  ...(day ? { from: day, to: spanEnd(day, Math.max(1, o.days || 1)) } : {}),
+                }).toString()}`}
+                prefetch="intent"
+                className="mt-1 inline-block font-medium text-moss underline underline-offset-4"
+              >
+                See who else runs this, free then →
+              </Link>
+            )}
+          </div>
+          <AskForm
+            o={o}
+            day={day}
+            party={party}
+            selectedOptions={selectedOptions}
+            returnTo={returnTo}
+            fetcher={fetcher}
+            busy={busy}
+            again
+          />
+        </>
+      ) : notice.state !== "none" ? (
+        <p
+          className={cn(
+            "rounded-button px-3 py-2 text-sm",
+            notice.tone === "good"
+              ? "bg-emerald-50 text-emerald-800"
+              : "bg-mist text-ink-soft",
+          )}
+        >
+          {notice.text}
         </p>
       ) : (
-        <fetcher.Form method="post" action="/enquiry">
-          <input type="hidden" name="offering_id" value={o.id} />
-          <input type="hidden" name="guide_id" value={o.guide_id} />
-          <input type="hidden" name="start_date" value={day} />
-          <input type="hidden" name="party_size" value={party} />
-          <input type="hidden" name="return_to" value={returnTo} />
-          {/* What they ticked travels with the request. The guide answers the
-              trip somebody actually asked for, not the listing's default. */}
-          <input
-            type="hidden"
-            name="selected_options"
-            value={JSON.stringify(selectedOptions)}
-          />
-          <textarea
-            name="message"
-            rows={2}
-            placeholder={`Message ${o.guide_first_name} (optional)`}
-            className="mb-2 w-full rounded-button border border-border px-3 py-2 text-sm"
-          />
-          {fetcher.data?.error && (
-            <p className="mb-2 text-sm text-danger">{fetcher.data.error}</p>
-          )}
-          <Button type="submit" variant="lime" loading={busy} disabled={!day} className="w-full">
-            Request to book
-          </Button>
-        </fetcher.Form>
+        <AskForm
+          o={o}
+          day={day}
+          party={party}
+          selectedOptions={selectedOptions}
+          returnTo={returnTo}
+          fetcher={fetcher}
+          busy={busy}
+        />
       )}
       {/* Sending dates is the first irreversible-feeling step, and until now
           the page said nothing about what it costs or commits you to. It
@@ -360,6 +426,10 @@ function ConfigBody({
         </li>
       </ul>
 
+      {/* Only while there is something to send. A person who has already
+          booked, or who is waiting on an answer, was being told what happens
+          when they send a request — a page explaining a step they are past. */}
+      {(notice.state === "none" || notice.canAskAgain) && (
       <TrustPanel
         className="mt-3"
         title="What happens when you send this"
@@ -375,6 +445,7 @@ function ConfigBody({
           ...previewTrack(o.kind).map((s) => ({ label: s.label, note: s.hint })),
         ]}
       />
+      )}
     </div>
   );
 }
@@ -390,6 +461,7 @@ export function BookingWidget({
   setDay,
   availableDays,
   returnTo,
+  standing,
 }: {
   offering: BookingWidgetOffering;
   priceBreakdown?: PB | null;
@@ -404,6 +476,17 @@ export function BookingWidget({
   setDay: (d: string) => void;
   availableDays: string[];
   returnTo: string;
+  /**
+   * What this trekker has already asked of this guide for this trip, read
+   * from the database rather than from the last form submission — so it
+   * survives a refresh, a new tab, and coming back tomorrow to check.
+   */
+  standing?: {
+    status: string;
+    startDate: string;
+    expiresAt: string | null;
+    bookingStatus: string | null;
+  } | null;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const quote = useQuote(offering, party, priceBreakdown, addonsPerPerson, day);
@@ -425,6 +508,7 @@ export function BookingWidget({
           <span className="text-ink-soft"> · {unit}</span>
         </p>
         <ConfigBody
+          standing={standing}
           o={offering}
           breakdown={priceBreakdown}
           addonsPerPerson={addonsPerPerson}
@@ -453,6 +537,7 @@ export function BookingWidget({
 
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Your trip">
         <ConfigBody
+          standing={standing}
           o={offering}
           breakdown={priceBreakdown}
           addonsPerPerson={addonsPerPerson}
@@ -521,5 +606,57 @@ function TickMark() {
       <circle cx="10" cy="10" r="7.25" />
       <path d="m6.8 10.2 2.1 2.1 4.3-4.6" />
     </svg>
+  );
+}
+
+
+/**
+ * The request form, in one place.
+ *
+ * It is rendered twice: for a first ask, and again under a decline — because
+ * asking a second time after a no is normal, and ask-guard is deliberately
+ * written to allow it. Two copies of this markup would drift, and the copy
+ * that drifted would be the one nobody tested.
+ */
+function AskForm({
+  o,
+  day,
+  party,
+  selectedOptions,
+  returnTo,
+  fetcher,
+  busy,
+  again = false,
+}: {
+  o: BookingWidgetOffering;
+  day: string;
+  party: number;
+  selectedOptions: string[];
+  returnTo: string;
+  fetcher: ReturnType<typeof useFetcher<any>>;
+  busy: boolean;
+  again?: boolean;
+}) {
+  return (
+    <fetcher.Form method="post" action="/enquiry" className={again ? "mt-3" : undefined}>
+      <input type="hidden" name="offering_id" value={o.id} />
+      <input type="hidden" name="guide_id" value={o.guide_id} />
+      <input type="hidden" name="start_date" value={day} />
+      <input type="hidden" name="party_size" value={party} />
+      <input type="hidden" name="return_to" value={returnTo} />
+      {/* What they ticked travels with the request. The guide answers the
+          trip somebody actually asked for, not the listing's default. */}
+      <input type="hidden" name="selected_options" value={JSON.stringify(selectedOptions)} />
+      <textarea
+        name="message"
+        rows={2}
+        placeholder={`Message ${o.guide_first_name} (optional)`}
+        className="mb-2 w-full rounded-button border border-border px-3 py-2 text-sm"
+      />
+      {fetcher.data?.error && <p className="mb-2 text-sm text-danger">{fetcher.data.error}</p>}
+      <Button type="submit" variant="lime" loading={busy} disabled={!day} className="w-full">
+        {again ? "Ask about another date" : "Request to book"}
+      </Button>
+    </fetcher.Form>
   );
 }

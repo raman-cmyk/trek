@@ -1,5 +1,7 @@
 import type { RouterContextProvider } from "react-router";
-import { createPublicClient, getEnv } from "~/lib/supabase.server";
+import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
+import { getSessionUser } from "~/lib/auth.server";
+import { one } from "~/lib/ops.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { absoluteUrl } from "~/lib/seo";
 import { offeringPath } from "~/components/public/cards";
@@ -10,6 +12,7 @@ export async function loadOfferingDetail(
   context: Readonly<RouterContextProvider>,
   slug: string,
   expect: Kind,
+  request?: Request,
 ) {
   const env = getEnv(context);
   const client = createPublicClient(env);
@@ -64,7 +67,17 @@ export async function loadOfferingDetail(
     0,
   );
 
+  // Anything this visitor has already asked of this guide, for this trip.
+  //
+  // Read last, from the session rather than the public client, and only when
+  // somebody is signed in — so the anonymous page stays exactly as cacheable
+  // as it was. Without this the "Request sent" notice lives only as long as
+  // the tab: refresh, and the page offers to send a request that was sent an
+  // hour ago.
+  const standing = request ? await standingAskFor(env, request, o.id) : null;
+
   return {
+    standing,
     o,
     photos: (photos ?? []) as Array<{
       url: string;
@@ -119,4 +132,57 @@ function bookableStartDays(openDays: string[], span: number, todayIso: string): 
     }
     return true;
   });
+}
+
+
+/**
+ * The trekker's own history with this exact trip: their latest request, and
+ * whether it became a booking that is still alive.
+ *
+ * Never throws and never blocks the page. A visitor who cannot be identified,
+ * or a query that fails, simply gets the page as an anonymous visitor would —
+ * which is wrong in a small way, where refusing to render the trek at all
+ * would be wrong in a large one.
+ */
+async function standingAskFor(env: Env, request: Request, offeringId: string) {
+  try {
+    const { user } = await getSessionUser(request, env);
+    if (!user) return null;
+    const admin = createAdminClient(env);
+
+    const ask = await one<{ status: string; start_date: string; expires_at: string | null }>(
+      admin
+        .from("enquiries")
+        .select("status, start_date, expires_at")
+        .eq("trekker_id", user.id)
+        .eq("offering_id", offeringId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      "your request for this trip",
+    );
+    if (ask.error || !ask.row) return null;
+
+    const booking = await one<{ status: string }>(
+      admin
+        .from("bookings")
+        .select("status")
+        .eq("trekker_id", user.id)
+        .eq("offering_id", offeringId)
+        .eq("start_date", ask.row.start_date)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      "your booking for this trip",
+    );
+
+    return {
+      status: ask.row.status,
+      startDate: ask.row.start_date,
+      expiresAt: ask.row.expires_at,
+      bookingStatus: booking.row?.status ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
