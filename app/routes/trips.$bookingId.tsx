@@ -23,6 +23,7 @@ import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { PreTrekBrief } from "~/components/PreTrekBrief";
+import { briefHeading, tripNoun } from "~/lib/pre-trek";
 import { dialable, emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
 import { TrailScene } from "~/components/design/TrailScene";
 import { FactStrip } from "~/components/design/FactStrip";
@@ -137,7 +138,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireUser(request, env, "trekker");
   const { data: b } = await admin
     .from("bookings")
-    .select("id, status, end_date, guide_id, offering_id")
+    // kind comes along so the emails this action sends can name the thing the
+    // person actually booked rather than calling a food tour a trek.
+    .select("id, status, end_date, guide_id, offering_id, offering:offerings(kind)")
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
     .maybeSingle();
@@ -185,10 +188,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
     const { data: booking } = await admin
       .from("bookings")
-      .select("start_date, party_size, offering:offerings(title)")
+      .select("start_date, party_size, offering:offerings(title, kind)")
       .eq("id", b.id)
       .maybeSingle();
-    const title = (booking as any)?.offering?.title ?? "your trek";
+    const title =
+      (booking as any)?.offering?.title ??
+      `your ${tripNoun((booking as any)?.offering?.kind ?? "")}`;
 
     await sendRichEmail(env, admin, {
       kind: "insurance_interest",
@@ -254,7 +259,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     // Auto-generate the shareable recap + record the guide's payout.
     await createRecap(admin, b.id);
     await createPayoutForBooking(admin, b.id);
-    await sendEmail(env, user.email, "How was your trek?", "Please leave your guide a review.");
+    const noun = tripNoun((b as any)?.offering?.kind ?? "");
+    await sendEmail(
+      env,
+      user.email,
+      `How was your ${noun}?`,
+      "Please leave your guide a review.",
+    );
     return data({ ok: "Trip marked complete. Please leave a review!" }, { headers });
   }
 
@@ -620,7 +631,9 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           wait, and they wait because they change. */}
       {!cancelled && (
         <section className="mt-6">
-          <h2 className="mb-2 font-display text-xl">A few quick things before the trek</h2>
+          <h2 className="mb-2 font-display text-xl">
+            {briefHeading(b.offering?.kind ?? "trek")}
+          </h2>
           <p className="mb-3 text-sm text-ink-soft">
             The questions {firstName(b.guide?.users?.full_name)} gets asked most,
             answered for this trip. Ask anything that is not here — that is what
@@ -725,7 +738,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
             to={`/recap/${recapSlug}`}
             className="block rounded-card border border-accent/40 bg-accent/5 p-4 text-center font-medium text-accent"
           >
-            View & share your trek recap →
+            View & share your {tripNoun(b.offering?.kind ?? "")} recap →
           </Link>
         </section>
       )}
@@ -758,7 +771,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
                 </label>
               ))}
             </div>
-            <textarea name="body" rows={3} placeholder="How was your trek?" className="w-full rounded-button border border-border px-3 py-2 text-sm" />
+            <textarea name="body" rows={3} placeholder={`How was your ${tripNoun(b.offering?.kind ?? "")}?`} className="w-full rounded-button border border-border px-3 py-2 text-sm" />
             <input name="credit_name" placeholder="Credit name for your photo (optional)" className="w-full rounded-button border border-border px-3 py-2 text-sm" />
             <input type="file" name="photo" accept="image/*" className="text-sm" />
             <p className="text-xs text-ink-soft">Your review is hidden until your guide reviews you too, or 14 days pass.</p>

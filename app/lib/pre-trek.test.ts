@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cashEstimateNpr, preTrekBrief, seasonOf, type TripFacts } from "./pre-trek";
+import {
+  briefHeading,
+  cashEstimateNpr,
+  preTrekBrief,
+  seasonOf,
+  tripNoun,
+  type TripFacts,
+} from "./pre-trek";
 
 const trek: TripFacts = {
   kind: "trek",
@@ -74,5 +81,79 @@ describe("preTrekBrief", () => {
       expect(s.hint.length).toBeGreaterThan(0);
       expect(s.items.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("what we call the thing they booked", () => {
+  it("names each kind the way a person would", () => {
+    expect(tripNoun("trek")).toBe("trek");
+    expect(tripNoun("day_hike")).toBe("hike");
+    expect(tripNoun("food_culture")).toBe("food tour");
+    expect(tripNoun("city")).toBe("tour");
+    expect(tripNoun("adventure")).toBe("day out");
+  });
+
+  it("falls back to a word that is true of all of them", () => {
+    // A kind added to the database before it is added here must still read
+    // as English, not as "the undefined".
+    expect(tripNoun("kayaking")).toBe("trip");
+    expect(tripNoun("")).toBe("trip");
+  });
+
+  it("never calls a food tour a trek in the heading", () => {
+    expect(briefHeading("food_culture")).toBe("A few quick things before the food tour");
+    expect(briefHeading("trek")).toBe("A few quick things before the trek");
+    expect(briefHeading("city")).toBe("A few quick things before the tour");
+  });
+});
+
+describe("the brief matches the kind of day it is", () => {
+  const evening: TripFacts = {
+    kind: "food_culture",
+    days: 1,
+    maxAltitudeM: 1400,
+    region: "Kathmandu",
+    startDate: "2026-10-12",
+    partySize: 2,
+  };
+
+  it("tells a food tour about food, not about stone trails", () => {
+    const body = JSON.stringify(preTrekBrief(evening));
+    expect(body).toContain("Come hungry");
+    expect(body).toMatch(/vegetarian/i);
+    // The bug this is here to prevent: a walk-in-the-hills brief printed
+    // over somebody's dinner in Kathmandu.
+    expect(body).not.toMatch(/stone is slick/i);
+    expect(body).not.toMatch(/at this altitude/i);
+  });
+
+  it("asks about diets before the day rather than at the table", () => {
+    expect(JSON.stringify(preTrekBrief(evening))).toMatch(/before the day/i);
+  });
+
+  it("tells a city tour about temples and shoes, not about teahouses", () => {
+    const body = JSON.stringify(preTrekBrief({ ...evening, kind: "city" }));
+    expect(body).toMatch(/shoulders and knees/i);
+    expect(body).not.toMatch(/teahouse|tea houses/i);
+  });
+
+  it("still gives a day hike the walking advice, because that is right for it", () => {
+    const body = JSON.stringify(
+      preTrekBrief({ ...evening, kind: "day_hike", maxAltitudeM: 3210 }),
+    );
+    expect(body).toMatch(/shoes with grip/i);
+    expect(body).toMatch(/two litres/i);
+  });
+
+  it("does not warn a low day hike about altitude it never reaches", () => {
+    const low = preTrekBrief({ ...evening, kind: "day_hike", maxAltitudeM: 1400 });
+    expect(JSON.stringify(low)).not.toMatch(/at this altitude/i);
+    const high = preTrekBrief({ ...evening, kind: "day_hike", maxAltitudeM: 4130 });
+    expect(JSON.stringify(high)).toMatch(/at this altitude/i);
+  });
+
+  it("leaves the trek brief alone", () => {
+    const body = JSON.stringify(preTrekBrief(trek));
+    expect(body).toMatch(/Money on the trail/i);
   });
 });

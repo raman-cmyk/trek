@@ -44,6 +44,42 @@ export interface TripFacts {
   partySize: number;
 }
 
+/**
+ * What this outing is called, in the words a person would use.
+ *
+ * Everything on this platform was a trek once, so "trek" was written into
+ * headings and advice as though it were the only thing we sell. It is not:
+ * a food tour in Kathmandu was being told to expect stone trails and
+ * altitude, under a heading that called it a trek. That is not a typo, it is
+ * the page not knowing what it is about.
+ *
+ * One function, so the noun is decided in a single place and every heading,
+ * hint and sentence agrees with it.
+ */
+export function tripNoun(kind: string): string {
+  switch (kind) {
+    case "trek":
+      return "trek";
+    case "day_hike":
+      return "hike";
+    case "food_culture":
+      return "food tour";
+    case "city":
+      return "tour";
+    case "adventure":
+      return "day out";
+    default:
+      // An offering kind nobody has taught this function about yet. "Trip" is
+      // true of all of them, which is the point of a fallback.
+      return "trip";
+  }
+}
+
+/** "A few quick things before the food tour" — the heading over the brief. */
+export function briefHeading(kind: string): string {
+  return `A few quick things before the ${tripNoun(kind)}`;
+}
+
 /** Nepali trekking seasons, which are not the European ones. */
 export type Season = "spring" | "monsoon" | "autumn" | "winter";
 
@@ -80,8 +116,122 @@ export function preTrekBrief(trip: TripFacts): BriefSection[] {
   const cash = cashEstimateNpr(Math.max(trip.days, 1));
 
   // A day out of Kathmandu is a different animal: no teahouses, no porters,
-  // no acclimatisation. Four things, and then let them get on with it.
+  // no acclimatisation. A handful of things, and then let them get on with it.
+  //
+  // Split by KIND, not lumped into one "not a trek" branch. The old version
+  // told somebody booking a food tour to bring shoes with grip for stone
+  // trails and warned them about the sun at altitude — advice for a walk in
+  // the hills, printed under a heading that called their evening in Kathmandu
+  // a trek. Wrong advice is worse than none: it teaches people the brief is
+  // boilerplate and they stop reading the one section that mattered.
   if (!isTrek) {
+    if (trip.kind === "food_culture") {
+      return [
+        {
+          key: "appetite",
+          title: "Come hungry",
+          hint: "Small plates, several stops, no rush.",
+          items: [
+            {
+              key: "pace",
+              title: "Eat a light lunch, or none",
+              body: `There are several stops and your guide will keep putting food in front of you. People who arrive full spend the ${tripNoun(trip.kind)} watching everyone else eat.`,
+            },
+            {
+              key: "diet",
+              title: "Say what you cannot eat, now",
+              body: "Vegetarian is easy and normal here. Beef is uncommon in Hindu kitchens. Allergies, halal, no pork, no onion or garlic — message your guide before the day, not at the table, so the route can change rather than your dinner.",
+            },
+            {
+              key: "water",
+              title: "Drink only what you are handed",
+              body: "Your guide knows which kitchens to trust and will order the water. Bottled or boiled only — a stomach upset on day two of a holiday is the thing that ruins the rest of it.",
+            },
+          ],
+        },
+        {
+          key: "wearing",
+          title: "What to wear",
+          hint: "Shoes you can slip off, modest cover.",
+          items: [
+            {
+              key: "shoes",
+              title: "Shoes you can take off easily",
+              body: "You will be in and out of homes, kitchens and temples, and shoes come off at the door every time. Laces get old quickly.",
+            },
+            {
+              key: "cover",
+              title: "Shoulders and knees covered",
+              body: "Not a rule on the street, but several of the good stops are near temples, and it is the difference between being welcomed in and waiting outside.",
+            },
+          ],
+        },
+        {
+          key: "money",
+          title: "Money",
+          hint: "Small notes, and cash for anything extra.",
+          items: [
+            {
+              key: "cash",
+              title: `Carry about ${npr(2000)}, in small notes`,
+              body: "The food on the route is paid for. This is for the thing you want a second helping of, and for shops that are cash only — a Rs 1,000 note for a Rs 60 tea is a problem for the person selling the tea.",
+            },
+            {
+              key: "tip",
+              title: "Tipping is normal, and not expected",
+              body: "If the evening was good, Rs 1,000-2,000 is the usual thank-you. Nobody will ask.",
+            },
+          ],
+        },
+      ];
+    }
+
+    if (trip.kind === "city") {
+      return [
+        {
+          key: "wearing",
+          title: "What to wear",
+          hint: "Shoes for walking, shoulders covered.",
+          items: [
+            {
+              key: "shoes",
+              title: "Shoes you can walk all day in",
+              body: "Kathmandu's old streets are brick and stone, uneven, and busier than they look. Comfort beats smart.",
+            },
+            {
+              key: "cover",
+              title: "Shoulders and knees covered",
+              body: "Temples and courtyards are part of the route, and several ask for it at the gate. Shoes come off at most of them too.",
+            },
+            {
+              key: "air",
+              title: "A mask, if dust bothers you",
+              body: "The air in the valley is dusty in the dry months, especially near traffic. Locals wear one; nobody will think it odd.",
+            },
+          ],
+        },
+        {
+          key: "money",
+          title: "Money",
+          hint: "Small notes, and entry fees.",
+          items: [
+            {
+              key: "cash",
+              title: `Carry about ${npr(3000)}, in small notes`,
+              body: "Several monument entries are cash only, and so is anything you buy on the way. Check with your guide which entry fees are already included.",
+            },
+            {
+              key: "tip",
+              title: "Tipping is normal, and not expected",
+              body: "If the day was good, Rs 1,000-2,000 is the usual thank-you. Nobody will ask.",
+            },
+          ],
+        },
+      ];
+    }
+
+    // A day hike, or a day of something more active. Walking advice, which
+    // for these is the right advice.
     return [
       {
         key: "bring",
@@ -98,11 +248,21 @@ export function preTrekBrief(trip: TripFacts): BriefSection[] {
             title: "Two litres of water",
             body: "More than you think, even on a short day. Your guide knows where it can be refilled.",
           },
-          {
-            key: "sun",
-            title: "Sun hat and sunscreen",
-            body: "The sun at this altitude burns through cloud. It catches almost everybody on their first day.",
-          },
+          ...(high
+            ? [
+                {
+                  key: "sun",
+                  title: "Sun hat and sunscreen",
+                  body: "The sun at this altitude burns through cloud. It catches almost everybody on their first day.",
+                },
+              ]
+            : [
+                {
+                  key: "sun",
+                  title: "Sun hat and sunscreen",
+                  body: "The sun here burns through cloud, and a day outdoors catches almost everybody who did not expect it.",
+                },
+              ]),
           {
             key: "layer",
             title: "One warm layer, one rain layer",
@@ -123,7 +283,7 @@ export function preTrekBrief(trip: TripFacts): BriefSection[] {
           {
             key: "tip",
             title: "Tipping is normal, and not expected",
-            body: "If the day was good, Rs 1,000–2,000 is the usual thank-you. Nobody will ask.",
+            body: "If the day was good, Rs 1,000-2,000 is the usual thank-you. Nobody will ask.",
           },
         ],
       },
