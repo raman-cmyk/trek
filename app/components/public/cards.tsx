@@ -107,34 +107,45 @@ export function GuideCard({
             {guide.only_with_me ?? guide.hook_line}
           </p>
         )}
-        {/* One line at card widths that fit it; stacked on the narrow
-            two-up mobile grid, where a 2xl name beside a district truncated
-            to a single letter. */}
-        <div className="mt-2.5 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
+        {/* The name on its own line, always.
+            It shared a row with the district, and the district carried
+            shrink-0 — so every pixel of shortfall came out of the name:
+            "Te…" beside "Sankhuwasabha" in full. On a guide-first
+            marketplace the name is the last thing that may be cut, and at
+            168px of card there is no width at which both fit on one line. */}
+        <div className="mt-2.5">
           <p className="truncate font-display text-xl text-ink sm:text-2xl">
             {guide.full_name}
           </p>
-          {guide.home_district && (
-            <p className="flex shrink-0 items-center gap-1 text-sm text-muted">
-              <PinMark />
-              {guide.home_district}
-            </p>
+          {/* The district yields first now, and it has a whole line to do it in. */}
+          <p className="mt-0.5 flex items-center gap-1 text-sm text-muted">
+            {guide.home_district ? (
+              <>
+                <PinMark />
+                <span className="truncate">{guide.home_district}</span>
+              </>
+            ) : (
+              <span aria-hidden>&nbsp;</span>
+            )}
+          </p>
+        </div>
+
+        {/* Always rendered, so cards in one row line up. It used to appear
+            only when there were reviews, which made every card in a carousel
+            a different height and knocked the price rows out of alignment. */}
+        <div className="mt-1.5 min-h-5">
+          {rating && rating.count > 0 ? (
+            <Stars value={rating.value} count={rating.count} />
+          ) : (
+            <span className="text-caption text-muted">No reviews yet</span>
           )}
         </div>
-        {rating && rating.count > 0 && (
-          <div className="mt-1.5">
-            <Stars value={rating.value} count={rating.count} />
-          </div>
-        )}
+
         {/* Bottom row pinned so every card in a row is equal height (§8). */}
-        <div className="mt-auto flex items-baseline justify-between gap-2 pt-2">
-          {rating && rating.count > 0 ? (
-            <span className="truncate text-sm text-muted">
-              {languages && languages.length > 0 ? languages.slice(0, 3).join(", ") : ""}
-            </span>
-          ) : (
-            <span className="text-sm text-muted">Be the first</span>
-          )}
+        <div className="mt-auto flex min-h-5 items-baseline justify-between gap-2 pt-2">
+          <span className="truncate text-sm text-muted">
+            {languages && languages.length > 0 ? languages.slice(0, 3).join(", ") : "\u00a0"}
+          </span>
           {guide.day_rate_usd_cents && (
             <span className="shrink-0 text-sm text-muted">
               <span className="font-mono font-medium text-ink">
@@ -227,7 +238,12 @@ export function OfferingCard({
               ) : (
                 "One day"
               )}
-              {level && <span className="text-muted"> · {level.label}</span>}
+              {/* An unset difficulty says so rather than leaving the row a
+                  different length from its neighbours. */}
+              <span className="text-muted">
+                {" · "}
+                {level ? level.label : "Difficulty not set"}
+              </span>
             </span>
           </li>
           {transport.length > 0 && (
@@ -242,8 +258,11 @@ export function OfferingCard({
           </li>
         </ul>
 
-        {offering.route_slug && (
-          <p className="text-caption text-muted">
+        {/* Always a line, even with no route: without it the cards that had
+            a route tag were a line taller than the ones that did not, and the
+            price rows across a grid stopped lining up. */}
+        <p className="min-h-4 text-caption text-muted">
+          {offering.route_slug ? (
             <Link
               to={`/routes/${offering.route_slug}`}
               prefetch="intent"
@@ -251,8 +270,10 @@ export function OfferingCard({
             >
               {offering.route_name}
             </Link>
-          </p>
-        )}
+          ) : (
+            <span aria-hidden>&nbsp;</span>
+          )}
+        </p>
 
         {from != null && (
           // Consistent price format site-wide: "from $XX · per person" (§8).

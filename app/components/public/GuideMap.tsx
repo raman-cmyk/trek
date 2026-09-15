@@ -107,12 +107,17 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
           container: el.current,
           style: MAP_STYLE as any,
           bounds: NEPAL_BOUNDS,
-          fitBoundsOptions: { padding: 28 },
+          fitBoundsOptions: { padding: 16 },
           attributionControl: { compact: true },
           // The map is a "look how much of Nepal we cover" device, not a
           // navigation tool — free-roam zoom just gets people lost.
           maxZoom: 10,
           minZoom: 5,
+          // Panning cannot wander off into China: this map is about Nepal.
+          maxBounds: [
+            [NEPAL_BOUNDS[0][0] - 1.5, NEPAL_BOUNDS[0][1] - 1.5],
+            [NEPAL_BOUNDS[1][0] + 1.5, NEPAL_BOUNDS[1][1] + 1.5],
+          ],
           dragRotate: false,
           // No cross-fade. The tiles are already late off a slow public
           // server; spending another 300ms dissolving them in is 300ms of
@@ -270,7 +275,12 @@ export function GuideMap({ pins, routes }: { pins: MapPin[]; routes: MapRoute[] 
         </ul>
       ) : (
         // Relative, because the loading cover sits over the canvas.
-        <div className="relative h-[420px] w-full sm:h-[520px]">
+        // Taller on a wide screen. fitBounds honours both dimensions, so a
+        // 1150x520 frame against Nepal's 8deg x 3.7deg box fitted the latitude
+        // exactly and spent the leftover width on India and Tibet — which is
+        // why the pins looked small and off-centre. At 620px the frame's shape
+        // matches the country's and Nepal fills it.
+        <div className="relative h-[420px] w-full sm:h-[520px] lg:h-[620px]">
           <div
             ref={el}
             className="h-full w-full overflow-hidden rounded-md border border-line bg-mist"

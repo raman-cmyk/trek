@@ -21,6 +21,8 @@ import { GuideMap, type MapPin, type MapRoute } from "~/components/public/GuideM
 import { computeExperiencePricing, type PriceBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { INTENTS, REGIONS, matchesKeywords } from "~/lib/intents";
+import { guideCount, journalCount, seeAll } from "~/lib/counts";
+import { dedupeRails } from "~/lib/rails";
 import { addDays } from "~/lib/browse";
 import { TREK_FEE_PCT } from "~/lib/config";
 import { fmtDate, fmtDateShort } from "~/lib/format";
@@ -75,6 +77,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     { data: reviews },
     fund,
     { data: journals },
+    { count: journalTotal },
   ] = await Promise.all([
       // The whole roster: this page is about scale, and 48 rows of text is
       // cheaper than six round trips for six different slices of it.
@@ -101,6 +104,10 @@ export async function loader({ context }: Route.LoaderArgs) {
         .select(JOURNAL_COLS)
         .order("start_date", { ascending: false })
         .limit(3),
+      // The true total. The section shows three; the footer said "4 treks
+      // written up" and the link said "Every journal", so the two numbers
+      // looked like a contradiction rather than "three of four".
+      client.from("public_journals").select("slug", { count: "exact", head: true }),
     ]);
 
   const all = (guides ?? []) as HomeGuide[];
@@ -154,7 +161,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 
   const pick = (g: HomeGuide) => g; // rows carry whole guide rows; cards need them
 
-  const rows = INTENTS.map((intent) => {
+  const matchedByIntent = INTENTS.map((intent) => {
     let matched = all;
     if (intent.gender) matched = matched.filter((g) => g.gender === intent.gender);
     if (intent.keywords) matched = matched.filter((g) => matchesKeywords(g, intent.keywords!));
@@ -166,17 +173,30 @@ export async function loader({ context }: Route.LoaderArgs) {
     if (intent.region) {
       matched = matched.filter((g) => regionsByGuide[g.user_id]?.has(intent.region!));
     }
-    return {
-      key: intent.key,
-      label: intent.label,
-      blurb: intent.blurb,
-      href: `/guides?intent=${intent.key}`,
-      total: matched.length,
-      guides: matched.slice(0, 8).map(pick),
-    };
-    // A row of one reads as a bug, not a choice. Rows appear when there are
-    // enough guides to make the choice real; the rest wait for supply.
-  }).filter((r) => r.guides.length >= 3);
+    return { key: intent.key, matched };
+  });
+
+  // One guide, one row. Sarita matched three intents and appeared in three
+  // rows with the same photograph, the same line and the same rate, which
+  // reads as padding rather than curation. A row left with fewer than three
+  // is dropped rather than padded — a row of one is a bug, not a choice.
+  const railsByKey = new Map(
+    dedupeRails(matchedByIntent, (g) => g.user_id).map((r) => [r.key, r]),
+  );
+  const rows = INTENTS.flatMap((intent) => {
+    const rail = railsByKey.get(intent.key);
+    if (!rail) return [];
+    return [
+      {
+        key: intent.key,
+        label: intent.label,
+        blurb: intent.blurb,
+        href: `/guides?intent=${intent.key}`,
+        total: rail.total,
+        guides: rail.members.map(pick),
+      },
+    ];
+  });
 
   const freeThisWeek = all
     .filter((g) => (freeRuns[g.user_id] ?? 0) >= 3)
@@ -239,6 +259,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     splitOffering,
     review: (reviews ?? [])[0] ?? null,
     journals: (journals ?? []) as PublicJournal[],
+    journalTotal: journalTotal ?? (journals ?? []).length,
     stats: {
       guides: all.length,
       districts: pins.length,
@@ -274,6 +295,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     splitOffering,
     review,
     journals,
+    journalTotal,
     stats,
     suggestions,
     today,
@@ -333,7 +355,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               prefetch="intent"
               className="text-white/80 underline decoration-white/25 underline-offset-4 hover:text-white"
             >
-              or browse all {stats.guides} guides →
+              {seeAll(stats.guides, "guides")}
             </Link>
           </div>
         </div>
@@ -418,7 +440,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               prefetch="intent"
               className="text-sm font-medium text-moss hover:underline"
             >
-              Every journal →
+              {seeAll(journalTotal, "journals")}
             </Link>
           </div>
           <p className="mt-2 max-w-[54ch] text-muted">
@@ -449,7 +471,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               prefetch="intent"
               className="text-sm text-moss underline underline-offset-4 hover:text-pine"
             >
-              All <span className="font-mono">{routeTotal}</span> routes →
+              {seeAll(routeTotal, "routes")}
             </Link>
           </div>
           <ul className="mt-6 divide-y divide-line border-y border-line">
@@ -469,7 +491,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     {r.max_altitude_m
                       ? ` · ${r.max_altitude_m.toLocaleString("en-US")} m`
                       : ""}
-                    {r.guides ? ` · ${r.guides} guides` : ""}
+                    {` · ${guideCount(r.guides)}`}
                   </span>
                 </Link>
               </li>
@@ -488,17 +510,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               key={r.name}
               to={`/guides?q=${encodeURIComponent(r.name)}`}
               prefetch="intent"
-              className="group bg-paper p-6 transition-colors hover:bg-mist"
+              className="group min-w-0 bg-paper p-6 transition-colors hover:bg-mist"
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="font-display text-2xl text-ink group-hover:text-moss">
+              {/* min-w-0 and a truncating heading: the grid clips its overflow
+                  to keep the rounded corners, so anything that could push a
+                  tile wider than its column got cut off at the right edge —
+                  and what got cut was the count, not the padding. */}
+              <div className="flex min-w-0 items-baseline justify-between gap-3">
+                <h3 className="truncate font-display text-2xl text-ink group-hover:text-moss">
                   {r.name}
                 </h3>
-                {regionCounts[r.name] ? (
-                  <span className="font-mono text-sm text-muted">
-                    {regionCounts[r.name]} guides
-                  </span>
-                ) : null}
+                {/* Mustang had no number at all, because zero rendered as
+                    nothing. Zero is a fact. */}
+                <span className="shrink-0 font-mono text-sm text-muted">
+                  {guideCount(regionCounts[r.name])}
+                </span>
               </div>
               <p className="mt-1 text-sm text-muted">{r.blurb}</p>
             </Link>
@@ -561,7 +587,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* 9 — Trust, one quiet line. The pages carry the detail. */}
       <section className="mx-auto max-w-6xl px-4 py-14">
-        <div className="flex flex-col gap-0 border-y border-line sm:flex-row">
+        {/* divide-* rather than per-item borders: the third column had a
+            left divider and no right one, and only the first column lacked
+            left padding, so the three were never actually even. */}
+        <div className="flex flex-col divide-y divide-line border-y border-line sm:flex-row sm:divide-x sm:divide-y-0">
           {[
             [
               "/trust",
@@ -578,14 +607,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               "If you ever need a helicopter",
               "We earn nothing from it.",
             ],
-          ].map(([to, t, b], i) => (
+          ].map(([to, t, b]) => (
             <Link
               key={t}
               to={to}
-              className={
-                "group flex-1 py-5 pr-6 " +
-                (i > 0 ? "border-t border-line sm:border-l sm:border-t-0 sm:pl-6" : "")
-              }
+              className="group min-w-0 flex-1 py-5 sm:px-6 sm:first:pl-0 sm:last:pr-0"
             >
               <p className="font-medium text-ink group-hover:text-primary">{t} →</p>
               <p className="mt-0.5 text-sm text-ink-soft">{b}</p>
@@ -643,7 +669,7 @@ function Row({
           prefetch="intent"
           className="text-sm font-medium text-moss hover:underline"
         >
-          {count != null && count > guides.length ? `All ${count} →` : "See everyone →"}
+          {count != null && count > guides.length ? seeAll(count) : seeAll()}
         </Link>
       </div>
       <p className="mt-0.5 text-sm text-muted">{blurb}</p>
@@ -661,7 +687,7 @@ function Row({
             to={href}
             className="flex w-[10.5rem] shrink-0 snap-start items-center justify-center rounded-md border border-dashed border-line text-sm font-medium text-moss hover:bg-mist sm:w-52"
           >
-            {count - guides.length} more →
+            {seeAll(count)}
           </Link>
         )}
       </div>
@@ -760,7 +786,7 @@ function ExperienceBrowser({
           prefetch="intent"
           className="text-sm font-medium text-moss hover:underline"
         >
-          Search all <span className="font-mono">{experiences.length}</span> →
+          {seeAll(experiences.length)}
         </Link>
       </div>
 
