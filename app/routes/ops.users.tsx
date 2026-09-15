@@ -2,6 +2,7 @@ import { Form, Link, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.users";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { CopyButton } from "~/components/ops/CopyButton";
+import { auditNote, checkPassword, MIN_PASSWORD } from "~/lib/admin-password";
 import { fmtDateShort } from "~/lib/format";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import {
@@ -96,6 +97,31 @@ export async function action({ request, context }: Route.ActionArgs) {
     .maybeSingle();
   const name = profile?.full_name || who.email || who.phone || "this account";
 
+  /**
+   * Leave a trace. Never the secret.
+   *
+   * Best effort on purpose: if the audit insert fails we have still changed
+   * the password, and refusing to tell the admin what it is — stranding a
+   * guide mid-call — would be a worse outcome than a missing row. The row is
+   * written BEFORE the reply so the ordinary path always records.
+   */
+  const record = async (
+    action: "password_set" | "password_generated" | "entered_account",
+  ) => {
+    try {
+      await admin.from("admin_actions").insert({
+        actor_id: user.id,
+        actor_email: user.email ?? "unknown",
+        action,
+        target_user_id: id,
+        target_email: who.email ?? who.phone ?? null,
+        note: auditNote(action, name),
+      });
+    } catch {
+      /* The action itself already happened; do not undo it over a log. */
+    }
+  };
+
   if (intent === "enter") {
     if (!who.email) {
       return data(
@@ -115,19 +141,35 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
     const url = new URL("/ops/users/enter", request.url);
     url.searchParams.set("token_hash", token);
+    await record("entered_account");
     return data({ enter: { name, url: url.toString() } }, { headers });
   }
 
-  if (intent === "password") {
-    const password = newPassword();
+  if (intent === "password" || intent === "set-password") {
+    // Typed by hand, or minted for them. The chosen one is checked; the
+    // generated one is ours and already strong.
+    const chosen = intent === "set-password";
+    const typed = String(form.get("password") ?? "");
+    if (chosen) {
+      const problem = checkPassword(typed);
+      if (problem) return data({ error: problem.message, forId: id }, { status: 400, headers });
+    }
+    const password = chosen ? typed : newPassword();
+
     const { error } = await admin.auth.admin.updateUserById(id, { password });
-    if (error) return data({ error: error.message }, { status: 500, headers });
+    // Deliberately returns the auth server's message and never the password:
+    // an error string is the most-copied text on any admin page.
+    if (error) return data({ error: error.message, forId: id }, { status: 500, headers });
+
+    await record(chosen ? "password_set" : "password_generated");
+
     return data(
       {
         password: {
           name,
           email: who.email ?? who.phone ?? "",
           password,
+          chosen,
           login: loginPathFor((profile?.role as any) ?? "none", who.email ?? null),
         },
       },
@@ -168,7 +210,10 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
         </p>
       )}
 
-      {act.error && (
+      {/* Only the errors that belong to no particular row. A per-row failure
+          is shown beside that row instead: on a list of fifty accounts, a
+          banner at the top is a banner you have already scrolled past. */}
+      {act.error && !act.forId && (
         <p role="alert" className="rounded border border-danger/40 bg-danger/5 p-3 text-sm text-danger">
           {act.error}
         </p>
@@ -193,9 +238,15 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
       )}
 
       {act.password && (
-        <Panel title={`New password for ${act.password.name}`}>
+        <Panel
+          title={`${act.password.chosen ? "Password set" : "New password"} for ${act.password.name}`}
+        >
           <p className="text-sm text-ink-soft">
-            This is their password now — the old one no longer works. It is shown once; copy it.
+            This is their password now — the old one no longer works.{" "}
+            {act.password.chosen
+              ? "You chose it, so it is not shown again after you leave this page."
+              : "It is shown once; copy it."}{" "}
+            Tell them to change it once they are in.
           </p>
           <Row label="Email" value={act.password.email} />
           <Row label="Password" value={act.password.password} />
@@ -295,6 +346,13 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
                             Open as them
                           </button>
                         </Form>
+                        {/* Two ways to do the same dangerous thing.
+                            Generating is right when you can paste the result
+                            somewhere; typing one is right when you are on the
+                            phone to a guide in Namche and they need something
+                            they can enter now — reading out
+                            "juniper-lantern-marigold-4417" down a bad line is
+                            not that. */}
                         <Form
                           method="post"
                           onSubmit={(e) => {
@@ -312,6 +370,42 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
                             New password
                           </button>
                         </Form>
+                        <Form
+                          method="post"
+                          className="flex items-center gap-1"
+                          onSubmit={(e) => {
+                            if (!confirm(`Set ${a.name}'s password to the one you typed?`)) {
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <input type="hidden" name="intent" value="set-password" />
+                          <input type="hidden" name="id" value={a.id} />
+                          <label className="sr-only" htmlFor={`pw-${a.id}`}>
+                            Set a password for {a.name}
+                          </label>
+                          <input
+                            id={`pw-${a.id}`}
+                            name="password"
+                            type="text"
+                            autoComplete="off"
+                            spellCheck={false}
+                            minLength={MIN_PASSWORD}
+                            placeholder="or type one"
+                            className="w-28 rounded border border-border px-2 py-0.5 text-xs text-ink outline-none focus:border-moss"
+                          />
+                          <button
+                            disabled={busy}
+                            className="rounded border border-border px-2 py-0.5 text-xs text-ink hover:border-moss disabled:opacity-40"
+                          >
+                            Set
+                          </button>
+                        </Form>
+                        {act.error && act.forId === a.id && (
+                          <p role="alert" className="basis-full text-xs text-danger">
+                            {act.error}
+                          </p>
+                        )}
                       </div>
                     </td>
                   </tr>

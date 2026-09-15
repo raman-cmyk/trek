@@ -87,8 +87,8 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
             <span className="text-sm text-ink-soft">Password</span>
             {/* Beside the field it belongs to, which is where a person looks
                 at the moment they realise they cannot remember it. */}
-            <a href="/forgot" className="text-sm text-primary hover:underline">
-              Forgot it?
+            <a href="/forgot" className="text-sm font-medium text-primary underline underline-offset-2">
+              Forgot password?
             </a>
           </div>
           <input

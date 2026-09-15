@@ -62,6 +62,21 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
+  // Email is not configured, so nothing was sent and nothing will be.
+  //
+  // Checked AFTER the work above so the two paths take the same time and the
+  // same branches, and said the same way to everyone regardless of whether
+  // the account exists — it is a fact about our mail setup, not about them,
+  // so it leaks nothing. Telling somebody to check an inbox that will never
+  // receive anything is the kind of small lie that costs a customer.
+  if (!env.RESEND_API_KEY) {
+    return data({
+      sent:
+        "We can't send email at the moment, so no reset link is on its way. " +
+        "Message us and we'll set your password by hand — we're quick about it.",
+    });
+  }
+
   return data({ sent: resetSentMessage(email) });
 }
 
