@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
-import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
+import { type PriceBreakdown } from "~/lib/experience-pricing";
+import { fromPriceFor } from "~/lib/card-offering";
 import { useMoney } from "~/lib/currency-context";
 import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
 import { activityLevel, transportLabels } from "~/lib/offering-details";
@@ -24,15 +25,17 @@ export interface PublicOffering {
   slug: string;
   kind: string;
   title: string;
-  summary: string;
+  summary?: string;
   days: number;
-  price_usd_cents: number | null;
-  price_breakdown: PriceBreakdown | null;
+  price_usd_cents?: number | null;
+  price_breakdown?: PriceBreakdown | null;
   max_party?: number | null;
   min_party?: number | null;
   /** Codes from 0066 — "On foot", "Private vehicle". */
   transport?: string[] | null;
   activity_level?: string | null;
+  /** The from-price, computed by the loader so the breakdown need not travel. */
+  from_usd_cents?: number | null;
   cover_photo_url: string | null;
   guide_slug: string;
   guide_name: string;
@@ -59,12 +62,11 @@ export function offeringPath(o: { kind: string; slug: string }) {
 }
 
 export function offeringFromUsdCents(o: PublicOffering): number | null {
-  // v3: an experience's price is its packaged breakdown total (cheapest per
-  // person = largest sensible group), NOT day_rate × days.
-  if (hasBreakdown(o.price_breakdown)) {
-    return fromPerPersonUsdCents(o.price_breakdown, o.max_party ?? undefined);
-  }
-  return o.price_usd_cents;
+  // Worked out on the server where it can be — a browse page that ships 56
+  // price_breakdown objects so the browser can recompute 56 numbers is 8 KB
+  // of payload for arithmetic already done (see app/lib/card-offering.ts).
+  if (o.from_usd_cents != null) return o.from_usd_cents;
+  return fromPriceFor(o);
 }
 
 export function GuideCard({
@@ -216,7 +218,7 @@ export function OfferingCard({
             scanning a grid was choosing on a photograph and a price. */}
         <ul className="mt-0.5 space-y-0.5 text-caption text-ink-soft">
           <li className="flex items-center gap-1.5">
-            <FactClock />
+            <FactIcon id="clock" />
             <span>
               {offering.kind === "trek" ? (
                 <>
@@ -230,12 +232,12 @@ export function OfferingCard({
           </li>
           {transport.length > 0 && (
             <li className="flex items-center gap-1.5">
-              <FactVan />
+              <FactIcon id="van" />
               <span>{transport.join(" · ")}</span>
             </li>
           )}
           <li className="flex items-center gap-1.5">
-            <FactPeople />
+            <FactIcon id="people" />
             <span>{partyWords(offering.min_party ?? 1, offering.max_party ?? null)}</span>
           </li>
         </ul>
@@ -267,34 +269,52 @@ export function OfferingCard({
   );
 }
 
-/* The three marks on a card's fact list. Inline, because three 20px glyphs are
-   not worth a sprite request on a grid of twenty cards. */
-function FactClock() {
+/*
+ * The three marks on a card's fact list, drawn from the sprite the public
+ * layout renders once (CardIconSprite below).
+ *
+ * They were inline SVGs: 168 of them on the browse page, about 34 KB of
+ * markup for three shapes. A <use> reference is a third of the size and the
+ * shape is parsed once.
+ */
+function FactIcon({ id }: { id: "clock" | "van" | "people" }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted" aria-hidden>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      className="shrink-0 text-muted"
+      aria-hidden="true"
+    >
+      <use href={`#gi-${id}`} />
     </svg>
   );
 }
 
-function FactVan() {
+/**
+ * The shapes themselves, rendered once per document by the public layout.
+ *
+ * Hidden rather than sized to zero: a 0×0 SVG still takes part in layout in
+ * some browsers, and this must never nudge the page.
+ */
+export function CardIconSprite() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted" aria-hidden>
-      <path d="M3 16V8h11l4 4h3v4" />
-      <circle cx="7" cy="17" r="1.6" />
-      <circle cx="17" cy="17" r="1.6" />
-    </svg>
-  );
-}
-
-function FactPeople() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-muted" aria-hidden>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3 20c0-3 2.7-5 6-5s6 2 6 5" />
-      <path d="M16 11a3 3 0 100-6" />
-      <path d="M18 20c0-2-.7-3.4-2-4.3" />
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ display: "none" }}>
+      <symbol id="gi-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+      <symbol id="gi-van" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 16V8h11l4 4h3v4" />
+        <circle cx="7" cy="17" r="1.6" />
+        <circle cx="17" cy="17" r="1.6" />
+      </symbol>
+      <symbol id="gi-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3 20c0-3 2.7-5 6-5s6 2 6 5" />
+        <path d="M16 11a3 3 0 100-6" />
+        <path d="M18 20c0-2-.7-3.4-2-4.3" />
+      </symbol>
     </svg>
   );
 }

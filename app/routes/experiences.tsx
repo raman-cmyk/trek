@@ -6,6 +6,7 @@ import { OfferingCard, type PublicOffering } from "~/components/public/cards";
 import { BrowseSearch } from "~/components/public/BrowseSearch";
 import { escapeLike, openRunsByGuide, parseRange } from "~/lib/browse.server";
 import { offeringRatings } from "~/lib/ratings.server";
+import { toCardOffering } from "~/lib/card-offering";
 import { fmtDateShort } from "~/lib/format";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
@@ -108,7 +109,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const tripRatings = await offeringRatings(client, offerings.map((o) => o.id));
 
   return {
-    offerings: offerings as PublicOffering[],
+    // Cards, not rows: the summary and the price breakdown never reach the
+    // browser, which is most of what made this page 292 KB.
+    offerings: offerings.map(toCardOffering) as unknown as PublicOffering[],
     tripRatings,
     total: totalCount ?? offerings.length,
     kind,

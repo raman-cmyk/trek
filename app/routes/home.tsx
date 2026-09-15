@@ -5,6 +5,7 @@ import { pageMeta, absoluteUrl, jsonLd, websiteLd } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
 import { guideRatings, offeringRatings } from "~/lib/ratings.server";
+import { toCardOffering } from "~/lib/card-offering";
 import { useState } from "react";
 import {
   GuideCard,
@@ -54,8 +55,11 @@ type HomeGuide = PublicGuide & {
   treks_completed_platform: number;
 };
 
+// No `bio`. The homepage never renders one, and forty-nine of them were
+// being fetched, serialised into the page's hydration payload and shipped to
+// every visitor for nothing.
 const GUIDE_COLS =
-  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, only_with_me, gender, years_experience, day_rate_usd_cents, median_response_mins, treks_completed_platform";
+  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, only_with_me, gender, years_experience, day_rate_usd_cents, median_response_mins, treks_completed_platform";
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -207,8 +211,11 @@ export async function loader({ context }: Route.LoaderArgs) {
   // The catalogue. The page already loads every offering for the region and
   // route maths, so rendering them costs nothing extra — and filtering on the
   // client makes the chips instant instead of a round trip per tap.
+  // Reduced to what a card draws. Whole rows were serialised into the page
+  // for the browser to hydrate — the summary it never renders, the breakdown
+  // it recomputes — and that payload was 42% of a 354 KB homepage.
   const experiences = ((offerings ?? []) as any[]).map((o) => ({
-    ...o,
+    ...toCardOffering(o),
     region: o.route_id ? (routeById.get(o.route_id)?.region ?? null) : null,
   }));
   // A rating per trip, for the cards in the browser below. The guide ratings

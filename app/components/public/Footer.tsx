@@ -202,7 +202,12 @@ function fitRows(n: number): number {
   // The grid is 6 / 8 / 12 columns; 24 is the smallest count that fills a
   // whole row at every one of them. grid-cols-16 was not a real Tailwind
   // class and fell back silently, which is what left the wall ragged.
-  return Math.floor(n / 24) * 24;
+  //
+  // Capped at 24 rather than every whole row the roster allows. At 48 faces
+  // this footer was 38 KB of markup on every public page — the single
+  // heaviest thing on pages that were dying with "Worker exceeded resource
+  // limits" — and two full rows read as a wall of faces just as well as four.
+  return Math.min(24, Math.floor(n / 24) * 24);
 }
 
 function Stat({ n, label }: { n?: number; label: string }) {

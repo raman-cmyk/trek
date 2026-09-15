@@ -3,6 +3,7 @@ import { organizationLd } from "~/lib/seo";
 import type { Route } from "./+types/_public";
 import { Header } from "~/components/public/Header";
 import { Footer } from "~/components/public/Footer";
+import { CardIconSprite } from "~/components/public/cards";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 
@@ -106,6 +107,8 @@ export default function PublicLayout({ loaderData }: Route.ComponentProps) {
           __html: JSON.stringify(organizationLd(loaderData.origin)),
         }}
       />
+      {/* The card icons, once per document rather than 168 times. */}
+      <CardIconSprite />
       <Header account={loaderData.account} />
       <div className="flex-1">
         <Outlet />

@@ -25,6 +25,7 @@ import {
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
 import { offeringsRating, offeringRatings } from "~/lib/ratings.server";
+import { toCardOffering } from "~/lib/card-offering";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { CLIMB_ROUTES } from "~/lib/climb";
@@ -181,7 +182,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   return {
     route,
     permits: permits ?? [],
-    offerings: (offerings ?? []) as PublicOffering[],
+    offerings: ((offerings ?? []) as any[]).map(toCardOffering) as unknown as PublicOffering[],
     journals: (journals ?? []) as PublicJournal[],
     guides,
     article,

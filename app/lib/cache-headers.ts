@@ -18,8 +18,20 @@ export function publicCacheHeaders({ parentHeaders }: { parentHeaders: Headers }
         // browser, so after signing in or out they were shown the page from
         // the other side of that change for the next five minutes — which
         // reads exactly like "I signed out and it signed me back in".
-        // Shared caches (the Worker's own) still hold it for 300s; the
-        // browser always checks in first.
-        "Cache-Control": "public, s-maxage=300, max-age=0, must-revalidate",
+        // Shared caches hold it; the browser always checks in first.
+        //
+        // Thirty minutes, not five, and stale-while-revalidate for a day.
+        // These pages are a catalogue that changes when a guide edits a trip,
+        // not a feed. At five minutes the edge was re-rendering the homepage
+        // twelve times an hour, and a cold render of this page costs enough
+        // CPU that 6% of them were dying with "Worker exceeded resource
+        // limits" — the error a visitor sees as a blank page.
+        //
+        // stale-while-revalidate is the half that matters: once a page is in
+        // the cache, a visitor is handed it instantly and the refresh happens
+        // behind them. A slow render, or a failed one, stops being something
+        // anybody waits for.
+        "Cache-Control":
+          "public, s-maxage=1800, stale-while-revalidate=86400, stale-if-error=86400, max-age=0, must-revalidate",
       };
 }
