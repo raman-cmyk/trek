@@ -50,6 +50,7 @@ export function PickYourDates({
         openDays={openDays}
         monthsFrom={monthsFrom}
         months={months}
+        guideName={guideFirstName}
         select="range"
         value={sel}
         onPick={setSel}

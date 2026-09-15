@@ -149,6 +149,7 @@ function DatePick({
         openDays={availableDays}
         monthsFrom={anchor}
         months={showMonths}
+        guideName={o.guide_first_name}
         compact
         select="span"
         days={days}

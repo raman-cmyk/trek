@@ -1147,6 +1147,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   openDays={openDays}
                   monthsFrom={monthAnchor}
                   months={1}
+                  guideName={first}
                   compact
                 />
                 <a

@@ -29,6 +29,7 @@ export function AvailabilityCalendar({
   days,
   value,
   onPick,
+  guideName,
 }: {
   openDays: string[];
   /** First-of-month ISO anchor (yyyy-mm-01) computed on the server. */
@@ -44,6 +45,16 @@ export function AvailabilityCalendar({
   /** What is chosen now. In span mode only `start` is read. */
   value?: { start: string | null; end: string | null };
   onPick?: (next: { start: string | null; end: string | null }) => void;
+  /**
+   * Whose diary this is.
+   *
+   * The legend used to say "Free" and "Taken" and never say free for WHOM.
+   * The founder read his own picked dates, could not tell what the pale
+   * squares behind them meant, and said so: "I cannot tell whether the guide
+   * is free or not." A calendar on a guide's page is the guide's calendar and
+   * it should have his name on it.
+   */
+  guideName?: string;
 }) {
   const open = new Set(openDays);
   const picking = !!select && !!onPick;
@@ -90,8 +101,22 @@ export function AvailabilityCalendar({
   const startable = (iso: string) =>
     select !== "span" || canStart(iso, tripDays, open);
 
+  /**
+   * Free and booked have to be told apart at a glance, on a phone, by
+   * somebody who has never seen this calendar before.
+   *
+   * They could not be: free was a 15%-opacity tint and booked was plain text
+   * at 40% opacity — two pale greys. Free is now a filled, outlined, dark-ink
+   * square and booked is struck through. Never colour alone: the strike and
+   * the legend carry it for anyone who cannot see the green.
+   */
   const dayCls = (isOpen: boolean) =>
-    cn("rounded py-1", isOpen ? "bg-accent/15 font-medium text-accent" : "text-ink-soft/40");
+    cn(
+      "rounded py-1",
+      isOpen
+        ? "bg-accent/30 font-semibold text-ink ring-1 ring-inset ring-accent/50"
+        : "text-ink-soft/45 line-through decoration-ink-soft/40",
+    );
 
   const [y0, m0] = monthsFrom.split("-").map(Number);
   const months = Array.from({ length: Math.max(monthCount, 1) }, (_, offset) => {
@@ -113,13 +138,17 @@ export function AvailabilityCalendar({
           <span aria-hidden="true" className={cn(dayCls(true), "w-7 text-center text-xs")}>
             12
           </span>
-          Free{compact ? "" : " to book"}
+          {guideName ? `${guideName} is free` : `Free${compact ? "" : " to book"}`}
         </li>
         <li className="flex items-center gap-2">
           <span aria-hidden="true" className={cn(dayCls(false), "w-7 text-center text-xs")}>
             12
           </span>
-          {compact ? "Taken" : "Already booked, or kept free"}
+          {guideName
+            ? `${guideName} is booked`
+            : compact
+              ? "Taken"
+              : "Already booked, or kept free"}
         </li>
         {picking && (
           <li className="flex items-center gap-2">
@@ -185,20 +214,21 @@ export function AvailabilityCalendar({
                   picking && isOpen && !startable(iso) && !isChosen && "opacity-40",
                 );
 
+                const who = guideName ?? "the guide";
                 const why = !isOpen
-                  ? "Not available"
+                  ? `${who} is booked`
                   : select === "span" && !startable(iso)
-                    ? `The trip would run into ${labelOf(firstTakenDay(iso, tripDays, open))}, which is not free`
+                    ? `The trip would run into ${labelOf(firstTakenDay(iso, tripDays, open))}, when ${who} is booked`
                     : isChosen
                       ? "Part of your dates"
-                      : "Free to book";
+                      : `${who} is free`;
 
                 if (!picking || !isOpen) {
                   return (
                     <span key={iso} title={why} className={cls}>
                       {i + 1}
                       <span className="sr-only">
-                        {isOpen ? " — free to book" : " — not available"}
+                        {isOpen ? ` — ${who} is free` : ` — ${who} is booked`}
                       </span>
                     </span>
                   );
