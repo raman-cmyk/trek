@@ -46,6 +46,12 @@ The founder (Raman) is non-technical. He runs terminal/code work through Claude 
 /public               Static assets
 ```
 
+**Adding a screen to the admin area?** Read `docs/OPS-PAGES.md` first. It is
+the recipe: the three places a page has to be registered, the skeleton, what
+you get for free, and the one rule — never destructure `{ data }` on its own
+and never fire a write you do not look at. Both fail silently, and this area
+has shipped that bug three times.
+
 ## Hard rules
 
 1. **All schema changes via migration files** in /supabase/migrations. Never tell the founder to edit tables in the Supabase dashboard.
