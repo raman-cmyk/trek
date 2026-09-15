@@ -50,7 +50,6 @@ import { cn } from "~/lib/cn";
 import { pronounsFor } from "~/lib/pronouns";
 import { useLightbox } from "~/components/public/Lightbox";
 import { skillLabel } from "~/lib/guide-skills";
-import { StatTile } from "~/components/design/StatTile";
 import type { ChipGlyph } from "~/components/design/Chip";
 
 /**
@@ -601,6 +600,39 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
   for (const r of receipts) receiptBy[r.check_type] = r;
   const quote = guide.only_with_me ?? guide.hook_line;
 
+  /**
+   * The four facts under the name, in the order a stranger asks them.
+   *
+   * Built as a list rather than four conditional blocks so the dividers land
+   * between whatever is actually present — a guide who joined last week has no
+   * rating and no treks led, and three tiles with one empty was the old shape's
+   * other problem. Nothing is invented to fill a slot: a fact we do not hold is
+   * simply not a column.
+   */
+  const facts: Array<{ value: string; label: string }> = [
+    guide.years_experience
+      ? { value: String(guide.years_experience), label: "years guiding" }
+      : null,
+    treksLed > 0
+      ? {
+          value: treksLed.toLocaleString("en-US"),
+          label: treksLed === 1 ? "trek led" : "treks led",
+        }
+      : null,
+    rating
+      ? { value: rating.value.toFixed(1), label: `rating (${rating.count})` }
+      : null,
+    guide.median_response_mins != null
+      ? {
+          value:
+            guide.median_response_mins >= 60
+              ? `~${Math.round(guide.median_response_mins / 60)} hr`
+              : `~${guide.median_response_mins} min`,
+          label: "replies in",
+        }
+      : null,
+  ].filter(Boolean) as Array<{ value: string; label: string }>;
+
   // The rail's availability summary: the next stretch of ≥3 open days, and
   // how much of the next three months is open at all.
   const nextWindow = firstRun(openDays, 3);
@@ -690,43 +722,42 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                         </p>
                       </>
                     )}
-                    {/* Two columns, not four: at four these numbers sat in a thin
-                      strip and read as a stats bar. Two gives each one room to
-                      be a fact. */}
-                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line pt-4">
-                      {guide.years_experience ? (
-                        <BigNum
-                          glyph="calendar"
-                          n={guide.years_experience}
-                          label="years guiding"
-                        />
-                      ) : null}
-                      {treksLed > 0 && (
-                        <BigNum
-                          glyph="mountain"
-                          n={treksLed}
-                          label={treksLed === 1 ? "trek led" : "treks led"}
-                        />
-                      )}
-                      {rating && (
-                        <BigNum
-                          glyph="star"
-                          n={rating.value.toFixed(1)}
-                          label={`rating (${rating.count})`}
-                        />
-                      )}
-                      {guide.median_response_mins != null && (
-                        <BigNum
-                          glyph="clock"
-                          n={
-                            guide.median_response_mins >= 60
-                              ? `~${Math.round(guide.median_response_mins / 60)} hr`
-                              : `~${guide.median_response_mins} min`
-                          }
-                          label="responds in"
-                        />
-                      )}
-                    </div>
+                    {/* One row of facts on the card itself, divided by
+                        hairlines — not four filled tiles in a 2×2.
+
+                        The tiles were the problem: four mint rectangles with an
+                        icon apiece, taking half the header to say four short
+                        things, and reading as a dashboard widget rather than as
+                        evidence about a person. Same four facts, a quarter of
+                        the furniture, and the portrait gets the room back. */}
+                    {/* A grid, not a wrapping flex row. Flexed, the third item
+                        began a new line on a phone but kept the divider and the
+                        indent it had as a mid-row item, so the 2x2 was stepped
+                        in by twelve pixels on its second row. Two columns with
+                        no rules on a phone, four divided ones from sm up, where
+                        they are genuinely one row. */}
+                    <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-line pt-4 sm:flex sm:gap-0">
+                      {facts.map((f, n) => (
+                        <div
+                          key={f.label}
+                          className={cn(
+                            "min-w-0 sm:flex-1 sm:px-3 sm:first:pl-0",
+                            n > 0 && "sm:border-l sm:border-line",
+                          )}
+                        >
+                          {/* nowrap on the figure: "~42 min" broke over two
+                              lines in a quarter-width column and pushed its
+                              own label below the other three. A number that
+                              wraps is not a number any more. */}
+                          <dd className="whitespace-nowrap font-mono text-xl leading-none text-ink lg:text-2xl">
+                            {f.value}
+                          </dd>
+                          <dt className="mt-1.5 text-[11px] uppercase leading-tight tracking-[0.07em] text-muted">
+                            {f.label}
+                          </dt>
+                        </div>
+                      ))}
+                    </dl>
                   </div>
                 </div>
               </div>
@@ -931,6 +962,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   guideName={guide.full_name}
                   guideId={guide.user_id}
                   slug={guide.slug}
+                  pronoun={pn}
                 />
               ) : (
                 <>
@@ -1270,11 +1302,17 @@ function GuidePortrait({
     current.alt || `${first}, trekking guide in ${district ?? "Nepal"}`;
 
   return (
-    <div className="relative">
+    // h-full down the whole chain, and absolute inset-0 on the picture itself.
+    // This column is a grid item, so the outer div stretched to the card's
+    // height — but the button inside did not, and `sm:h-full` on the image
+    // resolved against a button that was only as tall as the photograph. So
+    // the portrait stopped short and left a band of empty card below it on
+    // every guide's page, which is the first thing anybody sees here.
+    <div className="relative h-full min-h-[240px]">
       <button
         type="button"
         onClick={() => lightbox.open(Math.min(i, photos.length - 1))}
-        className="group block w-full cursor-zoom-in"
+        className="group block h-full w-full cursor-zoom-in"
         aria-label={`See ${first}'s photograph larger`}
       >
         <SmartImage
@@ -1285,9 +1323,9 @@ function GuidePortrait({
           eager
           cover
           // 4:3 on a phone, where a 4:5 frame pushed the name and the numbers
-          // off the first screen; the intrinsic portrait ratio takes over
-          // beside them on wider viewports.
-          className="aspect-[4/3] w-full sm:aspect-auto sm:h-full sm:min-h-[280px]"
+          // off the first screen. Beside them it fills whatever height the
+          // identity column ends up being.
+          className="aspect-[4/3] w-full sm:absolute sm:inset-0 sm:aspect-auto sm:h-full"
         />
       </button>
 
@@ -1458,11 +1496,14 @@ function JournalWall({
   guideName,
   guideId,
   slug,
+  pronoun,
 }: {
   journals: PublicJournal[];
   guideName: string;
   guideId: string;
   slug: string;
+  /** Passed in rather than guessed: the page already knows them. */
+  pronoun: ReturnType<typeof pronounsFor>;
 }) {
   const first = guideName.split(" ")[0];
   const [route, setRoute] = useState("");
@@ -1504,12 +1545,14 @@ function JournalWall({
 
   return (
     <>
+      {/* "1 trek, as it happened" was a caption for somebody who already knew
+          what this section was. Nobody arriving from a search does — it reads
+          as a label on a list, and the reader scrolls past the single most
+          persuasive thing on the page. Say plainly what it is and what they get
+          out of opening one. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-display text-3xl text-ink">
-          <span className="font-mono">{journals.length}</span>{" "}
-          {journals.length === 1
-            ? "trek, as it happened"
-            : "treks, as they happened"}
+        <h2 className="max-w-[22ch] font-display text-3xl text-ink">
+          What a trek with {first} is actually like
         </h2>
         <Link
           to={`/journals?guide=${slug}`}
@@ -1519,6 +1562,17 @@ function JournalWall({
           All of {first}'s journals →
         </Link>
       </div>
+      <p className="mt-2 max-w-[62ch] text-muted">
+        {first} writes up every trek once {pronoun.subject}
+        {pronoun.s ? " is" : " are"} back on wifi — the days as they went, the
+        weather, where the party slept, and {pronoun.possessive} own photographs
+        from each one. Not a brochure: it is the trip you would have been on.
+        {" "}
+        <span className="text-ink">
+          <span className="font-mono">{journals.length}</span>{" "}
+          {journals.length === 1 ? "write-up" : "write-ups"} so far.
+        </span>
+      </p>
 
       {journals.length > 6 && (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -1790,15 +1844,6 @@ function GuideGallery({
       )}
       {lightbox.node}
     </section>
-  );
-}
-
-/** A trust-card number: large, mono, with its label underneath. */
-function BigNum({ n, label, glyph }: { n: number | string; label: string; glyph?: ChipGlyph }) {
-  // A fact as a tile (docs/07): the number mono and big, the label in small
-  // capitals, the glyph saying what kind of fact it is.
-  return (
-    <StatTile glyph={glyph} value={typeof n === "number" ? n.toLocaleString("en-US") : n} label={label} />
   );
 }
 
