@@ -39,10 +39,21 @@
   --color-skeleton-base:      #dfe6d6;
   --color-skeleton-highlight: #eef3e8;
 
-  /* Type — display serif, UI sans, data mono */
+  /* Type — Bricolage for display, Helvetica for everything a person reads,
+     JetBrains for figures.
+
+     Helvetica by the founder's call, as a system stack rather than a webfont:
+     there is no free Helvetica to serve, and Arial is metrically identical, so
+     a machine without Helvetica lands on the same shapes at the same widths
+     instead of reflowing. It also drops a webfont download from every page,
+     which matters while Error 1102 is still one busy afternoon away.
+
+     Worth knowing: only Apple machines have real Helvetica. Android — which
+     is what every guide uses — will render Roboto, and Linux Liberation Sans.
+     Both are close; neither is the same. */
   --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-body:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-sans:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+  --font-sans:    "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
   --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
   /* Radius: 8 pills/inputs, 14 cards, 24 images/modals, 999 avatars/chips */
@@ -68,6 +79,7 @@
   --text-display-m--letter-spacing: -0.015em;
   --text-body-l: 17px;
   --text-body-l--line-height: 1.6;
+  --text-body-l--letter-spacing: -0.01em;
   --text-caption: 13px;
   --text-caption--line-height: 1.4;
   --text-data: 15px;
@@ -158,6 +170,9 @@ body {
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.55;
+  /* "-2": Helvetica set at default tracking reads loose at UI sizes, and the
+     founder asked for it pulled in. Headings set their own, tighter still. */
+  letter-spacing: -0.02em;
   -webkit-font-smoothing: antialiased;
   /* Nothing may ever push the page sideways. `clip` rather than `hidden`
      because `hidden` on <body> silently kills `position: sticky` for every
@@ -172,6 +187,22 @@ body {
   html,
   body {
     font-size: 16px;
+  }
+}
+
+/* "-1": descriptions. A paragraph of prose wants a hair more room than the
+   UI chrome around it — pulled to -2 as well it sets cramped at reading
+   length.
+
+   Layered and behind :where() for the reason spelled out above the font-mono
+   rule, and this is the second time that trap has been sprung: written
+   unlayered, a bare `p` selector beats EVERY `tracking-*` utility in the
+   codebase, because in Tailwind v4 unlayered CSS outranks anything inside
+   @layer no matter how specific. It silently flattened the uppercase caption
+   under each homepage figure from +0.07em to -0.01em. */
+@layer base {
+  :where(p) {
+    letter-spacing: -0.01em;
   }
 }
 
@@ -262,10 +293,13 @@ a, button, input, select, textarea, label, summary {
 }
 .label {
   font-family: var(--font-body);
-  font-size: 0.6875rem;
+  /* 13px, not 11. Same reason as the StatTile caption: this is the mark under
+     a figure or over a block of facts, and at 11px it was being read as
+     decoration rather than as the label for the thing beside it. */
+  font-size: 0.8125rem;
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 

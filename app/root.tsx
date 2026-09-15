@@ -10,9 +10,11 @@ import {
 import type { Route } from "./+types/root";
 
 // Self-hosted variable fonts (no runtime CDN — CSP/Cloudflare friendly).
-// Fraunces = display, Inter Tight = body/UI, JetBrains Mono = data (§3).
+// Bricolage Grotesque = display, JetBrains Mono = figures. Body and UI are
+// Helvetica, which is a system stack and so has nothing to import — that is
+// one fewer webfont on every page, not an oversight. (The old comment here
+// still named Fraunces, which this project has not used for a long time.)
 import "@fontsource-variable/bricolage-grotesque";
-import "@fontsource-variable/inter-tight";
 import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 import { CurrencyProvider } from "~/lib/currency-context";

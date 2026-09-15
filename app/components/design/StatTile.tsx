@@ -52,9 +52,14 @@ export function StatTile({
           </span>
         )}
       </p>
+      {/* The caption under the figure. It was 10px mono, which on "VERIFIED
+          GUIDES" under a 24px number is smaller than the thing it labels needs
+          — legible on a laptop, guesswork on a phone. 13px Helvetica, and the
+          tracking eased back now the face is wider: mono at 0.12em was holding
+          apart letters that were already monospaced. */}
       <p
         className={cn(
-          "font-mono text-[10px] uppercase tracking-[0.12em]",
+          "font-sans text-[13px] uppercase tracking-[0.07em]",
           dark ? "text-paper/70" : "text-muted",
         )}
       >
