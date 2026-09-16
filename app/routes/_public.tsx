@@ -105,7 +105,17 @@ export default function PublicLayout({ loaderData }: Route.ComponentProps) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(organizationLd(loaderData.origin)),
+          // Escaped, like every other JSON-LD block on the site. Everything
+          // else goes through React Router's meta, which runs escapeHtml over
+          // the serialised graph; this one is hand-rolled and did not. A URL
+          // origin cannot actually carry "</script>", so this was not
+          // exploitable — but it is the one script on the page whose safety
+          // rests on that argument rather than on escaping, and the next
+          // person to add a field here would not know.
+          __html: JSON.stringify(organizationLd(loaderData.origin)).replace(
+            /</g,
+            "\\u003c",
+          ),
         }}
       />
       <Header account={loaderData.account} />

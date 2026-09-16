@@ -8,8 +8,32 @@ export interface DateRange {
   to: string; // yyyy-mm-dd, inclusive
 }
 
+/**
+ * A date that is the right shape AND a date that exists.
+ *
+ * `/experiences?from=9999-99-99` returned a 500. The shape regex below passed
+ * it — four digits, two, two — and then `new Date("9999-99-99T00:00:00Z")` is
+ * an Invalid Date, whose `toISOString()` throws RangeError rather than
+ * returning anything. So a mangled link, a crawler, or a typed URL took the
+ * whole browse page down. Same on /guides.
+ *
+ * Round-tripped on purpose: `2026-02-30` parses without complaint and silently
+ * becomes 2 March, which would show somebody results for a date they did not
+ * ask for. A day that does not exist is a typo, and a typo is not a filter.
+ */
+export function isRealDate(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const d = new Date(iso + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return false;
+  return d.toISOString().slice(0, 10) === iso;
+}
+
 export function addDays(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00Z");
+  // Defensive: four modules in this codebase have their own addDays, and this
+  // one is exported and reachable from a URL. An unparseable input returns the
+  // input rather than throwing out of whatever page called it.
+  if (Number.isNaN(d.getTime())) return iso;
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
@@ -38,11 +62,10 @@ export function parseRange(
   toRaw: string | null,
   today: string,
 ): DateRange | null {
-  const iso = /^\d{4}-\d{2}-\d{2}$/;
-  if (!fromRaw || !iso.test(fromRaw)) return null;
+  if (!fromRaw || !isRealDate(fromRaw)) return null;
   const from = fromRaw < today ? today : fromRaw;
   let to =
-    toRaw && iso.test(toRaw) ? toRaw : addDays(from, DEPARTURE_WINDOW_DAYS);
+    toRaw && isRealDate(toRaw) ? toRaw : addDays(from, DEPARTURE_WINDOW_DAYS);
   // A backwards end date is a typo, not a request for a one-day trek.
   if (to < from) to = addDays(from, DEPARTURE_WINDOW_DAYS);
   // A year is as far ahead as any guide's calendar goes; without a cap a

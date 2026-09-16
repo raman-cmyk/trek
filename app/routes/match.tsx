@@ -40,8 +40,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const p = url.searchParams;
 
   const region = (p.get("region") || null) as Region | null;
-  const month = p.get("month") ? Number(p.get("month")) : null;
-  const budget = p.get("budget") ? Number(p.get("budget")) : null;
+  // `?month=abc` used to reach the matcher as NaN, which compares false against
+  // everything and silently narrowed the results to nothing with the month
+  // control still showing "any".
+  const num = (raw: string | null, lo: number, hi: number) => {
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= lo && n <= hi ? n : null;
+  };
+  const month = num(p.get("month"), 1, 12);
+  const budget = num(p.get("budget"), 0, 1_000_000);
   const language = p.get("language") || null;
   const fitness = (p.get("fitness") || null) as MatchQuery["fitness"];
   const groupSize = Math.max(1, Math.min(12, Number(p.get("group") ?? 2)));

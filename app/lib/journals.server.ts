@@ -288,7 +288,14 @@ export function parseEntryForm(form: FormData) {
     day_no: Math.max(1, Math.min(99, Number(form.get("day_no")) || 1)),
     title: String(form.get("title") ?? "").trim(),
     body: String(form.get("body") ?? "").trim() || null,
-    altitude_m: form.get("altitude_m") ? Number(form.get("altitude_m")) : null,
+    // A guide typing "4,200" or "about 4200" used to store NaN, which Postgres
+    // takes as null on a numeric column but which reads as a real value
+    // everywhere in between. Anything that is not a plain number is no
+    // altitude, and an altitude outside what Nepal has is a typo.
+    altitude_m: (() => {
+      const n = Number(String(form.get("altitude_m") ?? "").replace(/,/g, "").trim());
+      return Number.isFinite(n) && n > 0 && n <= 8849 ? Math.round(n) : null;
+    })(),
     is_hard_day: form.get("is_hard_day") === "on",
     photos: parseMedia(form),
   };

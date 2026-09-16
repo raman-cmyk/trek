@@ -6,6 +6,7 @@ import {
   escapeLike,
   guideMatchesText,
   parseRange,
+  isRealDate,
 } from "./browse";
 
 const TODAY = "2026-08-11";
@@ -97,5 +98,65 @@ describe("guideMatchesText", () => {
         "dorje",
       ),
     ).toBe(true);
+  });
+});
+
+/**
+ * The 500 on a mangled date in a URL.
+ *
+ * `/experiences?from=9999-99-99` and `/guides?from=2026-13-40` both returned
+ * a 500 in production. The shape regex passed them — four digits, two, two —
+ * and `new Date("9999-99-99T00:00:00Z")` is an Invalid Date whose
+ * `toISOString()` throws RangeError rather than returning anything, so the
+ * whole browse page died on a link somebody could paste or a crawler could
+ * invent.
+ */
+describe("a date that is the right shape but is not a date", () => {
+  const TODAY = "2026-09-16";
+
+  it.each(["9999-99-99", "2026-13-40", "2026-00-10", "2026-01-32"])(
+    "parseRange refuses %s instead of throwing",
+    (bad) => {
+      expect(() => parseRange(bad, null, TODAY)).not.toThrow();
+      expect(parseRange(bad, null, TODAY)).toBeNull();
+    },
+  );
+
+  it("refuses an impossible day rather than rolling it into the next month", () => {
+    // new Date("2026-02-30") does not complain — it quietly becomes 2 March,
+    // which would show somebody results for a date they never asked for.
+    expect(parseRange("2026-02-30", null, TODAY)).toBeNull();
+  });
+
+  it("still takes a real date, and a real end date", () => {
+    expect(parseRange("2026-10-01", "2026-10-14", TODAY)).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-14",
+    });
+  });
+
+  it("ignores a mangled end date rather than dying on it", () => {
+    const r = parseRange("2026-10-01", "9999-99-99", TODAY);
+    expect(r?.from).toBe("2026-10-01");
+    expect(r?.to).toBeTruthy();
+  });
+
+  it("addDays hands back what it was given rather than throwing", () => {
+    expect(() => addDays("9999-99-99", 7)).not.toThrow();
+    expect(addDays("9999-99-99", 7)).toBe("9999-99-99");
+    expect(addDays("2026-10-01", 7)).toBe("2026-10-08");
+  });
+});
+
+describe("isRealDate", () => {
+  it("accepts dates that exist", () => {
+    expect(isRealDate("2026-02-28")).toBe(true);
+    expect(isRealDate("2024-02-29")).toBe(true); // a real leap day
+  });
+  it("rejects dates that do not", () => {
+    expect(isRealDate("2026-02-29")).toBe(false); // 2026 is not a leap year
+    expect(isRealDate("2026-13-01")).toBe(false);
+    expect(isRealDate("not-a-date")).toBe(false);
+    expect(isRealDate("2026-1-1")).toBe(false);
   });
 });
