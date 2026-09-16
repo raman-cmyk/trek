@@ -43,6 +43,9 @@ import { PhotoCard } from "~/components/design/PhotoCard";
 import { GlassPill } from "~/components/design/Glass";
 import { KIND_GLYPH } from "~/components/public/cards";
 import { featuredReview } from "~/lib/featured-review";
+import { Standards, SmallestStep } from "~/components/public/Standards";
+import { TREK_REGIONS, inRegion } from "~/lib/trek-regions";
+import { profileOf } from "~/lib/route-cards";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -348,6 +351,38 @@ export async function loader({ context }: Route.LoaderArgs) {
     (offerings ?? []).find((o) => o.kind === "trek" && o.price_breakdown) ??
     null;
 
+  // One card per region, pointing at its own page rather than a query
+  // string, with something true on it even where we have no photograph.
+  //
+  // Mustang's card was blank and countless: no photo in REGION_PHOTO and no
+  // guide with Mustang in their regions, so the pill was hidden and the image
+  // fell back to bare contour. Seven of the eleven regions were in that
+  // state. The house rule is terrain rather than stock photography, so the
+  // fix is not to borrow a Langtang photograph — it is to draw the region's
+  // OWN longest trail in the placeholder, and to count its routes when it
+  // has no guides yet.
+  const regionCards = TREK_REGIONS.map((tr) => {
+    const inThis = ((routes ?? []) as any[]).filter((r) => inRegion(tr, r.region));
+    const longest = [...inThis].sort(
+      (a, b) => (b.typical_days ?? 0) - (a.typical_days ?? 0),
+    )[0];
+    const stops = (Array.isArray(longest?.day_stops) ? longest.day_stops : [])
+      .map((d: any) => ({
+        day: Number(d.day) || 0,
+        place: String(d.place ?? ""),
+        altitude_m: Number(d.altitude_m) || 0,
+      }))
+      .filter((d: any) => d.altitude_m > 0);
+    return {
+      slug: tr.slug,
+      name: tr.name,
+      blurb: tr.intent,
+      values: tr.values,
+      routeCount: inThis.length,
+      profile: stops.length >= 3 ? profileOf(stops) : null,
+    };
+  });
+
   const regionCounts: Record<string, number> = {};
   for (const set of Object.values(regionsByGuide)) {
     for (const r of set) regionCounts[r] = (regionCounts[r] ?? 0) + 1;
@@ -375,6 +410,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     routeRows,
     routeTotal: (routes ?? []).length,
     regionCounts,
+    regionCards,
     ratings,
     langMap,
     splitOffering,
@@ -427,6 +463,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     routeRows,
     routeTotal,
     regionCounts,
+    regionCards,
     ratings,
     langMap,
     splitOffering,
@@ -524,6 +561,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         ]}
       />
 
+      {/* 2b — The fear, answered head-on.
+          Everything else on this page argues the guides are good. This is the
+          question underneath — fourteen days from a road with a stranger —
+          and it was the one thing the page never said out loud. First
+          screenful after the numbers, because it is the question that decides
+          whether the rest gets read. */}
+      <Standards />
+
       {/* 3 — The atlas. Not "we have guides in 25 districts" — a count is a
           claim about us. Pick a trail and meet the people who walk it, which
           is a claim about them, and the only one that has ever sold a trek. */}
@@ -583,7 +628,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             langMap={langMap}
           />
         ))}
-        {rows.map((r) => (
+        {rows.slice(0, 2).map((r) => (
           <Row
             key={r.key}
             label={r.label}
@@ -597,10 +642,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         ))}
       </div>
 
-      {/* 5c — The catalogue. The rows above answer "who"; this answers
-          "what", and it is the only place on the homepage you can browse
-          bookable things rather than people. */}
+      {/* 5c — The catalogue, in the MIDDLE of the guide rails rather than
+          after all of them.
+          The rows answer "who" and this answers "what", and a block of six
+          people-rails followed by a block of things read as two catalogues
+          bolted together. Alternating them keeps every row a fresh reason to
+          book — which is what each row is for. */}
       <ExperienceBrowser experiences={experiences} ratings={ratings} />
+
+      {rows.length > 2 && (
+        <div className="bg-card py-4">
+          {rows.slice(2).map((r) => (
+            <Row
+              key={r.key}
+              label={r.label}
+              blurb={r.blurb}
+              count={r.total}
+              href={r.href}
+              guides={r.guides}
+              ratings={ratings}
+              langMap={langMap}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Latest from the trail — the proof-of-life feed. Real treks, dated,
           written by the guide who led them. Nothing on this page argues the
@@ -677,32 +742,59 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </section>
       )}
 
-      {/* 6 — Regions, as doorways. */}
+      {/* 6 — Regions, as doorways to their own pages.
+          These used to point at /guides?q=Khumbu — a query string, which
+          search treats as one page with eleven sets of contents, and which is
+          why "trekking in Annapurna" found nothing of ours. Each card is now
+          a real indexable page (see lib/trek-regions). */}
       <section className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="mb-6 font-display text-3xl text-ink">Browse by region</h2>
+        <h2 className="font-display text-3xl text-ink">Where do you want to walk?</h2>
+        <p className="mb-6 mt-2 max-w-[54ch] text-muted">
+          Ten regions, the trails in each, and the guides who live there.
+        </p>
         {/* Doorways as pictures (docs/07): the region's own route photograph
-            where we have one, terrain where we do not — never a grey cell. */}
+            where we have one, and its own longest trail drawn as terrain
+            where we do not — never a grey cell, and never a borrowed photo. */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-          {REGIONS.map((r) => (
-            <PhotoCard
-              key={r.name}
-              to={`/guides?q=${encodeURIComponent(r.name)}`}
-              photo={REGION_PHOTO[r.name] ?? null}
-              alt={`${r.name} region`}
-              aspect="aspect-[4/3]"
-              topRight={
-                regionCounts[r.name] ? (
-                  <GlassPill>
-                    <Glyph name="people" className="text-moss" />
-                    <span className="font-mono">{regionCounts[r.name]}</span> guides
-                  </GlassPill>
-                ) : undefined
-              }
-            >
-              <h3 className="font-display text-xl leading-tight sm:text-2xl">{r.name}</h3>
-              <p className={cn("mt-1 hidden text-sm sm:block", REGION_PHOTO[r.name] ? "text-paper/80" : "text-muted")}>{r.blurb}</p>
-            </PhotoCard>
-          ))}
+          {regionCards.map((r: any) => {
+            const photo = r.values.map((v: string) => REGION_PHOTO[v]).find(Boolean) ?? null;
+            const guides = r.values.reduce(
+              (n: number, v: string) => n + (regionCounts[v] ?? 0),
+              0,
+            );
+            return (
+              <PhotoCard
+                key={r.slug}
+                to={`/nepal/${r.slug}`}
+                photo={photo}
+                profile={photo ? null : r.profile}
+                alt={`${r.name}, Nepal`}
+                aspect="aspect-[4/3]"
+                topRight={
+                  // A count, always — guides if anyone works there, otherwise
+                  // the trails, which is still a reason to open the page.
+                  guides > 0 ? (
+                    <GlassPill>
+                      <Glyph name="people" className="text-moss" />
+                      <span className="font-mono">{guides}</span>{" "}
+                      {guides === 1 ? "guide" : "guides"}
+                    </GlassPill>
+                  ) : r.routeCount > 0 ? (
+                    <GlassPill>
+                      <Glyph name="route" className="text-moss" />
+                      <span className="font-mono">{r.routeCount}</span>{" "}
+                      {r.routeCount === 1 ? "route" : "routes"}
+                    </GlassPill>
+                  ) : undefined
+                }
+              >
+                <h3 className="font-display text-xl leading-tight sm:text-2xl">{r.name}</h3>
+                <p className={cn("mt-1 hidden text-sm sm:block", photo ? "text-paper/80" : "text-muted")}>
+                  {r.blurb}
+                </p>
+              </PhotoCard>
+            );
+          })}
           <Link
             to="/routes"
             prefetch="intent"
@@ -758,6 +850,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           reading this page has just seen exactly what a trekker pays and
           exactly what the guide keeps. */}
       <GuideCall count={stats.guides} />
+
+      {/* 8c — The smallest safe next step.
+          Every other call to action here asks for a decision. Somebody who
+          has read the standards and is still deciding needs a smaller one
+          than any of them: ask a question, free, and see who answers. */}
+      <SmallestStep />
 
       {/* 9 — Trust, one quiet line. The pages carry the detail. */}
       <section className="mx-auto max-w-6xl px-4 py-14">

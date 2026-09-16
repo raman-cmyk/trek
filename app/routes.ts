@@ -20,6 +20,10 @@ export default [
     route("journals/:slug", "routes/journals.$slug.tsx"),
     route("routes", "routes/routes._index.tsx"),
     route("routes/:slug", "routes/routes.$slug.tsx"),
+    // "Trekking in Annapurna" as a page rather than a query string: one
+    // indexable page per region, since search treats /routes?region=X as one
+    // page with ten sets of contents. See lib/trek-regions.
+    route("nepal/:region", "routes/nepal.$region.tsx"),
     route("transparency", "routes/transparency.tsx"),
     route("fund", "routes/fund.tsx"),
     route("stories", "routes/stories.tsx"),

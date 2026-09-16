@@ -95,7 +95,13 @@ describe("the pages that render an OfferingCard", () => {
     // If this fails a new page started rendering the card. Add it, then make
     // sure its select carries the column — that is what the next test checks.
     expect(pages.sort()).toEqual(
-      ["experiences.tsx", "guides.$slug.tsx", "home.tsx", "routes.$slug.tsx"].sort(),
+      [
+        "experiences.tsx",
+        "guides.$slug.tsx",
+        "home.tsx",
+        "nepal.$region.tsx",
+        "routes.$slug.tsx",
+      ].sort(),
     );
   });
 

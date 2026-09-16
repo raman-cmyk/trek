@@ -1,6 +1,7 @@
 import type { Route } from "./+types/sitemap.xml";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { absoluteUrl } from "~/lib/seo";
+import { TREK_REGIONS } from "~/lib/trek-regions";
 
 /**
  * The sitemap, generated per request from the database and cached an hour.
@@ -74,6 +75,11 @@ export async function loader({ context }: Route.LoaderArgs) {
     { path: "/journals" },
     { path: "/events", lastmod: freshest(events) },
     { path: "/safety" },
+
+    // One entry per region. These are the highest-intent pages on the site —
+    // "trekking in annapurna" is what a person types a week before they book
+    // — and a page search cannot find is worth nothing, however good it is.
+    ...TREK_REGIONS.map((r) => ({ path: `/nepal/${r.slug}` })),
 
     ...(guides ?? []).map((g) => ({
       path: `/guides/${g.slug}`,
