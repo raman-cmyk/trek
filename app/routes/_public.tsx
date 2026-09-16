@@ -70,14 +70,26 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return data(
     {
       origin: new URL(request.url).origin,
-      // `routes` keeps every route for the pages that want the full atlas;
-      // the footer gets only the ones with a guide behind them.
+      // Routes a guide actually leads come first in their region group; the
+      // rest keep their link.
+      //
+      // Pratik's note was that the footer sends people to Api Base Camp and
+      // Rara Lake, which nobody leads — a link with nothing to book at the
+      // end of it. True, and worse than he could see: SEVENTEEN of the
+      // twenty-four have no offering, Annapurna Base Camp and Ghorepani Poon
+      // Hill among them. Hiding them would have cut the footer to seven
+      // links, and this footer is a real part of how route pages get found
+      // on a site whose primary demand channel is search. That is a supply
+      // problem to fix in the roster, not a rendering problem to hide: those
+      // pages still carry the day-by-day, the permits and the altitude, and
+      // they can rank. So the ones you can book lead, and the rest follow.
       routes: (() => {
         const withGuide = new Set((led ?? []).map((o: any) => o.route_id));
-        const live = (routes ?? []).filter((r: any) => withGuide.has(r.id));
-        // If the offerings read failed we would silently empty the footer, so
-        // fall back to the full list rather than to nothing.
-        return live.length > 0 ? live : (routes ?? []);
+        const all = (routes ?? []) as any[];
+        return [
+          ...all.filter((r) => withGuide.has(r.id)),
+          ...all.filter((r) => !withGuide.has(r.id)),
+        ];
       })(),
       footer: {
         faces: (faces ?? []).map((g) => ({
