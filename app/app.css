@@ -638,3 +638,31 @@ a, button, input, select, textarea, label, summary {
     transform: none;
   }
 }
+
+/* ── /apply: the step change, and the card arriving ──────────────────────────
+   A step that swaps instantly reads as a page reload on a slow phone — the
+   eye has nothing to follow and no sense of having moved forward. Sixteen
+   pixels and a quarter second is enough to say "this is the next screen",
+   which is all it has to say.
+
+   The success card rises once, slowly. It is the end of a ten-minute form
+   filled in by somebody who has just handed over their citizenship card;
+   confetti would be the wrong note entirely. */
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.step-in { animation: step-in 250ms var(--ease-out-soft, ease-out) both; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-in,
+  .animate-\[rise_600ms_ease-out\],
+  .animate-\[fade-in_400ms_ease-out\] {
+    animation: none !important;
+  }
+}

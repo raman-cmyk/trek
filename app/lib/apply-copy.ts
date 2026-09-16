@@ -118,7 +118,12 @@ export const T = {
     ne: "करिब 10 मिनेट लाग्छ। लाइसेन्स र नागरिकता नजिकै राख्नुहोस्।",
   },
   proofRate: { en: "You keep 100% of your rate", ne: "तपाईंको दर पूरै तपाईंको" },
-  proofPaid: { en: "Paid in NPR within 7 days", ne: "7 दिनभित्र रुपैयाँमा भुक्तानी" },
+  // Not "within 7 days": there is no payout window in this codebase or its
+  // docs, and the first promise this page makes is not the one to guess at.
+  proofPaid: {
+    en: "Paid in rupees, into your own account",
+    ne: "रुपैयाँमा, तपाईंको आफ्नै खातामा भुक्तानी",
+  },
   proofNoAgency: {
     en: "No agency between you and the trekker",
     ne: "तपाईं र पर्यटकबीच कुनै एजेन्सी छैन",
@@ -186,6 +191,50 @@ export const T = {
   cardDistrictPlaceholder: { en: "Your district", ne: "तपाईंको जिल्ला" },
   cardHookPlaceholder: { en: "Your one line", ne: "तपाईंको एक वाक्य" },
   earningsHead: { en: "What that earns you", ne: "त्यसबाट तपाईंको कमाई" },
+  earningsLine: {
+    en: "At {rate}/day, a {days}-day {trek} pays you that.",
+    ne: "दिनको {rate} दरमा, {days} दिनको {trek} बाट तपाईंलाई त्यति।",
+  },
+  rateHint: {
+    en: "Most guides here charge NPR {low}–{high} a day.",
+    ne: "यहाँका धेरै गाइड दिनको NPR {low}–{high} लिन्छन्।",
+  },
+  keepAllWhy: {
+    en: "Our fee is added to the trekker's bill, never taken out of yours.",
+    ne: "हाम्रो शुल्क पर्यटकको बिलमा थपिन्छ, तपाईंको रकमबाट काटिँदैन।",
+  },
+  verifyLicence: {
+    en: "We check your licence number against the register.",
+    ne: "तपाईंको लाइसेन्स नम्बर दर्तासँग जाँच्छौं।",
+  },
+  verifyId: {
+    en: "We check your ID matches the name on the licence.",
+    ne: "परिचयपत्रको नाम लाइसेन्ससँग मिल्छ कि जाँच्छौं।",
+  },
+  verifyCall: {
+    en: "We phone you, and we phone one reference.",
+    ne: "हामी तपाईंलाई र एक जना सन्दर्भ व्यक्तिलाई फोन गर्छौं।",
+  },
+  verifySigned: {
+    en: "Someone in the Kathmandu office signs and dates it, by name.",
+    ne: "काठमाडौं कार्यालयको कर्मचारीले नाम र मिति राखी हस्ताक्षर गर्छन्।",
+  },
+  nextRead: {
+    en: "We read your application in the Kathmandu office.",
+    ne: "हामी काठमाडौं कार्यालयमा तपाईंको आवेदन पढ्छौं।",
+  },
+  nextCall: {
+    en: "We phone you on the number you gave us.",
+    ne: "तपाईंले दिएको नम्बरमा हामी फोन गर्छौं।",
+  },
+  nextLive: {
+    en: "Your profile goes live, and trekkers can message you.",
+    ne: "तपाईंको प्रोफाइल सार्वजनिक हुन्छ, पर्यटकले सन्देश पठाउन सक्छन्।",
+  },
+  nextWhen: {
+    en: "Usually within {days} days.",
+    ne: "सामान्यतया {days} दिनभित्र।",
+  },
   keepAll: { en: "You keep 100%", ne: "पूरै तपाईंको" },
   howWeVerifyHead: { en: "How we verify you", ne: "हामी कसरी पुष्टि गर्छौं" },
   nextStepsHead: { en: "What happens next", ne: "अब के हुन्छ" },

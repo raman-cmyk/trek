@@ -105,8 +105,8 @@ describe("validateStep", () => {
 
   it("asks for one person to call", () => {
     expect(validateStep("id", {}).map((p) => p.field).sort()).toEqual([
-      "emergency_name",
-      "emergency_phone",
+      "emergency_contact_name",
+      "emergency_contact_phone",
     ]);
   });
 
@@ -167,5 +167,56 @@ describe("resumeAt", () => {
 
   it("does not trust a saved step past the end", () => {
     expect(resumeAt(99, complete)).toBeLessThanOrEqual(NUMBERED.length);
+  });
+});
+
+/**
+ * The names have to be the ones the form actually posts.
+ *
+ * A step machine validating `emergency_name` while EmergencyFields posts
+ * `emergency_contact_name` passes every check it runs and submits nothing —
+ * there is no type error and no runtime error, only an application that
+ * arrives without a next of kin on it.
+ */
+describe("field names match the form", () => {
+  it("uses the emergency contact names the action reads", () => {
+    const step = STEPS.find((s) => s.id === "id")!;
+    for (const f of [
+      "emergency_contact_name",
+      "emergency_contact_relationship",
+      "emergency_contact_phone",
+    ]) {
+      expect(step.fields, f).toContain(f);
+    }
+  });
+
+  it("has no field named with the shorter prefix that nothing posts", () => {
+    const all = STEPS.flatMap((s) => s.fields);
+    for (const wrong of ["emergency_name", "emergency_phone", "emergency_relationship"]) {
+      expect(all, wrong).not.toContain(wrong);
+    }
+  });
+});
+
+describe("resuming a draft that has no password in it", () => {
+  // Found by driving the real flow: fill step one, reload, and it went back
+  // to step one. The draft deliberately never stores the password, so the
+  // step-one check could never pass again.
+  const draft = {
+    full_name: "Subas Kandel",
+    phone: "9812345678",
+    email: "subas@example.com",
+    day_rate_npr: "4500",
+    // no password, on purpose
+  };
+
+  it("returns to the step it was left on", () => {
+    expect(resumeAt(2, draft)).toBe(2);
+    expect(resumeAt(3, draft)).toBe(3);
+  });
+
+  it("still walks back when something that IS saved is missing", () => {
+    expect(resumeAt(3, { ...draft, full_name: "" })).toBe(1);
+    expect(resumeAt(3, { ...draft, day_rate_npr: "" })).toBe(2);
   });
 });

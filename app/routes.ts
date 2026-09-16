@@ -29,7 +29,6 @@ export default [
     // What happens if you cannot come, generated from the refund engine.
     route("cancellation", "routes/cancellation.tsx"),
     route("insurance", "routes/insurance.tsx"),
-    route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
     // The way back in, for everybody: trekkers, guides and the office all
     // sign in with a password, so they all need a way to have forgotten it.
@@ -72,6 +71,15 @@ export default [
     // 404 catch-all gets the site chrome too.
     route("*", "routes/$.tsx"),
   ]),
+
+  // Becoming a guide sits OUTSIDE the public shell on purpose.
+  //
+  // Inside it, the page carried the trekker header — Guides, Experiences,
+  // Routes, Plan an Event, Stories, Sign up — which is six ways out of a
+  // ten-minute form, and an applicant who wanders onto the customer side of
+  // the site does not come back to finish. It renders its own minimal header
+  // and its own guide-facing footer instead.
+  route("apply", "routes/apply.tsx"),
 
   // Guide area (M4 status page; M5 dashboard). Login sits outside the gate.
   route("g/login", "routes/g.login.tsx"),

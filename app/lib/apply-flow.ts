@@ -51,7 +51,7 @@ export const STEPS: Step[] = [
     id: "id",
     index: 4,
     label: "ID",
-    fields: ["id_photo", "emergency_name", "emergency_relationship", "emergency_phone"],
+    fields: ["id_photo", "emergency_contact_name", "emergency_contact_relationship", "emergency_contact_phone", "emergency_contact_email"],
   },
   { id: "review", index: 5, label: "REVIEW", fields: ["heard_about", "heard_about_detail"] },
 ];
@@ -78,9 +78,10 @@ export function stepById(id: StepId): Step {
  */
 export const SENSITIVE_FIELDS = [
   "id_photo",
-  "emergency_name",
-  "emergency_relationship",
-  "emergency_phone",
+  "emergency_contact_name",
+  "emergency_contact_relationship",
+  "emergency_contact_phone",
+  "emergency_contact_email",
 ];
 
 export const FIRST_SENSITIVE_STEP = 4;
@@ -184,11 +185,11 @@ export function validateStep(
   }
 
   if (step === "id") {
-    if (!v("emergency_name")) {
-      out.push({ field: "emergency_name", code: "emergency_name_missing", message: "One person we can call if something happens to you." });
+    if (!v("emergency_contact_name")) {
+      out.push({ field: "emergency_contact_name", code: "emergency_name_missing", message: "One person we can call if something happens to you." });
     }
-    if (!normalisePhone(v("emergency_phone"))) {
-      out.push({ field: "emergency_phone", code: "emergency_phone_missing", message: "A number for that person." });
+    if (!normalisePhone(v("emergency_contact_phone"))) {
+      out.push({ field: "emergency_contact_phone", code: "emergency_phone_missing", message: "A number for that person." });
     }
   }
 
@@ -217,7 +218,12 @@ export function resumeAt(saved: number | null | undefined, values: Record<string
   const wanted = Math.max(0, Math.min(NUMBERED.length, Number(saved) || 0));
   for (const s of NUMBERED) {
     if (s.index >= wanted) break;
-    if (!canAdvance(s.id, values)) return s.index;
+    // The password is never written to the draft — a half-filled application
+    // sitting in localStorage is not the place for it — so a resumed draft
+    // can never satisfy the password rule, and requiring it here sent every
+    // returning applicant back to step one with their work still on screen.
+    // It is checked when they submit, which is the only moment it matters.
+    if (!canAdvance(s.id, values, { requirePassword: false })) return s.index;
   }
   return wanted;
 }
