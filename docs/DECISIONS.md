@@ -438,3 +438,28 @@ Most guides and many trips have no photograph yet. Every card and hero has
 a designed no-photo state made from real data — the contour pattern with
 the route's own line and pins, or a guide's initial — rather than a tan
 box. No stock photography, ever.
+
+## The shape of the walk decides the shape of the page (2026-09-16)
+
+A journey page is fifteen days long and was fifteen identical blocks — day
+numeral, title, paragraph, one photograph — which reads as a filing cabinet
+however well each block is set. The variety had to come from somewhere, and
+the only thing on that page we can trust is the altitude the guide wrote
+down. So `app/lib/journal-reading.ts` derives it: where the trek breaks into
+chapters (the walk in, going higher, the high days, the way down), which days
+get a photograph you can see into (the hard day, the highest day, a chapter's
+first day), and how far down a reader has to be before the trip is offered.
+
+Derived, never random: the same journal always reads the same way, and a
+journal with no altitudes recorded gets the plain treatment rather than a
+guessed chapter heading. Three chapters is the floor — two headings are not a
+structure.
+
+## One width for a page, not four (2026-09-16)
+
+The journey page was built out of a `max-w-4xl` cover, a `max-w-4xl` guide
+strip, a `max-w-6xl` article and a `max-w-4xl` closing panel, and a day
+numeral hanging in a 4.5rem margin on top of that. Nothing lined up with
+anything: the title started 128px right of day one and the elevation graphic
+96px left of it. Any page with bands in it gets one shell constant and every
+band uses it.

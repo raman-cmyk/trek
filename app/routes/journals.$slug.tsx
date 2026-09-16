@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment } from "react";
 import { Form, Link, data, useFetcher } from "react-router";
 import type { Route } from "./+types/journals.$slug";
 import { pageMeta, breadcrumbLd, jsonLd, absoluteUrl } from "~/lib/seo";
@@ -25,6 +25,15 @@ import {
   type PublicJournal,
 } from "~/lib/journals";
 import { cn } from "~/lib/cn";
+import { JourneyIndex } from "~/components/public/JourneyIndex";
+import {
+  chaptersOf,
+  dayShape,
+  midCtaAfterDay,
+  peakIndex,
+  type Chapter,
+  type DayShape,
+} from "~/lib/journal-reading";
 import { TrailScene } from "~/components/design/TrailScene";
 import { ProfileWithPhotos } from "~/components/design/ProfileWithPhotos";
 import { profileOf } from "~/lib/route-cards";
@@ -257,6 +266,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   return data({ ok: true }, { headers });
 }
 
+/**
+ * One width for the whole page.
+ *
+ * The page used to be built out of three: a `max-w-4xl` cover, a `max-w-4xl`
+ * guide strip, a `max-w-6xl` article and a `max-w-4xl` closing panel. Nothing
+ * lined up with anything — the title started 128px to the right of day one,
+ * the elevation graphic started 96px to its left — and the whole thing read
+ * as content shoved against the left of a page it did not fit. One shell,
+ * used by every band, and the left edge is the same from the title to the
+ * footer.
+ */
+const SHELL = "mx-auto w-full max-w-[64rem] px-4";
+
 export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
   const { journal: j, entries, tags, route, more, offering, comments, liked, signedIn } =
     loaderData as any;
@@ -292,10 +314,30 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
   // A post is one moment, not a trek: no day numerals, no elevation profile.
   const isPost = j.kind === "post";
 
+  // The shape of the walk decides the shape of the page (see journal-reading):
+  // where it breaks into chapters, which days get a picture you can see into,
+  // and how far down a reader has to be before we offer them the trip.
+  const chapters = isPost ? [] : chaptersOf(entries as JournalEntry[]);
+  const peak = isPost ? -1 : peakIndex(entries as JournalEntry[]);
+  const midCtaAfter = isPost ? null : midCtaAfterDay(entries as JournalEntry[], chapters);
+  const chapterAt = new Map<number, Chapter>();
+  for (const c of chapters) chapterAt.set(c.firstIndex, c);
+  // With chapters there is a level above the days, so the days step down to
+  // h3 rather than leaving the page with fifteen peer headings.
+  const dayHeading = chapters.length ? "h3" : "h2";
+
+  const tripHref = offering
+    ? `/${offering.kind === "trek" ? "treks" : "experiences"}/${offering.slug}`
+    : j.route_slug
+      ? `/routes/${j.route_slug}`
+      : null;
+
   return (
     <main className="pb-16">
-      {/* 1 — Cover. The title overlaps the bottom edge of the photograph
-          instead of sitting politely under it (Not-AI doc §2: break the grid). */}
+      {/* 1 — Cover. Everything in the caption now sits inside the picture,
+          over its own gradient. It used to hang below the photograph's bottom
+          edge in white type on cream paper: the dates, the weather note and
+          every tag were invisible on the live site. */}
       <header className="relative">
         {/* The trek drawn on its cover (docs/07): the route's real day stops
             as a dotted line, so the story opens on the shape of the walk. */}
@@ -305,50 +347,57 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
           stops={routeStops}
           pins={3}
           eager
-          height="h-[46vh] sm:h-[62vh]"
+          dim={false}
+          height="h-[76vh] min-h-[26rem] sm:h-[72vh] sm:min-h-[32rem]"
           className="rounded-none"
-        />
-        <div className="mx-auto max-w-4xl px-4">
-          <h1 className="relative -mt-16 max-w-[20ch] font-display text-3xl leading-[1.05] text-white [text-shadow:0_2px_20px_rgb(0_0_0/0.55)] sm:-mt-24 sm:text-5xl">
-            {j.title}
-          </h1>
-          {/* Light type: this line sits on the photograph's dark foot, not on
-              the page. It was ink-on-photo and unreadable. */}
-          <p className="relative mt-3 font-mono text-caption text-white/85 sm:text-sm">
-            {journalStatLine(j)}
-          </p>
-          {j.weather_note && (
-            <p className="relative mt-1 text-sm text-white/70">{j.weather_note}</p>
-          )}
-          {/* Route link next to the stats, not buried at the bottom — it is
-              the second most useful link on the page. */}
-          <div className="relative mt-3 flex flex-wrap items-center gap-2">
-            {j.route_slug && (
-              <Link
-                to={`/routes/${j.route_slug}`}
-                prefetch="intent"
-                className="rounded-pill bg-paper/95 px-3 py-1 text-sm font-medium text-ink hover:bg-white"
-              >
-                {j.route_name} →
-              </Link>
-            )}
-            {sortTags(tags).map((t: JournalTag) => (
-              <Link
-                key={t.kind + t.value}
-                to={`/journals?tag=${encodeURIComponent(t.value)}`}
-                className="rounded-pill border border-white/30 px-2.5 py-1 text-caption text-white/85 hover:bg-white/10"
-              >
-                {t.value}
-              </Link>
-            ))}
+        >
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/90 via-ink/60 to-transparent pb-8 pt-32 sm:pb-14">
+            <div className={SHELL}>
+              <p className="label text-white/70">
+                {j.route_region ? `${j.route_region} · Nepal` : "Nepal"}
+              </p>
+              <h1 className="mt-2 max-w-[22ch] font-display text-3xl leading-[1.05] text-white sm:text-5xl">
+                {j.title}
+              </h1>
+              <p className="mt-4 font-mono text-caption text-white/85 sm:text-sm">
+                {journalStatLine(j)}
+              </p>
+              {j.weather_note && (
+                <p className="mt-1.5 max-w-[56ch] text-sm text-white/75">{j.weather_note}</p>
+              )}
+              {/* Route link next to the stats, not buried at the bottom — it
+                  is the second most useful link on the page. */}
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                {j.route_slug && (
+                  <Link
+                    to={`/routes/${j.route_slug}`}
+                    prefetch="intent"
+                    className="rounded-pill bg-paper/95 px-3 py-1 text-sm font-medium text-ink hover:bg-white"
+                  >
+                    {j.route_name} →
+                  </Link>
+                )}
+                {sortTags(tags).map((t: JournalTag) => (
+                  <Link
+                    key={t.kind + t.value}
+                    to={`/journals?tag=${encodeURIComponent(t.value)}`}
+                    className="rounded-pill border border-white/40 px-2.5 py-1 text-caption text-white/90 hover:bg-white/10"
+                  >
+                    {t.value}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        </TrailScene>
       </header>
 
       {/* 2 — Guide strip. Sticky: this is a story, but it is also the page
-          where someone decides to book the man who wrote it. */}
-      <div className="sticky top-0 z-20 mt-8 border-y border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-2.5">
+          where someone decides to book the man who wrote it — so the trip
+          itself is in here, at the top, rather than only eleven thousand
+          pixels down. */}
+      <div className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
+        <div className={cn(SHELL, "flex items-center gap-3 py-2.5")}>
           <Link to={`/guides/${j.guide_slug}`} prefetch="intent" className="shrink-0">
             <SmartImage
               src={j.guide_avatar_url ?? ""}
@@ -375,79 +424,117 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
               </p>
             )}
           </div>
-          <Form method="post" action="/conversations" className="shrink-0">
+          <Form method="post" action="/conversations" className="hidden shrink-0 sm:block">
             <input type="hidden" name="guide_id" value={j.guide_id} />
             <input type="hidden" name="next" value={`/journals/${j.slug}`} />
-            <button className="rounded bg-moss px-4 py-2 text-sm font-medium text-white hover:bg-pine">
+            <button className="rounded border border-moss px-3 py-2 text-sm font-medium text-moss hover:bg-mist">
               Message
             </button>
           </Form>
+          {tripHref && (
+            <Link
+              to={tripHref}
+              prefetch="intent"
+              className="shrink-0 rounded bg-pine px-4 py-2 text-sm font-medium text-paper hover:bg-moss"
+            >
+              Plan this trek
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* 3 — The album. Editorial measure on the left, sticky rail on the
-          right: the dead column is now the route map, the profile, and the
-          guide, all of which you want while reading. */}
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      {/* 3 — The album. A reading measure on the left, and on the right the
+          column that was empty from day three down: the days as a menu, the
+          route, the climb, the guide. */}
+      <div className={cn(SHELL, "mt-10 grid gap-x-14 gap-y-10 lg:grid-cols-[minmax(0,1fr)_16rem]")}>
         <div className="min-w-0">
-        {entries.map((e: JournalEntry, i: number) => (
-          <DayBlock
-            key={e.id}
-            entry={e}
-            showDayNumber={!isPost}
-            onOpen={(k) => lightbox.open(offsets[i] + k)}
-          />
-        ))}
+        {entries.map((e: JournalEntry, i: number) => {
+          const chapter = chapterAt.get(i);
+          return (
+            <Fragment key={e.id}>
+              {chapter && <ChapterBreak chapter={chapter} firstOnPage={i === 0} />}
+              <DayBlock
+                entry={e}
+                showDayNumber={!isPost}
+                heading={dayHeading}
+                isPeak={i === peak}
+                opensChapter={!!chapter}
+                shape={isPost ? "standard" : dayShape(e, { isPeak: i === peak, opensChapter: !!chapter })}
+                onOpen={(k) => lightbox.open(offsets[i] + k)}
+              />
+              {midCtaAfter === e.day_no && (
+                <PlanStrip
+                  guideFirstName={first}
+                  routeName={j.route_name}
+                  tripHref={tripHref}
+                  offeringTitle={offering?.title ?? null}
+                  offeringDays={offering?.days ?? null}
+                />
+              )}
+            </Fragment>
+          );
+        })}
 
         {photoCount > 1 && (
           <button
             type="button"
             onClick={() => lightbox.open(0)}
-            className="mt-10 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink transition-colors hover:border-sage hover:bg-mist"
+            className="mt-12 w-full rounded-md border border-line bg-card py-3 text-sm font-medium text-ink transition-colors hover:border-sage hover:bg-mist"
           >
             View all <span className="font-mono">{photoCount}</span> photos as a gallery
           </button>
         )}
 
-        {/* 5 — Elevation, from what the guide actually recorded. */}
+        {/* 5 — Elevation, from what the guide actually recorded. A heading
+            rather than an eyebrow, and inside a frame: as a bare graphic
+            floating between two paragraphs it read as a stray widget. */}
         {!isPost && points.length >= 3 && (
-          <section className="mt-14 border-t border-line pt-8">
-            <h2 className="font-display text-2xl text-ink">How high, and when</h2>
+          <section className="mt-16 border-t border-line pt-10">
+            <h2 className="font-display text-2xl text-ink sm:text-3xl">How high, and when</h2>
+            <p className="mt-2 max-w-[56ch] text-sm text-muted">
+              The climb as {first} recorded it, with his photographs where he took them.
+            </p>
             {/* The guide's own photographs pinned to the climb where they
                 were taken (docs/07, reference 3). Falls back to the plain
                 strip when the days have no pictures. */}
-            {dayProfile && pinned.length >= 2 ? (
-              <ProfileWithPhotos profile={dayProfile} photos={pinned} label={`${j.title}: the climb, day by day`} className="mt-10" />
-            ) : (
-              <ElevationStrip points={points} className="mt-3" />
-            )}
+            <div className="mt-6 rounded-md border border-line bg-card p-4 sm:p-6">
+              {dayProfile && pinned.length >= 2 ? (
+                <ProfileWithPhotos profile={dayProfile} photos={pinned} label={`${j.title}: the climb, day by day`} />
+              ) : (
+                <ElevationStrip points={points} />
+              )}
+            </div>
           </section>
         )}
 
-        {/* 6 — The closing note, set larger. His words. */}
-        {j.guide_note && (
-          <section className="mt-14 border-l-[3px] border-chartreuse pl-5 sm:pl-7">
-            <p className="whitespace-pre-line font-display text-xl leading-relaxed text-ink sm:text-2xl">
-              {j.guide_note}
-            </p>
-            <p className="mt-3 text-caption text-muted">
-              — {j.guide_name}, who led this trek
-            </p>
-          </section>
-        )}
-
-        {/* 7 — The client's note, if they gave one and consented to the name. */}
-        {j.client_note && (
-          <figure className="mt-10 rounded-md bg-mist p-6">
-            <blockquote className="text-lg leading-relaxed text-ink">
-              “{j.client_note}”
-            </blockquote>
-            {j.client_note_author && (
-              <figcaption className="mt-2 font-mono text-caption text-muted">
-                — {j.client_note_author}
-              </figcaption>
+        {/* 6 — The last word. His, then the family's: two quotations that had
+            no heading between them and the page above. */}
+        {(j.guide_note || j.client_note) && (
+          <section className="mt-16 border-t border-line pt-10">
+            <h2 className="font-display text-2xl text-ink sm:text-3xl">The last word</h2>
+            {j.guide_note && (
+              <div className="mt-6 border-l-[3px] border-chartreuse pl-5 sm:pl-7">
+                <p className="whitespace-pre-line font-display text-xl leading-relaxed text-ink sm:text-2xl">
+                  {j.guide_note}
+                </p>
+                <p className="mt-3 text-caption text-muted">
+                  — {j.guide_name}, who led this trek
+                </p>
+              </div>
             )}
-          </figure>
+            {j.client_note && (
+              <figure className="mt-8 rounded-md bg-mist p-6">
+                <blockquote className="text-lg leading-relaxed text-ink">
+                  “{j.client_note}”
+                </blockquote>
+                {j.client_note_author && (
+                  <figcaption className="mt-2 font-mono text-caption text-muted">
+                    — {j.client_note_author}
+                  </figcaption>
+                )}
+              </figure>
+            )}
+          </section>
         )}
 
         <Comments
@@ -461,6 +548,12 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
 
         <aside className="hidden lg:block">
           <div className="sticky top-20 space-y-4">
+            {/* The ask a long page cannot do without: a way to reach day nine
+                that is not the scroll wheel. */}
+            {!isPost && (
+              <JourneyIndex days={entries as JournalEntry[]} chapters={chapters} />
+            )}
+
             {route?.day_stops?.length ? (
               <div className="overflow-hidden rounded-md border border-line">
                 <RouteMap
@@ -478,12 +571,6 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
                 </Link>
               </div>
             ) : null}
-
-            {!isPost && points.length >= 3 && (
-              <div className="rounded-md border border-line bg-card p-3">
-                <ElevationStrip points={points} className="mt-1" />
-              </div>
-            )}
 
             <div className="rounded-md border border-line bg-card p-4">
               <Link to={`/guides/${j.guide_slug}`} className="flex items-center gap-3">
@@ -538,7 +625,7 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
 
       {/* Sticky book bar — available the whole way down, not only at the end. */}
       <div className="sticky bottom-0 z-20 mt-12 border-t border-line bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+        <div className={cn(SHELL, "flex items-center gap-3 py-2.5")}>
           <p className="min-w-0 flex-1 truncate text-sm text-muted">
             Trek {j.route_name ?? "this route"} with{" "}
             <span className="font-medium text-ink">{first}</span>
@@ -561,45 +648,82 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
         </div>
       </div>
 
-      {/* 8 — Book the same trail with the same man. */}
+      {/* 8 — Book the same trail with the same man. Two columns: the offer
+          used to sit in the left half of a full-bleed dark band with the
+          other half empty, which is what made the foot of the page read as
+          an unfinished container. */}
       <section className="mt-16 bg-pine py-14 text-paper">
-        <div className="mx-auto max-w-4xl px-4">
-          <p className="label text-paper/60">Walk it yourself</p>
-          <h2 className="mt-2 max-w-[20ch] font-display text-3xl sm:text-4xl">
-            Trek {j.route_name ?? "this route"} with {first}.
-          </h2>
-          <div className="mt-6 flex flex-wrap gap-3">
-            {offering && (
+        <div className={cn(SHELL, "grid items-start gap-10 md:grid-cols-[1.15fr_1fr]")}>
+          <div>
+            <p className="label text-paper/60">Walk it yourself</p>
+            <h2 className="mt-2 max-w-[20ch] font-display text-3xl sm:text-4xl">
+              Trek {j.route_name ?? "this route"} with {first}.
+            </h2>
+            <div className="mt-6 flex flex-wrap gap-3">
+              {offering && (
+                <Link
+                  to={`/${offering.kind === "trek" ? "treks" : "experiences"}/${offering.slug}`}
+                  prefetch="intent"
+                  className="rounded bg-chartreuse px-5 py-3 font-medium text-pine hover:bg-white"
+                >
+                  {offering.title} — {offering.days} days →
+                </Link>
+              )}
+              <Form method="post" action="/conversations">
+                <input type="hidden" name="guide_id" value={j.guide_id} />
+                <input type="hidden" name="next" value={`/journals/${j.slug}`} />
+                <button className="rounded border border-paper/40 px-5 py-3 font-medium text-paper hover:bg-paper/10">
+                  Message {first} — free
+                </button>
+              </Form>
+            </div>
+            {j.route_slug && (
               <Link
-                to={`/${offering.kind === "trek" ? "treks" : "experiences"}/${offering.slug}`}
-                prefetch="intent"
-                className="rounded bg-chartreuse px-5 py-3 font-medium text-pine hover:bg-white"
+                to={`/routes/${j.route_slug}`}
+                className="mt-5 inline-block text-sm text-paper/75 underline underline-offset-4 hover:text-paper"
               >
-                {offering.title} — {offering.days} days →
+                Permits, costs and every guide on {j.route_name} →
               </Link>
             )}
-            <Form method="post" action="/conversations">
-              <input type="hidden" name="guide_id" value={j.guide_id} />
-              <input type="hidden" name="next" value={`/journals/${j.slug}`} />
-              <button className="rounded border border-paper/40 px-5 py-3 font-medium text-paper hover:bg-paper/10">
-                Message {first} — free
-              </button>
-            </Form>
           </div>
-          {j.route_slug && (
-            <Link
-              to={`/routes/${j.route_slug}`}
-              className="mt-5 inline-block text-sm text-paper/75 underline underline-offset-4 hover:text-paper"
-            >
-              Permits, costs and every guide on {j.route_name} →
+
+          {/* The right half, which used to be empty: the man, and what this
+              story is evidence of. */}
+          <div className="rounded-md bg-paper/5 p-5 ring-1 ring-paper/15">
+            <Link to={`/guides/${j.guide_slug}`} className="flex items-center gap-3">
+              <SmartImage
+                src={j.guide_avatar_url ?? ""}
+                alt={j.guide_name}
+                width={64}
+                height={64}
+                className="h-14 w-14 rounded-full"
+              />
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-paper">{j.guide_name}</span>
+                <span className="block font-mono text-caption text-sage">
+                  {j.guide_district}
+                </span>
+              </span>
             </Link>
-          )}
+            <dl className="mt-5 space-y-2 text-sm">
+              {!isPost && (
+                <Fact
+                  n={entries.length}
+                  label={`${entries.length === 1 ? "day" : "days"} of this trek, written up by him`}
+                />
+              )}
+              <Fact n={photoCount} label={`${photoCount === 1 ? "photograph" : "photographs"} he took on it`} />
+              {route?.max_altitude_m ? (
+                <Fact n={route.max_altitude_m.toLocaleString("en-US")} label="metres at the top of it" />
+              ) : null}
+            </dl>
+          </div>
         </div>
       </section>
 
       {more.length > 0 && (
-        <section className="mx-auto mt-14 max-w-6xl px-4">
-          <h2 className="mb-4 font-display text-2xl text-ink">More from the trail</h2>
+        <section className={cn(SHELL, "mt-16")}>
+          <h2 className="mb-4 font-display text-2xl text-ink sm:text-3xl">More from the trail</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             {more.map((o: PublicJournal) => (
               <JournalCard key={o.id} journal={o} showGuide={o.guide_id !== j.guide_id} />
@@ -612,58 +736,184 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
   );
 }
 
+/** One figure and what it counts, for the dark panel at the foot. */
+function Fact({ n, label }: { n: number | string; label: string }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="font-mono text-paper">{n}</dt>
+      <dd className="text-sage">{label}</dd>
+    </div>
+  );
+}
+
+/**
+ * A chapter break.
+ *
+ * Fifteen days in a row all look the same however well each one is set,
+ * because there is nothing above them saying where you are. These are the
+ * four moments the altitudes actually mark — the walk in, going higher, the
+ * high days, the way down — and a reader arriving at one knows the page has
+ * turned rather than that another day has gone by.
+ */
+function ChapterBreak({ chapter, firstOnPage }: { chapter: Chapter; firstOnPage: boolean }) {
+  return (
+    <div
+      id={`chapter-${chapter.key}`}
+      className={cn(
+        "scroll-mt-24 border-t-2 border-pine/15 pt-5",
+        firstOnPage ? "mt-0" : "mt-20",
+      )}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="font-display text-2xl text-pine sm:text-[2.125rem] sm:leading-[1.1]">
+          {chapter.title}
+        </h2>
+        <p className="font-mono text-caption uppercase tracking-[0.08em] text-muted">
+          {chapter.from === chapter.to
+            ? `Day ${chapter.from}`
+            : `Days ${chapter.from}–${chapter.to}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The offer, half way down.
+ *
+ * A reader who has got through the climb has told us more than one who landed
+ * on the cover, and the only place to act on it used to be the foot of a
+ * page most of them never reach.
+ */
+function PlanStrip({
+  guideFirstName,
+  routeName,
+  tripHref,
+  offeringTitle,
+  offeringDays,
+}: {
+  guideFirstName: string;
+  routeName: string | null;
+  tripHref: string | null;
+  offeringTitle: string | null;
+  offeringDays: number | null;
+}) {
+  if (!tripHref) return null;
+  return (
+    <aside className="mt-16 flex flex-wrap items-center gap-x-6 gap-y-4 rounded-md border border-sage/60 bg-mist px-5 py-5">
+      <div className="min-w-[14rem] flex-1">
+        <p className="label text-moss">Still reading</p>
+        <p className="mt-1.5 font-display text-lg leading-snug text-ink">
+          {guideFirstName} walks {routeName ?? "this route"} with people every season.
+        </p>
+      </div>
+      <Link
+        to={tripHref}
+        prefetch="intent"
+        className="shrink-0 rounded bg-pine px-5 py-3 text-sm font-medium text-paper hover:bg-moss"
+      >
+        {offeringTitle && offeringDays
+          ? `Plan this trek — ${offeringDays} days →`
+          : "Plan this trek →"}
+      </Link>
+    </aside>
+  );
+}
+
 /**
  * One day.
  *
- * The numeral sits in the left margin as a big mono figure and the frames sit
- * under the words, always — the old version rotated five silhouettes down the
- * page and floated a portrait into the text, which read as noise rather than
- * as rhythm. Variety now lives in the photographs, not in the furniture around
- * them, and every frame opens the viewer.
+ * The numeral used to hang in a 4.5rem left margin as a big pale figure,
+ * which pushed every day 6rem to the right of the title, the elevation
+ * graphic and the closing note — the page's ragged left edge came from here.
+ * So the day and its altitude are an eyebrow above the title now, flush with
+ * everything else, and the rhythm the numeral was carrying comes from the
+ * chapter breaks and from which days get a picture worth stopping at.
+ *
+ * Three shapes, decided in `journal-reading` from the trek's own altitudes:
+ *
+ *   feature   the hard day, the highest day, a chapter's first day — a frame
+ *             with depth, and on a wide screen wider than the prose
+ *   split     a short note with its one photograph beside it
+ *   standard  words, then the frames underneath
  */
 function DayBlock({
   entry,
   showDayNumber,
+  heading,
+  isPeak,
+  opensChapter,
+  shape,
   onOpen,
 }: {
   entry: JournalEntry;
   showDayNumber: boolean;
+  heading: "h2" | "h3";
+  isPeak: boolean;
+  /** The chapter heading is directly above, so this day sits closer to it. */
+  opensChapter: boolean;
+  shape: DayShape;
   onOpen: (indexInBlock: number) => void;
 }) {
   const media = (entry.photos ?? []) as JournalPhoto[];
+  const H = heading;
+
+  const where = [
+    showDayNumber ? `Day ${entry.day_no}` : null,
+    entry.altitude_m != null ? `${entry.altitude_m.toLocaleString("en-US")} m` : null,
+  ].filter(Boolean);
+
+  const head = (
+    <header>
+      {entry.is_hard_day && <p className="mb-1 label text-ember">The hard day</p>}
+      {isPeak && !entry.is_hard_day && <p className="mb-1 label text-moss">The top of the trek</p>}
+      <H className="font-display text-[1.375rem] leading-[1.2] text-ink sm:text-[1.75rem]">
+        {entry.title}
+      </H>
+      {where.length > 0 && (
+        <p className="mt-1.5 font-mono text-caption text-muted">{where.join(" · ")}</p>
+      )}
+    </header>
+  );
+
+  const body = entry.body ? (
+    <p className="mt-4 whitespace-pre-line text-[1.0625rem] leading-[1.75] text-ink">
+      {entry.body}
+    </p>
+  ) : null;
+
   return (
     <section
       className={cn(
-        "mt-12 scroll-mt-24",
-        showDayNumber && "sm:grid sm:grid-cols-[4.5rem_1fr] sm:gap-6",
+        "scroll-mt-24",
+        opensChapter ? "mt-8" : "mt-14 first:mt-0",
+        entry.is_hard_day && "border-l-2 border-ember/50 pl-4 sm:-ml-5 sm:pl-5",
       )}
       id={`day-${entry.day_no}`}
     >
-      {showDayNumber && (
-        <p className="font-mono text-4xl leading-none text-line sm:text-right sm:text-5xl">
-          {entry.day_no}
-        </p>
+      {shape === "split" ? (
+        // The one two-column day: a short note does not need the full
+        // measure, and the photograph beside it breaks the column of
+        // text-then-picture that the page is otherwise made of.
+        <div className="lg:grid lg:grid-cols-[1.2fr_1fr] lg:items-start lg:gap-7">
+          <div className="min-w-0">
+            {head}
+            {body}
+          </div>
+          <MediaGrid media={media} alt={entry.title} onOpen={onOpen} className="lg:mt-0" />
+        </div>
+      ) : (
+        <>
+          {head}
+          {body}
+          <MediaGrid
+            media={media}
+            alt={entry.title}
+            onOpen={onOpen}
+            feature={shape === "feature"}
+          />
+        </>
       )}
-
-      <div className={cn(entry.is_hard_day && "border-l-2 border-ember/50 pl-4 sm:pl-5")}>
-        {entry.is_hard_day && <p className="mb-1 label text-ember">The hard day</p>}
-
-        <h2 className="mt-2 font-display text-2xl leading-snug text-ink sm:mt-0">
-          {entry.title}
-        </h2>
-        {entry.altitude_m != null && (
-          <p className="mt-1 font-mono text-caption text-muted">
-            {entry.altitude_m.toLocaleString("en-US")} m
-          </p>
-        )}
-        {entry.body && (
-          <p className="mt-3 max-w-[62ch] whitespace-pre-line leading-relaxed text-ink">
-            {entry.body}
-          </p>
-        )}
-
-        <MediaGrid media={media} alt={entry.title} onOpen={onOpen} />
-      </div>
     </section>
   );
 }

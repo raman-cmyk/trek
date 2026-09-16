@@ -3037,3 +3037,72 @@ password are all in these two transcripts and want revoking once the updates
 stop.
 
 Green: typecheck clean, 1267 tests, `npm run build` passing, deployed.
+---
+## 2026-09-16 — The journey page, rebuilt from its own altitudes
+
+Pratik reviewed a journey page (`/journals/:slug`) and sent ten design notes.
+Loading it in a real browser against production found an eleventh, worse than
+any of them: below the cover photograph the dates, the weather note and every
+tag were **white type on cream paper** — invisible on the live site. The
+caption had been pulled up over the photo's foot with `-mt-16`, which covered
+the title and nothing else.
+
+What changed, against his list:
+
+- **Squeezed to the left.** Four container widths on one page became one
+  `SHELL`. The article column is a reading measure with the sidebar beside it,
+  so the page is centred rather than shoved left, and every left edge — cover
+  title, day one, the elevation graphic, the closing panel — is the same.
+- **The right column.** It was empty from day three down. It now opens with
+  **On this page**: every day as a link, grouped by chapter. Plain anchors, so
+  it works with JavaScript off; verified that day 10 lands 96px down, clear of
+  the sticky strip, both by hash and by click.
+- **Repetitive.** `chaptersOf` breaks the trek into the four moments its
+  altitudes mark, with a rule and a day range. `dayShape` gives the hard day,
+  the highest day and each chapter's first day a **feature** frame — deeper,
+  and wider than the prose on a big screen — and puts a short one-photograph
+  day **beside** its picture instead of above it.
+- **Weak hierarchy.** Chapters are a tier above days now (pine, 34px) rather
+  than the same size; body text is 17px on 1.75 line-height.
+- **The hero.** The whole caption sits inside the photograph over its own
+  gradient, with the cover taller on a phone so the title clears the drawn
+  trail line, and real clearance from the bottom edge.
+- **Photographs inconsistent / too small.** One gap everywhere (was 8px for a
+  pair and 12px for four). A pair went from 4/3 — 250px deep in a reading
+  column — to 4/5.
+- **The booking action arrives very late.** **Plan this trek** is now in the
+  sticky strip at the top, and a **Still reading** strip sits in the pause
+  before the high days.
+- **Disconnected boxes near the end.** "How high, and when" is a heading with
+  a line of explanation in a frame, not a 13px eyebrow over a floating
+  graphic; the two closing quotations sit under "The last word".
+- **The foot looked unfinished.** The dark band had its offer in the left half
+  of a full-bleed section and the right half empty, which is what read as an
+  unfinished container. It is two columns now: the offer, and the guide with
+  what this story is evidence of.
+
+The one item **not** from his list that this also fixed: the hard day's ember
+rule used to indent that day 22px right of every other one. It hangs in the
+margin now.
+
+One thing this session got wrong and then fixed: the first pass put `DAY 6 ·
+4,410 M` in mono caps above each day's title — fifteen captions over fifteen
+headings, which is precisely the pattern the `:: LABEL` purge removed after
+the founder said it "makes the website feel a lot AI". The day and the
+altitude are metadata, so they sit *below* the title now, in mono and not
+shouting, which is also where the altitude was before any of this. The two
+markers that survived that purge upstream ("The hard day", "Walk it
+yourself") are left exactly as they were.
+
+Also dropped: the second, unlabelled copy of the elevation sparkline in the
+sidebar. With "How high, and when" now a titled section in the article and
+the day index directly above it, a caption-less graphic in a card was the
+disconnected-widget problem rather than a fix for it.
+
+`app/lib/journal-reading.ts` is a pure module with 23 tests, including the
+real Everest and a trek that starts at its own high point. Suite: **1,310
+tests in 89 files, green**; `npm run build` green. Every screen above was read
+off a real browser render against the production database at 1440px and
+390px, on all four journals that exist — and with JavaScript disabled, where
+the day index still has its fourteen links and `#day-10` still lands 96px
+down, clear of the sticky strip.

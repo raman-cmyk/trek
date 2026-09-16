@@ -21,6 +21,10 @@ import { cn } from "~/lib/cn";
  *   4  → an even two-by-two
  *   5+ → two-by-two, and the last tile counts what is behind it
  *
+ * `feature` is the one dial on top of that, and it changes depth rather than
+ * arrangement: the days the trek turns on get frames you can see into. Which
+ * days those are is decided in `journal-reading`, from the altitudes.
+ *
  * Everything opens the viewer, so the grid is a way in rather than the whole
  * album. Beyond four, the count is honest about how much more there is.
  */
@@ -28,30 +32,48 @@ export function MediaGrid({
   media,
   alt,
   onOpen,
+  feature = false,
   className,
 }: {
   media: JournalPhoto[];
   alt: string;
   /** Index within this block; the page maps it to the journal-wide gallery. */
   onOpen: (indexInBlock: number) => void;
+  /**
+   * This day's pictures carry the chapter: taller frames, and on a wide
+   * screen a block that reaches past the measure of the prose. Used for the
+   * hard day, the highest day, and the day a chapter opens — never on a
+   * whim, or the emphasis means nothing.
+   */
+  feature?: boolean;
   className?: string;
 }) {
   const n = media.length;
   if (n === 0) return null;
 
+  // One gap everywhere. Two frames 8px apart and four frames 12px apart read
+  // as two different components.
+  const box = cn("mt-6 grid gap-3", feature && "xl:-mx-8", className);
+
   if (n === 1) {
     return (
-      <div className={cn("mt-5", className)}>
-        <Frame media={media[0]} alt={alt} onOpen={() => onOpen(0)} ratio="wide" priority />
+      <div className={cn("mt-6", feature && "xl:-mx-8", className)}>
+        <Frame
+          media={media[0]}
+          alt={alt}
+          onOpen={() => onOpen(0)}
+          ratio={feature ? "feature" : "wide"}
+          priority
+        />
       </div>
     );
   }
 
   if (n === 2) {
     return (
-      <div className={cn("mt-5 grid grid-cols-2 gap-2 sm:gap-3", className)}>
+      <div className={cn(box, "grid-cols-2")}>
         {media.map((m, i) => (
-          <Frame key={m.url + i} media={m} alt={alt} onOpen={() => onOpen(i)} ratio="square" />
+          <Frame key={m.url + i} media={m} alt={alt} onOpen={() => onOpen(i)} ratio="pair" />
         ))}
       </div>
     );
@@ -59,9 +81,9 @@ export function MediaGrid({
 
   if (n === 3) {
     return (
-      <div className={cn("mt-5 grid grid-cols-2 gap-2 sm:gap-3", className)}>
+      <div className={cn(box, "grid-cols-2")}>
         <Frame media={media[0]} alt={alt} onOpen={() => onOpen(0)} ratio="tall" />
-        <div className="grid grid-rows-2 gap-2 sm:gap-3">
+        <div className="grid grid-rows-2 gap-3">
           <Frame media={media[1]} alt={alt} onOpen={() => onOpen(1)} ratio="fill" />
           <Frame media={media[2]} alt={alt} onOpen={() => onOpen(2)} ratio="fill" />
         </div>
@@ -72,7 +94,7 @@ export function MediaGrid({
   const shown = media.slice(0, 4);
   const hidden = n - 4;
   return (
-    <div className={cn("mt-5 grid grid-cols-2 gap-2 sm:gap-3", className)}>
+    <div className={cn(box, "grid-cols-2")}>
       {shown.map((m, i) => (
         <Frame
           key={m.url + i}
@@ -88,7 +110,16 @@ export function MediaGrid({
 }
 
 const RATIO = {
+  /** A day's single photograph. */
   wide: "aspect-[16/10]",
+  /** The day that carries the chapter — deeper, and wider than the prose. */
+  feature: "aspect-[4/3] sm:aspect-[3/2]",
+  /**
+   * Two frames side by side. At 4/3 a pair came out 250px deep in a reading
+   * column and you could not see what was in them; 4/5 gives each one back
+   * enough height to be a photograph rather than a thumbnail.
+   */
+  pair: "aspect-[3/4] sm:aspect-[4/5]",
   square: "aspect-[4/3]",
   tall: "aspect-[3/4] sm:aspect-[4/5]",
   fill: "h-full",
