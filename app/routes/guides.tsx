@@ -32,7 +32,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
 }
 
 const GUIDE_COLS =
-  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, only_with_me, day_rate_usd_cents, median_response_mins, years_experience, gender";
+  "user_id, slug, full_name, avatar_url, home_district, tier, hook_line, bio, only_with_me, day_rate_usd_cents, median_response_mins, years_experience, treks_completed_platform, gender";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);

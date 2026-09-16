@@ -20,6 +20,13 @@ export interface PublicGuide {
   only_with_me?: string | null;
   day_rate_usd_cents: number | null;
   median_response_mins: number | null;
+  /**
+   * What stands in for a review, which most guides do not have yet. Both are
+   * on `public_guides` already; the card simply was not asking for them, so
+   * every card fell through to "No reviews yet" — see lib/card-rating.
+   */
+  years_experience?: number | null;
+  treks_completed_platform?: number | null;
 }
 
 export interface PublicOffering {
@@ -64,6 +71,21 @@ export const KIND_GLYPH: Record<string, ChipGlyph> = {
   city: "city",
 };
 
+/**
+ * Languages, on one line, without cutting a word in half.
+ *
+ * Three names joined with commas came to "Nepali, English, S…" in a 211px
+ * card: the ellipsis lands mid-word and reads as a rendering fault. Two names
+ * and a count is shorter than the space available at every card width, and
+ * "+2" is a fact rather than a fragment.
+ */
+export function langLabel(languages?: string[] | null): string {
+  const list = (languages ?? []).filter(Boolean);
+  if (list.length === 0) return "";
+  if (list.length <= 2) return list.join(", ");
+  return `${list.slice(0, 2).join(", ")} +${list.length - 2}`;
+}
+
 function responseLabel(mins: number): string {
   if (mins < 60) return `~${mins} min`;
   const h = Math.round(mins / 60);
@@ -95,6 +117,11 @@ export function GuideCard({
   languages?: string[];
 }) {
   const { mr } = useMoney();
+  const line = ratingLine(rating, {
+    years: guide.years_experience,
+    treks: guide.treks_completed_platform,
+    tier: guide.tier,
+  });
   return (
     <Link
       to={`/guides/${guide.slug}`}
@@ -175,15 +202,15 @@ export function GuideCard({
               its neighbours' — the same misalignment one row lower, which is
               the whole thing this block exists to prevent. */}
           <div className="mt-1.5 flex h-5 items-center">
-            {rating && rating.count > 0 ? (
-              <Stars value={rating.value} count={rating.count} />
-            ) : (
-              <span className="truncate text-sm text-muted">No reviews yet</span>
-            )}
+            {line.stars != null ? (
+              <Stars value={line.stars} count={line.count} />
+            ) : line.text ? (
+              <span className="truncate text-sm text-muted">{line.text}</span>
+            ) : null}
           </div>
           <div className="flex items-baseline justify-between gap-2 pt-2">
             <span className="truncate text-sm text-muted">
-              {languages && languages.length > 0 ? languages.slice(0, 3).join(", ") : ""}
+              {langLabel(languages)}
             </span>
             {guide.day_rate_usd_cents && (
               <span className="shrink-0 text-sm text-muted">
@@ -210,7 +237,10 @@ export function OfferingCard({
 }) {
   const { mr } = useMoney();
   const from = offeringFromUsdCents(offering);
-  const line = ratingLine(rating, offering.guide_years_experience);
+  const line = ratingLine(rating, {
+    years: offering.guide_years_experience,
+    tier: offering.guide_tier,
+  });
   return (
     // Not a <Link> wrapper: the route chip below has to be its own link, and a
     // nested <a> is invalid HTML that breaks hydration. Instead the title link

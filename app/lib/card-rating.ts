@@ -7,11 +7,17 @@
  * you pick a person, the scarcest thing a card can spend that line on is what
  * other people said about that person.
  *
- * The hard case is a guide with no reviews, and it is not rare: every guide
- * has none on their first day. A 0.0, or five empty stars, reads as a bad
- * guide rather than a new one — so a guide with nothing said about them yet
- * says exactly that, and the years they have been guiding carry the line
- * instead. Never a fake number, never a blank.
+ * The hard case is a guide with no reviews, and on a launching marketplace it
+ * is not the hard case, it is the normal one. It said **"No reviews yet"**,
+ * and a browse page printed that about thirty people at once. Read the way a
+ * trekker reads it, thirty times down a page, it says "nobody has booked any
+ * of these people" — we were paying to advertise our own emptiness.
+ *
+ * So there is no negative rung. Reviews if they exist, and otherwise the
+ * strongest true thing we know about this person: a career, treks led here,
+ * or the licence itself. If we somehow know none of those, the line is blank,
+ * because nothing beats a sentence that costs us the sale. Never a fake
+ * number, never a 0.0, never an apology.
  */
 
 export interface CardRating {
@@ -24,34 +30,60 @@ export interface RatingLine {
   stars: number | null;
   /** "(12)" — omitted when there is no rating. */
   count: number;
-  /** What to read when there are no reviews yet. */
+  /** The standing this guide has instead. Null when there is a rating. */
   text: string | null;
+}
+
+/** Everything a card can offer in place of a review. */
+export interface Standing {
+  /** Years guiding before this platform existed. */
+  years?: number | null;
+  /** Treks actually completed through us. */
+  treks?: number | null;
+  /** Verification tier; 1 and up means licence and papers checked. */
+  tier?: number | null;
 }
 
 /**
  * The line, from a rating that may not exist.
  *
- * `years` is the fallback's evidence: "New here · 14 years guiding" is a
- * truthful thing to say about somebody with no reviews on this platform and
- * a career behind them, and it is what a trekker actually wants to know.
+ * The ladder, strongest first. Each rung is a fact about this person that a
+ * trekker in Berlin would actually weigh:
+ *
+ *   4.9 (12)             what twelve people said
+ *   8 treks led here     they have done this, through us, and we watched
+ *   14 years guiding     a career that predates us — most guides' best fact
+ *   Licensed and checked we have seen the papers, which is our whole promise
+ *   (blank)              we know nothing yet, so we say nothing
+ *
+ * `years` accepts a second argument as a bare number for the callers that
+ * only have that, so older call sites keep working.
  */
 export function ratingLine(
   rating: CardRating | null | undefined,
-  years?: number | null,
+  standing?: Standing | number | null,
 ): RatingLine {
   // A rating of zero reviews is not a rating. Some callers build the record
   // by guide id and hand back a default rather than omitting the key.
   if (rating && rating.count > 0 && Number.isFinite(rating.value)) {
     return { stars: rating.value, count: rating.count, text: null };
   }
-  if (years && years > 0) {
-    return {
-      stars: null,
-      count: 0,
-      text: `New here · ${years} ${years === 1 ? "year" : "years"} guiding`,
-    };
+
+  const s: Standing =
+    typeof standing === "number" ? { years: standing } : (standing ?? {});
+  const line = (text: string | null): RatingLine => ({ stars: null, count: 0, text });
+
+  // Treks led through us beat years claimed to us: we watched these happen.
+  if (s.treks && s.treks > 0) {
+    return line(`${s.treks} ${s.treks === 1 ? "trek" : "treks"} led here`);
   }
-  return { stars: null, count: 0, text: "No reviews yet" };
+  if (s.years && s.years > 0) {
+    return line(`${s.years} ${s.years === 1 ? "year" : "years"} guiding`);
+  }
+  // The licence is the floor, and it is never nothing: it is the one thing
+  // this platform exists to have checked.
+  if (s.tier && s.tier > 0) return line("Licensed, and we have met them");
+  return line(null);
 }
 
 /** "4.9" — one decimal, always, so a column of them lines up. */

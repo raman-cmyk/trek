@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ratingLine, reviewsLabel, starText } from "./card-rating";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { langLabel } from "~/components/public/cards";
 
 describe("ratingLine", () => {
   it("shows the rating when there is one", () => {
@@ -20,14 +21,18 @@ describe("ratingLine", () => {
   });
 
   it("falls back to experience, which is true and useful", () => {
-    expect(ratingLine(null, 14).text).toBe("New here · 14 years guiding");
-    expect(ratingLine(undefined, 1).text).toBe("New here · 1 year guiding");
+    // Was "New here · 14 years guiding". "New here" was doing the same job
+    // as "No reviews yet" in nicer clothes — it led with the weakness.
+    expect(ratingLine(null, 14).text).toBe("14 years guiding");
+    expect(ratingLine(undefined, 1).text).toBe("1 year guiding");
   });
 
-  it("says so plainly when there is nothing at all", () => {
-    expect(ratingLine(null, 0).text).toBe("No reviews yet");
-    expect(ratingLine(null, null).text).toBe("No reviews yet");
-    expect(ratingLine(null).text).toBe("No reviews yet");
+  it("says nothing at all when there is nothing at all", () => {
+    // Deliberately not a sentence. See the ladder in card-rating.ts: an
+    // empty line costs us less than an apology.
+    expect(ratingLine(null, 0).text).toBeNull();
+    expect(ratingLine(null, null).text).toBeNull();
+    expect(ratingLine(null).text).toBeNull();
   });
 
   it("never invents a number", () => {
@@ -69,7 +74,7 @@ describe("reviewsLabel", () => {
 /**
  * The fallback line needs a column, and a column is easy to lose.
  *
- * "New here · 14 years guiding" only appears if the loader actually selected
+ * "14 years guiding" only appears if the loader actually selected
  * guide_years_experience. It shipped once without it, on all four pages, and
  * nothing failed — every review-less card just quietly read "No reviews yet",
  * including for guides with a twenty-year career. There is no type error and
@@ -103,5 +108,76 @@ describe("the pages that render an OfferingCard", () => {
     const selects = src.match(/"id, slug, kind[^"]*guide_tier[^"]*"/g) ?? [];
     expect(selects.length).toBeGreaterThan(0);
     for (const s of selects) expect(s).toContain("guide_years_experience");
+  });
+});
+
+describe("the line never argues against the guide", () => {
+  it("never says 'no reviews' — a browse page printed that thirty times", () => {
+    const rungs = [
+      ratingLine(null, { treks: 8, years: 14, tier: 2 }),
+      ratingLine(null, { years: 14, tier: 2 }),
+      ratingLine(null, { tier: 2 }),
+      ratingLine(null, {}),
+      ratingLine({ value: 0, count: 0 }, { tier: 1 }),
+    ];
+    for (const l of rungs) {
+      expect((l.text ?? "").toLowerCase()).not.toContain("no review");
+      expect((l.text ?? "").toLowerCase()).not.toContain("be the first");
+      expect(l.stars === null || l.stars > 0).toBe(true);
+    }
+  });
+
+  it("prefers treks we watched to years we were told about", () => {
+    expect(ratingLine(null, { treks: 8, years: 14 }).text).toBe("8 treks led here");
+  });
+
+  it("falls back to the career when there are no platform treks", () => {
+    expect(ratingLine(null, { years: 14, tier: 2 }).text).toBe("14 years guiding");
+  });
+
+  it("falls back to the licence, which is never nothing", () => {
+    expect(ratingLine(null, { tier: 1 }).text).toBe("Licensed, and we have met them");
+  });
+
+  it("says nothing at all rather than something negative", () => {
+    expect(ratingLine(null, {}).text).toBeNull();
+    expect(ratingLine(null, { treks: 0, years: 0, tier: 0 }).text).toBeNull();
+  });
+
+  it("still accepts a bare number of years, for older call sites", () => {
+    expect(ratingLine(null, 14).text).toBe("14 years guiding");
+  });
+
+  it("singularises", () => {
+    expect(ratingLine(null, { treks: 1 }).text).toBe("1 trek led here");
+    expect(ratingLine(null, { years: 1 }).text).toBe("1 year guiding");
+  });
+
+  it("puts a real rating above all of it", () => {
+    const l = ratingLine({ value: 4.9, count: 12 }, { treks: 8 });
+    expect(l.stars).toBe(4.9);
+    expect(l.text).toBeNull();
+  });
+});
+
+describe("langLabel", () => {
+  it("does not cut a language in half", () => {
+    // "Nepali, English, S…" in a 211px card read as a broken page.
+    expect(langLabel(["Nepali", "English", "Sherpa"])).toBe("Nepali, English +1");
+  });
+
+  it("lists one or two in full", () => {
+    expect(langLabel(["Nepali"])).toBe("Nepali");
+    expect(langLabel(["Nepali", "English"])).toBe("Nepali, English");
+  });
+
+  it("counts the rest", () => {
+    expect(langLabel(["a", "b", "c", "d", "e"])).toBe("a, b +3");
+  });
+
+  it("is empty when there is nothing", () => {
+    expect(langLabel([])).toBe("");
+    expect(langLabel(undefined)).toBe("");
+    expect(langLabel(null)).toBe("");
   });
 });

@@ -10,13 +10,13 @@ import { TripIntentDialog } from "~/components/public/TripIntentDialog";
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const client = createPublicClient(env);
-  const [{ data: routes }, { data: faces }, { count: journalCount }, { user }] =
+  const [{ data: routes }, { data: faces }, { count: journalCount }, { data: led }, { user }] =
     await Promise.all([
       // region + altitude group the footer's route list; day_stops draws the
       // profile the footer's top edge is cut from.
       client
         .from("routes")
-        .select("slug, name, region, max_altitude_m, typical_days, day_stops")
+        .select("id, slug, name, region, max_altitude_m, typical_days, day_stops")
         .order("name"),
       // The face wall. Ordered by user_id rather than at random so the strip
       // is stable across a session — a footer that reshuffles on every
@@ -28,6 +28,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       client
         .from("public_journals")
         .select("id", { count: "exact", head: true }),
+      // Which routes anyone actually leads. The footer listed all 24, and
+      // Api Base Camp and Rara Lake have no guide on them — a link into a
+      // page with nothing to book, in the one place on the site that exists
+      // to send people somewhere useful.
+      client.from("public_offerings").select("route_id"),
       getSessionUser(request, env),
     ]);
   // Reflect the signed-in customer in the header (trips + sign out + unread).
@@ -65,7 +70,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return data(
     {
       origin: new URL(request.url).origin,
-      routes: routes ?? [],
+      // `routes` keeps every route for the pages that want the full atlas;
+      // the footer gets only the ones with a guide behind them.
+      routes: (() => {
+        const withGuide = new Set((led ?? []).map((o: any) => o.route_id));
+        const live = (routes ?? []).filter((r: any) => withGuide.has(r.id));
+        // If the offerings read failed we would silently empty the footer, so
+        // fall back to the full list rather than to nothing.
+        return live.length > 0 ? live : (routes ?? []);
+      })(),
       footer: {
         faces: (faces ?? []).map((g) => ({
           slug: g.slug,

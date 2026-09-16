@@ -42,6 +42,7 @@ import { Chip } from "~/components/design/Chip";
 import { PhotoCard } from "~/components/design/PhotoCard";
 import { GlassPill } from "~/components/design/Glass";
 import { KIND_GLYPH } from "~/components/public/cards";
+import { featuredReview } from "~/lib/featured-review";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -102,9 +103,9 @@ export async function loader({ context }: Route.LoaderArgs) {
         .order("sort"),
       client
         .from("public_reviews")
-        .select("id, overall, body, published_at, author_name, author_country")
+        .select("id, overall, body, published_at, author_name, author_country, offering_slug")
         .order("published_at", { ascending: false })
-        .limit(4),
+        .limit(40),
       // Same helper /fund uses — the two numbers must never disagree.
       fundCollected(createAdminClient(env), { sinceStartDate: yearStart }),
       // Proof of life: the most recent treks anyone actually walked.
@@ -146,6 +147,11 @@ export async function loader({ context }: Route.LoaderArgs) {
     })(),
     openRunsByGuide(client, { from: today, to: weekEnd }, ids),
   ]);
+
+  // What kind of trip each review is about, for picking the featured one.
+  const kindBySlug = new Map<string, string>(
+    ((offerings ?? []) as any[]).map((o) => [o.slug, o.kind]),
+  );
 
   // Which guides lead which region — the region rows and "women guiding
   // Annapurna" both need it, and it's one pass over data we already have.
@@ -372,7 +378,15 @@ export async function loader({ context }: Route.LoaderArgs) {
     ratings,
     langMap,
     splitOffering,
-    review: (reviews ?? [])[0] ?? null,
+    // Not the newest — the most convincing. The newest was 4.0 stars about a
+    // yoga class, on a page selling a fortnight at altitude. The kind comes
+    // from the offerings this page already has in hand, mapped by slug.
+    review: featuredReview(
+      ((reviews ?? []) as any[]).map((r) => ({
+        ...r,
+        kind: kindBySlug.get(r.offering_slug) ?? null,
+      })),
+    ),
     journals: (journals ?? []) as PublicJournal[],
     // Four real guides for the numbers band. "49 verified guides" is an
     // abstraction; four people looking at you is the argument this company
@@ -500,7 +514,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           { glyph: "pin", value: String(stats.districts), label: "home districts" },
           { glyph: "mountain", value: stats.treksLed.toLocaleString("en-US"), label: "treks led" },
           { glyph: "spark", value: mr(stats.fundUsdCents), label: "to The Fund this year", href: "/fund" },
-          { glyph: "altitude", value: mr(0), label: "taken on rescue flights", href: "/safety", summit: true },
+          // "taken on rescue flights" left a reader asking taken from whom,
+          // by whom, and why a currency symbol is on it. The claim underneath
+          // is the strongest one on the row — Nepal has a documented
+          // helicopter-evacuation kickback problem, and we earn nothing when
+          // a trekker is flown out, so nobody here has a reason to call one
+          // early. That is only worth printing if it says so.
+          { glyph: "altitude", value: mr(0), label: "earned by us from rescue flights", href: "/safety", summit: true },
         ]}
       />
 
