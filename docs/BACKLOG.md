@@ -72,3 +72,31 @@ What the real thing needs, roughly in order:
 Read the demand first: `select count(*) from email_log where kind =
 'insurance_interest'` says how many people asked, before any of the above is
 worth paying for.
+
+## The other eighteen ops pages still swallow their errors
+
+`app/lib/ops.server.ts` (`rows`, `one`, `write`) was written after the second
+time this area shipped a silently-empty screen, and applied to one page. It is
+now on `/ops/pipeline` and `/ops/bookings/:id` too, and
+`app/lib/ops-pages.test.ts` has grown a read-side ratchet to match its
+write-side one: `LEGACY_SILENT_READS` records every remaining page's count of
+`const { data } = await admin...`, the test fails if any goes up, and a new
+ops page cannot swallow an error at all. That file's own header listed the
+swallowed read as failure #1 and never checked for it.
+
+Eighteen pages are still on the old pattern — the budget list in that test is
+the worklist, worst first:
+
+    ops.people.$id.tsx           5     ops.routes.$slug.page.tsx    5
+    ops.experiences.$id.tsx      3     ops.journals.$id.tsx         3
+    ops.people.tsx               2     ops.routes.$slug.tsx         2
+    …and ten list pages with one each.
+
+Converting one is a ten-minute job: swap the destructure for the helper,
+**render** the error it returns, lower the number, delete the entry at zero.
+The detail pages matter most — a refused read there shows an empty Documents
+panel on a real trek, which is the passport check silently not happening.
+
+`ops.login.tsx`, `ops.users.tsx` and `ops.users.enter.tsx` read the auth
+server rather than a table and already branch on failure; their counts are
+shape, not bug.

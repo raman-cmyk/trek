@@ -3106,3 +3106,57 @@ off a real browser render against the production database at 1440px and
 390px, on all four journals that exist — and with JavaScript disabled, where
 the day index still has its fourteen links and `#day-10` still lands 96px
 down, clear of the sticky strip.
+
+---
+
+## 2026-09-16 — Pratik's three empty ops screens
+
+Three screenshots: `/ops/users` reporting "0 accounts", `/ops/pipeline` with
+six empty columns, and a live trek opening as a 404. These are, word for word,
+the three failures already written down in `docs/OPS-PAGES.md` and in the
+header of `app/lib/ops.server.ts` as having shipped before.
+
+**What production actually holds**, read with the service-role key:
+
+    users (auth accounts)   72
+    bookings                35   — 11 completed, 11 confirmed, 9 cancelled,
+                                   2 pending_deposit, 1 active, 1 docs_pending
+    the booking he opened   exists, status `active`
+
+So the board should show 2 / 0 / 1 / 11 / 1 / 11 and nine cancelled badges.
+
+**I could not reproduce any of the three.** I ran each page's literal select
+string — copied out of the route, not paraphrased — against the same database
+with the same key: the pipeline's returns 35 rows, the booking detail's
+returns its 1 row, `listUsers` returns 72 accounts. Every column the queries
+name exists. My first theory (the `guides(users(...))` embed being ambiguous —
+twelve tables join guides and users, so it is a plausible PostgREST refusal)
+is wrong: that select works. The live worker is several commits behind, so the
+likeliest answer is simply that it is stale.
+
+Which is the actual problem, and it is not a query: **these pages cannot tell
+anyone why they are empty.** I spent a dozen steps guessing at a cause the
+screen already knew and had thrown away. So:
+
+- `/ops/pipeline` reads through `rows()` and renders the failure above the
+  board; its status-advance button goes through `write()` and reports a
+  refused update instead of reloading unchanged, which reads as a dead button.
+- `/ops/bookings/:id` separates "no such booking" from "the query failed" —
+  the 404 now fires only when the read succeeded and found nothing — and its
+  seven panel reads go through `rows()`/`one()` with one line naming any that
+  failed. An empty Documents panel on a real trek is the passport check
+  silently not happening.
+- `app/lib/ops-pages.test.ts` already ratcheted the write side. Its header
+  listed the swallowed *read* as failure #1 and never checked for it, so it
+  has a `LEGACY_SILENT_READS` ratchet now: eighteen pages with their counts
+  recorded, failing if any rises, and zero allowed on anything new. Plus
+  three assertions specific to these bugs — that a captured error is
+  rendered and not just stored, and that a refused query is never answered
+  with a 404.
+
+Eighteen pages are still on the old pattern; the list is in that test and the
+worklist is in `docs/BACKLOG.md`, worst first (`ops.people.$id` and
+`ops.routes.$slug.page` at five each).
+
+Green: 1,344 tests in 89 files, typecheck clean, `npm run build` passing.
+Still not deployed — no Cloudflare credential in this session.

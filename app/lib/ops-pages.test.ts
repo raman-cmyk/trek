@@ -48,11 +48,53 @@ const LEGACY_SILENT_WRITES = new Set([
   "ops.people.$id.tsx",
   "ops.people.tsx",
   "ops.permits.tsx",
-  "ops.pipeline.tsx",
   "ops.routes.$slug.page.tsx",
   "ops.routes.tsx",
   "ops.users.tsx",
 ]);
+
+/**
+ * Pages that predate app/lib/ops.server.ts and still swallow READ errors,
+ * with how many each has.
+ *
+ * This is failure #1 in the header above — the one that said "0 accounts" on
+ * a site with 72 — and until now this file named it and did not check for it.
+ * Numbers, not names, because a page with five unsafe reads becomes safe one
+ * read at a time and the ratchet should hold at every step.
+ *
+ * Only ever lower these. Delete the entry at zero.
+ */
+const LEGACY_SILENT_READS: Record<string, number> = {
+  // Detail pages first: a refused read here shows an empty panel on a real
+  // record — an empty Documents list is the passport check not happening.
+  "ops.people.$id.tsx": 5,
+  "ops.routes.$slug.page.tsx": 5,
+  "ops.users.tsx": 5,
+  "ops.bookings.$id.tsx": 3,
+  "ops.experiences.$id.tsx": 3,
+  "ops.journals.$id.tsx": 3,
+  "ops.people.tsx": 2,
+  "ops.routes.$slug.tsx": 2,
+  "ops.data.tsx": 1,
+  "ops.events.tsx": 1,
+  "ops.experiences.new.tsx": 1,
+  "ops.experiences.tsx": 1,
+  "ops.journals.tsx": 1,
+  "ops.moderation.tsx": 1,
+  "ops.payouts.tsx": 1,
+  "ops.permits.tsx": 1,
+  "ops.search.tsx": 1,
+  "ops.verifications.tsx": 1,
+  // These two read the auth server rather than a table and already branch on
+  // failure. The count is the shape of the call, not the bug.
+  "ops.login.tsx": 4,
+  "ops.users.enter.tsx": 1,
+};
+
+/** `const { data ... } = await ...` — the error discarded on the same line. */
+function silentReads(src: string): number {
+  return (src.match(/const\s*\{\s*data\b/g) ?? []).length;
+}
 
 /**
  * A write whose result nobody looks at.
@@ -90,6 +132,44 @@ describe("ops pages report their failures", () => {
       ).toEqual([]);
     });
   }
+
+  for (const f of opsFiles) {
+    const allowed = LEGACY_SILENT_READS[f] ?? 0;
+    it(`${f} keeps the reason a read failed`, () => {
+      expect(
+        silentReads(read(f)),
+        `${f}: use rows()/one() from ~/lib/ops.server and render the error, so an empty screen can say why it is empty`,
+      ).toBeLessThanOrEqual(allowed);
+    });
+  }
+
+  it("the read allowlist only shrinks", () => {
+    for (const [f, allowed] of Object.entries(LEGACY_SILENT_READS)) {
+      expect(opsFiles, `${f} is allowlisted but no longer exists — remove it`).toContain(f);
+      const n = silentReads(read(f));
+      expect(n, `${f} is down to ${n} unsafe reads — lower its number in LEGACY_SILENT_READS`).toBe(
+        allowed,
+      );
+    }
+  });
+
+  it("puts a captured error on the page rather than storing it", () => {
+    // A held error nobody displays is still a silent failure.
+    for (const f of ["ops.pipeline.tsx", "ops.bookings.$id.tsx", "ops.incidents.tsx"]) {
+      const src = read(f);
+      expect(src, `${f} captures the reason`).toMatch(/loadError|listError/);
+      expect(src, `${f} renders it`).toMatch(/\{\s*(loadError|listError)\s*\}/);
+    }
+  });
+
+  it("never answers a refused query with a 404", () => {
+    // "Not found" is an answer about the record, not about the database, and
+    // opening a live trek used to give it for both.
+    const src = read("ops.bookings.$id.tsx");
+    const notFound = src.indexOf("status: 404");
+    expect(notFound).toBeGreaterThan(-1);
+    expect(src.slice(0, notFound)).toMatch(/if \(booking\.error\) throw/);
+  });
 
   it("the allowlist only shrinks", () => {
     for (const f of LEGACY_SILENT_WRITES) {

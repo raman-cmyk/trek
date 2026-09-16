@@ -11,61 +11,102 @@ import { generateContractForBooking } from "~/lib/contracts.server";
 import { issueTimsCard } from "~/lib/tims.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { Badge, Panel } from "~/components/ops/ui";
+import { one, rows } from "~/lib/ops.server";
 import { formatUsd } from "~/lib/pricing";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { admin, headers } = await requireOps(request, env);
-  const { data: b } = await admin
-    .from("bookings")
-    .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
-    )
-    .eq("id", params.id)
-    .maybeSingle();
-  if (!b) throw new Response("Not found", { status: 404 });
-  const [{ data: docs }, { data: permits }, { data: contract }, { data: tims }, { data: instalments }, { data: payments }, { data: checkins }] = await Promise.all([
-    admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
-    admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
+  // A booking that is not there and a query the database refused are two
+  // different answers, and this page used to give the same one to both: a
+  // 404. Opening a live trek and being told it does not exist is how that
+  // reads, and it is in docs/OPS-PAGES.md as one of the three failures this
+  // area has shipped.
+  const booking = await one<any>(
     admin
-      .from("contracts")
-      .select("id, title, body_rendered, status, company_signed_at, guide_signed_at, company_signatory")
-      .eq("booking_id", b.id)
+      .from("bookings")
+      .select(
+        "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+      )
+      .eq("id", params.id)
       .maybeSingle(),
-    admin.from("tims_cards").select("card_no, status, issued_at").eq("booking_id", b.id).maybeSingle(),
-    admin
-      .from("instalments")
-      .select("seq, amount_usd_cents, due_date, status, paid_at")
-      .eq("booking_id", b.id)
-      .order("seq"),
-    admin
-      .from("payments")
-      .select("type, amount_usd_cents, status, created_at")
-      .eq("booking_id", b.id)
-      .order("created_at"),
+    "this booking",
+  );
+  if (booking.error) throw new Response(booking.error, { status: 500 });
+  const b = booking.row;
+  if (!b) throw new Response("Not found", { status: 404 });
+  const [docs, permits, contract, tims, instalments, payments, checkins] = await Promise.all([
+    rows<any>(
+      admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
+      "this trek's documents",
+    ),
+    rows<any>(
+      admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
+      "the permits",
+    ),
+    one<any>(
+      admin
+        .from("contracts")
+        .select("id, title, body_rendered, status, company_signed_at, guide_signed_at, company_signatory")
+        .eq("booking_id", b.id)
+        .maybeSingle(),
+      "the contract",
+    ),
+    one<any>(
+      admin.from("tims_cards").select("card_no, status, issued_at").eq("booking_id", b.id).maybeSingle(),
+      "the TIMS card",
+    ),
+    rows<any>(
+      admin
+        .from("instalments")
+        .select("seq, amount_usd_cents, due_date, status, paid_at")
+        .eq("booking_id", b.id)
+        .order("seq"),
+      "the instalments",
+    ),
+    rows<any>(
+      admin
+        .from("payments")
+        .select("type, amount_usd_cents, status, created_at")
+        .eq("booking_id", b.id)
+        .order("created_at"),
+      "the payments",
+    ),
     // The safety record. Guides walk out of signal for days and fill those
     // days in when they get back down, so the day a check-in is *about* and
     // the day it arrived are different questions — and for due diligence the
     // office has to be able to see which.
-    admin
-      .from("checkins")
-      .select("day, method, note, received_at")
-      .eq("booking_id", b.id)
-      .order("day"),
+    rows<any>(
+      admin
+        .from("checkins")
+        .select("day, method, note, received_at")
+        .eq("booking_id", b.id)
+        .order("day"),
+      "the check-ins",
+    ),
   ]);
+  // One line naming whichever panels could not be read. A blank Documents
+  // panel on a trek whose passports are the thing you came to check is the
+  // failure mode this whole file is guarding against.
+  const loadError =
+    [docs, permits, contract, tims, instalments, payments, checkins]
+      .map((r) => r.error)
+      .filter(Boolean)
+      .join(" ") || null;
   return data(
     {
       booking: b,
-      documents: docs ?? [],
-      permits: permits ?? [],
-      contract,
-      tims,
-      instalments: instalments ?? [],
-      payments: payments ?? [],
+      loadError,
+      documents: docs.rows,
+      permits: permits.rows,
+      contract: contract.row,
+      tims: tims.row,
+      instalments: instalments.rows,
+      payments: payments.rows,
       // One row per day of the trek so far, in order — a gap reads as a gap
       // only when it sits between the days either side of it.
       safety: [
-        ...(checkins ?? []).map((c: any) => ({
+        ...checkins.rows.map((c: any) => ({
           day: c.day as string,
           note: c.note as string | null,
           late: wasLate(c.day, c.received_at),
@@ -75,7 +116,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           b.start_date,
           b.end_date,
           new Date().toISOString().slice(0, 10),
-          (checkins ?? []).map((c: any) => c.day),
+          checkins.rows.map((c: any) => c.day),
         ).map((day) => ({ day, note: null, late: false, receivedAt: null })),
       ].sort((x, y) => x.day.localeCompare(y.day)),
     },
@@ -198,7 +239,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits, contract, tims, instalments, payments, safety } =
+  const { booking: b, documents, permits, contract, tims, instalments, payments, safety, loadError } =
     loaderData as any;
   const meta = b.insurance_meta ?? {};
   const insuranceOk = meta.altitude && meta.helicopter;
@@ -209,6 +250,14 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
         <span>/</span>
         <span className="text-ink">{b.offering?.title}</span>
       </div>
+
+      {/* Which panels below are empty because there is nothing in them, and
+          which are empty because the read failed. */}
+      {loadError && (
+        <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {loadError}
+        </p>
+      )}
 
       {/* A rejection refused for want of a reason has to say so somewhere the
           eye lands, not inside the panel that scrolled away. */}

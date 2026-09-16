@@ -3,6 +3,7 @@ import type { Route } from "./+types/ops.pipeline";
 import { Badge } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+import { rows, write } from "~/lib/ops.server";
 import { createPayoutForBooking } from "~/lib/booking.server";
 
 // Happy-path pipeline columns (docs/01 F1). Cancellations shown separately.
@@ -45,13 +46,19 @@ const STAMP: Record<string, string | undefined> = {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { admin, headers } = await requireOps(request, env);
-  const { data: bookings } = await admin
-    .from("bookings")
-    .select(
-      "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
-    )
-    .order("start_date");
-  return data({ bookings: bookings ?? [] }, { headers });
+  // Through `rows` rather than a bare destructure: this board reported an
+  // empty pipeline on a platform with thirty-five live bookings, and it could
+  // not say why, because the reason was discarded one line after it arrived.
+  const bookings = await rows<any>(
+    admin
+      .from("bookings")
+      .select(
+        "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
+      )
+      .order("start_date"),
+    "the bookings",
+  );
+  return data({ bookings: bookings.rows, loadError: bookings.error }, { headers });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -63,19 +70,41 @@ export async function action({ request, context }: Route.ActionArgs) {
   const patch: Record<string, unknown> = { status: next };
   const stamp = STAMP[next];
   if (stamp) patch[stamp] = new Date().toISOString();
-  await admin.from("bookings").update(patch).eq("id", id);
+  // Looked at, not fired and forgotten. A refused update used to reload the
+  // board unchanged, which reads to the person clicking as a button that does
+  // nothing — so they click it again.
+  const moved = await write(
+    admin.from("bookings").update(patch).eq("id", id),
+    `moving this booking to ${LABELS[next] ?? next}`,
+  );
+  if (!moved.ok) return data({ error: moved.error }, { status: 500, headers });
   // Completion is when the guide gets paid — record the payout ledger row.
   if (next === "completed") await createPayoutForBooking(admin, id);
   return data({ ok: true }, { headers });
 }
 
-export default function OpsPipeline({ loaderData }: Route.ComponentProps) {
+export default function OpsPipeline({ loaderData, actionData }: Route.ComponentProps) {
   const bookings = loaderData.bookings as any[];
+  const loadError = (loaderData as any).loadError as string | null;
+  const actionError = (actionData as any)?.error as string | null | undefined;
   const byStatus = (s: string) => bookings.filter((b) => b.status === s);
 
   return (
     <div className="space-y-4">
       <h1 className="font-display text-2xl">Booking pipeline</h1>
+
+      {/* Six empty columns and six empty columns look identical, so say which
+          one this is. */}
+      {loadError && (
+        <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {loadError}
+        </p>
+      )}
+      {actionError && (
+        <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {actionError}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {COLUMNS.map((col) => {
           const cards = byStatus(col);
@@ -127,7 +156,7 @@ export default function OpsPipeline({ loaderData }: Route.ComponentProps) {
                 ))}
                 {cards.length === 0 && (
                   <p className="px-1 py-4 text-center text-xs text-ink-soft">
-                    —
+                    {loadError ? "?" : "—"}
                   </p>
                 )}
               </div>
@@ -142,7 +171,7 @@ export default function OpsPipeline({ loaderData }: Route.ComponentProps) {
 }
 
 function CancelledStrip({ bookings }: { bookings: any[] }) {
-  const cancelled = bookings.filter((b) => b.status.startsWith("cancelled"));
+  const cancelled = bookings.filter((b) => String(b.status ?? "").startsWith("cancelled"));
   if (cancelled.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2">
