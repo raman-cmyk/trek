@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Form } from "react-router";
 import { cn } from "~/lib/cn";
+import { DateField } from "~/components/public/DateField";
 
 /**
  * The browse search bar: free text + a date range, on one row.
@@ -80,24 +81,22 @@ export function BrowseSearch({
           <span className="shrink-0 basis-full text-caption text-muted sm:basis-auto">
             {dateLabel}
           </span>
-          <input
-            type="date"
+          <DateField
             name="from"
             defaultValue={from}
             min={today}
-            aria-label={`${dateLabel} — first day`}
-            className="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-ink outline-none"
+            placeholder="From"
+            className="w-full min-w-0 bg-transparent py-2 font-mono text-sm text-ink outline-none"
           />
           <span aria-hidden="true" className="text-muted">
             –
           </span>
-          <input
-            type="date"
+          <DateField
             name="to"
             defaultValue={to}
             min={from || today}
-            aria-label={`${dateLabel} — last day`}
-            className="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm text-ink outline-none"
+            placeholder="To"
+            className="w-full min-w-0 bg-transparent py-2 font-mono text-sm text-ink outline-none"
           />
         </div>
 

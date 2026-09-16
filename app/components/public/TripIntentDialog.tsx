@@ -192,7 +192,10 @@ export function TripIntentDialog({ signedIn }: { signedIn: boolean }) {
                   name="start"
                   value={start}
                   onChange={(e) => setStart(e.target.value)}
-                  className="w-full rounded-md border border-line bg-card px-3 py-2 text-sm outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
+                  // See .date-quiet in app.css: an empty date input prints
+                  // "dd/mm/yyyy" under a label that already says "Arrive".
+                  data-empty={start ? undefined : "true"}
+                  className="date-quiet w-full rounded-md border border-line bg-card px-3 py-2 text-sm outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
                 />
               </label>
               <label className="block">
@@ -203,7 +206,8 @@ export function TripIntentDialog({ signedIn }: { signedIn: boolean }) {
                   value={end}
                   min={start || undefined}
                   onChange={(e) => setEnd(e.target.value)}
-                  className="w-full rounded-md border border-line bg-card px-3 py-2 text-sm outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
+                  data-empty={end ? undefined : "true"}
+                  className="date-quiet w-full rounded-md border border-line bg-card px-3 py-2 text-sm outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
                 />
               </label>
             </div>

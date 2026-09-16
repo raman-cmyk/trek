@@ -1,4 +1,5 @@
 import { Form } from "react-router";
+import { DateField } from "~/components/public/DateField";
 
 /**
  * The hero search: where · when · how many. A plain GET to /experiences, which
@@ -54,11 +55,11 @@ export function HeroSearch({
           <label className={label} htmlFor="hero-from">
             Setting off
           </label>
-          <input
+          <DateField
             id="hero-from"
-            type="date"
             name="from"
             min={today}
+            placeholder="Any date"
             className={`${field} font-mono text-sm`}
           />
         </div>

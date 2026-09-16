@@ -666,3 +666,26 @@ a, button, input, select, textarea, label, summary {
     animation: none !important;
   }
 }
+
+/* ── An empty date input, without the dd/mm/yyyy ─────────────────────────────
+   Chrome renders the format inside an empty date field, in placeholder grey,
+   which under a real label reads as broken scaffolding rather than as an
+   empty field. Ours all carry their own label, so the hint is redundant.
+
+   Only the EMPTY and UNFOCUSED state is hidden. The moment the field is
+   focused or holds a value the native editor is fully visible — hiding a date
+   somebody had chosen would be far worse than the noise we are removing. The
+   calendar button stays put, so the field still looks like a date field.
+
+   `data-empty` is kept accurate by DateField; without JavaScript the
+   server-rendered value decides, which is correct on first paint. */
+.date-quiet[data-empty="true"]:not(:focus)::-webkit-datetime-edit {
+  opacity: 0;
+}
+.date-quiet[data-empty="true"]:not(:focus) {
+  color: transparent;
+}
+.date-quiet:focus,
+.date-quiet:not([data-empty="true"]) {
+  color: inherit;
+}
