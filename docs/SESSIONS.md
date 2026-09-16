@@ -3158,5 +3158,24 @@ Eighteen pages are still on the old pattern; the list is in that test and the
 worklist is in `docs/BACKLOG.md`, worst first (`ops.people.$id` and
 `ops.routes.$slug.page` at five each).
 
+**Deployed** — version `39ccf1b0`, the first deploy from this session. The
+previous one was `2116a607` at 23:42 the night before, so everything from
+today (the journey page included) had been sitting on the branch unreleased.
+Verified live afterwards: the journey page's chapters, day index, mid-page
+offer and metadata-below-the-title all render, with zero uppercase captions;
+`/routes/everest-base-camp` now carries the altitude warning it was silently
+missing; and ten pages including the three ops screens return 200.
+
+Worth noting for the ops three: Pratik's screenshots are watermarked **11
+Sep**, five days before this session. Migrations 0066–0068 and a long run of
+fixes landed in between, and today's database answers all three of those
+pages' queries correctly. So they were most likely already fixed. What was
+not fixed is that nobody could have told — which is the part this commit
+addresses.
+
+The worker has five secrets set: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SITE_URL`, `CRON_SECRET`. There is no
+`RESEND_API_KEY`, no `STRIPE_*` and no `SPARROW_SMS_TOKEN`, which confirms
+from the platform side that no email or SMS has ever been delivered.
+
 Green: 1,344 tests in 89 files, typecheck clean, `npm run build` passing.
-Still not deployed — no Cloudflare credential in this session.
