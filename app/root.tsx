@@ -18,6 +18,7 @@ import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 import { CurrencyProvider } from "~/lib/currency-context";
+import { CHUNK_RECOVERY_SCRIPT } from "~/lib/chunk-recovery";
 
 export const links: Route.LinksFunction = () => [];
 
@@ -27,8 +28,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* The site had no icon of any kind. Browsers ask for /favicon.ico
+            without being told to, so that was a 404 in the console on every
+            page of the site, and every tab, bookmark and phone home screen
+            showed a blank sheet for a company whose entire argument is that
+            you can trust it. The .ico is there for that automatic request;
+            the SVG is what a modern browser actually draws. */}
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/site.webmanifest" />
+        <meta name="theme-color" content="#1b3b2a" />
         <Meta />
         <Links />
+        {/* Must be inline and before the bundles: a module that 404s never
+            runs, so only a classic script already executing can notice that
+            the page's JavaScript is missing. See chunk-recovery.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY_SCRIPT }} />
       </head>
       <body>
         {children}

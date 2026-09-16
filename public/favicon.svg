@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Guides of Nepal">
+  <!-- The mark: a ridgeline, in the brand's own greens. Two peaks rather than
+       one, because a single triangle is every outdoor logo ever made, and the
+       notch between them is what reads as Himalaya at 16 pixels. -->
+  <rect width="64" height="64" rx="14" fill="#1b3b2a"/>
+  <path d="M8 46 L23 22 L32 35 L41 18 L56 46 Z" fill="#dff08a"/>
+  <path d="M41 18 L47 29 L38 31 Z" fill="#fbf9f3" opacity="0.92"/>
+  <path d="M23 22 L28 30 L19 31 Z" fill="#fbf9f3" opacity="0.75"/>
+</svg>
