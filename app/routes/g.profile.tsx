@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/g.profile";
+import { write, writeAll } from "~/lib/ops.server";
 import { getEnv } from "~/lib/supabase.server";
 import { bucketObjectPath } from "~/lib/avatar";
 import { requireUser } from "~/lib/auth.server";
@@ -102,12 +103,23 @@ export async function action({ request, context }: Route.ActionArgs) {
   // sends nothing at all.
   if (intent === "skills") {
     const chosen = parseSkills(form.getAll("skill"));
-    await admin.from("guide_skills").delete().eq("guide_id", user.id);
-    if (chosen.length) {
-      await admin
-        .from("guide_skills")
-        .insert(chosen.map((skill) => ({ guide_id: user.id, skill })));
-    }
+    const saved = await writeAll([
+      {
+        query: admin.from("guide_skills").delete().eq("guide_id", user.id),
+        what: "your skills",
+      },
+      ...(chosen.length
+        ? [
+            {
+              query: admin
+                .from("guide_skills")
+                .insert(chosen.map((skill) => ({ guide_id: user.id, skill }))),
+              what: "your skills",
+            },
+          ]
+        : []),
+    ]);
+    if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
     return data({ ok: true }, { headers });
   }
 
@@ -116,7 +128,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === "emergency") {
     const parsed = parseEmergency(form);
     if (!parsed.ok) return data({ error: parsed.error }, { status: 400, headers });
-    await admin.from("users").update(emergencyPatch(parsed.value)).eq("id", user.id);
+    const saved = await write(
+      admin.from("users").update(emergencyPatch(parsed.value)).eq("id", user.id),
+      "your emergency contact",
+    );
+    if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
     return data({ ok: true }, { headers });
   }
 
@@ -135,7 +151,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     const acctName = String(form.get("payout_account_name") ?? "").trim();
     if (acctName) patch.payout_account_name = acctName;
     if (Object.keys(patch).length) {
-      await admin.from("guides").update(patch).eq("user_id", user.id);
+      const saved = await write(
+        admin.from("guides").update(patch).eq("user_id", user.id),
+        "your rate and payout details",
+      );
+      if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
     }
     return data({ ok: "Saved." }, { headers });
   }
@@ -146,10 +166,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === "story") {
     const bio = String(form.get("bio") ?? "").trim().slice(0, 4000);
     const hook = String(form.get("hook_line") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
-    await admin
-      .from("guides")
-      .update({ bio: bio || null, hook_line: hook || null })
-      .eq("user_id", user.id);
+    const saved = await write(
+      admin
+        .from("guides")
+        .update({ bio: bio || null, hook_line: hook || null })
+        .eq("user_id", user.id),
+      "your words about yourself",
+    );
+    if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
     return data({ ok: "Saved. This is on your profile now." }, { headers });
   }
 
@@ -166,7 +190,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (["female", "male", "other"].includes(gender)) patch.gender = gender;
     const exp = String(form.get("licence_expiry") ?? "").trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(exp)) patch.licence_expiry = exp;
-    await admin.from("guides").update(patch).eq("user_id", user.id);
+    const saved = await write(
+      admin.from("guides").update(patch).eq("user_id", user.id),
+      "your profile",
+    );
+    if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
     return data({ ok: "Saved." }, { headers });
   }
 
