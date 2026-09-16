@@ -75,6 +75,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         guideCount: (faces ?? []).length,
         journalCount: journalCount ?? 0,
         routeCount: (routes ?? []).length,
+        // Whether the footer may claim a card is accepted. Read from the
+        // worker's own config rather than a constant, so the claim appears
+        // the day payment works and not a day before.
+        paymentsLive: Boolean(env.STRIPE_PUBLISHABLE_KEY),
       },
       account,
     },

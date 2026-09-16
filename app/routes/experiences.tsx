@@ -10,6 +10,7 @@ import { escapeLike, openRunsByGuide, parseRange } from "~/lib/browse.server";
 import { fmtDateShort } from "~/lib/format";
 import { Chip } from "~/components/design/Chip";
 import { KIND_GLYPH } from "~/components/public/cards";
+import { BookingAssurance } from "~/components/public/BookingAssurance";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -309,6 +310,8 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
           ))}
         </div>
       )}
+
+      <BookingAssurance className="mt-16" />
     </main>
   );
 }

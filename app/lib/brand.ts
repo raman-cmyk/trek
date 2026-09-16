@@ -24,3 +24,14 @@ export const COMPANY_NAME = `${BRAND} — ${LEGAL_ENTITY}`;
  * does not get.
  */
 export const SMS_PREFIX = "Guides of Nepal";
+
+/**
+ * Where to follow this.
+ *
+ * Empty on purpose, and the footer renders nothing while it is: a link to an
+ * Instagram account that does not exist is worse than no link, because the
+ * first thing a trekker deciding whether to trust us with a deposit finds is
+ * a 404 with our name on it. Add the handles that are real, leave out the
+ * ones that are not, and the block appears.
+ */
+export const SOCIAL: { label: string; href: string }[] = [];

@@ -17,6 +17,7 @@ import { findIntent, matchesKeywords } from "~/lib/intents";
 import { membersOf } from "~/lib/categories";
 import { fmtDateShort } from "~/lib/format";
 import { Chip, ChipRow, Glyph } from "~/components/design/Chip";
+import { BookingAssurance } from "~/components/public/BookingAssurance";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -420,6 +421,8 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
           ))}
         </div>
       )}
+
+      <BookingAssurance className="mt-16" />
     </main>
   );
 }

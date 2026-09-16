@@ -9,6 +9,7 @@ import { TierBadge } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { cn } from "~/lib/cn";
 import { Glyph } from "~/components/design/Chip";
+import { BookingAssurance } from "~/components/public/BookingAssurance";
 
 const REGIONS: Region[] = ["Khumbu", "Annapurna", "Langtang", "Manaslu"];
 const LANGUAGES = ["English", "German", "Spanish", "Hindi", "French"];
@@ -264,6 +265,8 @@ export default function Match({ loaderData }: Route.ComponentProps) {
           </ul>
         </section>
       )}
+
+      <BookingAssurance className="mt-16" />
     </main>
   );
 }

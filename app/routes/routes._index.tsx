@@ -19,6 +19,7 @@ import {
   type SortKey,
 } from "~/lib/route-cards";
 import { Glyph } from "~/components/design/Chip";
+import { BookingAssurance } from "~/components/public/BookingAssurance";
 
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
@@ -387,6 +388,10 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           </Link>
         </div>
       </section>
+
+      <div className="mx-auto max-w-6xl px-4">
+        <BookingAssurance className="mt-16" />
+      </div>
     </main>
   );
 }

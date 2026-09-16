@@ -100,3 +100,46 @@ panel on a real trek, which is the passport check silently not happening.
 `ops.login.tsx`, `ops.users.tsx` and `ops.users.enter.tsx` read the auth
 server rather than a table and already branch on failure; their counts are
 shape, not bug.
+
+## Referrals and gift cards: what a 5.9% margin can actually pay
+
+Pratik suggested a gift-card block on the home page, to pull in referrals from
+friends and family. The founder's instinct was right — "we dont have massive
+margins so we need to figure out what we can give out". Here are the numbers,
+from `TREK_FEE_PCT`, `FUND_PCT` and `estimateStripeFeeUsdCents` in this repo:
+
+    package                     we charge   our fee    Fund    Stripe   NET TO US
+    Momo crawl (day)               $50.85     $4.50   $1.35     $1.77       $2.73
+    Poon Hill, 5 days             $621.50    $55.00  $16.50    $18.32      $36.68
+    Annapurna Circuit, 14 days   $1297.33   $114.81  $34.44    $37.92      $76.89
+    Everest Base Camp, 14 days   $1469.00   $130.00  $39.00    $42.90      $87.10
+
+**Net is ~5.9% of gross on every trek**, because the fee is 10% and Stripe
+takes 2.9% + 30¢ of the whole charge, not of our slice. The package is the
+guide's in full and the Fund's 3% is not ours to spend.
+
+So the Withlocals-style €50 gift card is **65% of the entire margin** on a
+fortnight in the Khumbu, and **eighteen times** the margin on a momo crawl. A
+$25/$25 two-sided referral is 65% of a trek's margin. Even $15/$15 is 39%.
+Cash referrals do not fit in this business as priced.
+
+What does fit, roughly in order of how cheap it is:
+
+1. **Credit, not cash, and only on completion.** A $20 credit redeemable on a
+   future booking costs nothing unless it produces a second booking — which
+   earns another ~$77. Pay it when the referred trek *completes*, so a
+   cancellation never costs us. This is the recommendation.
+2. **A Fund donation in their name.** We already collect 3% for the Guide
+   Emergency Fund. "We put $20 in the Fund in your friend's name" is on-brand,
+   is a real thing happening, and reads better than a discount code.
+3. **Guide-funded.** The guide holds the $1,148, not us. A guide may well give
+   2% for a seat they would not have filled — but that is their decision to
+   offer, not ours to spend, and it has to be opt-in per guide.
+4. **Non-cash and ours to give**: first refusal on a specific guide's dates, a
+   free insurance check, the printed day-by-day map.
+
+**Gift cards are blocked regardless**, and not on margin: the worker has no
+`STRIPE_*` secrets, so nothing on this platform can take money yet. A "Buy a
+gift card" button would be a form that cannot charge. Sequence is Stripe
+first, then credits (which need a ledger — issue, balance, expiry, and a
+redemption that cannot go negative), then gift cards on top of that ledger.

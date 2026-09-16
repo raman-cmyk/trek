@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 import { SmartImage } from "~/components/SmartImage";
+import { SOCIAL } from "~/lib/brand";
+import { paymentNote } from "~/lib/assurance";
 
 /**
  * The end of the trail.
@@ -28,6 +30,12 @@ export interface FooterData {
   guideCount: number;
   journalCount: number;
   routeCount: number;
+  /**
+   * Whether the worker has Stripe keys. Decides whether the accepted-cards
+   * row exists at all — see `paymentNote`. Not a design flag: it is the
+   * difference between a true statement and a false one.
+   */
+  paymentsLive: boolean;
 }
 
 interface FooterRoute {
@@ -177,8 +185,32 @@ export function Footer({
                   </li>
                 ))}
               </ul>
+
+              {/* Follow us. Absent until there is something real to follow —
+                  see SOCIAL in lib/brand. */}
+              {SOCIAL.length > 0 && (
+                <>
+                  <p className="mt-6 text-sm font-medium text-paper">Follow us</p>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {SOCIAL.map((s) => (
+                      <li key={s.href}>
+                        <a
+                          href={s.href}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="hover:text-fern"
+                        >
+                          {s.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           </div>
+
+          <AcceptedPayment live={Boolean(data?.paymentsLive)} />
         </div>
 
         <div className="border-t border-fern/20 py-4">
@@ -188,6 +220,42 @@ export function Footer({
         </div>
       </div>
     </footer>
+  );
+}
+
+/**
+ * What we take, and who holds the card.
+ *
+ * Every competitor runs a wall of payment badges down here, and it is the
+ * easiest row on a website to leave lying: half of theirs are region-specific
+ * methods (Klarna, iDEAL) that a US entity charging in dollars never gets,
+ * and all of them keep claiming a card is accepted long after a key rotates.
+ *
+ * So this is words rather than logos, from one list in lib/assurance, and it
+ * does not render at all until the worker actually has Stripe keys. A trekker
+ * reading "we accept Visa" and then finding no checkout is a worse first
+ * impression than reading nothing.
+ */
+function AcceptedPayment({ live }: { live: boolean }) {
+  const p = paymentNote(live);
+  if (!p.show) return null;
+  return (
+    <div className="mt-8 border-t border-fern/20 pt-6">
+      <p className="text-sm font-medium text-paper">What we accept</p>
+      <ul className="mt-2 flex flex-wrap gap-2">
+        {[...p.networks, ...p.wallets].map((m) => (
+          <li
+            key={m}
+            className="rounded border border-fern/30 px-2 py-1 text-xs text-sage"
+          >
+            {m}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-sage/80">
+        {p.note} Payments are processed by {p.processor}.
+      </p>
+    </div>
   );
 }
 
