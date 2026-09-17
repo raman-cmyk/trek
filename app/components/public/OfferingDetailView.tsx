@@ -10,6 +10,7 @@ import {
   computeExperiencePricing,
   recompose,
   porterCostOf,
+  splitAmounts,
   hasBreakdown,
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
@@ -310,15 +311,12 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               </div>
 
               <div className="mt-4">
+                {/* By bucket, not by position — see splitAmounts. Read
+                    positionally this threw on any trip with fewer than six
+                    priced lines, and silently mislabelled the money on any
+                    itemised trip with more. */}
                 <ExperienceSplit
-                  amounts={{
-                    guide: pricing.lines[0].amountUsdCents,
-                    permits: pricing.lines[1].amountUsdCents,
-                    porters: pricing.lines[2].amountUsdCents,
-                    logistics: pricing.lines[3].amountUsdCents,
-                    trek: pricing.lines[4].amountUsdCents,
-                    fund: pricing.lines[5].amountUsdCents,
-                  }}
+                  amounts={splitAmounts(pricing)}
                   total={pricing.perPersonUsdCents}
                   showAmounts
                 />

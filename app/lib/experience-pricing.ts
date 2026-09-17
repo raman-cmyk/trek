@@ -221,6 +221,47 @@ export function computeExperiencePricing(
  * toggles at checkout. Kept out of the headline so a price is never quoted
  * including something the traveller has not chosen.
  */
+/**
+ * The six amounts the split bar draws, taken by meaning rather than position.
+ *
+ * `computeExperiencePricing` returns lines in two different shapes. A trip
+ * priced from rollup totals returns exactly six, in a known order. A trip
+ * priced from its own itemised lines returns one per line the guide wrote,
+ * plus an optional season row, plus our fee and the Fund — a length nobody can
+ * predict.
+ *
+ * The trip page read them as `lines[0]` … `lines[5]`. On a trip whose guide
+ * had written three lines that is `lines[3].amountUsdCents` on undefined — a
+ * 500, which is what "Langtang Valley Experience" did the moment it was
+ * created. On an itemised trip with six or more lines it did not crash; it
+ * quietly drew the third line's money under "Porters" and the fourth under
+ * "Teahouse & logistics", whatever they actually were.
+ *
+ * Buckets are the thing that survives both shapes, so buckets are what this
+ * adds up. Our fee and the Fund carry no bucket and are found by key.
+ */
+export function splitAmounts(pricing: { lines: PricingLine[] }): {
+  guide: number;
+  permits: number;
+  porters: number;
+  logistics: number;
+  trek: number;
+  fund: number;
+} {
+  const byBucket = (b: PriceBucket) =>
+    pricing.lines.reduce((sum, l) => (l.bucket === b ? sum + l.amountUsdCents : sum), 0);
+  const byKey = (k: string) =>
+    pricing.lines.reduce((sum, l) => (l.key === k ? sum + l.amountUsdCents : sum), 0);
+  return {
+    guide: byBucket("guide"),
+    permits: byBucket("permits"),
+    porters: byBucket("porters"),
+    logistics: byBucket("logistics"),
+    trek: byKey("trek"),
+    fund: byKey("fund"),
+  };
+}
+
 export function addOns(
   bd: PriceBreakdown,
   groupSize: number,
