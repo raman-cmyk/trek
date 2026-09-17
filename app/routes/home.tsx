@@ -17,6 +17,7 @@ import { Stars } from "~/components/public/bits";
 import { SmartImage } from "~/components/SmartImage";
 import { HeroSearch } from "~/components/public/HeroSearch";
 import { AscentStats } from "~/components/public/AscentStats";
+import { toCardOffering } from "~/lib/card-offering";
 import { TrailAtlas } from "~/components/public/TrailAtlas";
 import { fanOut } from "~/lib/atlas";
 import { DISTRICT_CENTRES } from "~/lib/geo";
@@ -399,7 +400,11 @@ export async function loader({ context }: Route.LoaderArgs) {
   return {
     categoryRows: categoryRowsOut,
     rows,
-    experiences,
+    // Trimmed to what a card draws. Each of these used to ship its summary
+    // (no card shows one) and its whole price_breakdown, so the browser could
+    // recompute a price the server already had — 165 KB of a 407 KB page, and
+    // CPU the worker does not have to spare. See card-offering.ts.
+    experiences: experiences.map(toCardOffering),
     freeThisWeek: freeThisWeek.slice(0, 8).map(pick),
     freeThisWeekTotal: freeThisWeek.length,
     freeRuns,

@@ -34,17 +34,20 @@ export interface PublicOffering {
   slug: string;
   kind: string;
   title: string;
-  summary: string;
+  summary?: string;
   days: number;
-  price_usd_cents: number | null;
-  price_breakdown: PriceBreakdown | null;
+  price_usd_cents?: number | null;
+  price_breakdown?: PriceBreakdown | null;
   max_party?: number | null;
   cover_photo_url: string | null;
   guide_slug: string;
   guide_name: string;
   guide_avatar_url: string | null;
   guide_tier: number;
-  guide_day_rate_usd_cents: number | null;
+  /** Optional: declared for years and drawn by nothing. A trimmed card row
+      does not carry it, and the price it used to feed is now computed on the
+      server (card-offering.ts). */
+  guide_day_rate_usd_cents?: number | null;
   /** Carries the "New here · 14 years guiding" line when there are no reviews. */
   guide_years_experience?: number | null;
   route_slug?: string | null;
@@ -52,6 +55,8 @@ export interface PublicOffering {
   /** Selected only where they are displayed — the compare table. */
   included?: string[] | null;
   meeting_point?: string | null;
+  /** Set by toCardOffering; the browser then needs no price_breakdown. */
+  from_usd_cents?: number | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -96,7 +101,13 @@ export function offeringPath(o: { kind: string; slug: string }) {
   return o.kind === "trek" ? `/treks/${o.slug}` : `/experiences/${o.slug}`;
 }
 
-export function offeringFromUsdCents(o: PublicOffering): number | null {
+export function offeringFromUsdCents(
+  o: PublicOffering & { from_usd_cents?: number | null },
+): number | null {
+  // Already worked out on the server (card-offering.ts), which is how the
+  // browser is spared a price_breakdown per card. Undefined means the caller
+  // has not been trimmed yet, which is different from a trip with no price.
+  if (o.from_usd_cents !== undefined) return o.from_usd_cents;
   // The figure the trip page will quote when somebody lands on it.
   //
   // This used to price the guide fee split four ways while the page opens at

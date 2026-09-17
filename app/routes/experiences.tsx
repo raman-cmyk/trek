@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { guideRatings } from "~/lib/ratings.server";
+import { toCardOffering } from "~/lib/card-offering";
 import type { Route } from "./+types/experiences";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
@@ -162,7 +163,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   return {
     ratings,
-    offerings: offerings as PublicOffering[],
+    // Trimmed for the same reason as the homepage — see card-offering.ts.
+    offerings: offerings.map(toCardOffering),
     total: totalCount ?? offerings.length,
     kind,
     filters: { q, from: range?.from ?? "", to: range?.to ?? "", party },
