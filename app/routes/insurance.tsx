@@ -6,6 +6,7 @@ import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { getSessionUser } from "~/lib/auth.server";
 import { evaluatePolicy, altitudeThresholdM, type PolicyAnswers } from "~/lib/insurance";
 import { cn } from "~/lib/cn";
+import { INSURERS, policyNoProblem, resolveInsurer } from "~/lib/validate";
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return pageMeta({
@@ -58,7 +59,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const admin = createAdminClient(env);
   const { data: b } = await admin
     .from("bookings")
-    .select("id")
+    .select("id, offering:offerings(route:routes(max_altitude_m))")
     .eq("id", bookingId)
     .eq("trekker_id", user.id)
     .maybeSingle();
@@ -71,13 +72,49 @@ export async function action({ request, context }: Route.ActionArgs) {
     repatriation: form.get("repatriation") === "1",
     datesCovered: form.get("datesCovered") === "1",
   };
+
+  // The qualification gate, on the server, where it belongs.
+  //
+  // The five cover answers are hidden inputs written by React state, and this
+  // action used to take them on trust — the only thing stopping an
+  // unqualifying policy being attested was that the browser did not render the
+  // form. A hand-made POST could declare anything, and what it declared became
+  // the record the office verifies against and the TIMS card is issued on.
+  const maxAltitudeM = (b as any).offering?.route?.max_altitude_m ?? null;
+  const verdict = evaluatePolicy(meta, { maxAltitudeM });
+  if (!verdict.qualifies) {
+    return data(
+      {
+        error: `This policy does not cover ${verdict.missingRequired.join(" or ").toLowerCase()}.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Who the insurer is, resolved to the list's own spelling. Free text is how
+  // eleven bookings came to carry four insurers, two of which are the same
+  // company one letter apart.
+  const insurer = resolveInsurer(form.get("provider") as string, form.get("provider_other") as string);
+  const policy = policyNoProblem(form.get("policy_no") as string);
+  if (!insurer.ok || policy) {
+    return data(
+      { error: [insurer.ok ? null : insurer.problem.message, policy?.message].filter(Boolean).join(" ") },
+      { status: 400 },
+    );
+  }
+
   await admin
     .from("bookings")
     .update({
-      insurance_provider: String(form.get("provider") ?? "").trim() || null,
-      insurance_policy_no: String(form.get("policy_no") ?? "").trim() || null,
+      insurance_provider: insurer.name,
+      insurance_policy_no: String(form.get("policy_no") ?? "").trim(),
       insurance_meta: meta,
       insurance_attested_at: new Date().toISOString(),
+      // A fresh declaration is a fresh answer to a refusal, so the refusal is
+      // over — the office is being asked to look again.
+      insurance_rejected_at: null,
+      insurance_rejected_reason: null,
+      insurance_rejected_by: null,
     })
     .eq("id", b.id);
   return data({ saved: true });
@@ -94,6 +131,8 @@ const QUESTIONS: { key: keyof PolicyAnswers; q: string; hint: string }[] = [
 export default function Insurance({ loaderData }: Route.ComponentProps) {
   const { ctx, partner } = loaderData;
   const fetcher = useFetcher<{ saved?: boolean; error?: string }>();
+  // Which insurer is picked, so the "which one?" box can appear for Other.
+  const [insurer, setInsurer] = useState("");
   const [ans, setAns] = useState<PolicyAnswers>({
     altitude: false,
     helicopter: false,
@@ -220,10 +259,41 @@ export default function Insurance({ loaderData }: Route.ComponentProps) {
               {(Object.keys(ans) as (keyof PolicyAnswers)[]).map((k) => (
                 <input key={k} type="hidden" name={k} value={ans[k] ? "1" : "0"} />
               ))}
+              {/* A picker, not a text box. Free text gave us "wolrd nomads"
+                  and "world nomads" as two different insurers on four
+                  bookings each. */}
               <div className="grid gap-3 sm:grid-cols-2">
-                <input name="provider" placeholder="Insurer (e.g. World Nomads)" className="rounded-md border border-line px-3 py-2 text-sm" />
-                <input name="policy_no" placeholder="Policy number" className="rounded-md border border-line px-3 py-2 text-sm" />
+                <select
+                  name="provider"
+                  required
+                  defaultValue=""
+                  onChange={(e) => setInsurer(e.currentTarget.value)}
+                  className="rounded-md border border-line bg-white px-3 py-2 text-sm"
+                >
+                  <option value="" disabled>
+                    Who is your policy with?
+                  </option>
+                  {INSURERS.map((i) => (
+                    <option key={i.key} value={i.key}>
+                      {i.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  name="policy_no"
+                  required
+                  placeholder="Policy number"
+                  className="rounded-md border border-line px-3 py-2 text-sm"
+                />
               </div>
+              {insurer === "other" && (
+                <input
+                  name="provider_other"
+                  required
+                  placeholder="Which insurer?"
+                  className="w-full rounded-md border border-line px-3 py-2 text-sm"
+                />
+              )}
               <button className="rounded-md bg-moss px-5 py-2.5 font-medium text-white hover:bg-pine">
                 Save to my trip
               </button>
