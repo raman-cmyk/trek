@@ -3,7 +3,7 @@ import type { Route } from "./+types/ops.bookings.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { emergencyLine } from "~/lib/emergency";
 import { requireOps } from "~/lib/supabase.server";
-import { verifyDocument, rejectDocument, signedDocumentUrl } from "~/lib/documents.server";
+import { verifyDocument, rejectDocument } from "~/lib/documents.server";
 import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
 import { fmtDate } from "~/lib/format";
 import { missingDays, wasLate } from "~/lib/checkin";
@@ -203,12 +203,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
-  if (intent === "view") {
-    const documentId = String(form.get("document_id"));
-    const url = await signedDocumentUrl(admin, documentId, user.id);
-    return data({ url }, { headers });
-  }
-
   if (intent === "gen_contract") {
     await generateContractForBooking(admin, params.id!);
     return data({ ok: true }, { headers });
@@ -301,16 +295,21 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                         <p className="text-xs text-ink-soft">{d.person_name}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {(actionData as any)?.url && (
-                          <a href={(actionData as any).url} target="_blank" rel="noreferrer" className="text-xs text-primary">
-                            open
-                          </a>
-                        )}
-                        <Form method="post">
-                          <input type="hidden" name="intent" value="view" />
-                          <input type="hidden" name="document_id" value={d.id} />
-                          <button className="rounded border border-border px-2 py-1 text-xs">View</button>
-                        </Form>
+                        {/* A plain link to the redirect route, so one click
+                            opens the document. It used to be a form that
+                            posted, put the signed URL in the page, and drew an
+                            "open" link — two clicks, and the link was drawn on
+                            EVERY row from one shared value, so opening the
+                            passport then clicking "open" beside the insurance
+                            showed the passport again. */}
+                        <a
+                          href={`/ops/doc/booking/${d.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded border border-border px-2 py-1 text-xs hover:bg-mist"
+                        >
+                          View
+                        </a>
                         {state === "verified" ? (
                           <Badge tone="green">verified</Badge>
                         ) : (

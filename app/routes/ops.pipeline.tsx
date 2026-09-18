@@ -1,29 +1,18 @@
-import { Form, data } from "react-router";
+import { Form, Link, data, useSearchParams } from "react-router";
 import type { Route } from "./+types/ops.pipeline";
 import { Badge } from "~/components/ops/ui";
 import { formatUsd } from "~/lib/pricing";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { rows, write } from "~/lib/ops.server";
 import { createPayoutForBooking } from "~/lib/booking.server";
-
-// Happy-path pipeline columns (docs/01 F1). Cancellations shown separately.
-const COLUMNS = [
-  "pending_deposit",
-  "deposit_paid",
-  "docs_pending",
-  "confirmed",
-  "active",
-  "completed",
-] as const;
-
-const LABELS: Record<string, string> = {
-  pending_deposit: "Pending deposit",
-  deposit_paid: "Deposit paid",
-  docs_pending: "Docs pending",
-  confirmed: "Confirmed",
-  active: "Active",
-  completed: "Completed",
-};
+import {
+  BOARDS,
+  COLUMN_LABELS,
+  COLUMN_NOTES,
+  boardFor,
+  byColumn,
+  type BoardKey,
+} from "~/lib/ops-pipeline";
 
 // The next status a booking advances to (walk it through every state).
 const NEXT: Record<string, string | null> = {
@@ -49,11 +38,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // Through `rows` rather than a bare destructure: this board reported an
   // empty pipeline on a platform with thirty-five live bookings, and it could
   // not say why, because the reason was discarded one line after it arrived.
+  //
+  // permit_applications comes along because the board now has a column the
+  // booking's own status cannot fill: a trek is `confirmed` from the moment
+  // its papers are verified until the day it walks, so only the applications
+  // say whether anyone has filed a permit.
   const bookings = await rows<any>(
     admin
       .from("bookings")
       .select(
-        "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title)",
+        "id, status, start_date, end_date, party_size, total_usd_cents, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(users(full_name)), offering:offerings(title, kind), permit_applications(status)",
       )
       .order("start_date"),
     "the bookings",
@@ -75,7 +69,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   // nothing — so they click it again.
   const moved = await write(
     admin.from("bookings").update(patch).eq("id", id),
-    `moving this booking to ${LABELS[next] ?? next}`,
+    `moving this booking to ${COLUMN_LABELS[next] ?? next}`,
   );
   if (!moved.ok) return data({ error: moved.error }, { status: 500, headers });
   // Completion is when the guide gets paid — record the payout ledger row.
@@ -87,11 +81,46 @@ export default function OpsPipeline({ loaderData, actionData }: Route.ComponentP
   const bookings = loaderData.bookings as any[];
   const loadError = (loaderData as any).loadError as string | null;
   const actionError = (actionData as any)?.error as string | null | undefined;
-  const byStatus = (s: string) => bookings.filter((b) => b.status === s);
+  const [params] = useSearchParams();
+
+  const board: BoardKey = params.get("board") === "day" ? "day" : "treks";
+  const def = BOARDS.find((b) => b.key === board)!;
+  const columns = byColumn(bookings, board);
+
+  // Counted from the same rule that places the cards, so a tab can never
+  // advertise a number its board does not show.
+  const liveOn = (key: BoardKey) =>
+    Object.values(byColumn(bookings, key)).reduce((n, list) => n + list.length, 0);
 
   return (
     <div className="space-y-4">
       <h1 className="font-display text-2xl">Booking pipeline</h1>
+
+      {/* Two boards, because a momo crawl and fourteen days to Everest do not
+          have the same steps and one board has to name its columns vaguely
+          enough to cover both. Plain links, so this survives a reload and can
+          be bookmarked. */}
+      <div className="flex flex-wrap gap-2">
+        {BOARDS.map((b) => {
+          const on = b.key === board;
+          return (
+            <Link
+              key={b.key}
+              to={`?board=${b.key}`}
+              className={
+                "rounded-md border px-3 py-2 text-sm transition " +
+                (on
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-border text-ink-soft hover:border-primary/50 hover:text-ink")
+              }
+            >
+              <span className="font-medium">{b.label}</span>
+              <span className="ml-2 text-xs opacity-70">{liveOn(b.key)}</span>
+              <span className="block text-[11px] opacity-70">{b.note}</span>
+            </Link>
+          );
+        })}
+      </div>
 
       {/* Six empty columns and six empty columns look identical, so say which
           one this is. */}
@@ -105,17 +134,32 @@ export default function OpsPipeline({ loaderData, actionData }: Route.ComponentP
           {actionError}
         </p>
       )}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {COLUMNS.map((col) => {
-          const cards = byStatus(col);
+
+      {/* One track per column on a wide screen, wrapping down to two on a
+          phone. The count comes from the board, since the two boards do not
+          have the same number of columns. */}
+      <div
+        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
+        style={{ ["--cols" as any]: def.columns.length }}
+      >
+        {def.columns.map((col) => {
+          const cards = columns[col] ?? [];
           return (
             <div key={col} className="rounded-lg border border-border bg-card">
-              <header className="flex items-center justify-between border-b border-border px-3 py-2">
-                <span className="text-sm font-medium">{LABELS[col]}</span>
-                <span className="text-xs text-ink-soft">{cards.length}</span>
+              <header className="border-b border-border px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{COLUMN_LABELS[col]}</span>
+                  <span className="text-xs text-ink-soft">{cards.length}</span>
+                </div>
+                {/* A column called "Permits pending" beside one called
+                    "Docs pending" needs one line saying which papers are
+                    which, or the office guesses. */}
+                <p className="mt-0.5 text-[11px] leading-snug text-ink-soft">
+                  {COLUMN_NOTES[col]}
+                </p>
               </header>
               <div className="space-y-2 p-2">
-                {cards.map((b) => (
+                {cards.map((b: any) => (
                   <div
                     key={b.id}
                     className="rounded-md border border-border/70 bg-surface p-2 text-xs"
@@ -128,29 +172,33 @@ export default function OpsPipeline({ loaderData, actionData }: Route.ComponentP
                     </a>
                     <p className="mt-1 text-ink-soft">
                       {b.trekker?.full_name}
-                      {b.trekker?.country_code
-                        ? ` · ${b.trekker.country_code}`
-                        : ""}
+                      {b.trekker?.country_code ? ` · ${b.trekker.country_code}` : ""}
                     </p>
-                    <p className="text-ink-soft">
-                      guide {b.guide?.users?.full_name ?? "—"}
-                    </p>
+                    <p className="text-ink-soft">guide {b.guide?.users?.full_name ?? "—"}</p>
                     <p className="mt-1 text-ink-soft">
-                      {b.start_date} · {b.party_size}p ·{" "}
-                      {formatUsd(b.total_usd_cents)}
+                      {b.start_date} · {b.party_size}p · {formatUsd(b.total_usd_cents)}
                     </p>
-                    {NEXT[b.status] && (
-                      <Form method="post" className="mt-2">
-                        <input type="hidden" name="bookingId" value={b.id} />
-                        <input
-                          type="hidden"
-                          name="next"
-                          value={NEXT[b.status]!}
-                        />
-                        <button className="w-full rounded border border-border bg-card px-2 py-1 text-xs font-medium hover:border-primary hover:text-primary">
-                          → {LABELS[NEXT[b.status]!]}
-                        </button>
-                      </Form>
+                    {col === "permits_pending" ? (
+                      // The status is already `confirmed`; what is missing
+                      // is permits, and permits are filed on their own page.
+                      // A "→ Active" button here would say the work was
+                      // done.
+                      <Link
+                        to="/ops/permits"
+                        className="mt-2 block rounded border border-border bg-card px-2 py-1 text-center text-xs font-medium hover:border-primary hover:text-primary"
+                      >
+                        File the permits
+                      </Link>
+                    ) : (
+                      NEXT[b.status] && (
+                        <Form method="post" className="mt-2">
+                          <input type="hidden" name="bookingId" value={b.id} />
+                          <input type="hidden" name="next" value={NEXT[b.status]!} />
+                          <button className="w-full rounded border border-border bg-card px-2 py-1 text-xs font-medium hover:border-primary hover:text-primary">
+                            → {COLUMN_LABELS[NEXT[b.status]!]}
+                          </button>
+                        </Form>
+                      )
                     )}
                   </div>
                 ))}
@@ -161,17 +209,21 @@ export default function OpsPipeline({ loaderData, actionData }: Route.ComponentP
                 )}
               </div>
             </div>
-          );
+        );
         })}
       </div>
 
-      <CancelledStrip bookings={bookings} />
+      <CancelledStrip bookings={bookings} board={board} />
     </div>
   );
 }
 
-function CancelledStrip({ bookings }: { bookings: any[] }) {
-  const cancelled = bookings.filter((b) => String(b.status ?? "").startsWith("cancelled"));
+function CancelledStrip({ bookings, board }: { bookings: any[]; board: BoardKey }) {
+  const cancelled = bookings.filter(
+    (b) =>
+      String(b.status ?? "").startsWith("cancelled") &&
+      boardFor(b.offering?.kind ?? null) === board,
+  );
   if (cancelled.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2">

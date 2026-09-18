@@ -2,7 +2,7 @@ import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.permits";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { getEnv, requireOps } from "~/lib/supabase.server";
-import { signedPermitScanUrl, uploadPermitScan } from "~/lib/documents.server";
+import { uploadPermitScan } from "~/lib/documents.server";
 import { fmtDate } from "~/lib/format";
 import {
   bySoonest,
@@ -139,13 +139,6 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // ── Open one ──────────────────────────────────────────────────────────
-  if (intent === "view") {
-    const url = await signedPermitScanUrl(admin, String(form.get("id")));
-    return url
-      ? data({ url }, { headers })
-      : data({ error: "Nothing attached to that one." }, { status: 404, headers });
-  }
-
   // ── Move a permit along ───────────────────────────────────────────────
   const id = String(form.get("id"));
   const status = String(form.get("status"));
@@ -332,13 +325,18 @@ export default function OpsPermits({ loaderData, actionData }: Route.ComponentPr
                     <td className="py-3">
                       {r.scan_path ? (
                         <div className="space-y-1">
-                          <Form method="post">
-                            <input type="hidden" name="intent" value="view" />
-                            <input type="hidden" name="id" value={r.id} />
-                            <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
-                              View
-                            </button>
-                          </Form>
+                          {/* Was a form posting a "view" intent whose result
+                              nothing on this page ever rendered, so the button
+                              did nothing at all. Same redirect route the
+                              booking page uses. */}
+                          <a
+                            href={`/ops/doc/permit/${r.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block rounded border border-border px-2 py-1 text-xs hover:bg-mist"
+                          >
+                            View
+                          </a>
                           <p className="text-[11px] text-ink-soft">
                             attached {fmtDate(r.scan_uploaded_at)}
                           </p>

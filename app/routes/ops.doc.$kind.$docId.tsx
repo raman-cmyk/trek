@@ -1,6 +1,10 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/ops.doc.$kind.$docId";
-import { signedDocumentUrl, signedGuideDocumentUrl } from "~/lib/documents.server";
+import {
+  signedDocumentUrl,
+  signedGuideDocumentUrl,
+  signedPermitScanUrl,
+} from "~/lib/documents.server";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 
 /**
@@ -22,7 +26,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       ? await signedGuideDocumentUrl(admin, params.docId!, user.id, "ops_review")
       : params.kind === "booking"
         ? await signedDocumentUrl(admin, params.docId!, user.id)
-        : null;
+        : params.kind === "permit"
+          ? await signedPermitScanUrl(admin, params.docId!)
+          : null;
 
   if (!url) throw new Response("That document is gone.", { status: 404 });
   return redirect(url);
