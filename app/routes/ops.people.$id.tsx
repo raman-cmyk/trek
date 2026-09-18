@@ -1,6 +1,7 @@
 import { Form, Link, data, useNavigation, useSearchParams } from "react-router";
 import type { Route } from "./+types/ops.people.$id";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
+import { ChecklistPanel } from "~/components/ops/ChecklistPanel";
 import { Button } from "~/components/Button";
 import { cn } from "~/lib/cn";
 import { fmtDate, statusLabel } from "~/lib/format";
@@ -227,10 +228,39 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const avail = (availRes as any).data ?? [];
 
+  // The office's own list for this guide (0105). Nothing before they are a
+  // guide, and nothing invented: the six papers `guide_verifications` already
+  // holds tick themselves, and the rest is what only a person knows.
+  let tasks: any[] = [];
+  let otherLists: Array<{ key: string; name: string }> = [];
+  if (isGuide) {
+    const { listChecklists, listTasksFor, runChecklist, runningLists, syncGuideChecklist } =
+      await import("~/lib/checklists.server");
+    const subject = { type: "guide" as const, id };
+    const already = await runningLists(admin, subject);
+    // The core list starts itself; the trekking and day lists are started by
+    // ops, because nothing in the data says which kind of guide somebody is.
+    if (already.length === 0) {
+      await runChecklist(admin, {
+        type: "guide",
+        id,
+        createdAt: (guide as any)?.created_at ?? person?.created_at ?? null,
+      });
+    }
+    await syncGuideChecklist(admin, id);
+    tasks = await listTasksFor(admin, subject);
+    const running = new Set(await runningLists(admin, subject));
+    otherLists = (await listChecklists(admin, "guide"))
+      .filter((l) => l.active && !running.has(l.id))
+      .map((l) => ({ key: l.key, name: l.name }));
+  }
+
   return data(
     {
       person,
       isGuide,
+      tasks,
+      otherLists,
       guide,
       languages: (langRes as any).data ?? [],
       checks: [...((checksRes as any).data ?? [])].sort((a: any, b: any) =>
@@ -267,6 +297,32 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const intent = String(form.get("intent"));
   const str = (k: string) => String(form.get(k) ?? "").trim();
   const nul = (k: string) => str(k) || null;
+
+  // Their checklist — the same three intents as a trip's, handled the same way.
+  const { handleTaskIntent } = await import("~/lib/tasks.server");
+  const taskWrite = await handleTaskIntent(admin, { intent, subjectId: id, form, by: user.id });
+  if (taskWrite) {
+    return data(taskWrite.ok ? { ok: taskWrite.message } : { error: taskWrite.error }, {
+      status: taskWrite.ok ? 200 : 400,
+      headers,
+    });
+  }
+
+  // Ops starts another list on this guide — the trekking one, or the day one.
+  if (intent === "run_checklist") {
+    const { runChecklist } = await import("~/lib/checklists.server");
+    const res = await runChecklist(
+      admin,
+      { type: "guide", id },
+      str("checklist_key"),
+    );
+    if (!res.checklist) {
+      return data({ error: "We could not find that list." }, { status: 404, headers });
+    }
+    const { syncGuideChecklist } = await import("~/lib/checklists.server");
+    await syncGuideChecklist(admin, id);
+    return data({ ok: `${res.checklist.name} started.` }, { headers });
+  }
 
   if (intent === "profile") {
     const fullName = str("full_name");
@@ -1088,6 +1144,22 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                   </Form>
                 </div>
               </Panel>
+            )}
+
+            {/* The office's own list for this guide — the process steps a
+                verification record cannot hold: the introduction call, the
+                reference somebody actually rang, the porter welfare rules.
+                The six papers below tick themselves from it. */}
+            {d.isGuide && (
+              <div className="mb-4">
+                <ChecklistPanel
+                  tasks={d.tasks}
+                  title="Their checklist"
+                  today={new Date().toISOString().slice(0, 10)}
+                  available={d.otherLists}
+                  emptyNote="No list is running on this guide yet."
+                />
+              </div>
             )}
 
             {d.isGuide && (

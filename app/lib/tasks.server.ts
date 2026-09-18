@@ -12,7 +12,6 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { tasksFor } from "~/lib/task-template";
 
 export interface TripTask {
   id: string;
@@ -32,10 +31,20 @@ const SELECT =
   "id, key, stage, label, owner, done_when, due_on, state, done_at, waived_reason, note";
 
 /**
- * Make sure this booking has its tasks. Safe to call on every page load.
+ * Make sure this booking is running its checklist.
  *
- * Returns how many were added, which is 0 on all but the first call and after
- * the template grows.
+ * The list itself is no longer in this file. It is a template the office
+ * writes and edits at /ops/checklists (0105), picked by the offering's kind —
+ * a trek gets the trek list, a momo crawl gets the day list — so adding a
+ * step no longer needs a deploy by somebody who cannot deploy.
+ *
+ * Safe on every page load: it inserts what is missing and touches nothing
+ * that is there, so a row the office added this morning appears on every live
+ * trip without disturbing anything ticked yesterday.
+ *
+ * Generated when a booking is paid for rather than when it is enquired about.
+ * A trip nobody has put money on has no logistics, and thirty open tasks
+ * against it would bury the trips that do.
  */
 export async function generateTasks(
   admin: SupabaseClient,
@@ -55,38 +64,15 @@ export async function generateTasks(
     return { added: 0 };
   }
 
-  const specs = tasksFor((b as any).offering?.kind, {
+  const { runChecklist } = await import("~/lib/checklists.server");
+  const res = await runChecklist(admin, {
+    type: "booking",
+    id: bookingId,
+    appliesTo: (b as any).offering?.kind ?? null,
     startDate: (b as any).start_date,
-    bookedOn: String((b as any).created_at ?? "").slice(0, 10) || null,
+    createdAt: (b as any).created_at,
   });
-
-  const { data: existing } = await admin
-    .from("trip_tasks")
-    .select("key")
-    .eq("booking_id", bookingId);
-  const have = new Set((existing ?? []).map((t: any) => t.key));
-
-  const missing = specs.filter((s) => !have.has(s.key));
-  if (missing.length === 0) return { added: 0 };
-
-  const ins = await admin.from("trip_tasks").insert(
-    missing.map((s) => ({
-      booking_id: bookingId,
-      key: s.key,
-      stage: s.stage,
-      label: s.label,
-      owner: s.owner,
-      done_when: s.doneWhen,
-      due_on: s.dueOn,
-    })),
-  );
-  // Two page loads at once both see nothing and both insert; the unique index
-  // on (booking_id, key) is what actually decides, and losing that race is
-  // not an error worth showing anybody.
-  if (ins.error && !String(ins.error.message).includes("duplicate key")) {
-    return { added: 0 };
-  }
-  return { added: missing.length };
+  return { added: res.added };
 }
 
 export async function listTasks(
@@ -94,9 +80,10 @@ export async function listTasks(
   bookingId: string,
 ): Promise<TripTask[]> {
   const { data } = await admin
-    .from("trip_tasks")
+    .from("checklist_tasks")
     .select(SELECT)
-    .eq("booking_id", bookingId)
+    .eq("subject_type", "booking")
+    .eq("subject_id", bookingId)
     // Dated first, soonest first; the undated ones ("Daily", "As needed")
     // sit at the bottom where they belong rather than at the top where an
     // empty date would otherwise put them.
@@ -114,10 +101,10 @@ export interface TaskWrite {
 /** Tick one off. */
 export async function completeTask(
   admin: SupabaseClient,
-  args: { bookingId: string; taskId: string; by: string; note?: string | null },
+  args: { subjectId: string; taskId: string; by: string; note?: string | null },
 ): Promise<TaskWrite> {
   const upd = await admin
-    .from("trip_tasks")
+    .from("checklist_tasks")
     .update({
       state: "done",
       done_at: new Date().toISOString(),
@@ -128,7 +115,7 @@ export async function completeTask(
       waived_reason: null,
     })
     .eq("id", args.taskId)
-    .eq("booking_id", args.bookingId)
+    .eq("subject_id", args.subjectId)
     .select("label");
   if (upd.error || (upd.data ?? []).length === 0) {
     return { ok: false, error: "We could not find that task on this trip." };
@@ -139,13 +126,13 @@ export async function completeTask(
 /** Put it back. Somebody ticked the wrong row, which happens. */
 export async function reopenTask(
   admin: SupabaseClient,
-  args: { bookingId: string; taskId: string },
+  args: { subjectId: string; taskId: string },
 ): Promise<TaskWrite> {
   const upd = await admin
-    .from("trip_tasks")
+    .from("checklist_tasks")
     .update({ state: "open", done_at: null, done_by: null, waived_reason: null })
     .eq("id", args.taskId)
-    .eq("booking_id", args.bookingId)
+    .eq("subject_id", args.subjectId)
     .select("label");
   if (upd.error || (upd.data ?? []).length === 0) {
     return { ok: false, error: "We could not find that task on this trip." };
@@ -167,14 +154,14 @@ const MAX_REASON = 600;
  */
 export async function waiveTask(
   admin: SupabaseClient,
-  args: { bookingId: string; taskId: string; by: string; reason: string },
+  args: { subjectId: string; taskId: string; by: string; reason: string },
 ): Promise<TaskWrite> {
   const reason = args.reason.trim();
   if (reason.length < MIN_REASON) {
     return { ok: false, error: "Say why this one does not apply." };
   }
   const upd = await admin
-    .from("trip_tasks")
+    .from("checklist_tasks")
     .update({
       state: "waived",
       waived_reason: reason.slice(0, MAX_REASON),
@@ -182,7 +169,7 @@ export async function waiveTask(
       done_by: args.by,
     })
     .eq("id", args.taskId)
-    .eq("booking_id", args.bookingId)
+    .eq("subject_id", args.subjectId)
     .select("label");
   if (upd.error || (upd.data ?? []).length === 0) {
     return { ok: false, error: "We could not find that task on this trip." };
@@ -267,10 +254,41 @@ export async function syncDerivedTasks(
   if (keys.length === 0) return { ticked: [] };
 
   await admin
-    .from("trip_tasks")
+    .from("checklist_tasks")
     .update({ state: "done", done_at: new Date().toISOString() })
-    .eq("booking_id", bookingId)
+    .eq("subject_id", bookingId)
     .in("key", keys)
     .eq("state", "open");
   return { ticked: keys };
+}
+
+/**
+ * The three things anybody does to a task, from any page.
+ *
+ * The guide page, the experience page and the booking page all run the same
+ * checklists, so they answer the same three intents the same way rather than
+ * growing three copies of this.
+ */
+export async function handleTaskIntent(
+  admin: SupabaseClient,
+  args: { intent: string; subjectId: string; form: FormData; by: string },
+): Promise<TaskWrite | null> {
+  const taskId = String(args.form.get("task_id") ?? "");
+  const shared = { subjectId: args.subjectId, taskId };
+  if (args.intent === "task_done") {
+    return completeTask(admin, {
+      ...shared,
+      by: args.by,
+      note: String(args.form.get("note") ?? ""),
+    });
+  }
+  if (args.intent === "task_reopen") return reopenTask(admin, shared);
+  if (args.intent === "task_waive") {
+    return waiveTask(admin, {
+      ...shared,
+      by: args.by,
+      reason: String(args.form.get("reason") ?? ""),
+    });
+  }
+  return null;
 }

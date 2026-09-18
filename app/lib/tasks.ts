@@ -2,7 +2,8 @@
  * Reading a trip's checklist: what is done, what is late, what is next.
  *
  * Pure, so the trip page, the ops page and the pipeline card all answer the
- * question the same way. The rows come from `trip_tasks` (0103); the shapes
+ * question the same way. The rows come from `checklist_tasks` (0103, 0105);
+ * the shapes
  * here are the minimum those rows have to carry.
  */
 

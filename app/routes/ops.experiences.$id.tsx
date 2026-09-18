@@ -18,6 +18,7 @@ import {
 } from "~/lib/notifications.server";
 import { PAUSE_REASON_MAX, pausedFor } from "~/lib/pause";
 import { Badge } from "~/components/ops/ui";
+import { ChecklistPanel } from "~/components/ops/ChecklistPanel";
 import { firstName } from "~/lib/names";
 
 /**
@@ -52,8 +53,26 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .order("created_at", { ascending: false })
     .limit(20);
   const pauses = (history ?? []).filter((h: any) => h.changed?.status);
+
+  // Is this ready to be seen by a trekker in Berlin? There was no list for
+  // that at all — an experience went live when somebody pressed publish, and
+  // whether it had photographs or a price that added up was a matter of who
+  // looked (0105).
+  const { listTasksFor, runChecklist, syncOfferingChecklist } = await import(
+    "~/lib/checklists.server"
+  );
+  await runChecklist(admin, {
+    type: "offering",
+    id: params.id!,
+    appliesTo: (offering as any).kind,
+    createdAt: (offering as any).created_at,
+  });
+  await syncOfferingChecklist(admin, params.id!);
+  const tasks = await listTasksFor(admin, { type: "offering", id: params.id! });
+
   return data(
     {
+      tasks,
       offering: {
         ...offering,
         photos: (opsPhotos ?? []).map((p: any) => ({ url: p.url, alt: p.alt_text })),
@@ -71,6 +90,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const { user, admin, headers } = await requireOps(request, env);
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "save");
+
+  // Its go-live checklist — the same three intents as a trip's or a guide's.
+  const { handleTaskIntent } = await import("~/lib/tasks.server");
+  const taskWrite = await handleTaskIntent(admin, {
+    intent,
+    subjectId: params.id!,
+    form,
+    by: user.id,
+  });
+  if (taskWrite) {
+    return data(taskWrite.ok ? { ok: taskWrite.message } : { error: taskWrite.error }, {
+      status: taskWrite.ok ? 200 : 400,
+      headers,
+    });
+  }
 
   if (intent === "pause") {
     const res = await pauseOffering(admin, {
@@ -151,7 +185,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsExperienceEdit({ loaderData, actionData }: Route.ComponentProps) {
-  const { offering, routes, pauses, now } = loaderData as any;
+  const { offering, routes, pauses, now, tasks } = loaderData as any;
   const nav = useNavigation();
   return (
     <div className="max-w-2xl space-y-5">
@@ -179,6 +213,17 @@ export default function OpsExperienceEdit({ loaderData, actionData }: Route.Comp
       {actionData && "error" in actionData && (actionData as any).error && (
         <p className="rounded bg-ember/10 px-3 py-2 text-sm text-ember">{(actionData as any).error}</p>
       )}
+
+      {/* Is this ready for a trekker in Berlin? Above the approve button on
+          purpose: most of it the page can answer itself, and the rest —
+          the test booking, the price checked line by line — is what somebody
+          has to say they did. */}
+      <ChecklistPanel
+        tasks={tasks}
+        title="Ready to go live?"
+        today={now.slice(0, 10)}
+        emptyNote="No go-live list is running on this experience yet."
+      />
 
       {offering.status === "pending" && (
         <form method="post">

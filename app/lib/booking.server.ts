@@ -426,9 +426,10 @@ export async function advanceOnDepositPaid(admin: SupabaseClient, bookingId: str
 
   // The deposit itself is one of those tasks, and it is done by definition.
   await admin
-    .from("trip_tasks")
+    .from("checklist_tasks")
     .update({ state: "done", done_at: new Date().toISOString() })
-    .eq("booking_id", bookingId)
+    .eq("subject_type", "booking")
+    .eq("subject_id", bookingId)
     .eq("key", "deposit")
     .eq("state", "open");
 }

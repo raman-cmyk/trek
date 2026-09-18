@@ -43,6 +43,9 @@ function makeMock(store: any) {
         return api;
       },
       limit(n: number) { state.limit = n; return api; },
+      // Ordering is a no-op here: the store hands rows back in insertion
+      // order, which is what every caller under test wants anyway.
+      order() { return api; },
       maybeSingle() { state.single = true; return api; },
       single() { state.single = true; return api; },
       then(onF: any, onR: any) {
