@@ -46,6 +46,33 @@ export async function uploadDocument(
 }
 
 /**
+ * Ops removes a booking document.
+ *
+ * For the wrong file, the duplicate, the page of somebody else's passport —
+ * the office could add one and send one back, but never take one away, so a
+ * mistake stayed on the booking for ever and kept it out of "docs complete".
+ *
+ * The stored object goes first, then the access log (which has a foreign key
+ * to the row), then the row. Deleting the row while its file stayed in the
+ * bucket would leave a passport scan nobody can see and nobody can delete.
+ */
+export async function deleteBookingDocument(
+  admin: SupabaseClient,
+  documentId: string,
+): Promise<boolean> {
+  const { data: doc } = await admin
+    .from("booking_documents")
+    .select("storage_path")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (!doc) return false;
+  await admin.storage.from(BUCKET).remove([doc.storage_path]);
+  await admin.from("document_access_log").delete().eq("document_id", documentId);
+  await admin.from("booking_documents").delete().eq("id", documentId);
+  return true;
+}
+
+/**
  * Issue a short-lived signed URL for a document and log the access. Never logs
  * the URL itself. Caller must have authorised (ops, or the owning trekker).
  */

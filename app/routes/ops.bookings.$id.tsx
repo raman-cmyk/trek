@@ -3,16 +3,23 @@ import type { Route } from "./+types/ops.bookings.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { emergencyLine } from "~/lib/emergency";
 import { requireOps } from "~/lib/supabase.server";
-import { verifyDocument, rejectDocument } from "~/lib/documents.server";
+import {
+  verifyDocument,
+  rejectDocument,
+  uploadDocument,
+  deleteBookingDocument,
+} from "~/lib/documents.server";
 import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
 import { fmtDate } from "~/lib/format";
-import { missingDays, wasLate } from "~/lib/checkin";
+import { missingDays, wasLate, trekDay } from "~/lib/checkin";
 import { generateContractForBooking } from "~/lib/contracts.server";
 import { issueTimsCard } from "~/lib/tims.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { Badge, Panel } from "~/components/ops/ui";
 import { one, rows } from "~/lib/ops.server";
 import { formatUsd } from "~/lib/pricing";
+import { bookingBreakdown, payoutUsdCents } from "~/lib/booking-breakdown";
+import { hasBreakdown, computeExperiencePricing, addOns } from "~/lib/experience-pricing";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -26,7 +33,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, status, start_date, end_date, party_size, total_usd_cents, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+        "id, status, start_date, end_date, party_size, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, price_breakdown, route:routes(name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
       )
       .eq("id", params.id)
       .maybeSingle(),
@@ -41,7 +48,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       "this trek's documents",
     ),
     rows<any>(
-      admin.from("permit_applications").select("status, reference_no, permit:permits(name)").eq("booking_id", b.id),
+      admin
+        .from("permit_applications")
+        .select("id, status, reference_no, scan_path, permit:permits(name)")
+        .eq("booking_id", b.id),
       "the permits",
     ),
     one<any>(
@@ -203,6 +213,39 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // The office adds a document itself — a passport emailed instead of
+  // uploaded, a policy the trekker cannot get to upload from Kathmandu.
+  if (intent === "add_doc") {
+    const file = form.get("file");
+    const type = String(form.get("doc_type"));
+    const personName = String(form.get("person_name") ?? "").trim();
+    if (!(file instanceof File) || file.size === 0) {
+      return data({ error: "Choose a file first." }, { status: 400, headers });
+    }
+    if (type !== "passport" && type !== "insurance") {
+      return data({ error: "A document is a passport or an insurance policy." }, { status: 400, headers });
+    }
+    if (!personName) {
+      return data({ error: "Whose document is it?" }, { status: 400, headers });
+    }
+    const up = await uploadDocument(admin, {
+      bookingId: params.id!,
+      personName,
+      type,
+      file,
+    });
+    // Looked at, not fired and forgotten — a failed upload used to reload the
+    // page unchanged, which reads as a button that does nothing.
+    if (!up.ok) return data({ error: up.error ?? "That upload failed." }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "remove_doc") {
+    const gone = await deleteBookingDocument(admin, String(form.get("document_id")));
+    if (!gone) return data({ error: "That document is already gone." }, { status: 404, headers });
+    return data({ ok: true }, { headers });
+  }
+
   if (intent === "gen_contract") {
     await generateContractForBooking(admin, params.id!);
     return data({ ok: true }, { headers });
@@ -261,6 +304,10 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
         </p>
       )}
 
+      {/* The day-by-day, full width and above the panels, because when a
+          trek is walking this is the thing the office opens the page for. */}
+      <Itinerary booking={b} />
+
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel title="Booking">
           <dl className="space-y-1 text-sm">
@@ -310,6 +357,19 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                         >
                           View
                         </a>
+                        <Form
+                          method="post"
+                          onSubmit={(e) => {
+                            if (!confirm("Delete this document? The file goes too."))
+                              e.preventDefault();
+                          }}
+                        >
+                          <input type="hidden" name="intent" value="remove_doc" />
+                          <input type="hidden" name="document_id" value={d.id} />
+                          <button className="rounded border border-border px-2 py-1 text-xs text-ink-soft hover:border-red-300 hover:bg-red-50 hover:text-red-900">
+                            Remove
+                          </button>
+                        </Form>
                         {state === "verified" ? (
                           <Badge tone="green">verified</Badge>
                         ) : (
@@ -359,6 +419,9 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                 })}
               </ul>
             )}
+
+            <PermitDocs permits={permits} />
+            <AddDocument defaultPerson={b.trekker?.full_name ?? ""} />
           </Panel>
 
           {/* Insurance (2026 gate) */}
@@ -376,6 +439,8 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                   </span>{" "}
                   of <span className="font-mono text-ink">{formatUsd(b.total_usd_cents)}</span>
                 </p>
+
+                <CostBreakdown booking={b} />
                 {instalments.length > 0 ? (
                   <table className="mt-3 w-full text-left">
                     <thead className="text-xs uppercase text-ink-soft">
@@ -412,6 +477,8 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                 ) : (
                   <p className="mt-2 text-ink-soft">Single payment — no instalment plan.</p>
                 )}
+
+                <WhatsIncluded booking={b} />
               </div>
             </Panel>
 
@@ -636,3 +703,362 @@ function Row({ label, value, children }: { label: string; value?: string; childr
     </div>
   );
 }
+
+/**
+ * What the total is made of.
+ *
+ * Every figure here was snapshotted onto the booking when the guide accepted,
+ * so this is what the trekker was actually charged, not what the offering
+ * costs today. The lines are checked against the stored total: if they ever
+ * disagree the panel says so rather than drawing a tidy table, because an
+ * office quoting a refund off a breakdown that does not match the receipt is
+ * worse off than one with no breakdown at all.
+ */
+function CostBreakdown({ booking }: { booking: any }) {
+  const b = bookingBreakdown(booking);
+  if (b.lines.length === 0) return null;
+  const payout = payoutUsdCents(b);
+
+  return (
+    <div className="mt-3 rounded-md border border-border">
+      <p className="border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+        What makes up the total
+      </p>
+      <table className="w-full text-left text-sm">
+        <tbody>
+          {b.lines.map((l) => (
+            <tr key={l.key} className="border-b border-border/60">
+              <td className="py-1.5 pl-3 pr-2">
+                {l.label}
+                {l.note && <span className="block text-[11px] text-ink-soft">{l.note}</span>}
+              </td>
+              <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                {formatUsd(l.amountUsdCents)}
+              </td>
+            </tr>
+          ))}
+          <tr className="bg-surface">
+            <td className="py-1.5 pl-3 pr-2 font-medium">Trekker pays</td>
+            <td className="py-1.5 pr-3 text-right font-mono font-medium tabular-nums">
+              {formatUsd(b.totalUsdCents)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {!b.balances && (
+        <p className="border-t border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+          These lines come to {formatUsd(b.sumUsdCents)}, which is{" "}
+          {formatUsd(Math.abs(b.driftUsdCents))}{" "}
+          {b.driftUsdCents > 0 ? "more" : "less"} than the {formatUsd(b.totalUsdCents)} charged.
+          Do not quote a refund from this until it is looked at.
+        </p>
+      )}
+
+      {/* Where the money goes afterwards, which is a different question from
+          what the trekker paid — and the reason the two are not one table. */}
+      <div className="space-y-1 border-t border-border px-3 py-2 text-xs text-ink-soft">
+        <p>
+          Deposit taken up front:{" "}
+          <span className="font-mono text-ink">{formatUsd(b.depositUsdCents)}</span>
+          {b.depositUsdCents === b.totalUsdCents && " — paid in full"}
+        </p>
+        {b.guidePayoutNprPaisa > 0 && (
+          <p>
+            Guide is paid:{" "}
+            <span className="font-mono text-ink">
+              NPR {(b.guidePayoutNprPaisa / 100).toLocaleString("en-US")}
+            </span>
+            {payout !== null && <> ({formatUsd(payout)} at {b.fxRateNpr} to the dollar, fixed when this was booked)</>}
+          </p>
+        )}
+        {b.commissionUsdCents !== null && (
+          <p>
+            Commission out of the guide's share:{" "}
+            <span className="font-mono text-ink">{formatUsd(b.commissionUsdCents)}</span>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The permits, beside the passports rather than four panels further down.
+ *
+ * They are documents on this trip in exactly the way a passport is, and the
+ * office was scrolling past everything else to find out whether TIMS had been
+ * issued. The scan opens through the same redirect route the passports use.
+ */
+function PermitDocs({ permits }: { permits: any[] }) {
+  if (!permits || permits.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Permits</p>
+      <ul className="mt-1.5 space-y-1.5">
+        {permits.map((p: any, i: number) => (
+          <li key={p.id ?? i} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="min-w-0">
+              {p.permit?.name ?? "Permit"}
+              {p.reference_no && (
+                <span className="ml-1.5 font-mono text-xs text-ink-soft">{p.reference_no}</span>
+              )}
+            </span>
+            <span className="flex items-center gap-2">
+              <Badge
+                tone={
+                  p.status === "ready"
+                    ? "green"
+                    : p.status === "rejected"
+                      ? "red"
+                      : "amber"
+                }
+              >
+                {String(p.status ?? "").replace(/_/g, " ")}
+              </Badge>
+              {p.scan_path && p.id && (
+                <a
+                  href={`/ops/doc/permit/${p.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border border-border px-2 py-1 text-xs hover:bg-mist"
+                >
+                  View
+                </a>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Link to="/ops/permits" className="mt-2 inline-block text-xs text-primary hover:underline">
+        File or attach permits →
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * Ops uploads a document on somebody's behalf.
+ *
+ * Passports arrive by email, by WhatsApp, and handed over a desk in Thamel.
+ * Until now the only way one reached a booking was the trekker uploading it
+ * themselves, so a booking could sit in "docs pending" with the passport
+ * sitting in somebody's inbox.
+ */
+function AddDocument({ defaultPerson }: { defaultPerson: string }) {
+  return (
+    <details className="mt-3 border-t border-border pt-3">
+      <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+        Add a document…
+      </summary>
+      <Form
+        method="post"
+        encType="multipart/form-data"
+        className="mt-2 flex flex-wrap items-end gap-2"
+      >
+        <input type="hidden" name="intent" value="add_doc" />
+        <label className="text-xs text-ink-soft">
+          <span className="block">Whose</span>
+          <input
+            name="person_name"
+            defaultValue={defaultPerson}
+            required
+            className="mt-0.5 w-40 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+          />
+        </label>
+        <label className="text-xs text-ink-soft">
+          <span className="block">What</span>
+          <select
+            name="doc_type"
+            className="mt-0.5 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+          >
+            <option value="passport">Passport</option>
+            <option value="insurance">Insurance</option>
+          </select>
+        </label>
+        <input
+          type="file"
+          name="file"
+          required
+          accept="image/*,application/pdf"
+          className="max-w-[14rem] text-xs"
+        />
+        <button className="rounded border border-border px-2 py-1.5 text-xs hover:bg-mist">
+          Upload
+        </button>
+      </Form>
+    </details>
+  );
+}
+
+/**
+ * The trip itself, day by day — and on an active trek, where they are today.
+ *
+ * The office had the dates, the money and the paperwork on this page and not
+ * one word about the trek: to answer "where are they?" during an incident you
+ * had to leave for the route page, which does not know this booking's dates.
+ * Here the stored itinerary is laid against the booking's own start date, so
+ * every day carries the date it actually falls on.
+ */
+function Itinerary({ booking }: { booking: any }) {
+  const route = booking.offering?.route;
+  const stops: any[] = Array.isArray(route?.day_stops) ? route.day_stops : [];
+  if (stops.length === 0) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const window = trekDay(booking.start_date, booking.end_date, today);
+  // Only mark a day when they are actually out there. A "today" ring on a trek
+  // that starts in December says something untrue about a booking in
+  // September.
+  const walking = window.where === "on" && booking.status === "active";
+
+  const dateOf = (dayNo: number) => {
+    const t = Date.parse(`${String(booking.start_date).slice(0, 10)}T00:00:00Z`);
+    return new Date(t + (dayNo - 1) * 86_400_000).toISOString().slice(0, 10);
+  };
+
+  return (
+    <Panel title={`The trek${route?.name ? ` — ${route.name}` : ""}`}>
+      <div className="flex flex-wrap items-center gap-2 pb-2 text-xs text-ink-soft">
+        {route?.region && <Badge tone="neutral">{route.region}</Badge>}
+        {route?.difficulty && <Badge tone="neutral">{route.difficulty}</Badge>}
+        {route?.max_altitude_m && <Badge tone="neutral">up to {route.max_altitude_m} m</Badge>}
+        <span>
+          {stops.length} day{stops.length === 1 ? "" : "s"} · {booking.start_date} → {booking.end_date}
+        </span>
+        {walking ? (
+          <Badge tone="green">
+            day {window.day} of {window.total} today
+          </Badge>
+        ) : window.where === "before" ? (
+          <Badge tone="blue">starts in {window.daysUntilStart} day{window.daysUntilStart === 1 ? "" : "s"}</Badge>
+        ) : (
+          <Badge tone="neutral">walked</Badge>
+        )}
+      </div>
+
+      <ol className="divide-y divide-border border-t border-border">
+        {stops.map((stop: any, i: number) => {
+          const dayNo = Number(stop.day ?? i + 1);
+          const isToday = walking && dayNo === window.day;
+          return (
+            <li
+              key={`${dayNo}-${i}`}
+              className={
+                "flex gap-3 py-2 text-sm " + (isToday ? "-mx-2 rounded bg-emerald-50 px-2" : "")
+              }
+            >
+              <div className="w-14 shrink-0">
+                <p className={"font-medium " + (isToday ? "text-emerald-900" : "text-ink")}>
+                  Day {dayNo}
+                </p>
+                <p className="font-mono text-[11px] text-ink-soft">{dateOf(dayNo).slice(5)}</p>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-ink">
+                  {stop.place ?? "—"}
+                  {typeof stop.altitude_m === "number" && (
+                    <span className="ml-1.5 font-mono text-xs font-normal text-ink-soft">
+                      {stop.altitude_m} m
+                    </span>
+                  )}
+                  {isToday && <span className="ml-2 text-xs text-emerald-800">← today</span>}
+                </p>
+                {stop.note && <p className="text-xs text-ink-soft">{stop.note}</p>}
+                <p className="text-[11px] text-ink-soft">
+                  {[
+                    stop.sleep && `sleeps at ${stop.sleep}`,
+                    typeof stop.nights === "number" && stop.nights > 1 && `${stop.nights} nights here`,
+                    typeof stop.km === "number" && `${stop.km} km`,
+                    typeof stop.hours === "number" && `${stop.hours} h walking`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      {route?.slug && (
+        <Link
+          to={`/routes/${route.slug}`}
+          className="mt-2 inline-block text-xs text-primary hover:underline"
+        >
+          The whole route →
+        </Link>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * What the price buys, and what it did not.
+ *
+ * "Is the porter in this?" is a question the office answers by opening the
+ * offering in another tab and reading its price builder. The same figures are
+ * already on the booking — these are the offering's own lines at this party
+ * size, which is what the trekker read before they paid.
+ *
+ * Add-ons are listed apart and priced, but NOT added up: whether this party
+ * took one is not something the breakdown records, so a total here would be
+ * a guess presented as a fact.
+ */
+function WhatsIncluded({ booking }: { booking: any }) {
+  const bd = booking.offering?.price_breakdown;
+  if (!hasBreakdown(bd)) return null;
+
+  const party = Math.max(1, Number(booking.party_size) || 1);
+  const pricing = computeExperiencePricing(bd, party, booking.start_date);
+  // An add-on priced at nothing is an unfinished row in the builder, not
+  // something to offer somebody.
+  const extras = addOns(bd, party).filter((a) => a.perPersonUsdCents > 0);
+  if (pricing.lines.length === 0 && extras.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-border">
+      <p className="border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+        What the trip includes
+      </p>
+      <ul className="divide-y divide-border/60">
+        {pricing.lines.map((l) => (
+          <li key={l.key} className="flex justify-between gap-2 px-3 py-1.5 text-sm">
+            <span className="min-w-0">{l.label}</span>
+            {/* A line the guide listed but priced at nothing is part of the
+                trip that costs no extra — "$0.00" reads as a mistake. */}
+            <span className="shrink-0 font-mono tabular-nums text-ink-soft">
+              {l.amountUsdCents === 0 ? "included" : formatUsd(l.amountUsdCents)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="border-t border-border px-3 py-1.5 text-xs text-ink-soft">
+        Per person at a party of {party}.
+      </p>
+
+      {extras.length > 0 && (
+        <>
+          <p className="border-t border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+            Add-ons offered
+          </p>
+          <ul className="divide-y divide-border/60">
+            {extras.map((a) => (
+              <li key={a.id} className="flex justify-between gap-2 px-3 py-1.5 text-sm">
+                <span className="min-w-0">{a.label}</span>
+                <span className="shrink-0 font-mono tabular-nums text-ink-soft">
+                  +{formatUsd(a.perPersonUsdCents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-border px-3 py-1.5 text-xs text-ink-soft">
+            Offered, not necessarily taken — the booking does not record which
+            of these this party chose, so they are not added up here.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
