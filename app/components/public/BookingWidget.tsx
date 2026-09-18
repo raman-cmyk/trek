@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "~/lib/cn";
 import { askNotice } from "~/lib/standing-ask";
 import { useFetcher } from "react-router";
@@ -13,7 +13,15 @@ import { previewTrack } from "~/lib/pipeline";
 import { depositLine, freeCancellationLine } from "~/lib/policy-copy";
 import { Link } from "react-router";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
-import { daysLabel, firstTakenDay, formatSpan, spanEnd } from "~/lib/date-span";
+import {
+  daysLabel,
+  firstTakenDay,
+  formatSpan,
+  monthInView,
+  monthStart,
+  shiftMonth,
+  spanEnd,
+} from "~/lib/date-span";
 
 export interface BookingWidgetOffering {
   id: string;
@@ -81,7 +89,9 @@ function useQuote(
     } catch {
       return null;
     }
-  }, [o, party, breakdown, addonsPerPerson]);
+    // `startDate` belongs here: a breakdown can price a season differently,
+    // so leaving it out let the headline keep yesterday's date's price.
+  }, [o, party, breakdown, addonsPerPerson, startDate]);
 }
 
 /**
@@ -109,10 +119,22 @@ function DatePick({
   setDay: (d: string) => void;
 }) {
   const days = Math.max(1, o.days || 1);
-  // Start where their dates are, or at the guide's first open day.
-  const [offset, setOffset] = useState(0);
-  const base = day || availableDays[0] || new Date().toISOString().slice(0, 10);
-  const anchor = monthAnchor(base, offset);
+
+  /**
+   * Which month is on screen.
+   *
+   * Held, not derived. It used to be `month(chosen day) + a paging offset`,
+   * which meant every click moved the thing the offset was measured from:
+   * page forward three months, pick a date, and you landed three months past
+   * it. Picking a day in the second panel of a span that crosses a month did
+   * the same thing one month at a time — Dec, Jan, Feb, off into next year.
+   *
+   * So the view only moves when somebody moves it. The one exception is
+   * below: a date arriving from anywhere other than a click, which nobody
+   * can see happen.
+   */
+  const firstOpen = availableDays[0] || new Date().toISOString().slice(0, 10);
+  const [visibleMonth, setVisibleMonth] = useState(() => monthStart(day || firstOpen));
   const end = day ? spanEnd(day, days) : "";
   // Only possible for a date chosen before this component existed, or one
   // that was free when the page loaded and is not now.
@@ -121,7 +143,15 @@ function DatePick({
   // Show the second month when the trip runs into it. The whole point is
   // seeing the walk on a calendar; "20 Sep – 1 Oct" with only September on
   // screen shows two thirds of the answer.
-  const showMonths = end && end.slice(0, 7) !== anchor.slice(0, 7) ? 2 : 1;
+  const showMonths = end && end.slice(0, 7) !== visibleMonth.slice(0, 7) ? 2 : 1;
+
+  // A start date that is not on screen, set by something other than a click
+  // — a fresh page, a group's dates. Follow it; otherwise stay put.
+  useEffect(() => {
+    if (day && !monthInView(day, visibleMonth, showMonths)) {
+      setVisibleMonth(monthStart(day));
+    }
+  }, [day, visibleMonth, showMonths]);
 
   return (
     <div>
@@ -133,7 +163,7 @@ function DatePick({
           <button
             type="button"
             aria-label="Previous month"
-            onClick={() => setOffset((n) => n - 1)}
+            onClick={() => setVisibleMonth((m) => shiftMonth(m, -1))}
             className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
           >
             ‹
@@ -141,7 +171,7 @@ function DatePick({
           <button
             type="button"
             aria-label="Next month"
-            onClick={() => setOffset((n) => n + 1)}
+            onClick={() => setVisibleMonth((m) => shiftMonth(m, 1))}
             className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
           >
             ›
@@ -151,7 +181,7 @@ function DatePick({
 
       <AvailabilityCalendar
         openDays={availableDays}
-        monthsFrom={anchor}
+        monthsFrom={visibleMonth}
         months={showMonths}
         guideName={o.guide_first_name}
         compact
@@ -179,12 +209,6 @@ function DatePick({
   );
 }
 
-/** The yyyy-mm-01 anchor `offset` months from the month `iso` falls in. */
-function monthAnchor(iso: string, offset: number): string {
-  const d = new Date(iso + "T00:00:00Z");
-  const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + offset, 1));
-  return `${m.getUTCFullYear()}-${String(m.getUTCMonth() + 1).padStart(2, "0")}-01`;
-}
 
 function ConfigBody({
   o,
@@ -217,7 +241,7 @@ function ConfigBody({
     bookingStatus: string | null;
   } | null;
 }) {
-  const quote = useQuote(o, party, breakdown, addonsPerPerson);
+  const quote = useQuote(o, party, breakdown, addonsPerPerson, day);
   const { m } = useMoney();
   const fetcher = useFetcher();
   const busy = fetcher.state !== "idle";

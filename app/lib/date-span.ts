@@ -105,3 +105,41 @@ function day(iso: string): Date {
 function mon(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
 }
+
+/* ── Which month the calendar is looking at ─────────────────────────────── */
+
+/**
+ * The first of the month `iso` falls in.
+ *
+ * UTC throughout, like everything else here: a date picked at 23:00 in
+ * Kathmandu must not land in the previous month for a reader in Berlin.
+ */
+export function monthStart(iso: string): string {
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 8) + "01";
+  const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  return m.toISOString().slice(0, 10);
+}
+
+/** `n` months on from the month `iso` falls in. Negative goes back. */
+export function shiftMonth(iso: string, n: number): string {
+  const d = new Date(`${monthStart(iso)}T00:00:00Z`);
+  const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+  return m.toISOString().slice(0, 10);
+}
+
+/**
+ * Is this day already on screen, given the first month shown and how many
+ * months are drawn?
+ *
+ * The calendar used to derive its month from the chosen day, so every click
+ * moved the view — page forward three months, pick a date, and you landed
+ * three months past it. The view is held now, and this is the only reason it
+ * ever moves on its own: a date that arrives from somewhere other than a
+ * click, which nobody can see.
+ */
+export function monthInView(iso: string, firstMonth: string, monthCount: number): boolean {
+  const month = monthStart(iso);
+  const last = shiftMonth(firstMonth, Math.max(1, monthCount) - 1);
+  return month >= monthStart(firstMonth) && month <= last;
+}
