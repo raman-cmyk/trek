@@ -3,6 +3,7 @@ import type { Route } from "./+types/ops.users";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { CopyButton } from "~/components/ops/CopyButton";
 import { auditNote, checkPassword, MIN_PASSWORD } from "~/lib/admin-password";
+import { credentialsMailto, credentialsMessage, whatsappLink } from "~/lib/handover";
 import { fmtDateShort } from "~/lib/format";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import {
@@ -92,7 +93,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (!who) return data({ error: "No such account." }, { status: 404, headers });
   const { data: profile } = await admin
     .from("users")
-    .select("role, full_name")
+    .select("role, full_name, phone")
     .eq("id", id)
     .maybeSingle();
   const name = profile?.full_name || who.email || who.phone || "this account";
@@ -171,6 +172,10 @@ export async function action({ request, context }: Route.ActionArgs) {
           password,
           chosen,
           login: loginPathFor((profile?.role as any) ?? "none", who.email ?? null),
+          // For the send buttons: the address and the number kept apart,
+          // because one composes a mail and the other a WhatsApp message.
+          realEmail: who.email ?? null,
+          phone: profile?.phone ?? who.phone ?? null,
         },
       },
       { headers },
@@ -249,29 +254,7 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
         </Panel>
       )}
 
-      {act.password && (
-        <Panel
-          title={`${act.password.chosen ? "Password set" : "New password"} for ${act.password.name}`}
-        >
-          <p className="text-sm text-ink-soft">
-            This is their password now — the old one no longer works.{" "}
-            {act.password.chosen
-              ? "You chose it, so it is not shown again after you leave this page."
-              : "It is shown once; copy it."}{" "}
-            Tell them to change it once they are in.
-          </p>
-          <Row label="Email" value={act.password.email} />
-          <Row label="Password" value={act.password.password} />
-          <a
-            href={act.password.login}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-block rounded-button bg-pine px-3 py-1.5 text-sm font-medium text-paper hover:bg-moss"
-          >
-            Open their sign-in page →
-          </a>
-        </Panel>
-      )}
+      {act.password && <PasswordPanel p={act.password} />}
 
       <Form method="get" className="flex gap-2">
         <input
@@ -437,6 +420,88 @@ export default function OpsUsers({ loaderData, actionData }: Route.ComponentProp
 }
 
 /** A label, the value in mono, and a button that copies it. */
+/**
+ * The details, and a way to actually get them to the person.
+ *
+ * They used to sit on the screen and go no further: the office read them off
+ * and typed them into a chat by hand, which is where a wrong character on a
+ * password nobody can see comes from. WhatsApp leads, because that is the
+ * channel — most guides here have a phone and no inbox, which is the same
+ * reason every notification reaches them by SMS.
+ */
+function PasswordPanel({ p }: { p: any }) {
+  const creds = {
+    name: p.name,
+    email: p.realEmail ?? null,
+    password: p.password,
+    loginUrl: p.login,
+  };
+  const message = credentialsMessage(creds);
+  const wa = whatsappLink(p.phone, message);
+  const mail = credentialsMailto(creds);
+
+  return (
+    <Panel title={`${p.chosen ? "Password set" : "New password"} for ${p.name}`}>
+      <p className="text-sm text-ink-soft">
+        This is their password now — the old one no longer works.{" "}
+        {p.chosen
+          ? "You chose it, so it is not shown again after you leave this page."
+          : "It is shown once; copy it."}{" "}
+        Tell them to change it once they are in.
+      </p>
+      <Row label="Email" value={p.email} />
+      <Row label="Password" value={p.password} />
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {wa ? (
+          <a
+            href={wa}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-button bg-pine px-3 py-1.5 text-sm font-medium text-paper hover:bg-moss"
+          >
+            Send on WhatsApp →
+          </a>
+        ) : (
+          <span className="text-xs text-ink-soft">
+            No phone number on this account, so there is no WhatsApp to send to.
+          </span>
+        )}
+        {mail && (
+          <a
+            href={mail}
+            className="rounded-button border border-border px-3 py-1.5 text-sm text-ink hover:bg-mist"
+          >
+            Send by email
+          </a>
+        )}
+        <a
+          href={p.login}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-button border border-border px-3 py-1.5 text-sm text-ink hover:bg-mist"
+        >
+          Open their sign-in page →
+        </a>
+      </div>
+
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+          What it says
+        </summary>
+        <pre className="mt-1.5 whitespace-pre-wrap rounded border border-border bg-surface p-2 text-xs text-ink">
+          {message}
+        </pre>
+        <p className="mt-1 text-xs text-ink-soft">
+          The password is in the message on purpose — you were already typing it
+          into a chat by hand. This one also says it is temporary, tells them to
+          change it, and tells them to delete the message.
+        </p>
+      </details>
+    </Panel>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">

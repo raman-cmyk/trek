@@ -17,4 +17,10 @@ interface Env {
   // as Cloudflare vars/secrets to switch the CTA on — no deploy needed.
   INSURANCE_PARTNER_NAME?: string;
   INSURANCE_PARTNER_URL?: string;
+  // The office's WhatsApp number, for the "talk to a person" link on every
+  // guide screen. Same idea as the two above: set it as a Cloudflare var and
+  // the link appears; leave it unset and nothing is drawn, because a support
+  // button that opens nothing is worse than no button. Digits with the country
+  // code — 9779801234567.
+  SUPPORT_WHATSAPP?: string;
 }

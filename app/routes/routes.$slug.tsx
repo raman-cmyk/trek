@@ -525,7 +525,10 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
 
         {/* Guides who run it */}
         {guides.length > 0 && (
-          <section className="mt-12">
+          // The listing's "Meet the guides" button lands here, not at the top
+          // of the page — it used to drop you above the itinerary, the
+          // permits and the season table, with the guides five screens down.
+          <section id="guides" className="mt-12 scroll-mt-24">
             <h2 className="font-display text-2xl text-ink">
               Guides who run {route.name}
             </h2>

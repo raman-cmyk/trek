@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   gradeLevel,
+  groupByRegion,
   isRange,
   matches,
   priceSpread,
@@ -235,5 +236,53 @@ describe("regionsOf", () => {
       { region: "Khumbu", count: 2 },
       { region: "Annapurna", count: 1 },
     ]);
+  });
+});
+
+describe("routes on shelves, one per region", () => {
+  const card = (region: string, name: string) => ({ region, name }) as any;
+
+  it("puts every route under its own region", () => {
+    const groups = groupByRegion([
+      card("Khumbu", "Everest Base Camp"),
+      card("Annapurna", "Mardi Himal"),
+      card("Khumbu", "Gokyo Lakes"),
+    ]);
+    expect(groups.map((g) => g.region)).toEqual(["Khumbu", "Annapurna"]);
+    expect(groups[0].routes).toHaveLength(2);
+  });
+
+  it("leads with the busiest region, then alphabetically", () => {
+    // Where people actually go is a fair first shelf, and the tiebreak stops
+    // the order wobbling between renders.
+    const groups = groupByRegion([
+      card("Manaslu", "a"),
+      card("Annapurna", "b"),
+      card("Annapurna", "c"),
+      card("Dolpa", "d"),
+    ]);
+    expect(groups.map((g) => g.region)).toEqual(["Annapurna", "Dolpa", "Manaslu"]);
+  });
+
+  it("keeps the Nepali name and adds the English a stranger searches for", () => {
+    // The name on the permit, on the bus and in the guide's mouth stays the
+    // heading — but a trekker in Berlin types "Everest", not "Khumbu".
+    const [khumbu] = groupByRegion([card("Khumbu", "Everest Base Camp")]);
+    expect(khumbu.region).toBe("Khumbu");
+    expect(khumbu.note).toBe("the Everest region");
+  });
+
+  it("does not explain a region that explains itself", () => {
+    expect(groupByRegion([card("Annapurna", "x")])[0].note).toBeNull();
+  });
+
+  it("gives a route with no region somewhere to stand", () => {
+    const groups = groupByRegion([card("", "orphan"), card("  ", "another")]);
+    expect(groups[0].region).toBe("Elsewhere in Nepal");
+    expect(groups[0].routes).toHaveLength(2);
+  });
+
+  it("has nothing to shelve when there is nothing", () => {
+    expect(groupByRegion([])).toEqual([]);
   });
 });

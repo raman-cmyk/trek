@@ -9,13 +9,14 @@ import { NepalRouteMap } from "~/components/public/NepalRouteMap";
 import { RouteCard, type RouteCardData } from "~/components/public/RouteCard";
 import {
   GRADES,
+  SORTS,
+  groupByRegion,
   matches,
   priceSpread,
   profileOf,
   regionsOf,
   seasonLabel,
   sortCards,
-  SORTS,
   type SortKey,
 } from "~/lib/route-cards";
 import { Glyph } from "~/components/design/Chip";
@@ -320,11 +321,43 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           </>
         )}
 
-        <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {rest.map((r: any) => (
-            <RouteCard key={r.slug} route={r} />
-          ))}
-        </div>
+        {/* Shelved by region unless they have already picked one.
+            Twenty-four treks in one grid asks a reader to hold twenty-four
+            things in their head and rank them; nobody does that. They pick a
+            region first — "we want to see Everest" — and choose inside it. */}
+        {region === "all" ? (
+          groupByRegion(rest).map((g) => (
+            <section key={g.region} className="mt-8 first:mt-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line pb-2">
+                <h3 className="font-display text-xl text-ink">
+                  {g.region}
+                  {g.note && (
+                    <span className="ml-2 font-sans text-sm font-normal text-muted">
+                      {g.note}
+                    </span>
+                  )}
+                </h3>
+                <Link
+                  to={`/routes?region=${encodeURIComponent(g.region)}`}
+                  className="text-caption text-muted underline-offset-4 hover:text-moss hover:underline"
+                >
+                  {g.routes.length} {g.routes.length === 1 ? "route" : "routes"} →
+                </Link>
+              </div>
+              <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {g.routes.map((r: any) => (
+                  <RouteCard key={r.slug} route={r} />
+                ))}
+              </div>
+            </section>
+          ))
+        ) : (
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {rest.map((r: any) => (
+              <RouteCard key={r.slug} route={r} />
+            ))}
+          </div>
+        )}
 
         {list.length === 0 && (
           <div className="py-16 text-center">

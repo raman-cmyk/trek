@@ -219,3 +219,65 @@ export function regionsOf(cards: Card[]): Array<{ region: string; count: number 
     .map(([region, count]) => ({ region, count }))
     .sort((a, b) => b.count - a.count || a.region.localeCompare(b.region));
 }
+
+/* ── Regions as the page's own shelves ──────────────────────────────────── */
+
+/**
+ * What a region is called here, and what a stranger calls it.
+ *
+ * The heading keeps the Nepali name, because that is the name on the permit,
+ * on the bus and in the guide's mouth — and pretending otherwise is the
+ * agency habit this whole product exists against. But a trekker in Berlin
+ * types "Everest", not "Khumbu", so the local name carries a line of English
+ * beside it rather than being replaced by one.
+ *
+ * Only the regions whose name hides what they are need a line. "Annapurna"
+ * explains itself.
+ */
+export const REGION_NOTE: Record<string, string> = {
+  Khumbu: "the Everest region",
+  Solukhumbu: "the lower Everest valleys, walked in",
+  Sudurpashchim: "the far west, almost nobody goes",
+  Karnali: "the far west lakes",
+  Dolpa: "behind the Dhaulagiri wall",
+  Mustang: "the old kingdom north of Annapurna",
+};
+
+export interface RegionGroup<T> {
+  region: string;
+  /** The English line, where the name needs one. */
+  note: string | null;
+  routes: T[];
+}
+
+/**
+ * The routes on shelves, one per region.
+ *
+ * A flat grid of twenty-four treks asks a reader to hold twenty-four things
+ * in their head and rank them. Nobody does that; they pick a region first —
+ * "we want to see Everest" — and choose inside it. So the page is shelved the
+ * way the decision is actually made.
+ *
+ * Busiest region first, because the size of a shelf is a fair signal of where
+ * people go, and alphabetical inside a tie so the order never wobbles between
+ * renders.
+ */
+export function groupByRegion<T extends { region: string; name?: string }>(
+  cards: T[],
+): Array<RegionGroup<T>> {
+  const byRegion = new Map<string, T[]>();
+  for (const c of cards ?? []) {
+    const key = String(c.region ?? "").trim() || "Elsewhere in Nepal";
+    if (!byRegion.has(key)) byRegion.set(key, []);
+    byRegion.get(key)!.push(c);
+  }
+  return [...byRegion.entries()]
+    .map(([region, routes]) => ({
+      region,
+      note: REGION_NOTE[region] ?? null,
+      routes,
+    }))
+    .sort(
+      (a, b) => b.routes.length - a.routes.length || a.region.localeCompare(b.region),
+    );
+}

@@ -173,8 +173,11 @@ export function RouteCard({
 
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3.5">
           <GuideFaces faces={route.faces} count={route.guides} />
+          {/* A button that says "meet the guides" has to arrive at the
+              guides. It used to open the route page at the top, five screens
+              above them, which reads as the wrong page. */}
           <Link
-            to={`/routes/${route.slug}`}
+            to={route.guides > 0 ? `/routes/${route.slug}#guides` : `/routes/${route.slug}`}
             prefetch="intent"
             className="whitespace-nowrap rounded-pill border border-line bg-paper px-3.5 py-2 text-caption font-medium text-ink transition duration-quick hover:border-moss hover:bg-moss hover:text-paper"
           >

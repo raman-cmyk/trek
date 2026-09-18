@@ -907,6 +907,17 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
           </Panel>
           </div>
 
+          {/* Permits sit with the documents, not four panels below the money.
+              They were at the foot of this column and the office scrolled
+              past them looking for somewhere to add one. */}
+          <Permits
+            rows={permits}
+            types={permitTypes}
+            booking={b}
+            tims={tims}
+            error={(actionData as any)?.error ?? null}
+          />
+
           {/* Insurance (2026 gate) */}
           <div className="mt-4">
             <Panel title="Money">
@@ -1189,7 +1200,6 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             </div>
           )}
 
-          <Permits rows={permits} types={permitTypes} booking={b} tims={tims} error={(actionData as any)?.error ?? null} />
           <div className="mt-4">
             {/* The same panel as a guide's papers and an experience's
                 go-live list — it is the same thing, run against a trip. */}

@@ -2,6 +2,8 @@ import { Form, Link, data, useNavigation, useSearchParams } from "react-router";
 import type { Route } from "./+types/ops.people.$id";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { ChecklistPanel } from "~/components/ops/ChecklistPanel";
+import { rows } from "~/lib/ops.server";
+import { ACTION_KINDS, MAX_SUSPENSION_DAYS, REASON_MAX, REASON_MIN } from "~/lib/moderation";
 import { Button } from "~/components/Button";
 import { cn } from "~/lib/cn";
 import { fmtDate, statusLabel } from "~/lib/format";
@@ -228,6 +230,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const avail = (availRes as any).data ?? [];
 
+  // Is this account restricted right now? The page could show a guide's
+  // whole history and not that they are suspended, which is the one fact
+  // that changes what anybody should do next.
+  const blocks = await rows<any>(
+    admin
+      .from("account_blocks")
+      .select("id, kind, reason, starts_at, ends_at, lifted_at, created_at")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    "whether this account is restricted",
+  );
+
   // The office's own list for this guide (0105). Nothing before they are a
   // guide, and nothing invented: the six papers `guide_verifications` already
   // holds tick themselves, and the rest is what only a person knows.
@@ -259,6 +274,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     {
       person,
       isGuide,
+      blocks: blocks.rows,
+      blocksError: blocks.error,
       tasks,
       otherLists,
       guide,
@@ -297,6 +314,37 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const intent = String(form.get("intent"));
   const str = (k: string) => String(form.get(k) ?? "").trim();
   const nul = (k: string) => str(k) || null;
+
+  // Warn, suspend or ban — from the page where the office is already looking
+  // at them, rather than only from the moderation queue, which is reached by
+  // a flagged message and so cannot be used to act on somebody proactively.
+  if (intent === "take_action") {
+    const { takeAction } = await import("~/lib/moderation.server");
+    const res = await takeAction(env, admin, {
+      userId: id,
+      kind: str("kind") as any,
+      reason: str("reason"),
+      days: Number(form.get("days") ?? 0) || null,
+      byId: user.id,
+    });
+    return data(res.error ? { error: res.error } : { ok: res.ok }, {
+      status: res.error ? 400 : 200,
+      headers,
+    });
+  }
+
+  if (intent === "lift_block") {
+    const { liftBlock } = await import("~/lib/moderation.server");
+    const res = await liftBlock(env, admin, {
+      blockId: str("block_id"),
+      byId: user.id,
+      note: str("note"),
+    });
+    return data(res.error ? { error: res.error } : { ok: res.ok }, {
+      status: res.error ? 400 : 200,
+      headers,
+    });
+  }
 
   // Their checklist — the same three intents as a trip's, handled the same way.
   const { handleTaskIntent } = await import("~/lib/tasks.server");
@@ -1146,6 +1194,18 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
               </Panel>
             )}
 
+            {/* Warn, suspend or ban, from the page the office is already on.
+                This could only be done from the moderation queue, which is
+                reached by a flagged message — so there was no way to act on
+                somebody nobody had reported. */}
+            <div className="mb-4">
+              <Restrictions
+                blocks={d.blocks}
+                error={d.blocksError}
+                name={d.person?.full_name ?? "this account"}
+              />
+            </div>
+
             {/* The office's own list for this guide — the process steps a
                 verification record cannot hold: the introduction call, the
                 reference somebody actually rang, the porter welfare rules.
@@ -1787,5 +1847,149 @@ function TextField({
         className="w-full rounded border border-border bg-surface px-2.5 py-1.5 outline-none focus:border-primary"
       />
     </label>
+  );
+}
+
+/**
+ * What this account is allowed to do, and the way to change it.
+ *
+ * A live restriction is the one fact on this page that changes what anybody
+ * should do next, and the page did not carry it: you could read a guide's
+ * whole history, their papers and their payouts and not learn they were
+ * suspended.
+ *
+ * A reason is required on all three, warnings included. The person is sent
+ * it, and "you have been warned" with no cause attached is worse than
+ * silence.
+ */
+function Restrictions({
+  blocks,
+  error,
+  name,
+}: {
+  blocks: any[];
+  error: string | null;
+  name: string;
+}) {
+  const live = (blocks ?? []).find((b) => !b.lifted_at);
+  const history = (blocks ?? []).filter((b) => b.lifted_at);
+  const first = (name ?? "").split(" ")[0] || "them";
+
+  return (
+    <Panel title={live ? `Restricted — ${live.kind}` : "Standing"}>
+      <div className="space-y-3 px-4 py-3">
+        {/* "Nothing against them" is a claim. When the read failed we do not
+            know that, and a suspended guide reading as clear is the worst
+            possible version of this panel. */}
+        {error && (
+          <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+            {error}
+          </p>
+        )}
+        {live ? (
+          <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+            <p className="font-medium text-ink">
+              {live.kind === "banned"
+                ? "Banned."
+                : live.kind === "suspended"
+                  ? `Suspended${live.ends_at ? ` until ${fmtDate(live.ends_at)}` : ""}.`
+                  : "Warned."}
+            </p>
+            <p className="mt-0.5 text-xs text-ink">{live.reason}</p>
+            <p className="mt-0.5 text-xs text-ink-soft">Since {fmtDate(live.starts_at)}</p>
+            <Form method="post" className="mt-2 flex flex-wrap items-start gap-2">
+              <input type="hidden" name="intent" value="lift_block" />
+              <input type="hidden" name="block_id" value={live.id} />
+              <input
+                name="note"
+                placeholder="Why it is being lifted"
+                className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs text-ink"
+              />
+              <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                Lift it
+              </button>
+            </Form>
+          </div>
+        ) : error ? null : (
+          <p className="text-sm text-ink-soft">
+            Nothing against {first}. They can sign in and work as normal.
+          </p>
+        )}
+
+        {!live && (
+          <details>
+            <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+              Warn, suspend or remove…
+            </summary>
+            <Form method="post" className="mt-2 space-y-2">
+              <input type="hidden" name="intent" value="take_action" />
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-xs text-ink-soft">
+                  <span className="block">What</span>
+                  <select
+                    name="kind"
+                    defaultValue="suspended"
+                    className="mt-0.5 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                  >
+                    {ACTION_KINDS.map((k) => (
+                      <option key={k} value={k}>
+                        {k === "warned" ? "Warn" : k === "suspended" ? "Suspend" : "Ban"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-ink-soft">
+                  <span className="block">For how many days</span>
+                  <input
+                    name="days"
+                    type="number"
+                    min={1}
+                    max={MAX_SUSPENSION_DAYS}
+                    defaultValue={14}
+                    className="mt-0.5 w-20 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                  />
+                  <span className="mt-0.5 block text-[11px]">Suspensions only.</span>
+                </label>
+              </div>
+              <label className="block text-xs text-ink-soft">
+                <span className="block">Why — {first} is sent this</span>
+                <textarea
+                  name="reason"
+                  rows={2}
+                  required
+                  minLength={REASON_MIN}
+                  maxLength={REASON_MAX}
+                  placeholder="What happened, in words they can answer."
+                  className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                />
+              </label>
+              <button className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium">
+                Apply it
+              </button>
+              <p className="text-[11px] text-ink-soft">
+                A suspension or a ban also takes their listings off the
+                marketplace. Nobody can book them while it stands.
+              </p>
+            </Form>
+          </details>
+        )}
+
+        {history.length > 0 && (
+          <details>
+            <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+              Lifted before ({history.length})
+            </summary>
+            <ul className="mt-1.5 space-y-1 text-xs text-ink-soft">
+              {history.map((b) => (
+                <li key={b.id}>
+                  {b.kind} · {fmtDate(b.starts_at)} — lifted {fmtDate(b.lifted_at)}
+                  {b.reason ? ` · ${b.reason}` : ""}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+    </Panel>
   );
 }
