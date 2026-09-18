@@ -115,6 +115,32 @@ export const DOC_FILTERS: StatusFilter[] = [
   { key: "rejected", label: "Sent back", statuses: ["rejected"] },
 ];
 
+/* ── Cancellations ──────────────────────────────────────────────────────
+   Filtered on `cancellation_reason`, never on status. `nonpayment` is mapped
+   onto `cancelled_trekker` by cancelBooking, so status tabs would tell the
+   office that trekkers cancelled trips they never touched. */
+
+export const CANCELLATION_REASONS = [
+  "trekker",
+  "guide",
+  "nonpayment",
+  "hold_expired",
+  "force_majeure",
+  // A real answer: a trip cancelled by some path that wrote no reason. After
+  // 0108 this tab should read zero, and a number in it is the sign of a cancel
+  // path that does not go through cancelBooking.
+  "",
+];
+
+export const CANCELLATION_FILTERS: StatusFilter[] = [
+  allOf(),
+  { key: "trekker", label: "Trekker cancelled", statuses: ["trekker"] },
+  { key: "guide", label: "Guide pulled out", statuses: ["guide"] },
+  { key: "nonpayment", label: "Not paid in time", statuses: ["nonpayment", "hold_expired"] },
+  { key: "force_majeure", label: "Force majeure", statuses: ["force_majeure"] },
+  { key: "unrecorded", label: "No reason recorded", statuses: [""] },
+];
+
 /** Every pairing, for the test that keeps filters and vocabularies together. */
 export const ALL_FILTER_SETS: Array<{
   name: string;
@@ -129,4 +155,5 @@ export const ALL_FILTER_SETS: Array<{
   { name: "incidents", statuses: INCIDENT_STATUSES, filters: INCIDENT_FILTERS },
   { name: "permits", statuses: PERMIT_APP_STATUSES, filters: PERMIT_FILTERS },
   { name: "trekker documents", statuses: DOC_REVIEW_STATUSES, filters: DOC_FILTERS },
+  { name: "cancellations", statuses: CANCELLATION_REASONS, filters: CANCELLATION_FILTERS },
 ];

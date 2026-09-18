@@ -60,6 +60,7 @@ describe("the console's filter sets", () => {
       "incidents",
       "permits",
       "trekker documents",
+      "cancellations",
     ]);
   });
 });

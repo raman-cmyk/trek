@@ -177,6 +177,7 @@ export default [
     route("ops/bookings/:id", "routes/ops.bookings.$id.tsx"),
     route("ops/permits", "routes/ops.permits.tsx"),
     route("ops/insurance", "routes/ops.insurance.tsx"),
+    route("ops/cancellations", "routes/ops.cancellations.tsx"),
     route("ops/checklists", "routes/ops.checklists.tsx"),
     route("ops/checklists/:key", "routes/ops.checklists.$key.tsx"),
     route("ops/payouts", "routes/ops.payouts.tsx"),

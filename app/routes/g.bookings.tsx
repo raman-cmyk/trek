@@ -28,7 +28,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       "id, start_date, end_date, party_size, status, trekker_id, offering:offerings(title, kind), trekker:users!bookings_trekker_id_fkey(full_name, country_code, phone)",
     )
     .eq("guide_id", user.id)
-    .not("status", "in", "(cancelled_trekker,cancelled_guide,cancelled_force_majeure)")
+    // Cancelled trips stay in. Filtering them out meant a guide's trip simply
+    // vanished from this list — and the only other signal was an SMS that
+    // does not send, so nothing anywhere told them it was gone.
     .order("start_date", { ascending: false });
   const { data: myReviews } = await admin
     .from("reviews")
@@ -93,8 +95,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function GuideBookings({ loaderData }: Route.ComponentProps) {
   const bookings = loaderData.bookings as any[];
-  const upcoming = bookings.filter((b) => b.status !== "completed");
-  const past = bookings.filter((b) => b.status === "completed");
+  const cancelled = bookings.filter((b) => String(b.status ?? "").startsWith("cancelled"));
+  const live = bookings.filter((b) => !String(b.status ?? "").startsWith("cancelled"));
+  const upcoming = live.filter((b) => b.status !== "completed");
+  const past = live.filter((b) => b.status === "completed");
   const nav = useNavigation();
 
   return (
@@ -153,6 +157,28 @@ export default function GuideBookings({ loaderData }: Route.ComponentProps) {
                     TIMS card
                   </a>
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Below the live work, above the archive: a trip that was taken off
+          you is worth seeing, and is not worth seeing first. */}
+      {cancelled.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-sm font-medium text-ink-soft">Cancelled</p>
+          <ul className="space-y-2">
+            {cancelled.map((b) => (
+              <li key={b.id} className="rounded-photo border border-border bg-card p-4 opacity-80">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium text-ink">{b.offering?.title}</p>
+                  <Badge tone="red">{b.status.replace("cancelled_", "").replace(/_/g, " ")}</Badge>
+                </div>
+                <p className="text-sm text-ink-soft">
+                  {firstName(b.trekker?.full_name)} · {fmtDate(b.start_date)} ·
+                  {" "}your calendar is open again
+                </p>
               </li>
             ))}
           </ul>

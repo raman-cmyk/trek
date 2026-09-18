@@ -448,8 +448,15 @@ export async function cancelBooking(
   stripe: StripeClient,
   bookingId: string,
   reason: "trekker" | "guide" | "force_majeure" | "nonpayment",
-  env?: Env,
+  /**
+   * `env` was a bare optional parameter, so a caller that simply left it off
+   * cancelled a trip and told nobody. As an options bag the omission has to be
+   * written down. `actorId` is who pressed it — null means the platform did,
+   * which is the non-payment sweep and is a real answer, not a missing one.
+   */
+  opts: { env?: Env; actorId?: string | null } = {},
 ) {
+  const { env } = opts;
   const { data: b } = await admin
     .from("bookings")
     .select("id, status, total_usd_cents, guide_fee_usd_cents, start_date, deposit_usd_cents, enquiry_id")
@@ -498,7 +505,12 @@ export async function cancelBooking(
   } as const;
   const { data: updated } = await admin
     .from("bookings")
-    .update({ status: statusMap[reason], cancellation_reason: reason })
+    .update({
+      status: statusMap[reason],
+      cancellation_reason: reason,
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: opts.actorId ?? null,
+    })
     .eq("id", bookingId)
     .not("status", "like", "cancelled%")
     .select("id");
@@ -850,7 +862,8 @@ export async function runBalanceSweep(
     }
     const daysUntil = daysBetween(todayIso, b.start_date);
     if (daysUntil <= 10) {
-      await cancelBooking(admin, stripe, b.id, "nonpayment", env);
+      // No actor: the sweep picked the moment, not a person.
+      await cancelBooking(admin, stripe, b.id, "nonpayment", { env });
       cancelled++;
     } else if (daysUntil <= 14) {
       const pi = await stripe.createDepositIntent({

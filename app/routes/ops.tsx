@@ -69,6 +69,7 @@ const NAV = [
       { to: "/ops/categories", label: "Homepage rows", badge: null },
       { to: "/ops/permits", label: "Permits", badge: null },
       { to: "/ops/insurance", label: "Insurance", badge: null },
+      { to: "/ops/cancellations", label: "Cancellations", badge: null },
       { to: "/ops/checklists", label: "Checklists", badge: null },
       { to: "/ops/contracts", label: "Contracts", badge: null },
       { to: "/ops/events", label: "Group trips", badge: null },
