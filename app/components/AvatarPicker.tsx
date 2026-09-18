@@ -14,11 +14,18 @@ export function AvatarPicker({
   initial,
   name,
   hint,
+  userId,
 }: {
   initial: string | null;
   /** For the alt text, and so the empty state is a person rather than a box. */
   name: string;
   hint?: string;
+  /**
+   * Whose photograph to set. Omitted means your own, which is every use on a
+   * guide's or trekker's own profile. The office passes the person it is
+   * looking at; /api/avatar checks the role before honouring it.
+   */
+  userId?: string;
 }) {
   const [url, setUrl] = useState<string | null>(initial);
   const [busy, setBusy] = useState(false);
@@ -59,12 +66,14 @@ export function AvatarPicker({
     if (!file) return;
     const body = new FormData();
     body.append("file", file);
+    if (userId) body.append("user_id", userId);
     void send(body);
   }
 
   function remove() {
     const body = new FormData();
     body.append("intent", "remove");
+    if (userId) body.append("user_id", userId);
     void send(body);
     setStrippedGps(false);
   }

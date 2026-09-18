@@ -78,27 +78,61 @@ export function PhotoGallery({
   // crop is not enough to tell them apart.
   const viewer = useLightbox(photos.map((p) => ({ url: p.url, alt: p.alt })));
 
+  /**
+   * Send them together, not one after another.
+   *
+   * This used to `await` each upload inside a `for` loop, so eight photographs
+   * off a phone meant eight round trips end to end — and on the connection a
+   * guide in Nepal actually has, that is the difference between "a moment" and
+   * "is this broken?". Nothing needed them to be serial: the order comes from
+   * the array below, not from what finishes first.
+   *
+   * Three at a time rather than all of them: a guide picking twenty pictures
+   * on a phone should not open twenty sockets and have the browser stall them
+   * anyway. Each photograph appears the moment it lands, so the count moves
+   * the whole time instead of jumping at the end.
+   */
   async function take(files: FileList) {
     const list = Array.from(files);
     setErr(null);
     setBusy({ done: 0, total: list.length });
-    const added: GalleryPhoto[] = [];
-    for (let i = 0; i < list.length; i++) {
-      const body = new FormData();
-      body.append("file", list[i]);
-      body.append("guide_id", guideId);
-      try {
-        const res = await fetch("/api/journal-photo", { method: "POST", body });
-        const json: any = await res.json();
-        if (!res.ok) throw new Error(json?.error ?? "That photo didn't send.");
-        added.push({ url: json.url, alt: "" });
-      } catch (e: any) {
-        // One bad photo out of six should not lose the other five.
-        setErr(e.message ?? "One photo didn't send. The others are here.");
+
+    const results: (GalleryPhoto | null)[] = new Array(list.length).fill(null);
+    let done = 0;
+    let cursor = 0;
+    const LANES = 3;
+
+    async function worker() {
+      while (cursor < list.length) {
+        const i = cursor++;
+        const body = new FormData();
+        body.append("file", list[i]);
+        body.append("guide_id", guideId);
+        try {
+          const res = await fetch("/api/journal-photo", { method: "POST", body });
+          const json: any = await res.json();
+          if (!res.ok) throw new Error(json?.error ?? "That photo didn't send.");
+          results[i] = { url: json.url, alt: "" };
+        } catch (e: any) {
+          // One bad photo out of six should not lose the other five.
+          setErr(e.message ?? "One photo didn't send. The others are here.");
+        }
+        done += 1;
+        setBusy({ done, total: list.length });
       }
-      setBusy({ done: i + 1, total: list.length });
     }
-    setPhotos((p) => [...p, ...added]);
+
+    await Promise.all(Array.from({ length: Math.min(LANES, list.length) }, worker));
+
+    // Kept in the order they were picked, whatever order they came back in,
+    // because the first photograph is the cover.
+    const added = results.filter((r): r is GalleryPhoto => r !== null);
+    // A photograph already in the list is not added twice — picking the same
+    // file again is a slip, not an instruction.
+    setPhotos((p) => {
+      const have = new Set(p.map((x) => x.url));
+      return [...p, ...added.filter((a) => !have.has(a.url))];
+    });
     setBusy(null);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -126,7 +160,11 @@ export function PhotoGallery({
         <ul className="mt-3 space-y-2">
           {photos.map((p, i) => (
             <li
-              key={p.url}
+              // Index, not URL. The same photograph can legitimately appear
+              // twice while a list is being edited, and duplicate React keys
+              // make Remove delete the wrong row — which is the other half of
+              // "I can't delete anything".
+              key={`${i}:${p.url}`}
               draggable
               onDragStart={() => setDrag(i)}
               onDragOver={(e) => e.preventDefault()}

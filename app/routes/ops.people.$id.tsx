@@ -28,6 +28,7 @@ import {
 import { PROFICIENCY_LABELS, type Proficiency } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+import { AvatarPicker } from "~/components/AvatarPicker";
 
 /**
  * One person, one page.
@@ -1362,12 +1363,19 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
               <TextField label="Email" name="email" type="email" defaultValue={p.email} />
               <TextField label="Phone" name="phone" defaultValue={p.phone} />
               <TextField label="Country" name="country_code" defaultValue={p.country_code} />
-              <TextField
-                label="Photo URL"
-                name="avatar_url"
-                defaultValue={p.avatar_url}
-                className="sm:col-span-2"
-              />
+              {/* A real picker, not a URL box. Asking the office to paste a
+                  URL for a photograph sitting on their desktop is asking them
+                  not to bother — and /api/avatar could only ever write the
+                  signed-in user's own row, so there was no way to do it at
+                  all. Uploads on its own, like the guide's own profile does. */}
+              <div className="sm:col-span-2">
+                <AvatarPicker
+                  initial={p.avatar_url}
+                  name={p.full_name}
+                  userId={p.id}
+                  hint="Saves as soon as you pick it — no need to press Save."
+                />
+              </div>
               <TextField
                 label="Emergency contact"
                 name="emergency_contact_name"

@@ -111,7 +111,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", offering.id);
   if (dbErr) return data({ error: "That did not save. Try again." }, { status: 400, headers });
-  await saveOfferingPhotos(admin, offering.id, photos ?? []);
+  const pics = await saveOfferingPhotos(admin, offering.id, photos ?? []);
+  if (!pics.ok) return data({ error: pics.error }, { status: 500, headers });
 
   if (offering.status === "live") {
     await admin.from("guide_change_requests").insert({

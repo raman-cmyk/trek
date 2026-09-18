@@ -36,16 +36,46 @@ export async function action({ request, context }: Route.ActionArgs) {
   const file = form.get("file");
   const removing = String(form.get("intent") ?? "") === "remove";
 
+  /**
+   * Whose photograph this is.
+   *
+   * Every write below used to be `.eq("id", user.id)`, hard-coded — so there
+   * was no path at all for the office to put a picture on somebody's profile.
+   * The ops person page offered a "Photo URL" text box instead, which means
+   * finding a URL for a photograph that is sitting on your desktop. In
+   * practice: the admin could not add a profile image.
+   *
+   * A target other than yourself is allowed only for ops. The role is read
+   * from the database rather than taken from the form, so the worst a
+   * non-admin can do by posting `user_id` is change their own picture.
+   */
+  const asked = String(form.get("user_id") ?? "").trim();
+  let targetId = user.id;
+  if (asked && asked !== user.id) {
+    const { data: actor } = await admin
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (actor?.role !== "admin") {
+      return Response.json(
+        { error: "Only the office can change somebody else's photograph." },
+        { status: 403, headers },
+      );
+    }
+    targetId = asked;
+  }
+
   // The photo being replaced, so its bytes do not sit in the bucket for ever.
   const { data: me } = await admin
     .from("users")
     .select("avatar_url")
-    .eq("id", user.id)
+    .eq("id", targetId)
     .maybeSingle();
   const previous = bucketObjectPath(me?.avatar_url, AVATAR_BUCKET);
 
   if (removing) {
-    await admin.from("users").update({ avatar_url: null }).eq("id", user.id);
+    await admin.from("users").update({ avatar_url: null }).eq("id", targetId);
     if (previous) await admin.storage.from(AVATAR_BUCKET).remove([previous]);
     return Response.json({ url: null }, { headers });
   }
@@ -76,7 +106,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const { ext, contentType } = storedAs(kind as "jpeg" | "png" | "webp");
-  const path = avatarPath(user.id, ext, Date.now());
+  const path = avatarPath(targetId, ext, Date.now());
 
   const { error } = await admin.storage
     .from(AVATAR_BUCKET)
@@ -88,7 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { error: saveError } = await admin
     .from("users")
     .update({ avatar_url: pub.publicUrl })
-    .eq("id", user.id);
+    .eq("id", targetId);
   if (saveError) {
     // Do not leave an orphan in the bucket that nothing points at.
     await admin.storage.from(AVATAR_BUCKET).remove([path]);

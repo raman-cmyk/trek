@@ -71,7 +71,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       { status: 400, headers },
     );
   }
-  await saveOfferingPhotos(admin, created.id, photos ?? []);
+  const pics = await saveOfferingPhotos(admin, created.id, photos ?? [], "ops");
+  if (!pics.ok) return data({ error: pics.error }, { status: 500, headers });
   // Straight to the editor, which is where publishing lives.
   return redirect(`/ops/experiences/${created.id}`, { headers });
 }

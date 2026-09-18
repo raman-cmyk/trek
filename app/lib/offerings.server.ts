@@ -46,11 +46,42 @@ export async function saveOfferingPhotos(
   offeringId: string,
   photos: ParsedPhoto[],
   source: "guide" | "ops" = "guide",
-) {
-  await admin.from("offering_photos").delete().eq("offering_id", offeringId).eq("source", source);
-  if (!photos.length) return;
-  await admin.from("offering_photos").insert(
-    photos.map((p, i) => ({
+): Promise<{ ok: boolean; error: string | null }> {
+  // Delete every photo on this trip, not only the ones this editor happens to
+  // have filed under its own `source`.
+  //
+  // Scoping the delete to `source` meant the two editors could not see each
+  // other's rows. The office opens a trip, sees all nine photographs, removes
+  // three, saves — and the delete only touches the office's own rows, so the
+  // guide's three come straight back. That is the "I can't delete anything".
+  //
+  // It also compounded. The form posts back every row it was shown, and they
+  // all get re-inserted under the saving editor's source, so each save added
+  // another copy of the guide's photographs: one trip in production reached
+  // nine rows for three actual pictures, growing every time anybody saved.
+  //
+  // Both editors show the whole list, so both must own the whole list. The
+  // `source` column stays — it still records who put a picture there — but it
+  // is no longer a filter that hides rows from the person editing them.
+  const removed = await admin.from("offering_photos").delete().eq("offering_id", offeringId);
+  if (removed.error) {
+    return { ok: false, error: `Couldn't clear the old photographs. (${removed.error.message})` };
+  }
+  if (!photos.length) return { ok: true, error: null };
+
+  // Two rows with the same URL are the same photograph, and the form has been
+  // posting duplicates back for weeks. Keep the first, drop the rest.
+  const seen = new Set<string>();
+  const unique = photos.filter((p) => {
+    const u = (p.url ?? "").trim();
+    if (!u || seen.has(u)) return false;
+    seen.add(u);
+    return true;
+  });
+  if (!unique.length) return { ok: true, error: null };
+
+  const added = await admin.from("offering_photos").insert(
+    unique.map((p, i) => ({
       offering_id: offeringId,
       url: p.url,
       // alt_text is NOT NULL and these land on indexed pages; fall back to
@@ -61,6 +92,10 @@ export async function saveOfferingPhotos(
       sort: i,
     })),
   );
+  if (added.error) {
+    return { ok: false, error: `Couldn't save the photographs. (${added.error.message})` };
+  }
+  return { ok: true, error: null };
 }
 
 export function parseExperienceForm(

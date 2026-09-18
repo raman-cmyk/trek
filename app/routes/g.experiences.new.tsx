@@ -43,7 +43,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (dbErr || !created) {
     return data({ error: "That did not save. Try again." }, { status: 400, headers });
   }
-  await saveOfferingPhotos(admin, created.id, photos ?? []);
+  const pics = await saveOfferingPhotos(admin, created.id, photos ?? []);
+  if (!pics.ok) return data({ error: pics.error }, { status: 500, headers });
 
   // The office finds out through the queue it already watches.
   await admin.from("guide_change_requests").insert({

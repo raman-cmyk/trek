@@ -3,6 +3,7 @@ import { Form, Link } from "react-router";
 import type { OfferingDetailData } from "~/features/offering-detail.server";
 import { SmartImage } from "~/components/SmartImage";
 import { Carousel, type Photo } from "~/components/public/Carousel";
+import { useLightbox } from "~/components/public/Lightbox";
 import { BookingWidget } from "~/components/public/BookingWidget";
 import { ReviewBlock, Stars, TierBadge } from "~/components/public/bits";
 import { ExperienceSplit } from "~/components/Split";
@@ -88,14 +89,36 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
       n.has(k) ? n.delete(k) : n.add(k);
       return n;
     });
-  const carousel: Photo[] = (
-    photos.length
-      ? photos
-      : [{ url: o.cover_photo_url ?? "", alt_text: o.title, credit_name: null }]
-  ).map((p) => ({ url: p.url, alt: p.alt_text, credit: p.credit_name }));
+  /**
+   * The cover and the gallery are one set of pictures, not two.
+   *
+   * This showed the uploaded photographs when there were any and the cover
+   * only when there were none — so a trip with a cover and two uploads showed
+   * two pictures and quietly dropped the one chosen to represent it. And a
+   * trip with no uploads at all, which is 52 of the 56 live ones, showed a
+   * single photograph and no way to tell there was nothing more.
+   *
+   * The cover leads, then anything not already in the list.
+   */
+  const carousel: Photo[] = (() => {
+    const out: Photo[] = [];
+    const seen = new Set<string>();
+    const push = (url: string | null | undefined, alt: string, credit: string | null) => {
+      const u = (url ?? "").trim();
+      if (!u || seen.has(u)) return;
+      seen.add(u);
+      out.push({ url: u, alt, credit });
+    };
+    push(o.cover_photo_url, o.title, null);
+    for (const p of photos) push(p.url, p.alt_text, p.credit_name);
+    return out;
+  })();
   // A fourteen-day trek used to answer "what do I do for two weeks?" with the
   // one line its guide had typed, while the route it walks held all fourteen
   // days one table away. Falls back to those, and says so.
+  // Tapping one of the strip's photographs opens it full size, the same way
+  // the carousel's do on a trip without a route.
+  const gallery = useLightbox(carousel.map((c) => ({ url: c.url, alt: c.alt || o.title })));
   const { steps: itinerary, source: itinerarySource } = tripItinerary(
     o.itinerary,
     (data as any).routeDayStops,
@@ -150,6 +173,39 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
         </TrailScene>
       ) : (
         <Carousel photos={carousel} />
+      )}
+
+      {/* Every other photograph of this trip.
+          A trek with a route opens on TrailScene, which draws one picture over
+          the walk — so a trek that had ten photographs uploaded showed exactly
+          one of them, and there was nowhere on the page the other nine could
+          appear. The carousel only ever ran on trips with no route to draw.
+          Now the rest of the pictures always have somewhere to be. */}
+      {routeStops.length >= 2 && carousel.length > 1 && (
+        <section className="mt-3">
+          <Rail itemClassName="w-[70vw] max-w-[360px] sm:w-[300px]">
+            {carousel.slice(1).map((ph) => (
+              <button
+                key={ph.url}
+                type="button"
+                onClick={() => gallery.open(carousel.indexOf(ph))}
+                className="group block w-full cursor-zoom-in overflow-hidden rounded-photo border border-line bg-wheat"
+                aria-label={`See this photograph of ${o.title} larger`}
+              >
+                <SmartImage
+                  src={ph.url}
+                  alt={ph.alt || o.title}
+                  width={360}
+                  height={240}
+                  cover
+                  className="aspect-[3/2] w-full"
+                  imgClassName="transition duration-slow group-hover:scale-[1.03]"
+                />
+              </button>
+            ))}
+          </Rail>
+          {gallery.node}
+        </section>
       )}
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_360px]">

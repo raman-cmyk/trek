@@ -119,7 +119,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", params.id);
   if (dbErr) return data({ error: dbErr.message }, { status: 400, headers });
-  await saveOfferingPhotos(admin, params.id!, photos ?? [], "ops");
+  const pics = await saveOfferingPhotos(admin, params.id!, photos ?? [], "ops");
+  if (!pics.ok) return data({ error: pics.error }, { status: 500, headers });
 
   // The office editing a guide's listing is the concierge model working, not
   // an exception to it — but the guide has to be told, and it has to be
