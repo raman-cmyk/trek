@@ -452,7 +452,7 @@ export async function cancelBooking(
 ) {
   const { data: b } = await admin
     .from("bookings")
-    .select("id, status, total_usd_cents, guide_fee_usd_cents, start_date, deposit_usd_cents")
+    .select("id, status, total_usd_cents, guide_fee_usd_cents, start_date, deposit_usd_cents, enquiry_id")
     .eq("id", bookingId)
     .single();
   if (!b) throw new Error("booking not found");
@@ -514,6 +514,18 @@ export async function cancelBooking(
     .from("availability")
     .update({ status: "open", booking_id: null })
     .eq("booking_id", bookingId);
+
+  // The request that produced this trip ends here too (0107). Without it the
+  // request stays "accepted" for ever and the trek page goes on telling the
+  // trekker the guide said yes to a trip that no longer exists — which is
+  // what every accepted request in production was doing.
+  if (b.enquiry_id) {
+    await admin
+      .from("enquiries")
+      .update({ status: "cancelled" })
+      .eq("id", b.enquiry_id)
+      .in("status", ["accepted", "converted"]);
+  }
 
   // Refund PI-by-PI, largest first, capped at each PI's own charge.
   let remaining = outcome.refundToTrekkerUsdCents;

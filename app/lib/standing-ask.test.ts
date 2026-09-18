@@ -44,6 +44,58 @@ describe("a booking beats everything", () => {
   });
 });
 
+describe("after the trip was cancelled", () => {
+  /**
+   * The founder's screenshot: a cancelled Langtang trip still reading
+   * "pratik said yes. Finish it in My trips."
+   *
+   * Nothing walks an enquiry's status back when its booking is cancelled, so
+   * it stays `accepted` forever — and in production every single accepted
+   * enquiry was sitting behind a cancelled booking.
+   */
+  for (const bookingStatus of ["cancelled_trekker", "cancelled_guide", "cancelled_force_majeure"]) {
+    it(`does not say "said yes" about a trip that is ${bookingStatus}`, () => {
+      const n = askNotice(ask({ status: "accepted" }), bookingStatus, "pratik", now);
+      expect(n.state).toBe("cancelled");
+      expect(n.text).not.toContain("said yes");
+      expect(n.text).toContain("was cancelled");
+    });
+  }
+
+  it("does the same for a converted request, which is the commoner case", () => {
+    // Converted means money moved, so there is definitely a booking behind it.
+    expect(askNotice(ask({ status: "converted" }), "cancelled_trekker", "pratik", now).state).toBe(
+      "cancelled",
+    );
+  });
+
+  it("lets them ask again, which the server has always allowed", () => {
+    // enquiry.tsx excludes cancelled bookings from its duplicate check, so the
+    // banner was the only thing standing in the way.
+    const n = askNotice(ask({ status: "accepted" }), "cancelled_trekker", "pratik", now);
+    expect(n.canAskAgain).toBe(true);
+    expect(n.offerOtherDates).toBe(true);
+  });
+
+  it("does not offer other guides — this one never said no", () => {
+    const n = askNotice(ask({ status: "accepted" }), "cancelled_trekker", "pratik", now);
+    expect(n.offerOtherGuides).toBe(false);
+  });
+
+  it("still says yes when the booking is alive", () => {
+    expect(askNotice(ask({ status: "accepted" }), null, "pratik", now).state).toBe("accepted");
+    // A live booking is answered earlier still, as "booked".
+    expect(askNotice(ask({ status: "accepted" }), "confirmed", "pratik", now).state).toBe("booked");
+  });
+
+  it("a later decline is newer news than the cancellation behind it", () => {
+    // Booked, cancelled, asked again, turned down. The no is what matters.
+    expect(askNotice(ask({ status: "declined" }), "cancelled_trekker", "pratik", now).state).toBe(
+      "declined",
+    );
+  });
+});
+
 describe("after the guide says no", () => {
   const n = askNotice(ask({ status: "declined" }), null, "Pemba", now);
 

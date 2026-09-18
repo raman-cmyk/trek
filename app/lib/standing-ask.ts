@@ -28,6 +28,7 @@ export type AskState =
   | "waiting"
   | "accepted"
   | "booked"
+  | "cancelled"
   | "declined"
   | "expired";
 
@@ -58,6 +59,25 @@ export interface AskNotice {
  * a booking — the same rule ask-guard applies when deciding whether a new
  * request is a duplicate.
  */
+/**
+ * What to say when the trip behind this request is gone.
+ *
+ * Cancelled is not declined — the guide did not turn them down — so it keeps
+ * the guide, offers the calendar, and lets them ask again, which the server
+ * has always allowed: the duplicate check in enquiry.tsx excludes cancelled
+ * bookings, so the banner was the only thing standing in the way.
+ */
+function cancelledNotice(who: string): AskNotice {
+  return {
+    state: "cancelled",
+    tone: "cool",
+    text: `That trip was cancelled. ${who}'s open dates are on the calendar above — pick some and ask again.`,
+    offerOtherDates: true,
+    offerOtherGuides: false,
+    canAskAgain: true,
+  };
+}
+
 export function askNotice(
   ask: StandingAsk | null,
   bookingStatus: string | null | undefined,
@@ -96,6 +116,26 @@ export function askNotice(
   }
 
   if (status === "accepted" || status === "converted") {
+    /**
+     * Accepted, and then the trip was cancelled.
+     *
+     * Nothing ever walks a request's status back — `cancelBooking` touches
+     * bookings, instalments and availability and never enquiries — so an
+     * accepted request stays accepted after its trip is gone, and this page
+     * went on saying "they said yes, finish it in My trips" about a trip that
+     * no longer existed. Every accepted request in production was in exactly
+     * that state.
+     *
+     * Only this branch is overridden, not the ones above it: a decline or an
+     * expiry is NEWER news than a cancellation behind it. Somebody who booked,
+     * cancelled, and asked again only to be turned down needs to hear the no.
+     *
+     * Cancelled is not declined — the guide did not turn them down — so this
+     * keeps the guide, offers the calendar, and lets them ask again, which the
+     * server has always allowed: the duplicate check in enquiry.tsx excludes
+     * cancelled bookings.
+     */
+    if (bookingStatus && isCancelledBooking(bookingStatus)) return cancelledNotice(who);
     return {
       state: "accepted",
       tone: "good",
@@ -105,6 +145,11 @@ export function askNotice(
       canAskAgain: false,
     };
   }
+
+  // The same fact from the other direction: `cancelBooking` marks the request
+  // cancelled too, so a trekker who comes back later gets the same sentence
+  // whether we read the booking or the request.
+  if (status === "cancelled") return cancelledNotice(who);
 
   if (status === "declined") {
     return {
