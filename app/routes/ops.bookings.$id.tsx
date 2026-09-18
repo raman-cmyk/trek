@@ -27,6 +27,15 @@ import { one, rows } from "~/lib/ops.server";
 import { formatUsd } from "~/lib/pricing";
 import { bookingBreakdown, payoutUsdCents } from "~/lib/booking-breakdown";
 import { bookingDue } from "~/lib/booking-due";
+import { tripReadiness, byOwner, OWNER_LABEL, daysUntil, type ReadinessStep } from "~/lib/trip-readiness";
+import {
+  ARRANGEMENT_KINDS,
+  ARRANGEMENT_STATUSES,
+  arrangementTotals,
+  formatMinor,
+  kindLabel,
+  sortArrangements,
+} from "~/lib/arrangements";
 import { hasBreakdown, computeExperiencePricing, addOns } from "~/lib/experience-pricing";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -41,7 +50,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, status, start_date, end_date, party_size, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, hold_expires_at, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, price_breakdown, route:routes(name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+        "id, status, guide_id, start_date, end_date, party_size, meeting_point, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, hold_expires_at, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, price_breakdown, route:routes(name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
       )
       .eq("id", params.id)
       .maybeSingle(),
@@ -50,7 +59,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (booking.error) throw new Response(booking.error, { status: 500 });
   const b = booking.row;
   if (!b) throw new Response("Not found", { status: 404 });
-  const [docs, permits, contract, tims, instalments, payments, checkins, payouts] = await Promise.all([
+  const [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements] =
+    await Promise.all([
     rows<any>(
       admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
       "this trek's documents",
@@ -85,7 +95,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     rows<any>(
       admin
         .from("payments")
-        .select("type, amount_usd_cents, status, created_at")
+        .select("id, type, amount_usd_cents, status, created_at, stripe_payment_intent, stripe_refund_id")
         .eq("booking_id", b.id)
         .order("created_at"),
       "the payments",
@@ -113,12 +123,34 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         .order("kind"),
       "the guide's payments",
     ),
+    // The guide and the trekker talking to each other. The office had to open
+    // a second screen to find out whether a question had been answered, which
+    // on a trek starting in nine days is the whole of the job.
+    rows<any>(
+      admin
+        .from("messages")
+        .select("id, body, sender_id, created_at, flagged_reason")
+        .eq("booking_id", b.id)
+        .order("created_at", { ascending: false })
+        .limit(30),
+      "the messages",
+    ),
+    // Gear, hotels, transport (0096).
+    rows<any>(
+      admin
+        .from("trip_arrangements")
+        .select(
+          "id, kind, title, vendor, reference, happens_on, status, currency, cost_minor, paid_minor, due_on, note",
+        )
+        .eq("booking_id", b.id),
+      "the arrangements",
+    ),
   ]);
   // One line naming whichever panels could not be read. A blank Documents
   // panel on a trek whose passports are the thing you came to check is the
   // failure mode this whole file is guarding against.
   const loadError =
-    [docs, permits, contract, tims, instalments, payments, checkins, payouts]
+    [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements]
       .map((r) => r.error)
       .filter(Boolean)
       .join(" ") || null;
@@ -133,6 +165,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       instalments: instalments.rows,
       payments: payments.rows,
       payouts: payouts.rows,
+      messages: messages.rows,
+      arrangements: arrangements.rows,
       // One row per day of the trek so far, in order — a gap reads as a gap
       // only when it sits between the days either side of it.
       safety: [
@@ -381,6 +415,70 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // ── Gear, hotels, transport (0096) ──────────────────────────────────
+  if (intent === "arrangement_add") {
+    const title = String(form.get("title") ?? "").trim();
+    const kind = String(form.get("kind") ?? "other");
+    if (!title) return data({ error: "What is it?" }, { status: 400, headers });
+    if (!ARRANGEMENT_KINDS.some((k) => k.key === kind)) {
+      return data({ error: "That is not one of the kinds." }, { status: 400, headers });
+    }
+    const cost = Number(form.get("cost") ?? 0);
+    const saved = await admin.from("trip_arrangements").insert({
+      booking_id: params.id!,
+      kind,
+      title,
+      vendor: String(form.get("vendor") ?? "").trim() || null,
+      reference: String(form.get("reference") ?? "").trim() || null,
+      happens_on: String(form.get("happens_on") ?? "") || null,
+      due_on: String(form.get("due_on") ?? "") || null,
+      currency: String(form.get("currency") ?? "NPR").toUpperCase().slice(0, 3),
+      // Minor units, like every other amount in this codebase (CLAUDE.md #3).
+      cost_minor: isFinite(cost) && cost > 0 ? Math.round(cost * 100) : 0,
+      status: "to_book",
+      created_by: user.id,
+    });
+    if (saved.error) return data({ error: saved.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "arrangement_status") {
+    const id = String(form.get("arrangement_id"));
+    const status = String(form.get("status"));
+    if (!ARRANGEMENT_STATUSES.some((x) => x.key === status)) {
+      return data({ error: "That is not a status." }, { status: 400, headers });
+    }
+    // Marking it paid settles the money too, so "paid" and "still owed" can
+    // never disagree on the same row.
+    const patch: Record<string, unknown> = { status };
+    if (status === "paid") {
+      // one(), so a refused read cannot quietly mark a vendor paid for zero.
+      const row = await one<any>(
+        admin.from("trip_arrangements").select("cost_minor").eq("id", id).maybeSingle(),
+        "this arrangement",
+      );
+      if (row.error) return data({ error: row.error }, { status: 500, headers });
+      if (row.row) patch.paid_minor = row.row.cost_minor;
+    }
+    const saved = await admin
+      .from("trip_arrangements")
+      .update(patch)
+      .eq("id", id)
+      .eq("booking_id", params.id!);
+    if (saved.error) return data({ error: saved.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "arrangement_remove") {
+    const gone = await admin
+      .from("trip_arrangements")
+      .delete()
+      .eq("id", String(form.get("arrangement_id")))
+      .eq("booking_id", params.id!);
+    if (gone.error) return data({ error: gone.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
   if (intent === "gen_contract") {
     await generateContractForBooking(admin, params.id!);
     return data({ ok: true }, { headers });
@@ -411,8 +509,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits, contract, tims, instalments, payments, payouts, safety, missedRun, loadError } =
-    loaderData as any;
+  const {
+    booking: b,
+    documents,
+    permits,
+    contract,
+    tims,
+    instalments,
+    payments,
+    payouts,
+    messages,
+    arrangements,
+    safety,
+    missedRun,
+    loadError,
+  } = loaderData as any;
   const meta = b.insurance_meta ?? {};
   const insuranceOk = meta.altitude && meta.helicopter;
   return (
@@ -438,6 +549,20 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
           {(actionData as any).error}
         </p>
       )}
+
+      {/* Before anything else: what is still in the way, and whose move it
+          is. Everything below this line is a detail of one of these rows. */}
+      <Readiness
+        booking={b}
+        documents={documents}
+        permits={permits}
+        tims={tims}
+        contract={contract}
+        payments={payments}
+        instalments={instalments}
+        arrangements={arrangements}
+        payouts={payouts}
+      />
 
       {/* The day-by-day, full width and above the panels, because when a
           trek is walking this is the thing the office opens the page for. */}
@@ -559,6 +684,8 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             <AddDocument defaultPerson={b.trekker?.full_name ?? ""} />
           </Panel>
 
+          <Conversation messages={messages} booking={b} />
+
           {/* Insurance (2026 gate) */}
           <div className="mt-4">
             <Panel title="Money">
@@ -577,6 +704,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
 
                 <DueFromClient booking={b} payments={payments} instalments={instalments} />
                 <CostBreakdown booking={b} />
+                <PaymentLog payments={payments} />
                 <GuidePayments booking={b} payouts={payouts} />
                 {instalments.length > 0 ? (
                   <table className="mt-3 w-full text-left">
@@ -618,6 +746,8 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                 <WhatsIncluded booking={b} />
               </div>
             </Panel>
+
+            <Arrangements rows={arrangements} />
 
             <Panel title="Insurance">
               {b.insurance_attested_at ? (
@@ -1429,6 +1559,489 @@ function GuidePayments({ booking, payouts }: { booking: any; payouts: any[] }) {
           </p>
         </details>
       )}
+    </div>
+  );
+}
+
+const STEP_TONE: Record<string, string> = {
+  done: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  open: "border-amber-200 bg-amber-50 text-amber-900",
+  overdue: "border-red-300 bg-red-50 text-red-900",
+  blocked: "border-border bg-surface text-ink-soft",
+};
+
+/**
+ * What is still in the way, and whose move it is.
+ *
+ * The page could tell you a dozen separate facts — a status, two documents, a
+ * permit list, a TIMS row, a contract, a payment total — and never the one
+ * thing somebody opening it at eight in the morning wants: what is left, and
+ * who has to do it. Three columns because there are exactly three people who
+ * can act, and a step belongs to one of them.
+ *
+ * "Blocked" is drawn grey and quiet on purpose. It is not a failure and not a
+ * job — it is a step waiting on an earlier one, and the office chasing a
+ * trekker for a passport on a trip nobody has paid a deposit for is the
+ * specific waste this distinction exists to stop.
+ */
+function Readiness({
+  booking,
+  documents,
+  permits,
+  tims,
+  contract,
+  payments,
+  instalments,
+  arrangements,
+  payouts,
+}: {
+  booking: any;
+  documents: any[];
+  permits: any[];
+  tims: any;
+  contract: any;
+  payments: any[];
+  instalments: any[];
+  arrangements: any[];
+  payouts: any[];
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const due = bookingDue({ ...booking, payments, instalments }, today);
+  const r = tripReadiness({
+    status: booking.status,
+    kind: booking.offering?.kind,
+    startDate: booking.start_date,
+    partySize: booking.party_size,
+    paidUp: due.outstandingUsdCents === 0,
+    outstandingUsdCents: due.outstandingUsdCents,
+    paymentDueOn: due.next.dueOn,
+    documents: documents ?? [],
+    insuranceVerifiedAt: booking.insurance_verified_at,
+    insuranceAttestedAt: booking.insurance_attested_at,
+    permits: permits ?? [],
+    timsStatus: tims?.status ?? null,
+    contractStatus: contract?.status ?? null,
+    meetingPoint: booking.meeting_point ?? null,
+    arrangements: arrangements ?? [],
+    guideAdvancePaid: (payouts ?? []).some((p: any) => p.kind === "advance" && p.status === "paid"),
+    todayIso: today,
+  });
+  if (r.total === 0) return null;
+
+  const split = byOwner(r);
+  const cancelled = String(booking.status ?? "").startsWith("cancelled");
+
+  return (
+    <Panel title="Ready to walk?">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="h-2 min-w-[12rem] flex-1 overflow-hidden rounded-full bg-border">
+          <div
+            className={
+              "h-full rounded-full transition-all " +
+              (r.overdue.length > 0 ? "bg-red-500" : r.percent === 100 ? "bg-emerald-500" : "bg-amber-400")
+            }
+            style={{ width: `${r.percent}%` }}
+          />
+        </div>
+        <span className="font-mono text-sm text-ink">
+          {r.doneCount}/{r.total}
+        </span>
+        {cancelled ? (
+          <Badge tone="neutral">cancelled</Badge>
+        ) : r.overdue.length > 0 ? (
+          <Badge tone="red">
+            {r.overdue.length} overdue
+          </Badge>
+        ) : r.percent === 100 ? (
+          <Badge tone="green">everything done</Badge>
+        ) : (
+          <Badge tone="amber">{r.outstanding.length} to go</Badge>
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {(["client", "guide", "office"] as const).map((owner) => (
+          <div key={owner} className="rounded-md border border-border">
+            <p className="flex items-center justify-between border-b border-border px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+              {OWNER_LABEL[owner]}
+              <span className="font-mono normal-case">
+                {split[owner].length === 0 ? "clear" : split[owner].length}
+              </span>
+            </p>
+            {split[owner].length === 0 ? (
+              <p className="px-2.5 py-2 text-xs text-ink-soft">Nothing waiting on them.</p>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {split[owner].map((st: ReadinessStep) => (
+                  <li key={st.key} className={"px-2.5 py-1.5 text-xs " + STEP_TONE[st.state]}>
+                    <p className="font-medium">
+                      {st.label}
+                      {st.state === "blocked" && <span className="font-normal"> · waiting</span>}
+                    </p>
+                    <p className="opacity-90">{st.detail}</p>
+                    {st.dueOn && (
+                      <p className="font-mono opacity-90">
+                        {(() => {
+                          const n = daysUntil(st.dueOn, today);
+                          if (n === null) return fmtDate(st.dueOn);
+                          if (n < 0) return `${fmtDate(st.dueOn)} — ${Math.abs(n)}d late`;
+                          return `${fmtDate(st.dueOn)} — in ${n}d`;
+                        })()}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* The done ones, small, so the bar can be trusted without scrolling
+          the page to find out what it counted. */}
+      <p className="mt-2 text-[11px] text-ink-soft">
+        Done:{" "}
+        {r.steps.filter((x) => x.state === "done").map((x) => x.label).join(" · ") || "nothing yet"}
+      </p>
+    </Panel>
+  );
+}
+
+/**
+ * Gear, hotels and transport — everything the office books that is not the
+ * guide (0096).
+ *
+ * A trek could read "confirmed" on this page while nobody had yet put a jeep
+ * on the road to the trailhead, because the bus, the down jacket and the
+ * teahouse in Kathmandu lived in a WhatsApp thread. One row each, with the
+ * reference number you have to read out on the phone at six in the morning.
+ */
+function Arrangements({ rows }: { rows: any[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const list = sortArrangements(rows ?? [], today);
+  const totals = arrangementTotals(rows ?? []);
+
+  return (
+    <div className="mt-4">
+      <Panel title="Gear, hotels & transport">
+        {list.length === 0 ? (
+          <p className="py-2 text-sm text-ink-soft">
+            Nothing booked through us yet. Add the jeep, the hotel the night
+            before, the gear hire — anything somebody would otherwise have to
+            remember.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {list.map((a: any) => {
+              const late = a.status !== "paid" && a.status !== "cancelled" && a.due_on && a.due_on < today;
+              return (
+                <li key={a.id} className={"py-2 " + (a.status === "cancelled" ? "opacity-50" : "")}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink">
+                        {a.title}
+                        <span className="ml-1.5 text-xs font-normal text-ink-soft">
+                          {kindLabel(a.kind)}
+                        </span>
+                      </p>
+                      <p className="text-xs text-ink-soft">
+                        {[
+                          a.vendor,
+                          a.reference && `ref ${a.reference}`,
+                          a.happens_on && `on ${fmtDate(a.happens_on)}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "no details yet"}
+                      </p>
+                      {a.due_on && a.status !== "paid" && a.status !== "cancelled" && (
+                        <p className={"text-xs " + (late ? "font-medium text-red-900" : "text-ink-soft")}>
+                          {late ? "pay was due " : "pay by "}
+                          {fmtDate(a.due_on)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {a.cost_minor > 0 && (
+                        <span className="font-mono text-xs tabular-nums text-ink">
+                          {formatMinor(a.cost_minor, a.currency ?? "NPR")}
+                        </span>
+                      )}
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="arrangement_status" />
+                        <input type="hidden" name="arrangement_id" value={a.id} />
+                        <select
+                          name="status"
+                          defaultValue={a.status}
+                          onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                          className={
+                            "rounded border px-1.5 py-1 text-xs " +
+                            (late
+                              ? "border-red-300 bg-red-50 text-red-900"
+                              : a.status === "paid"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                                : "border-border bg-card text-ink")
+                          }
+                        >
+                          {ARRANGEMENT_STATUSES.map((x) => (
+                            <option key={x.key} value={x.key}>
+                              {x.label}
+                            </option>
+                          ))}
+                        </select>
+                        <noscript>
+                          <button className="ml-1 rounded border border-border px-1.5 py-1 text-xs">
+                            Save
+                          </button>
+                        </noscript>
+                      </Form>
+                      <Form
+                        method="post"
+                        onSubmit={(e) => {
+                          if (!confirm("Remove this?")) e.preventDefault();
+                        }}
+                      >
+                        <input type="hidden" name="intent" value="arrangement_remove" />
+                        <input type="hidden" name="arrangement_id" value={a.id} />
+                        <button
+                          className="rounded border border-border px-1.5 py-1 text-xs text-ink-soft hover:border-red-300 hover:text-red-900"
+                          aria-label={`Remove ${a.title}`}
+                        >
+                          ×
+                        </button>
+                      </Form>
+                    </div>
+                  </div>
+                  {a.note && <p className="mt-0.5 text-xs text-ink-soft">{a.note}</p>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {totals.byCurrency.length > 0 && (
+          <div className="mt-2 border-t border-border pt-2 text-sm">
+            {/* Per currency, never summed together: a Lukla seat sold in
+                dollars added to rupees is wrong by a factor of 130. */}
+            {totals.byCurrency.map((t) => (
+              <p key={t.currency} className="text-ink-soft">
+                {t.currency}:{" "}
+                <span className="font-mono text-ink">{formatMinor(t.costMinor, t.currency)}</span>{" "}
+                booked,{" "}
+                <span className="font-mono text-ink">{formatMinor(t.owedMinor, t.currency)}</span>{" "}
+                still to pay
+              </p>
+            ))}
+          </div>
+        )}
+
+        <details className="mt-2 border-t border-border pt-2">
+          <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+            Add something…
+          </summary>
+          <Form method="post" className="mt-2 grid gap-2 sm:grid-cols-2">
+            <input type="hidden" name="intent" value="arrangement_add" />
+            <label className="text-xs text-ink-soft sm:col-span-2">
+              <span className="block">What</span>
+              <input
+                name="title"
+                required
+                placeholder="Jeep, Kathmandu → Soti Khola"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-ink-soft">
+              <span className="block">Kind</span>
+              <select
+                name="kind"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              >
+                {ARRANGEMENT_KINDS.map((k) => (
+                  <option key={k.key} value={k.key}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-ink-soft">
+              <span className="block">Who with</span>
+              <input
+                name="vendor"
+                placeholder="Shona's, Buddha Air…"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-ink-soft">
+              <span className="block">Reference</span>
+              <input
+                name="reference"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-ink-soft">
+              <span className="block">Happens on</span>
+              <input
+                type="date"
+                name="happens_on"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-ink-soft">
+              <span className="block">Cost</span>
+              <div className="mt-0.5 flex gap-1">
+                <input
+                  name="cost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="w-full min-w-0 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                />
+                <select
+                  name="currency"
+                  className="rounded border border-border bg-card px-1 py-1 text-sm text-ink"
+                >
+                  <option value="NPR">NPR</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            </label>
+            <label className="text-xs text-ink-soft">
+              <span className="block">Pay the vendor by</span>
+              <input
+                type="date"
+                name="due_on"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <div className="sm:col-span-2">
+              <button className="rounded border border-border px-3 py-1.5 text-xs hover:bg-mist">
+                Add
+              </button>
+            </div>
+          </Form>
+        </details>
+      </Panel>
+    </div>
+  );
+}
+
+/**
+ * What the guide and the trekker have said to each other.
+ *
+ * Read-only, and that is the decision rather than an omission: the office
+ * stepping into a thread as one of the two people in it is how a trekker ends
+ * up believing their guide said something the guide has never seen. When the
+ * office needs to say something it says it as itself, elsewhere. Here it only
+ * needs to know whether the question got answered.
+ */
+function Conversation({ messages, booking }: { messages: any[]; booking: any }) {
+  const rows = messages ?? [];
+  const guideId = booking.guide_id ?? null;
+  const whoFor = (senderId: string) =>
+    senderId && guideId && senderId === guideId
+      ? (booking.guide?.users?.full_name ?? "Guide")
+      : (booking.trekker?.full_name ?? "Trekker");
+
+  return (
+    <div className="mt-4">
+      <Panel title="Guide ↔ trekker">
+        {rows.length === 0 ? (
+          <p className="py-2 text-sm text-ink-soft">
+            They have not written to each other on this trip yet.
+          </p>
+        ) : (
+          <ul className="max-h-80 space-y-2 overflow-y-auto">
+            {/* Newest first: on a trek that starts in nine days, the last
+                thing said is the thing you came to read. */}
+            {rows.map((m: any) => (
+              <li
+                key={m.id}
+                className={
+                  "rounded-md border px-2.5 py-1.5 text-sm " +
+                  (m.flagged_reason
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-border bg-surface")
+                }
+              >
+                <p className="flex items-baseline justify-between gap-2 text-xs text-ink-soft">
+                  <span className="font-medium text-ink">{whoFor(m.sender_id)}</span>
+                  <span className="font-mono">{fmtDate(m.created_at)}</span>
+                </p>
+                <p className="mt-0.5 whitespace-pre-wrap text-ink">{m.body}</p>
+                {m.flagged_reason && (
+                  <p className="mt-1 text-xs text-amber-900">flagged: {m.flagged_reason}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-[11px] text-ink-soft">
+          Read-only here. The office writing into their thread is how a trekker
+          comes to believe their guide said something the guide never saw.
+        </p>
+      </Panel>
+    </div>
+  );
+}
+
+/**
+ * Every payment that has ever touched this booking.
+ *
+ * "Paid so far: $420" is a total, and a total is what you have instead of a
+ * receipt. When a trekker writes to ask why they were charged twice, or a
+ * refund has to be traced, the office needs the rows: what each one was, when
+ * it landed, and the Stripe reference to paste into the dashboard.
+ *
+ * Failed and refunded attempts stay on the list. A card that was declined on
+ * Tuesday is the reason somebody rang on Wednesday, and hiding it leaves the
+ * office reading a clean ledger while the trekker describes a mess.
+ */
+function PaymentLog({ payments }: { payments: any[] }) {
+  const rows = payments ?? [];
+  if (rows.length === 0) {
+    return (
+      <p className="mt-3 rounded-md border border-border px-3 py-2 text-sm text-ink-soft">
+        No payment has been attempted yet.
+      </p>
+    );
+  }
+  const tone = (status: string) =>
+    status === "succeeded"
+      ? "green"
+      : status === "refunded"
+        ? "neutral"
+        : status === "failed"
+          ? "red"
+          : "amber";
+
+  return (
+    <div className="mt-3 rounded-md border border-border">
+      <p className="border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+        Payment log
+      </p>
+      <ul className="divide-y divide-border/60">
+        {rows.map((p: any) => (
+          <li key={p.id} className="flex flex-wrap items-start justify-between gap-2 px-3 py-1.5 text-sm">
+            <span className="min-w-0">
+              <span className="capitalize">{String(p.type ?? "payment").replace(/_/g, " ")}</span>
+              <span className="block text-[11px] text-ink-soft">
+                {fmtDate(p.created_at)}
+                {/* The reference, so a question about this charge can be
+                    answered in Stripe without hunting for it. */}
+                {p.stripe_payment_intent && (
+                  <span className="ml-1 font-mono">{p.stripe_payment_intent}</span>
+                )}
+                {p.stripe_refund_id && (
+                  <span className="ml-1 font-mono">refund {p.stripe_refund_id}</span>
+                )}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="font-mono tabular-nums">{formatUsd(p.amount_usd_cents ?? 0)}</span>
+              <Badge tone={tone(String(p.status))}>{p.status}</Badge>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
