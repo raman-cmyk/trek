@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { byOwner, daysUntil, tripReadiness, type ReadinessInput } from "./trip-readiness";
 
+/** Two people going, both named — the roster the permits are filed against. */
+const PARTY = [
+  { id: "t1", full_name: "Odonell Brian" },
+  { id: "t2", full_name: "Ana Lima" },
+];
+
+/** Both of them have sent this, and the office has passed it. */
+const bothSent = (type: string, verified_at: string | null = "2026-09-02") =>
+  PARTY.map((t) => ({ type, traveller_id: t.id, verified_at }));
+
 const TREK: ReadinessInput = {
   status: "deposit_paid",
   kind: "trek",
@@ -10,6 +20,7 @@ const TREK: ReadinessInput = {
   outstandingUsdCents: 102774,
   paymentDueOn: "2026-11-17",
   documents: [],
+  travellers: PARTY,
   permits: [],
   arrangements: [],
   guideAdvancePaid: false,
@@ -56,16 +67,53 @@ describe("who has to move", () => {
   });
 
   it("says a passport is uploaded but unchecked, which is the office's move", () => {
-    const r = tripReadiness({ ...TREK, documents: [{ type: "passport" }] });
+    const r = tripReadiness({ ...TREK, documents: bothSent("passport", null) });
     expect(step(r, "passport").detail).toContain("waiting for the office");
+  });
+
+  it("counts papers per person, not per booking", () => {
+    // The whole point of the roster: one passport used to satisfy a party of
+    // two, which is what confirmed bookings on one document (0099).
+    const one = tripReadiness({
+      ...TREK,
+      documents: [{ type: "passport", traveller_id: "t1", verified_at: "2026-09-02" }],
+    });
+    expect(step(one, "passport").state).toBe("open");
+    expect(step(one, "passport").detail).toContain("1 still to upload");
+
+    const both = tripReadiness({ ...TREK, documents: bothSent("passport") });
+    expect(step(both, "passport").state).toBe("done");
+  });
+
+  it("wants everybody named before it wants their papers", () => {
+    const r = tripReadiness({ ...TREK, travellers: [PARTY[0]] });
+    expect(step(r, "roster").state).toBe("open");
+    expect(step(r, "roster").detail).toContain("1 of 2");
+    // And a passport for the one person named is not the party's passports.
+    expect(step(r, "passport").state).toBe("open");
   });
 
   it("does not count a rejected document as in", () => {
     const r = tripReadiness({
       ...TREK,
-      documents: [{ type: "passport", verified_at: null, rejected_at: "2026-09-01" }],
+      documents: [
+        { type: "passport", traveller_id: "t1", verified_at: null, rejected_at: "2026-09-01" },
+      ],
     });
     expect(step(r, "passport").state).toBe("open");
+  });
+
+  it("does not count a replaced document as in either", () => {
+    const r = tripReadiness({
+      ...TREK,
+      documents: [
+        // Superseded by a clearer scan (0101) — not a refusal, but not the
+        // document we hold either.
+        { type: "passport", traveller_id: "t1", verified_at: "2026-09-01", superseded_at: "2026-09-05" },
+        { type: "passport", traveller_id: "t2", verified_at: "2026-09-02" },
+      ],
+    });
+    expect(step(r, "passport").detail).toContain("1 still to upload");
   });
 });
 
@@ -77,7 +125,7 @@ describe("what is blocked on what", () => {
   it("can once it is verified", () => {
     const r = tripReadiness({
       ...TREK,
-      documents: [{ type: "passport", verified_at: "2026-09-02" }],
+      documents: bothSent("passport"),
     });
     expect(step(r, "permits").state).toBe("open");
   });
@@ -99,7 +147,7 @@ describe("overdue is louder than open", () => {
   it("marks a REJECTED permit overdue whatever the calendar says", () => {
     const r = tripReadiness({
       ...TREK,
-      documents: [{ type: "passport", verified_at: "2026-09-02" }],
+      documents: bothSent("passport"),
       permits: [{ status: "ready" }, { status: "rejected" }],
     });
     expect(step(r, "permits").state).toBe("overdue");
@@ -157,7 +205,9 @@ describe("gear, hotels and transport", () => {
 
 describe("the bar", () => {
   it("counts blocked as not done — it is not progress", () => {
-    const r = tripReadiness({ ...TREK, status: "pending_deposit" });
+    // No roster yet either: the lead traveller is seeded when the deposit
+    // lands, not when somebody clicks book.
+    const r = tripReadiness({ ...TREK, status: "pending_deposit", travellers: [] });
     expect(r.percent).toBeLessThan(50);
     expect(r.doneCount).toBe(0);
   });
@@ -167,10 +217,7 @@ describe("the bar", () => {
       ...TREK,
       paidUp: true,
       outstandingUsdCents: 0,
-      documents: [
-        { type: "passport", verified_at: "2026-09-02" },
-        { type: "insurance", verified_at: "2026-09-02" },
-      ],
+      documents: [...bothSent("passport"), ...bothSent("insurance")],
       insuranceVerifiedAt: "2026-09-02",
       permits: [{ status: "ready" }],
       timsStatus: "issued",

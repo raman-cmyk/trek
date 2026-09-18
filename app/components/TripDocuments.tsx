@@ -1,7 +1,111 @@
 import { Form, Link, useFetcher } from "react-router";
 import { Button } from "~/components/Button";
-import { docState, outstanding, STATE_LABEL } from "~/lib/doc-review";
+import { docState, liveDocs, outstanding, STATE_LABEL } from "~/lib/doc-review";
 import { Badge } from "~/components/ops/ui";
+import { missingDocs, owedSummary, type Traveller } from "~/lib/travellers";
+
+/**
+ * Who is walking.
+ *
+ * The upload form used to ask "whose is it?" as free text, typed fresh every
+ * time, so one party of one ended up with three passports filed under "xyz",
+ * "XYZ" and "INS" and nothing could tell whether that was one person or three.
+ * The names are the roster now, and the roster is what the permits are filed
+ * against.
+ */
+export function TravellerRoster({
+  travellers,
+  docs,
+  partySize,
+  error,
+  busy,
+  canEdit = true,
+}: {
+  travellers: Traveller[];
+  docs: any[];
+  partySize: number;
+  error?: string | null;
+  busy: boolean;
+  canEdit?: boolean;
+}) {
+  const owed = missingDocs(travellers, docs);
+  const short = Math.max(0, partySize - travellers.length);
+  const summary = owedSummary(owed);
+
+  return (
+    <div className="rounded-card border border-border bg-card p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-medium text-ink">Who is going</h3>
+        <span className="text-xs text-ink-soft">
+          {travellers.length} of {partySize}
+        </span>
+      </div>
+      <p className="mt-0.5 text-sm text-ink-soft">
+        Names exactly as they are printed on each passport — that is what the
+        permit counter reads.
+      </p>
+
+      {travellers.length > 0 && (
+        <ul className="mt-3 divide-y divide-border border-y border-border">
+          {owed.map(({ traveller: t, missing, pending }) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                {t.full_name}
+                {t.is_lead && (
+                  <span className="ml-1.5 text-xs text-ink-soft">· we call them first</span>
+                )}
+              </span>
+              {missing.length + pending.length === 0 ? (
+                <Badge tone="green">papers in</Badge>
+              ) : (
+                <Badge tone="amber">
+                  {missing.length > 0 ? `${missing.length} to send` : "checking"}
+                </Badge>
+              )}
+              {canEdit && (
+                <Form method="post" className="shrink-0">
+                  <input type="hidden" name="intent" value="roster_remove" />
+                  <input type="hidden" name="traveller_id" value={t.id} />
+                  <button
+                    className="text-xs text-ink-soft underline hover:text-danger"
+                    aria-label={`Remove ${t.full_name}`}
+                  >
+                    remove
+                  </button>
+                </Form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {summary && <p className="mt-2 text-sm text-ink-soft">{summary}</p>}
+
+      {canEdit && short > 0 && (
+        <Form method="post" className="mt-3 flex flex-wrap items-end gap-2">
+          <input type="hidden" name="intent" value="roster_add" />
+          <input
+            name="full_name"
+            required
+            placeholder="Name as printed on the passport"
+            className="min-w-0 flex-1 rounded-button border border-border px-3 py-2 text-sm"
+          />
+          <Button type="submit" size="sm" variant="secondary" loading={busy}>
+            Add
+          </Button>
+        </Form>
+      )}
+
+      {canEdit && short === 0 && travellers.length > partySize && (
+        <p className="mt-2 text-sm text-ink-soft">
+          This trip is booked for {partySize}. Message your guide if the party has
+          changed.
+        </p>
+      )}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </div>
+  );
+}
 
 /**
  * One kind of document, with its own upload form.
@@ -15,6 +119,7 @@ export function DocumentSlot({
   blurb,
   type,
   docs,
+  travellers,
   bookingId,
   error,
   busy,
@@ -25,6 +130,7 @@ export function DocumentSlot({
   blurb: string;
   type: "passport" | "insurance";
   docs: any[];
+  travellers: Traveller[];
   bookingId: string;
   error: string | null;
   busy: boolean;
@@ -32,22 +138,36 @@ export function DocumentSlot({
   status?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  // Who we already hold this document for, so the picker can say that
+  // uploading again replaces it rather than adding a second one.
+  const held = new Set(liveDocs(docs).map((d: any) => d.traveller_id));
+  const waiting = travellers.filter((t) => !held.has(t.id));
+
+  if (travellers.length === 0) {
+    return (
+      <div className="rounded-card border border-border bg-card p-4">
+        <h3 className="font-medium text-ink">{title}</h3>
+        <p className="mt-0.5 text-sm text-ink-soft">
+          Add who is going first — every document is filed against a person.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-card border border-border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-medium text-ink">{title}</h3>
         <span className="text-xs text-ink-soft">
-          {docs.length === 0
-            ? "none yet"
-            : `${docs.length} uploaded`}
+          {liveDocs(docs).length} of {travellers.length}
         </span>
       </div>
       <p className="mt-0.5 text-sm text-ink-soft">{blurb}</p>
       {status}
 
-      {docs.length > 0 && (
+      {liveDocs(docs).length > 0 && (
         <ul className="mt-3 space-y-1 text-sm">
-          {docs.map((d: any) => (
+          {liveDocs(docs).map((d: any) => (
             <li key={d.id} className="flex items-center justify-between gap-2">
               <a
                 href={`/trips/${bookingId}/doc/${d.id}`}
@@ -85,16 +205,22 @@ export function DocumentSlot({
       >
         <input type="hidden" name="intent" value="upload" />
         <input type="hidden" name="type" value={type} />
-        <input
-          name="person_name"
-          placeholder={
-            type === "passport"
-              ? "Whose is it? (name as on the passport)"
-              : "Whose policy is it? (name on the certificate)"
-          }
+        {/* A picker over the roster, not a name box. Typing the name again on
+            every upload is what put three spellings of one person on one
+            booking. */}
+        <select
+          name="traveller_id"
           required
-          className="w-full rounded-button border border-border px-3 py-2 text-sm"
-        />
+          defaultValue={waiting[0]?.id ?? travellers[0]?.id ?? ""}
+          className="w-full rounded-button border border-border bg-card px-3 py-2 text-sm"
+        >
+          {travellers.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.full_name}
+              {held.has(t.id) ? " — replaces the one we hold" : ""}
+            </option>
+          ))}
+        </select>
         <input
           type="file"
           name="file"

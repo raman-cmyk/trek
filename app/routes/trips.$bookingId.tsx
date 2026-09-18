@@ -5,6 +5,12 @@ import { requireUser } from "~/lib/auth.server";
 import { getStripe } from "~/lib/stripe.server";
 import { cancelBooking, createPayoutForBooking } from "~/lib/booking.server";
 import { uploadDocument } from "~/lib/documents.server";
+import {
+  addTraveller,
+  ensureLeadTraveller,
+  listTravellers,
+  removeTraveller,
+} from "~/lib/roster.server";
 import { submitReview, createRecap, addReviewPhoto } from "~/lib/reviews.server";
 import { uploadPublicPhoto } from "~/lib/media.server";
 import { SUBRATINGS } from "~/lib/reviews";
@@ -20,7 +26,7 @@ import { TripPipeline } from "~/components/TripPipeline";
 import { meetingTimeOf, permitProgress } from "~/lib/pipeline";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
-import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
+import { DocumentSlot, NoInsuranceYet, TravellerRoster } from "~/components/TripDocuments";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { PreTrekBrief } from "~/components/PreTrekBrief";
 import { briefHeading, tripNoun } from "~/lib/pre-trek";
@@ -48,6 +54,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (!b) throw new Response("Not found", { status: 404 });
 
   const today = new Date().toISOString().slice(0, 10);
+  // A solo trekker should confirm a name that is already there rather than
+  // type their own into an empty box.
+  if (b.status !== "pending_deposit") await ensureLeadTraveller(admin, b.id);
+  const travellers = await listTravellers(admin, b.id);
   // Their own next of kin, asked for alongside the documents (0063).
   const { data: me } = await admin
     .from("users")
@@ -59,7 +69,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const [{ data: payments }, { data: docs }, { data: permits }, { data: myReview }, { data: recap }, { data: tims }, { data: instalments }] =
     await Promise.all([
       admin.from("payments").select("type, amount_usd_cents, status, created_at").eq("booking_id", b.id).order("created_at"),
-      admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id).order("created_at"),
+      admin.from("booking_documents").select("id, person_name, type, traveller_id, verified_at, rejected_at, rejected_reason, superseded_at").eq("booking_id", b.id).order("created_at"),
       admin.from("permit_applications").select("id, status, reference_no, scan_path, permit:permits(name)").eq("booking_id", b.id),
       admin.from("reviews").select("id").eq("booking_id", b.id).eq("author_id", user.id).maybeSingle(),
       admin.from("recaps").select("slug").eq("booking_id", b.id).maybeSingle(),
@@ -106,6 +116,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       me: me ?? {},
       group: group ?? null,
       payments: payments ?? [],
+      travellers,
       documents: docs ?? [],
       permits: permits ?? [],
       guidePhone: phoneUnlocked ? (b as any).guide?.users?.phone ?? null : null,
@@ -158,16 +169,37 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: "Saved — your guide and our office can see this." }, { headers });
   }
 
+  // The roster — who is actually walking. Every document is filed against one
+  // of these people rather than against a name typed on the day.
+  if (intent === "roster_add") {
+    const res = await addTraveller(admin, {
+      bookingId: b.id,
+      fullName: String(form.get("full_name") ?? ""),
+      addedBy: user.id,
+    });
+    if (!res.ok) return data({ error: res.error }, { status: 400, headers });
+    return data({ ok: res.message }, { headers });
+  }
+
+  if (intent === "roster_remove") {
+    const res = await removeTraveller(admin, {
+      bookingId: b.id,
+      travellerId: String(form.get("traveller_id") ?? ""),
+    });
+    if (!res.ok) return data({ error: res.error }, { status: 400, headers });
+    return data({ ok: res.message }, { headers });
+  }
+
   if (intent === "upload") {
     const file = form.get("file");
-    const personName = String(form.get("person_name") ?? "").trim();
+    const travellerId = String(form.get("traveller_id") ?? "").trim();
     const type = String(form.get("type")) as "passport" | "insurance";
-    if (!(file instanceof File) || !file.size || !personName) {
-      return data({ error: "Add a name and choose a file." }, { status: 400 });
+    if (!(file instanceof File) || !file.size || !travellerId) {
+      return data({ error: "Say whose it is and choose a file." }, { status: 400 });
     }
     const res = await uploadDocument(admin, {
       bookingId: b.id,
-      personName,
+      travellerId,
       type,
       file,
     });
@@ -330,7 +362,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, me, group, payments, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceRejected, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
+  const { booking: b, me, group, payments, travellers, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceRejected, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -520,11 +552,20 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
             permits.
           </p>
 
+          <TravellerRoster
+            travellers={travellers}
+            docs={documents}
+            partySize={b.party_size}
+            error={docError}
+            busy={nav.state !== "idle"}
+          />
+
           <DocumentSlot
             title="Passport"
             blurb="The photo page — a photo of it is fine. One for each person going."
             type="passport"
             docs={documents.filter((d: any) => d.type === "passport")}
+            travellers={travellers}
             bookingId={b.id}
             error={docError}
             busy={nav.state !== "idle"}
@@ -535,6 +576,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
             blurb={`The certificate has to cover trekking to ${altitudeM.toLocaleString()}m and emergency helicopter evacuation.`}
             type="insurance"
             docs={documents.filter((d: any) => d.type === "insurance")}
+            travellers={travellers}
             bookingId={b.id}
             error={docError}
             busy={nav.state !== "idle"}

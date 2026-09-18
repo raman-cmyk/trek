@@ -3,7 +3,14 @@ import type { Route } from "./+types/_dev.primitives";
 import { Button } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
 import { TripPipeline } from "~/components/TripPipeline";
-import { DocumentSlot, NoInsuranceYet } from "~/components/TripDocuments";
+import { DocumentSlot, NoInsuranceYet, TravellerRoster } from "~/components/TripDocuments";
+
+/** Four names, so the roster and the pickers have something to show. */
+const DEMO_PARTY = [
+  { id: "p1", full_name: "Tom Weber", is_lead: true },
+  { id: "p2", full_name: "Yuki Tanaka", is_lead: false },
+  { id: "p3", full_name: "Sam Okoro", is_lead: false },
+];
 import { SmartImage } from "~/components/SmartImage";
 import {
   CardGridSkeleton,
@@ -180,16 +187,24 @@ export default function Primitives() {
             />
           </div>
 
+          <TravellerRoster
+            travellers={DEMO_PARTY}
+            docs={[]}
+            partySize={4}
+            error={null}
+            busy={false}
+          />
           <DocumentSlot
             title="Passport"
             blurb="The photo page — a photo of it is fine. One for each person going."
             type="passport"
             docs={[
-              { id: "1", person_name: "Tom Weber", verified_at: "2026-09-01" },
-              { id: "2", person_name: "Yuki Tanaka", verified_at: null },
+              { id: "1", traveller_id: "p1", person_name: "Tom Weber", verified_at: "2026-09-01" },
+              { id: "2", traveller_id: "p2", person_name: "Yuki Tanaka", verified_at: null },
               // Sent back by ops with a reason the trekker can act on (0073).
               {
                 id: "3",
+                traveller_id: "p3",
                 person_name: "Sam Okoro",
                 verified_at: null,
                 rejected_at: "2026-09-10",
@@ -197,6 +212,7 @@ export default function Primitives() {
                   "The photo page is cut off at the bottom — we need the whole machine-readable strip.",
               },
             ]}
+            travellers={DEMO_PARTY}
             bookingId="demo"
             error={null}
             busy={false}
@@ -206,6 +222,7 @@ export default function Primitives() {
             blurb="The certificate has to cover trekking to 5,364m and emergency helicopter evacuation."
             type="insurance"
             docs={[]}
+            travellers={DEMO_PARTY}
             bookingId="demo"
             error={null}
             busy={false}

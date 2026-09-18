@@ -11,15 +11,21 @@
  * in the database (0073).
  */
 
-export type DocState = "verified" | "rejected" | "pending";
+export type DocState = "verified" | "rejected" | "superseded" | "pending";
 
 export interface ReviewedDoc {
   verified_at?: string | null;
   rejected_at?: string | null;
   rejected_reason?: string | null;
+  /** Replaced by a newer copy of the same document (0101). Not a rejection. */
+  superseded_at?: string | null;
 }
 
 export function docState(d: ReviewedDoc): DocState {
+  // Replacement first: a superseded row keeps whatever verdict it had, and
+  // showing a trekker "verified" against a scan that is no longer the one we
+  // hold is how two people end up talking about different passports.
+  if (d.superseded_at) return "superseded";
   if (d.verified_at) return "verified";
   if (d.rejected_at) return "rejected";
   return "pending";
@@ -29,6 +35,7 @@ export function docState(d: ReviewedDoc): DocState {
 export const STATE_LABEL: Record<DocState, string> = {
   verified: "verified",
   rejected: "needs redoing",
+  superseded: "replaced",
   pending: "checking",
 };
 
@@ -66,7 +73,7 @@ export function cleanReason(reason: string): string {
  * which is the opposite of what rejecting one is for.
  */
 export function liveDocs<T extends ReviewedDoc>(docs: T[]): T[] {
-  return docs.filter((d) => !d.rejected_at);
+  return docs.filter((d) => !d.rejected_at && !d.superseded_at);
 }
 
 /**
@@ -80,7 +87,13 @@ export function liveDocs<T extends ReviewedDoc>(docs: T[]): T[] {
  * than deprecated here: the old answer is not a fallback, it is a hole.
  */
 
-/** The rejections a trekker still has to act on. */
+/**
+ * The rejections a trekker still has to act on.
+ *
+ * A replaced document is not one of them — nobody said no to it, and telling
+ * somebody their passport needs redoing because they sent us a better scan of
+ * it is the bug 0101 exists to prevent.
+ */
 export function outstanding<T extends ReviewedDoc>(docs: T[]): T[] {
-  return docs.filter((d) => !!d.rejected_at);
+  return docs.filter((d) => !!d.rejected_at && !d.superseded_at);
 }

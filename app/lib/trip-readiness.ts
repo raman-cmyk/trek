@@ -56,7 +56,15 @@ export interface ReadinessInput {
   /** Whatever the client still owes, and by when. */
   outstandingUsdCents: number;
   paymentDueOn?: string | null;
-  documents: Array<{ type: string; verified_at?: string | null; rejected_at?: string | null }>;
+  documents: Array<{
+    type: string;
+    traveller_id?: string | null;
+    verified_at?: string | null;
+    rejected_at?: string | null;
+    superseded_at?: string | null;
+  }>;
+  /** The named party (0099). Papers are counted per person, not per booking. */
+  travellers?: Array<{ id: string; full_name: string }>;
   insuranceVerifiedAt?: string | null;
   insuranceAttestedAt?: string | null;
   permits: Array<{ status?: string | null }>;
@@ -78,13 +86,50 @@ function isPast(dueOn: string | null | undefined, todayIso: string): boolean {
   return midnight(dueOn) < midnight(todayIso);
 }
 
-/** A document of this type that has been checked and passed. */
-function hasVerified(docs: ReadinessInput["documents"], type: string): boolean {
-  return docs.some((d) => d.type === type && d.verified_at && !d.rejected_at);
+/**
+ * How many of the party still owe this document, and how many we are holding
+ * but have not checked.
+ *
+ * Counted per person. It used to be `some(type && verified)`, which said
+ * "Passport checked" on a party of four the moment one of them uploaded one —
+ * the same reading of the same data that let `docsSettled` confirm a booking
+ * on one passport (0099).
+ */
+function paperCount(
+  input: ReadinessInput,
+  type: string,
+): { need: number; missing: number; waiting: number } {
+  const live = input.documents.filter((d) => !d.rejected_at && !d.superseded_at);
+  const travellers = input.travellers ?? [];
+
+  // No roster yet: fall back to the head count, and treat every live document
+  // of this type as one person's. A booking with nobody named is not ready,
+  // and the roster step below is what says so.
+  if (travellers.length === 0) {
+    const need = Math.max(1, Number(input.partySize ?? 1));
+    const mine = live.filter((d) => d.type === type);
+    const verified = mine.filter((d) => d.verified_at).length;
+    return {
+      need,
+      missing: Math.max(0, need - mine.length),
+      waiting: mine.length - verified,
+    };
+  }
+
+  let missing = 0;
+  let waiting = 0;
+  for (const t of travellers) {
+    const doc = live.find((d) => d.traveller_id === t.id && d.type === type);
+    if (!doc) missing++;
+    else if (!doc.verified_at) waiting++;
+  }
+  return { need: travellers.length, missing, waiting };
 }
 
-function hasAny(docs: ReadinessInput["documents"], type: string): boolean {
-  return docs.some((d) => d.type === type && !d.rejected_at);
+/** Passports we do not yet hold, checked, for everybody going. */
+function passportsOutstanding(input: ReadinessInput): number {
+  const c = paperCount(input, "passport");
+  return c.missing + c.waiting;
 }
 
 export function tripReadiness(input: ReadinessInput): Readiness {
@@ -130,22 +175,46 @@ export function tripReadiness(input: ReadinessInput): Readiness {
     // Papers are asked for once money has moved. Chasing a passport for a
     // trip nobody has paid a deposit on is how the office wastes its morning.
     const moneyStarted = paidUp || outstandingUsdCents === 0 || status !== "pending_deposit";
-    const passportIn = hasVerified(documents, "passport");
+    // Who is walking, by name. Permits are filed against these names, so an
+    // unnamed party is not a party we can take anywhere.
+    const named = (input.travellers ?? []).length;
+    const partySize = Math.max(1, Number(input.partySize ?? 1));
+    steps.push({
+      key: "roster",
+      label: "Everyone named",
+      owner: "client",
+      state: named >= partySize ? "done" : moneyStarted ? "open" : "blocked",
+      detail:
+        named >= partySize
+          ? partySize === 1
+            ? "One trekker, named."
+            : `All ${partySize} named.`
+          : `${named} of ${partySize} named — the permit counter reads these names.`,
+    });
+
+    const passports = paperCount(input, "passport");
+    const passportIn = passports.missing === 0 && passports.waiting === 0 && named >= partySize;
     steps.push({
       key: "passport",
-      label: "Passport checked",
+      label: partySize === 1 ? "Passport checked" : `Passports checked (${passports.need - passports.missing - passports.waiting}/${passports.need})`,
       owner: "client",
       state: passportIn ? "done" : moneyStarted ? "open" : "blocked",
       detail: passportIn
         ? "Verified."
-        : hasAny(documents, "passport")
-          ? "Uploaded, waiting for the office to check it."
-          : moneyStarted
-            ? "Nothing uploaded."
-            : "Waiting on the deposit first.",
+        : !moneyStarted
+          ? "Waiting on the deposit first."
+          : passports.missing > 0
+            ? `${passports.missing} still to upload.`
+            : passports.waiting > 0
+              ? `${passports.waiting} uploaded, waiting for the office to check.`
+              : "Nothing uploaded.",
     });
 
-    const insuranceIn = !!input.insuranceVerifiedAt || hasVerified(documents, "insurance");
+    const certs = paperCount(input, "insurance");
+    // The booking-level attestation is the policy check, not the certificate;
+    // both have to be in before this is done.
+    const certsIn = certs.missing === 0 && certs.waiting === 0 && named >= partySize;
+    const insuranceIn = certsIn && !!input.insuranceVerifiedAt;
     steps.push({
       key: "insurance",
       label: "Insurance verified",
@@ -153,9 +222,15 @@ export function tripReadiness(input: ReadinessInput): Readiness {
       state: insuranceIn ? "done" : moneyStarted ? "open" : "blocked",
       detail: insuranceIn
         ? "Cover checked."
-        : input.insuranceAttestedAt
-          ? "Declared, not yet checked by the office."
-          : "Not run through the checker.",
+        : !moneyStarted
+          ? "Waiting on the deposit first."
+          : certs.missing > 0
+            ? `${certs.missing} certificate${certs.missing === 1 ? "" : "s"} still to upload.`
+            : certs.waiting > 0
+              ? `${certs.waiting} waiting for the office to check.`
+              : input.insuranceAttestedAt
+                ? "Declared, not yet checked by the office."
+                : "Not run through the checker.",
     });
   }
 
@@ -187,7 +262,7 @@ export function tripReadiness(input: ReadinessInput): Readiness {
           ? "done"
           : progress === "problem"
             ? "overdue"
-            : !hasVerified(documents, "passport")
+            : passportsOutstanding(input) > 0
               ? "blocked"
               : "open",
       detail:

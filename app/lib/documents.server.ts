@@ -13,21 +13,43 @@ function extFor(type: string, filename: string): string {
 }
 
 /**
- * Trekker uploads a passport/insurance doc for a party member. File goes to the
- * private bucket under the booking id; metadata to booking_documents. The
- * caller must have already checked the booking belongs to the trekker.
+ * A passport or an insurance certificate, filed against the person it belongs
+ * to. The file goes to the private bucket under the booking id; the metadata
+ * to `booking_documents`. The caller must already have checked that the
+ * booking belongs to the trekker, or that the caller is ops.
+ *
+ * `travellerId` is the roster row (0099). It used to be free text typed fresh
+ * on every upload, which is how one party of one came to hold three passports
+ * under three spellings of the same name.
+ *
+ * A second document of the same type for the same person REPLACES the first:
+ * the partial unique index over live rows would refuse the insert otherwise,
+ * and "replaces" is what the trekker means when they upload a clearer scan.
+ * The old row is marked superseded (0101) rather than deleted — its file is a
+ * real passport scan and the retention sweep owns when that goes — and it
+ * points at the row that replaced it.
  */
 export async function uploadDocument(
   admin: SupabaseClient,
   args: {
     bookingId: string;
-    personName: string;
+    travellerId: string;
     type: "passport" | "insurance";
     file: File;
   },
 ): Promise<{ ok: boolean; error?: string }> {
+  const { data: traveller } = await admin
+    .from("booking_travellers")
+    .select("id, full_name, booking_id")
+    .eq("id", args.travellerId)
+    .eq("booking_id", args.bookingId)
+    .maybeSingle();
+  // Belt and braces: a traveller id from another booking would otherwise file
+  // somebody's passport against a trip they are not on.
+  if (!traveller) return { ok: false, error: "We could not find that person on this trip." };
+
   const ext = extFor(args.file.type, args.file.name);
-  const safePerson = args.personName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const safePerson = traveller.full_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
   const path = `${args.bookingId}/${args.type}-${safePerson}-${Date.now()}.${ext}`;
 
   const bytes = new Uint8Array(await args.file.arrayBuffer());
@@ -36,13 +58,49 @@ export async function uploadDocument(
     .upload(path, bytes, { contentType: args.file.type, upsert: true });
   if (upErr) return { ok: false, error: upErr.message };
 
-  const { error } = await admin.from("booking_documents").insert({
-    booking_id: args.bookingId,
-    person_name: args.personName,
-    type: args.type,
-    storage_path: path,
-  });
-  if (error) return { ok: false, error: error.message };
+  // Stand the old one down first, or the unique index refuses the new row.
+  // Superseded, not rejected (0101): nobody said no to it, and a trekker who
+  // sends a clearer scan should not be told their passport needs redoing.
+  const superseded = await admin
+    .from("booking_documents")
+    .update({ superseded_at: new Date().toISOString() })
+    .eq("booking_id", args.bookingId)
+    .eq("traveller_id", args.travellerId)
+    .eq("type", args.type)
+    .is("rejected_at", null)
+    .is("superseded_at", null)
+    .select("id");
+  if (superseded.error) {
+    await admin.storage.from(BUCKET).remove([path]);
+    return { ok: false, error: "That upload failed. Try again." };
+  }
+
+  const { data: inserted, error } = await admin
+    .from("booking_documents")
+    .insert({
+      booking_id: args.bookingId,
+      traveller_id: args.travellerId,
+      // Kept in step with the roster so the ops list still reads as names.
+      person_name: traveller.full_name,
+      type: args.type,
+      storage_path: path,
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    await admin.storage.from(BUCKET).remove([path]);
+    // Put the old one back: it is the document we still hold.
+    for (const old of superseded.data ?? []) {
+      await admin.from("booking_documents").update({ superseded_at: null }).eq("id", old.id);
+    }
+    return { ok: false, error: error?.message ?? "That upload failed. Try again." };
+  }
+
+  // Which document replaced it — so the office can follow a passport back
+  // through its versions rather than guessing from timestamps.
+  for (const old of superseded.data ?? []) {
+    await admin.from("booking_documents").update({ superseded_by: inserted.id }).eq("id", old.id);
+  }
   return { ok: true };
 }
 

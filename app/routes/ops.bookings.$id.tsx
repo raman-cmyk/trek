@@ -10,7 +10,15 @@ import {
   deleteBookingDocument,
   uploadPermitScan,
 } from "~/lib/documents.server";
-import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
+import { cleanReason, docState, liveDocs, rejectionProblem } from "~/lib/doc-review";
+import {
+  addTraveller,
+  ensureLeadTraveller,
+  listTravellers,
+  removeTraveller,
+  renameTraveller,
+  setLeadTraveller,
+} from "~/lib/roster.server";
 import {
   PERMIT_STATUSES,
   PERMIT_TONE,
@@ -81,7 +89,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     permitTypes,
   ] = await Promise.all([
     rows<any>(
-      admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
+      admin.from("booking_documents").select("id, person_name, type, traveller_id, verified_at, rejected_at, rejected_reason, superseded_at, created_at").eq("booking_id", b.id).order("created_at"),
       "this trek's documents",
     ),
     rows<any>(
@@ -181,6 +189,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // One line naming whichever panels could not be read. A blank Documents
   // panel on a trek whose passports are the thing you came to check is the
   // failure mode this whole file is guarding against.
+  // The office can add or correct a traveller too — for the passports that
+  // arrive by email or over a desk in Thamel.
+  await ensureLeadTraveller(admin, b.id);
+  const travellers = await listTravellers(admin, b.id);
+
   const loadError =
     [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements, permitTypes]
       .map((r) => r.error)
@@ -190,6 +203,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     {
       booking: b,
       loadError,
+      travellers,
       documents: docs.rows,
       permits: permits.rows,
       contract: contract.row,
@@ -317,19 +331,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "add_doc") {
     const file = form.get("file");
     const type = String(form.get("doc_type"));
-    const personName = String(form.get("person_name") ?? "").trim();
+    const travellerId = String(form.get("traveller_id") ?? "").trim();
     if (!(file instanceof File) || file.size === 0) {
       return data({ error: "Choose a file first." }, { status: 400, headers });
     }
     if (type !== "passport" && type !== "insurance") {
       return data({ error: "A document is a passport or an insurance policy." }, { status: 400, headers });
     }
-    if (!personName) {
+    if (!travellerId) {
       return data({ error: "Whose document is it?" }, { status: 400, headers });
     }
     const up = await uploadDocument(admin, {
       bookingId: params.id!,
-      personName,
+      travellerId,
       type,
       file,
     });
@@ -612,6 +626,54 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // The roster. The office corrects a misspelling off a passport far more
+  // often than the trekker does, and a permit is filed against this name.
+  if (intent === "roster_add") {
+    const res = await addTraveller(admin, {
+      bookingId: params.id!,
+      fullName: String(form.get("full_name") ?? ""),
+      addedBy: user.id,
+    });
+    return data(res.ok ? { ok: true } : { error: res.error }, {
+      status: res.ok ? 200 : 400,
+      headers,
+    });
+  }
+
+  if (intent === "roster_rename") {
+    const res = await renameTraveller(admin, {
+      bookingId: params.id!,
+      travellerId: String(form.get("traveller_id") ?? ""),
+      fullName: String(form.get("full_name") ?? ""),
+    });
+    return data(res.ok ? { ok: true } : { error: res.error }, {
+      status: res.ok ? 200 : 400,
+      headers,
+    });
+  }
+
+  if (intent === "roster_remove") {
+    const res = await removeTraveller(admin, {
+      bookingId: params.id!,
+      travellerId: String(form.get("traveller_id") ?? ""),
+    });
+    return data(res.ok ? { ok: true } : { error: res.error }, {
+      status: res.ok ? 200 : 400,
+      headers,
+    });
+  }
+
+  if (intent === "roster_lead") {
+    const res = await setLeadTraveller(admin, {
+      bookingId: params.id!,
+      travellerId: String(form.get("traveller_id") ?? ""),
+    });
+    return data(res.ok ? { ok: true } : { error: res.error }, {
+      status: res.ok ? 200 : 400,
+      headers,
+    });
+  }
+
   if (intent === "issue_tims") {
     const res = await issueTimsCard(admin, params.id!, user.id);
     if (res.ok) {
@@ -626,6 +688,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
   const {
     booking: b,
+    travellers,
     documents,
     permits,
     contract,
@@ -670,6 +733,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
           is. Everything below this line is a detail of one of these rows. */}
       <Readiness
         booking={b}
+        travellers={travellers}
         documents={documents}
         permits={permits}
         tims={tims}
@@ -716,6 +780,11 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
         </div>
 
         <div className="lg:col-span-2">
+          {/* Who first, then their papers — a document with no owner is the
+              bug the roster exists to fix. */}
+          <Roster travellers={travellers} documents={documents} partySize={b.party_size} />
+
+          <div className="mt-4">
           <Panel title="Documents">
             {documents.length === 0 ? (
               <p className="py-4 text-sm text-ink-soft">No documents uploaded yet.</p>
@@ -809,8 +878,9 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
               </ul>
             )}
 
-            <AddDocument defaultPerson={b.trekker?.full_name ?? ""} />
+            <AddDocument travellers={travellers} />
           </Panel>
+          </div>
 
           {/* Insurance (2026 gate) */}
           <div className="mt-4">
@@ -1239,7 +1309,15 @@ function CostBreakdown({ booking }: { booking: any }) {
  * themselves, so a booking could sit in "docs pending" with the passport
  * sitting in somebody's inbox.
  */
-function AddDocument({ defaultPerson }: { defaultPerson: string }) {
+function AddDocument({ travellers }: { travellers: any[] }) {
+  if (travellers.length === 0) {
+    return (
+      <p className="mt-3 border-t border-border pt-3 text-xs text-ink-soft">
+        Add who is going before filing a document — every one is filed against a
+        person now, not a typed name.
+      </p>
+    );
+  }
   return (
     <details className="mt-3 border-t border-border pt-3">
       <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
@@ -1253,12 +1331,17 @@ function AddDocument({ defaultPerson }: { defaultPerson: string }) {
         <input type="hidden" name="intent" value="add_doc" />
         <label className="text-xs text-ink-soft">
           <span className="block">Whose</span>
-          <input
-            name="person_name"
-            defaultValue={defaultPerson}
+          <select
+            name="traveller_id"
             required
             className="mt-0.5 w-40 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
-          />
+          >
+            {travellers.map((t: any) => (
+              <option key={t.id} value={t.id}>
+                {t.full_name}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="text-xs text-ink-soft">
           <span className="block">What</span>
@@ -1281,7 +1364,89 @@ function AddDocument({ defaultPerson }: { defaultPerson: string }) {
           Upload
         </button>
       </Form>
+      <p className="mt-1.5 text-xs text-ink-soft">
+        A second one of the same kind for the same person replaces what we hold.
+      </p>
     </details>
+  );
+}
+
+/**
+ * The party, as the permit counter will read it.
+ *
+ * Names come off passports, and the office types them far more often than the
+ * trekker does — a scan arrives by email, somebody walks into the office in
+ * Thamel. Correcting a name here corrects it on their documents too, so one
+ * booking cannot carry two spellings of one person again.
+ */
+function Roster({ travellers, documents, partySize }: { travellers: any[]; documents: any[]; partySize: number }) {
+  const live = liveDocs(documents);
+  return (
+    <Panel title={`Who is going · ${travellers.length} of ${partySize}`}>
+      <ul className="divide-y divide-border">
+        {travellers.map((t: any) => {
+          const mine = live.filter((d: any) => d.traveller_id === t.id);
+          const has = (type: string) => mine.some((d: any) => d.type === type);
+          return (
+            <li key={t.id} className="px-4 py-2.5">
+              <Form method="post" className="flex flex-wrap items-center gap-2">
+                <input type="hidden" name="intent" value="roster_rename" />
+                <input type="hidden" name="traveller_id" value={t.id} />
+                <input
+                  name="full_name"
+                  defaultValue={t.full_name}
+                  className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-sm text-ink hover:border-border focus:border-primary focus:bg-card"
+                />
+                <Badge tone={has("passport") ? "green" : "amber"}>passport</Badge>
+                <Badge tone={has("insurance") ? "green" : "amber"}>insurance</Badge>
+                <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                  Save
+                </button>
+              </Form>
+              <div className="mt-1 flex flex-wrap items-center gap-3 pl-2 text-xs text-ink-soft">
+                {t.is_lead ? (
+                  <span>· we call them first</span>
+                ) : (
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="roster_lead" />
+                    <input type="hidden" name="traveller_id" value={t.id} />
+                    <button className="underline hover:text-ink">call them first</button>
+                  </Form>
+                )}
+                <Form method="post">
+                  <input type="hidden" name="intent" value="roster_remove" />
+                  <input type="hidden" name="traveller_id" value={t.id} />
+                  <button className="underline hover:text-danger">remove</button>
+                </Form>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {travellers.length < partySize && (
+        <Form method="post" className="flex flex-wrap items-end gap-2 border-t border-border px-4 py-3">
+          <input type="hidden" name="intent" value="roster_add" />
+          <label className="min-w-0 flex-1 text-xs text-ink-soft">
+            <span className="block">Name, as printed on the passport</span>
+            <input
+              name="full_name"
+              required
+              className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+            />
+          </label>
+          <button className="rounded border border-border px-2 py-1.5 text-xs hover:bg-mist">
+            Add
+          </button>
+        </Form>
+      )}
+      {travellers.length < partySize && (
+        <p className="px-4 pb-3 text-xs text-ink-soft">
+          {partySize - travellers.length} still to name. Permits cannot be filed
+          for a party we cannot name.
+        </p>
+      )}
+    </Panel>
   );
 }
 
@@ -1671,6 +1836,7 @@ const STEP_TONE: Record<string, string> = {
  */
 function Readiness({
   booking,
+  travellers,
   documents,
   permits,
   tims,
@@ -1681,6 +1847,7 @@ function Readiness({
   payouts,
 }: {
   booking: any;
+  travellers: any[];
   documents: any[];
   permits: any[];
   tims: any;
@@ -1701,6 +1868,7 @@ function Readiness({
     outstandingUsdCents: due.outstandingUsdCents,
     paymentDueOn: due.next.dueOn,
     documents: documents ?? [],
+    travellers: travellers ?? [],
     insuranceVerifiedAt: booking.insurance_verified_at,
     insuranceAttestedAt: booking.insurance_attested_at,
     permits: permits ?? [],
