@@ -940,13 +940,14 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                   title={`Here's what ${first} provides`}
                   meta={`${offerings.length} ${offerings.length === 1 ? "trip" : "trips"} ${pn.subject} runs`}
                 />
-                {offerings.length === 1 ? (
-                  <div className="mt-4">
-                    <FeatureTrip o={offerings[0]} />
-                  </div>
-                ) : (
-                  <OfferingGrid offerings={offerings} rating={rating} />
-                )}
+                {/* One card, the same card. A single trip used to get a wide
+                    photo-beside-text treatment of its own, so a guide with one
+                    experience and a guide with two had trips that did not look
+                    like the same kind of thing — and the one card that carries
+                    the guide's face, the verified tick and the rating was the
+                    one a reader never saw. The grid leaves a gap beside a lone
+                    card; a card that reads like every other card is worth it. */}
+                <OfferingGrid offerings={offerings} rating={rating} />
               </section>
             )}
 
@@ -1266,11 +1267,6 @@ function firstRun(openDays: string[], run: number): string | null {
 }
 
 /**
- * One trek, shown wide. A single offering in a three-column grid reads as
- * two empty slots; the same offering at full width reads as the thing this
- * guide does.
- */
-/**
  * One heading treatment for the whole page: the title at display size with a
  * small line of fact set on its baseline at the right. Every section used its
  * own size and its own alignment before, which is what made the page read as
@@ -1441,48 +1437,6 @@ function OfferingGrid({
         </button>
       )}
     </>
-  );
-}
-
-function FeatureTrip({ o }: { o: PublicOffering }) {
-  // mr, not m: a "from" price rounds, the way it does on every card and in
-  // the compare table. Exact cents here read as a quote, which it is not.
-  const { mr } = useMoney();
-  const from = offeringFromUsdCents(o);
-  const href = `/${o.kind === "trek" ? "treks" : "experiences"}/${o.slug}`;
-  return (
-    <Link
-      to={href}
-      prefetch="intent"
-      className="group grid overflow-hidden rounded-md border border-line bg-card transition-transform duration-quick ease-out-soft hover:-translate-y-0.5 sm:grid-cols-[minmax(0,42%)_1fr]"
-    >
-      <SmartImage
-        src={o.cover_photo_url ?? ""}
-        alt={o.title}
-        width={900}
-        height={640}
-        cover
-        className="aspect-[3/2] w-full sm:h-full"
-      />
-      <div className="flex flex-col justify-center p-5">
-        <p className="font-display text-2xl leading-snug text-ink">{o.title}</p>
-        {o.summary && (
-          <p className="mt-2 line-clamp-3 text-[15px] text-ink-soft">
-            {o.summary}
-          </p>
-        )}
-        {/* A trek priced by breakdown carries no price_usd_cents, so reading
-            that column directly printed the days and silently dropped the
-            price. Same helper the cards and the compare table use. */}
-        <p className="mt-3 font-mono text-sm text-ink">
-          {o.days} days
-          {from ? ` · from ${mr(from)} per person` : ""}
-        </p>
-        <p className="mt-3 text-sm text-moss underline underline-offset-4 group-hover:text-pine">
-          The whole trip, day by day →
-        </p>
-      </div>
-    </Link>
   );
 }
 

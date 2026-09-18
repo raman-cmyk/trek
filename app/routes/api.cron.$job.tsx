@@ -37,8 +37,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     case "missed-checkin": {
       const { data: ops } = await admin.from("users").select("id").eq("role", "ops").limit(1).maybeSingle();
       result = ops
-        ? await runMissedCheckinSweep(admin, today, ops.id)
-        : { alerts: 0, note: "no ops user" };
+        // env, so two silent days can actually reach the office by email
+        // rather than only landing in the incidents table.
+        ? await runMissedCheckinSweep(admin, today, ops.id, env)
+        : { alerts: 0, welfareChecks: 0, note: "no ops user" };
       break;
     }
     default:

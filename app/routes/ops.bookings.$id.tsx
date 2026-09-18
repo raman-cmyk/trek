@@ -11,7 +11,14 @@ import {
 } from "~/lib/documents.server";
 import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
 import { fmtDate } from "~/lib/format";
-import { missingDays, wasLate, trekDay } from "~/lib/checkin";
+import {
+  missingDays,
+  wasLate,
+  trekDay,
+  canRecord,
+  missedRunEndingAt,
+  needsWelfareCheck,
+} from "~/lib/checkin";
 import { generateContractForBooking } from "~/lib/contracts.server";
 import { issueTimsCard } from "~/lib/tims.server";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
@@ -19,6 +26,7 @@ import { Badge, Panel } from "~/components/ops/ui";
 import { one, rows } from "~/lib/ops.server";
 import { formatUsd } from "~/lib/pricing";
 import { bookingBreakdown, payoutUsdCents } from "~/lib/booking-breakdown";
+import { bookingDue } from "~/lib/booking-due";
 import { hasBreakdown, computeExperiencePricing, addOns } from "~/lib/experience-pricing";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -33,7 +41,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, status, start_date, end_date, party_size, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, price_breakdown, route:routes(name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+        "id, status, start_date, end_date, party_size, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, hold_expires_at, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, price_breakdown, route:routes(name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
       )
       .eq("id", params.id)
       .maybeSingle(),
@@ -42,7 +50,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (booking.error) throw new Response(booking.error, { status: 500 });
   const b = booking.row;
   if (!b) throw new Response("Not found", { status: 404 });
-  const [docs, permits, contract, tims, instalments, payments, checkins] = await Promise.all([
+  const [docs, permits, contract, tims, instalments, payments, checkins, payouts] = await Promise.all([
     rows<any>(
       admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
       "this trek's documents",
@@ -94,12 +102,23 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         .order("day"),
       "the check-ins",
     ),
+    // What the guide has actually been handed, and when. An advance paid
+    // before the trek is money the office has already spent; a ledger that
+    // only knows about the settlement says the guide is owed it twice.
+    rows<any>(
+      admin
+        .from("payouts")
+        .select("id, kind, amount_npr_paisa, method, status, paid_at, batch_ref, note")
+        .eq("booking_id", b.id)
+        .order("kind"),
+      "the guide's payments",
+    ),
   ]);
   // One line naming whichever panels could not be read. A blank Documents
   // panel on a trek whose passports are the thing you came to check is the
   // failure mode this whole file is guarding against.
   const loadError =
-    [docs, permits, contract, tims, instalments, payments, checkins]
+    [docs, permits, contract, tims, instalments, payments, checkins, payouts]
       .map((r) => r.error)
       .filter(Boolean)
       .join(" ") || null;
@@ -113,6 +132,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       tims: tims.row,
       instalments: instalments.rows,
       payments: payments.rows,
+      payouts: payouts.rows,
       // One row per day of the trek so far, in order — a gap reads as a gap
       // only when it sits between the days either side of it.
       safety: [
@@ -121,14 +141,26 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           note: c.note as string | null,
           late: wasLate(c.day, c.received_at),
           receivedAt: c.received_at as string,
+          // A day the guide sent and a day the office wrote down for them are
+          // different evidence; the log says which.
+          byOps: c.method === "ops",
         })),
         ...missingDays(
           b.start_date,
           b.end_date,
           new Date().toISOString().slice(0, 10),
           checkins.rows.map((c: any) => c.day),
-        ).map((day) => ({ day, note: null, late: false, receivedAt: null })),
+        ).map((day) => ({ day, note: null, late: false, receivedAt: null, byOps: false })),
       ].sort((x, y) => x.day.localeCompare(y.day)),
+      // Days of silence ending today. Two is where the office stops assuming
+      // and picks up a phone, so the panel has to say it rather than leave it
+      // to be counted off a list of fifteen rows.
+      missedRun: missedRunEndingAt(
+        b.start_date,
+        b.end_date,
+        new Date().toISOString().slice(0, 10),
+        checkins.rows.map((c: any) => c.day),
+      ),
     },
     { headers },
   );
@@ -246,6 +278,109 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // The office writes up a day the guide reported by phone or radio.
+  //
+  // A guide above the treeline has no signal and sometimes no phone left; the
+  // call comes through a teahouse or another party coming down. Until now that
+  // could not be recorded, so the safety log said "nothing yet" for a day the
+  // office had in fact accounted for — and the welfare sweep kept escalating
+  // a trek that was fine.
+  if (intent === "record_checkin") {
+    const day = String(form.get("day") ?? "").slice(0, 10);
+    const note = String(form.get("note") ?? "").trim();
+    // one(), not a bare destructure: a refused read here would read as "that
+    // booking is gone" and send the office looking for a record that is fine.
+    const bk = await one<any>(
+      admin.from("bookings").select("start_date, end_date").eq("id", params.id!).maybeSingle(),
+      "this booking",
+    );
+    if (bk.error) return data({ error: bk.error }, { status: 500, headers });
+    if (!bk.row) return data({ error: "That booking is gone." }, { status: 404, headers });
+    const today = new Date().toISOString().slice(0, 10);
+    if (!canRecord(bk.row.start_date, bk.row.end_date, today, day)) {
+      return data(
+        { error: "That day is outside the trek, or has not happened yet." },
+        { status: 400, headers },
+      );
+    }
+    if (!note) {
+      return data({ error: "Say what was reported, and who reported it." }, { status: 400, headers });
+    }
+    const saved = await admin.from("checkins").upsert(
+      {
+        booking_id: params.id!,
+        day,
+        method: "ops",
+        note,
+        received_at: new Date().toISOString(),
+      },
+      { onConflict: "booking_id,day" },
+    );
+    if (saved.error) return data({ error: saved.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
+  // Money handed to the guide before anybody walks.
+  //
+  // A guide buys the bus to the trailhead, the first days' food and often a
+  // porter's advance out of their own pocket, weeks before a flight is
+  // booked. The office pays part of the fee up front; until now there was
+  // nowhere to write it down, so it lived in a WhatsApp thread and the ledger
+  // said the guide was still owed money they had already had.
+  if (intent === "guide_advance") {
+    const npr = Number(form.get("amount_npr"));
+    const note = String(form.get("note") ?? "").trim();
+    if (!isFinite(npr) || npr <= 0) {
+      return data({ error: "How much, in rupees?" }, { status: 400, headers });
+    }
+    const bk = await one<any>(
+      admin
+        .from("bookings")
+        .select("guide_id, guide_payout_npr_paisa, guide:guides(payout_method)")
+        .eq("id", params.id!)
+        .maybeSingle(),
+      "this booking",
+    );
+    if (bk.error) return data({ error: bk.error }, { status: 500, headers });
+    if (!bk.row) return data({ error: "That booking is gone." }, { status: 404, headers });
+    const guide = bk.row;
+
+    // Paisa, not rupees — money is integers all the way down (CLAUDE.md #3).
+    const paisa = Math.round(npr * 100);
+    if (paisa > (guide.guide_payout_npr_paisa ?? 0)) {
+      return data(
+        { error: "That is more than the guide's whole fee for this trip." },
+        { status: 400, headers },
+      );
+    }
+    const saved = await admin.from("payouts").upsert(
+      {
+        guide_id: guide.guide_id,
+        booking_id: params.id!,
+        kind: "advance",
+        amount_npr_paisa: paisa,
+        method: guide.guide?.payout_method ?? "bank",
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        paid_by: user.id,
+        note: note || null,
+      },
+      { onConflict: "booking_id,kind" },
+    );
+    if (saved.error) return data({ error: saved.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "mark_payout_paid") {
+    const marked = await admin
+      .from("payouts")
+      .update({ status: "paid", paid_at: new Date().toISOString(), paid_by: user.id })
+      .eq("id", String(form.get("payout_id")))
+      .eq("booking_id", params.id!);
+    if (marked.error) return data({ error: marked.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
   if (intent === "gen_contract") {
     await generateContractForBooking(admin, params.id!);
     return data({ ok: true }, { headers });
@@ -276,7 +411,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function OpsBooking({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, documents, permits, contract, tims, instalments, payments, safety, loadError } =
+  const { booking: b, documents, permits, contract, tims, instalments, payments, payouts, safety, missedRun, loadError } =
     loaderData as any;
   const meta = b.insurance_meta ?? {};
   const insuranceOk = meta.altitude && meta.helicopter;
@@ -440,7 +575,9 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                   of <span className="font-mono text-ink">{formatUsd(b.total_usd_cents)}</span>
                 </p>
 
+                <DueFromClient booking={b} payments={payments} instalments={instalments} />
                 <CostBreakdown booking={b} />
+                <GuidePayments booking={b} payouts={payouts} />
                 {instalments.length > 0 ? (
                   <table className="mt-3 w-full text-left">
                     <thead className="text-xs uppercase text-ink-soft">
@@ -645,22 +782,69 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
           {safety.length > 0 && (
             <div className="mt-4">
               <Panel title="Daily safety check">
+                {/* Two days of silence is where the office stops assuming and
+                    picks up a phone. Said here, at the top, rather than left
+                    to be counted off fifteen rows of "nothing yet". */}
+                {needsWelfareCheck(missedRun) && b.status === "active" && (
+                  <div className="mb-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+                    <p className="font-medium">
+                      No word for {missedRun} days — welfare check.
+                    </p>
+                    <p className="mt-0.5 text-xs">
+                      Call the guide
+                      {b.guide?.users?.full_name ? ` (${b.guide.users.full_name})` : ""}. If you
+                      cannot reach them, work down the emergency contacts on this
+                      page. Write up whatever you learn against the day below, so
+                      the log shows the trek was accounted for.
+                    </p>
+                  </div>
+                )}
+
                 <ul className="space-y-1 text-sm">
                   {safety.map((c: any) => (
-                    <li key={c.day} className="flex items-start justify-between gap-3">
-                      <span className={c.receivedAt ? "min-w-0" : "min-w-0 text-ink-soft"}>
-                        {fmtDate(c.day)}
-                        {c.note ? <span className="text-ink-soft"> — {c.note}</span> : null}
-                      </span>
-                      {/* A day written up a week later is still a record, but
-                          it is not the same record as one sent that evening,
-                          and the office should not have to guess which. */}
-                      {!c.receivedAt ? (
-                        <Badge tone="red">nothing yet</Badge>
-                      ) : c.late ? (
-                        <Badge tone="amber">filled in {fmtDate(c.receivedAt)}</Badge>
-                      ) : (
-                        <Badge tone="green">on the day</Badge>
+                    <li key={c.day} className="border-b border-border/50 pb-1 last:border-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className={c.receivedAt ? "min-w-0" : "min-w-0 text-ink-soft"}>
+                          {fmtDate(c.day)}
+                          {c.note ? <span className="text-ink-soft"> — {c.note}</span> : null}
+                        </span>
+                        {/* A day written up a week later is still a record, but
+                            it is not the same record as one sent that evening,
+                            and the office should not have to guess which. */}
+                        {!c.receivedAt ? (
+                          <Badge tone="red">nothing yet</Badge>
+                        ) : c.byOps ? (
+                          <Badge tone="blue">office took this</Badge>
+                        ) : c.late ? (
+                          <Badge tone="amber">filled in {fmtDate(c.receivedAt)}</Badge>
+                        ) : (
+                          <Badge tone="green">on the day</Badge>
+                        )}
+                      </div>
+
+                      {/* The office writes up a day the guide reported by
+                          phone, radio, or another party coming down. A trek
+                          that was accounted for should not keep reading as
+                          silence. */}
+                      {!c.receivedAt && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+                            Write this day up…
+                          </summary>
+                          <Form method="post" className="mt-1 flex flex-wrap items-start gap-2">
+                            <input type="hidden" name="intent" value="record_checkin" />
+                            <input type="hidden" name="day" value={c.day} />
+                            <input
+                              name="note"
+                              required
+                              placeholder="What was reported, and who from?"
+                              className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs text-ink outline-none focus:border-primary"
+                            />
+                            <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                              Record
+                            </button>
+                          </Form>
+                        </details>
                       )}
                     </li>
                   ))}
@@ -1057,6 +1241,193 @@ function WhatsIncluded({ booking }: { booking: any }) {
             of these this party chose, so they are not added up here.
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+const nprFromPaisa = (paisa: number) =>
+  `NPR ${(paisa / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+
+/**
+ * What the trekker still owes, and by when.
+ *
+ * "Paid so far: $0 of $1,284.68" is a number, not a job. The office needs the
+ * next thing somebody has to pay, how much, by when, and whether that date has
+ * already gone. Counted from the payments rather than the booking's flags —
+ * a group pays in shares against this same booking, and the flags are what
+ * drift.
+ */
+function DueFromClient({
+  booking,
+  payments,
+  instalments,
+}: {
+  booking: any;
+  payments: any[];
+  instalments: any[];
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const due = bookingDue({ ...booking, payments, instalments }, today);
+  if (due.totalUsdCents === 0) return null;
+
+  if (due.outstandingUsdCents === 0) {
+    return (
+      <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+        Paid in full — nothing owed.
+      </p>
+    );
+  }
+
+  const n = due.next;
+  return (
+    <div
+      className={
+        "mt-2 rounded-md border px-3 py-2 " +
+        (n.overdue ? "border-red-300 bg-red-50" : "border-amber-200 bg-amber-50")
+      }
+    >
+      <p className="text-sm font-medium text-ink">
+        Still to pay: <span className="font-mono">{formatUsd(due.outstandingUsdCents)}</span>
+      </p>
+      <p className="mt-0.5 text-sm text-ink">
+        {n.label}: <span className="font-mono">{formatUsd(n.amountUsdCents)}</span>
+        {n.dueOn && (
+          <>
+            {" — "}
+            {n.overdue ? (
+              <span className="font-medium text-red-900">
+                was due {fmtDate(n.dueOn)}, {Math.abs(n.daysAway ?? 0)} day
+                {Math.abs(n.daysAway ?? 0) === 1 ? "" : "s"} ago
+              </span>
+            ) : (
+              <>
+                due {fmtDate(n.dueOn)}
+                {n.daysAway !== null && (
+                  <span className="text-ink-soft">
+                    {" "}
+                    ({n.daysAway === 0 ? "today" : `in ${n.daysAway} days`})
+                  </span>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </p>
+      {n.consequence && <p className="mt-0.5 text-xs text-ink-soft">{n.consequence}</p>}
+    </div>
+  );
+}
+
+/**
+ * What the guide has been handed, and what is still theirs.
+ *
+ * Two payments, not one. A guide pays for the bus to the trailhead, the first
+ * days' food and often a porter's own advance weeks before anybody books a
+ * flight, so the office settles part of the fee up front — and that had
+ * nowhere to live but a WhatsApp thread, which meant the ledger said the guide
+ * was owed money they had already been given.
+ *
+ * The settlement is written when the trek completes, for the fee MINUS any
+ * advance, so recording one here cannot end in paying for the same work twice.
+ */
+function GuidePayments({ booking, payouts }: { booking: any; payouts: any[] }) {
+  const fee = booking.guide_payout_npr_paisa ?? 0;
+  if (!fee) return null;
+
+  const rows = payouts ?? [];
+  const advance = rows.find((p: any) => p.kind === "advance");
+  const paid = rows
+    .filter((p: any) => p.status === "paid")
+    .reduce((s: number, p: any) => s + (p.amount_npr_paisa ?? 0), 0);
+
+  return (
+    <div className="mt-3 rounded-md border border-border">
+      <p className="border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+        Paid to the guide
+      </p>
+      <p className="px-3 py-1.5 text-sm">
+        Their whole fee for this trip:{" "}
+        <span className="font-mono text-ink">{nprFromPaisa(fee)}</span>
+        <span className="text-ink-soft"> · fixed when it was booked</span>
+      </p>
+
+      {rows.length > 0 && (
+        <ul className="divide-y divide-border/60 border-t border-border">
+          {rows.map((p: any) => (
+            <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-sm">
+              <span className="min-w-0">
+                {p.kind === "advance" ? "Advance, before the trek" : "Settlement, after the trek"}
+                {p.note && <span className="block text-[11px] text-ink-soft">{p.note}</span>}
+                {p.paid_at && (
+                  <span className="block text-[11px] text-ink-soft">
+                    {fmtDate(p.paid_at)}
+                    {p.method ? ` · ${p.method}` : ""}
+                    {p.batch_ref ? ` · ${p.batch_ref}` : ""}
+                  </span>
+                )}
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="font-mono tabular-nums">{nprFromPaisa(p.amount_npr_paisa ?? 0)}</span>
+                {p.status === "paid" ? (
+                  <Badge tone="green">paid</Badge>
+                ) : (
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="mark_payout_paid" />
+                    <input type="hidden" name="payout_id" value={p.id} />
+                    <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
+                      Mark paid
+                    </button>
+                  </Form>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="border-t border-border px-3 py-1.5 text-sm">
+        Still theirs:{" "}
+        <span className="font-mono text-ink">{nprFromPaisa(Math.max(0, fee - paid))}</span>
+      </p>
+
+      {/* The settlement writes itself when the trek completes. Only the
+          advance is a decision somebody makes, so only the advance has a
+          form. */}
+      {!advance && (
+        <details className="border-t border-border px-3 py-1.5">
+          <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+            Record an advance…
+          </summary>
+          <Form method="post" className="mt-2 flex flex-wrap items-end gap-2">
+            <input type="hidden" name="intent" value="guide_advance" />
+            <label className="text-xs text-ink-soft">
+              <span className="block">Rupees</span>
+              <input
+                name="amount_npr"
+                type="number"
+                min="1"
+                step="1"
+                required
+                className="mt-0.5 w-28 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="min-w-0 flex-1 text-xs text-ink-soft">
+              <span className="block">What for</span>
+              <input
+                name="note"
+                placeholder="Bus to the trailhead, porter's advance…"
+                className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <button className="rounded border border-border px-2 py-1.5 text-xs hover:bg-mist">
+              Record
+            </button>
+          </Form>
+          <p className="mt-1 text-[11px] text-ink-soft">
+            Deducted from the settlement written when the trek completes.
+          </p>
+        </details>
       )}
     </div>
   );

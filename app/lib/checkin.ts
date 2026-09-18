@@ -149,6 +149,47 @@ export function canRecord(
   return day >= start && day <= end && day <= midnight(todayIso);
 }
 
+/**
+ * How many days in a row, ending with the most recent reportable one, have
+ * had no word at all.
+ *
+ * One silent day is ordinary: the guide walked past the last cell tower
+ * before lunch and will fill it in tonight. Two in a row is the point where
+ * the office stops assuming and picks up a phone — which is the whole reason
+ * this counts a RUN rather than a total. A trek missing days 2 and 9 has been
+ * out of signal twice and is fine; a trek missing days 8 and 9 has not been
+ * heard from since day seven.
+ *
+ * Counted backwards from today (or the last day, once the trek is over), so a
+ * check-in filled in late closes the run the moment it arrives.
+ */
+export function missedRunEndingAt(
+  startIso: string,
+  endIso: string,
+  todayIso: string,
+  done: string[],
+): number {
+  const start = midnight(startIso);
+  const end = Math.max(midnight(endIso), start);
+  const last = Math.min(end, midnight(todayIso));
+  if (last < start) return 0;
+
+  const sent = new Set(done.map((d) => d.slice(0, 10)));
+  let run = 0;
+  for (let t = last; t >= start; t -= DAY) {
+    if (sent.has(iso(t))) break;
+    run++;
+  }
+  return run;
+}
+
+/** Two days of silence: the office calls, rather than waits (docs/01 F7). */
+export const WELFARE_CHECK_AFTER_DAYS = 2;
+
+export function needsWelfareCheck(missedRun: number): boolean {
+  return missedRun >= WELFARE_CHECK_AFTER_DAYS;
+}
+
 /** Sent after the day it describes — worth showing, and not worth scolding. */
 export function wasLate(dayIso: string, receivedAtIso: string): boolean {
   return midnight(receivedAtIso) > midnight(dayIso);

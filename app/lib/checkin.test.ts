@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canRecord,
-  checkinIsDue,
-  dayLabel,
-  missingDays,
-  needsClosing,
-  trekDay,
-  wasLate,
-} from "./checkin";
+import { canRecord, checkinIsDue, dayLabel, missingDays, needsClosing, trekDay, wasLate, missedRunEndingAt, needsWelfareCheck } from "./checkin";
 
 // The real booking that produced "day 34" on a fourteen-day trek: it ran
 // 6–20 August, nobody closed it, and today is the 8th of September.
@@ -153,5 +145,56 @@ describe("wasLate", () => {
   it("knows an update written up afterwards", () => {
     expect(wasLate("2026-10-02", "2026-10-06T09:00:00Z")).toBe(true);
     expect(wasLate("2026-10-02", "2026-10-02T22:00:00Z")).toBe(false);
+  });
+});
+
+describe("two silent days, and the office picks up a phone", () => {
+  const START = "2026-08-07";
+  const END = "2026-08-21";
+
+  it("counts the run backwards from today, not the total gaps", () => {
+    // Missing days 2 and 9 of a trek that has reported since: out of signal
+    // twice, and fine.
+    const done = [
+      "2026-08-07", "2026-08-09", "2026-08-10", "2026-08-11",
+      "2026-08-12", "2026-08-13", "2026-08-14",
+    ];
+    expect(missedRunEndingAt(START, END, "2026-08-14", done)).toBe(0);
+    expect(needsWelfareCheck(0)).toBe(false);
+  });
+
+  it("one silent day is ordinary", () => {
+    const done = ["2026-08-07", "2026-08-08", "2026-08-09"];
+    expect(missedRunEndingAt(START, END, "2026-08-10", done)).toBe(1);
+    expect(needsWelfareCheck(1)).toBe(false);
+  });
+
+  it("two in a row is not", () => {
+    const done = ["2026-08-07", "2026-08-08", "2026-08-09"];
+    expect(missedRunEndingAt(START, END, "2026-08-11", done)).toBe(2);
+    expect(needsWelfareCheck(2)).toBe(true);
+  });
+
+  it("closes the run the moment a late check-in arrives", () => {
+    const silent = ["2026-08-07", "2026-08-08"];
+    expect(missedRunEndingAt(START, END, "2026-08-11", silent)).toBe(3);
+    // The guide fills in yesterday from the trail. Still nothing for today,
+    // so one day open — but nobody is missing.
+    const caughtUp = [...silent, "2026-08-09", "2026-08-10"];
+    expect(missedRunEndingAt(START, END, "2026-08-11", caughtUp)).toBe(1);
+    expect(needsWelfareCheck(1)).toBe(false);
+  });
+
+  it("counts a trek that has never checked in at all", () => {
+    expect(missedRunEndingAt(START, END, "2026-08-09", [])).toBe(3);
+  });
+
+  it("says nothing about a trek that has not started", () => {
+    expect(missedRunEndingAt(START, END, "2026-08-01", [])).toBe(0);
+  });
+
+  it("stops at the last day once the trek is over", () => {
+    // Fifteen days, none reported — not a run of fifty because time passed.
+    expect(missedRunEndingAt(START, END, "2026-09-30", [])).toBe(15);
   });
 });

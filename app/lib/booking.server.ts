@@ -6,6 +6,7 @@ import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
 import { isCancelledBooking } from "~/lib/ask-guard";
 import { outstandingUsdCents } from "~/lib/group-pay";
+import { missedRunEndingAt, needsWelfareCheck } from "~/lib/checkin";
 import type { StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
 
@@ -533,10 +534,15 @@ export async function cancelBooking(
  * Idempotent per booking; amount is the NPR snapshot fixed at accept time.
  */
 export async function createPayoutForBooking(admin: SupabaseClient, bookingId: string) {
+  // kind, not just booking_id: a trip may also carry an advance paid before
+  // anybody walked (0095). Without narrowing, this maybeSingle() would see two
+  // rows, return an error rather than a row, and write a second settlement on
+  // top of the first.
   const { data: existing } = await admin
     .from("payouts")
     .select("id")
     .eq("booking_id", bookingId)
+    .eq("kind", "final")
     .maybeSingle();
   if (existing) return existing.id;
 
@@ -547,14 +553,28 @@ export async function createPayoutForBooking(admin: SupabaseClient, bookingId: s
     .single();
   if (!b) return null;
 
+  // The settlement is the fee minus whatever the guide has already had. An
+  // advance that is not deducted is the office paying the same work twice.
+  const { data: advance } = await admin
+    .from("payouts")
+    .select("amount_npr_paisa")
+    .eq("booking_id", bookingId)
+    .eq("kind", "advance")
+    .maybeSingle();
+  const owed = Math.max(
+    0,
+    (b.guide_payout_npr_paisa ?? 0) - (advance?.amount_npr_paisa ?? 0),
+  );
+
   const { data: created } = await admin
     .from("payouts")
     .insert({
       guide_id: b.guide_id,
       booking_id: bookingId,
-      amount_npr_paisa: b.guide_payout_npr_paisa,
+      amount_npr_paisa: owed,
       method: (b as any).guide?.payout_method ?? "bank",
       status: "payable",
+      kind: "final",
     })
     .select("id")
     .single();
@@ -562,51 +582,150 @@ export async function createPayoutForBooking(admin: SupabaseClient, bookingId: s
 }
 
 /**
- * Missed-check-in sweep (docs/01 F7): active multi-day treks whose most recent
- * check-in is older than yesterday get an ops incident (24h alert). A duplicate
- * open incident is not created.
+ * Missed-check-in sweep (docs/01 F7).
+ *
+ * Two thresholds, because one silent day and two silent days are different
+ * situations. A guide walks past the last cell tower before lunch and fills
+ * the day in that night: flagging it is right, waking anybody is not. Two days
+ * in a row with no word is where the office stops assuming and picks up a
+ * phone, so that one is an L2 and it emails every ops account rather than
+ * waiting to be noticed on a board nobody has open.
+ *
+ * Counted as a RUN ending today, not as a total: a trek missing days 2 and 9
+ * has been out of signal twice; a trek missing days 8 and 9 has not been heard
+ * from since day seven. And a check-in filled in late closes the run, which is
+ * why a guide catching up from the trail settles this without anyone acting.
  */
 export async function runMissedCheckinSweep(
   admin: SupabaseClient,
   todayIso: string,
   opsUserId: string,
+  env?: Env,
 ) {
   const { data: active } = await admin
     .from("bookings")
-    .select("id, start_date")
+    .select("id, start_date, end_date")
     .eq("status", "active");
-  const yesterday = new Date(Date.parse(todayIso) - 86_400_000).toISOString().slice(0, 10);
 
   let alerts = 0;
+  let welfareChecks = 0;
   for (const b of active ?? []) {
-    const { data: last } = await admin
+    const { data: days } = await admin
       .from("checkins")
       .select("day")
-      .eq("booking_id", b.id)
-      .order("day", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const missed = !last || last.day < yesterday;
-    if (!missed) continue;
+      .eq("booking_id", b.id);
+    const run = missedRunEndingAt(
+      b.start_date,
+      b.end_date ?? b.start_date,
+      todayIso,
+      (days ?? []).map((d: { day: string }) => d.day),
+    );
+    if (run < 1) continue;
+
+    const welfare = needsWelfareCheck(run);
     const { data: open } = await admin
       .from("incidents")
-      .select("id")
+      .select("id, severity")
       .eq("booking_id", b.id)
       .neq("status", "closed")
       .ilike("summary", "Missed check-in%")
+      .order("opened_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (open) continue;
+
+    // An open L1 that has now become two days of silence is raised rather
+    // than left as it was — otherwise the first quiet day suppresses the
+    // alert for the day that actually matters.
+    if (open) {
+      if (welfare && open.severity !== "L2") {
+        await admin
+          .from("incidents")
+          .update({
+            severity: "L2",
+            summary: `Missed check-in — ${run} days with no word. Welfare check needed.`,
+          })
+          .eq("id", open.id);
+        await notifyOpsWelfareCheck(env, admin, b.id, run);
+        welfareChecks++;
+      }
+      continue;
+    }
+
     await admin.from("incidents").insert({
       booking_id: b.id,
-      severity: "L1",
-      summary: "Missed check-in — no check-in in the last 24h.",
+      severity: welfare ? "L2" : "L1",
+      summary: welfare
+        ? `Missed check-in — ${run} days with no word. Welfare check needed.`
+        : "Missed check-in — no check-in in the last 24h.",
       status: "open",
       opened_by: opsUserId,
-      timeline: [{ at: todayIso, actor: "system", action: "Auto-flagged: missed check-in" }],
+      timeline: [
+        {
+          at: todayIso,
+          actor: "system",
+          action: welfare
+            ? `Auto-flagged: ${run} days with no check-in — welfare check`
+            : "Auto-flagged: missed check-in",
+        },
+      ],
     });
     alerts++;
+    if (welfare) {
+      await notifyOpsWelfareCheck(env, admin, b.id, run);
+      welfareChecks++;
+    }
   }
-  return { alerts };
+  return { alerts, welfareChecks };
+}
+
+/**
+ * Tell the office, by email, that somebody has not been heard from.
+ *
+ * An incident row is a thing you find when you go looking. Two days of silence
+ * on a trek at altitude is a thing that has to find you. Best-effort on
+ * purpose: a mail server having a bad morning must not stop the sweep
+ * flagging the rest of the treks.
+ */
+async function notifyOpsWelfareCheck(
+  env: Env | undefined,
+  admin: SupabaseClient,
+  bookingId: string,
+  missedDays: number,
+) {
+  if (!env) return;
+  try {
+    const [{ data: b }, { data: ops }] = await Promise.all([
+      admin
+        .from("bookings")
+        .select(
+          "start_date, end_date, party_size, offering:offerings(title), trekker:users!bookings_trekker_id_fkey(full_name), guide:guides(users(full_name, phone))",
+        )
+        .eq("id", bookingId)
+        .maybeSingle(),
+      admin.from("users").select("email").eq("role", "ops"),
+    ]);
+    if (!b) return;
+    const { sendEmail } = await import("~/lib/notify.server");
+    const guide = (b as any).guide?.users;
+    const body = [
+      `${(b as any).offering?.title ?? "A trek"} has had no check-in for ${missedDays} days.`,
+      "",
+      `Trekker: ${(b as any).trekker?.full_name ?? "—"} (party of ${b.party_size})`,
+      `Guide: ${guide?.full_name ?? "—"}${guide?.phone ? ` — ${guide.phone}` : ""}`,
+      `Dates: ${b.start_date} → ${b.end_date}`,
+      "",
+      "Call the guide. If you cannot reach them, call the trekker's emergency",
+      "contact and the guide's next of kin, both on the booking page:",
+      `${(env as any).SITE_URL ?? ""}/ops/bookings/${bookingId}`,
+    ].join("\n");
+
+    for (const o of ops ?? []) {
+      if (!o.email) continue;
+      await sendEmail(env, o.email, `Welfare check — ${missedDays} days with no word`, body);
+    }
+  } catch {
+    // never let a notification failure stop the sweep
+  }
 }
 
 /** Expire open enquiries past their TTL, and release accepted-but-unpaid holds. */
