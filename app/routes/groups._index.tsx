@@ -61,21 +61,30 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
   const offeringById = new Map((offerings ?? []).map((o) => [o.id, o]));
 
+  const rows = (groups ?? []).map((g) => {
+    const list = byGroup.get(g.id) ?? [];
+    const bk = g.booking_id ? bookingById.get(g.booking_id) : null;
+    return {
+      ...g,
+      members: list,
+      money: groupMoney(list, bk?.total_usd_cents, bk?.party_size),
+      seats: bk?.party_size ?? g.party_target,
+      bookingStatus: bk?.status ?? null,
+      offering: g.offering_id ? (offeringById.get(g.offering_id) ?? null) : null,
+      youAreInvited: list.some((m) => m.user_id === user.id && m.status === "invited"),
+    };
+  });
+
   return {
     userId: user.id,
-    groups: (groups ?? []).map((g) => {
-      const list = byGroup.get(g.id) ?? [];
-      const bk = g.booking_id ? bookingById.get(g.booking_id) : null;
-      return {
-        ...g,
-        members: list,
-        money: groupMoney(list, bk?.total_usd_cents, bk?.party_size),
-        seats: bk?.party_size ?? g.party_target,
-        bookingStatus: bk?.status ?? null,
-        offering: g.offering_id ? (offeringById.get(g.offering_id) ?? null) : null,
-        youAreInvited: list.some((m) => m.user_id === user.id && m.status === "invited"),
-      };
-    }),
+    // This page is the trips you are planning WITH other people. One seat and
+    // one person on the roster is a trek you are walking alone — it belongs in
+    // My trips, and showing it here as "1/1 in" was the page telling you that
+    // you had a group when you did not.
+    //
+    // A trip for two whose second person has not joined yet is a different
+    // thing and stays: that one has someone to invite.
+    groups: rows.filter((g) => (g.seats ?? 1) > 1 || g.members.length > 1),
   };
 }
 

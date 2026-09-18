@@ -268,9 +268,6 @@ export async function groupForBooking(
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking) return null;
-  // A solo booking gets no group of its own — but one that a group asked for
-  // is linked below however many seats it was sold with.
-  if (booking.party_size < 2 && !booking.enquiry_id) return null;
 
   const { data: existing } = await admin
     .from("trip_groups")
@@ -310,6 +307,19 @@ export async function groupForBooking(
     await recomputeShares(admin, asked.data.id);
     return asked.data.slug;
   }
+
+  // Nobody asked for this as a group, so a party of one is a party of one.
+  //
+  // This check used to sit at the top as `party_size < 2 && !enquiry_id`, and
+  // the second half of it undid the first: a booking's enquiry_id is set on
+  // essentially every booking, because an enquiry is how a trek gets booked.
+  // So every solo trek fell through to the create below and got a group page
+  // of its own, with one member, addressed to nobody — ten of them by the
+  // time it was noticed, each opening "invite the others and split it here".
+  //
+  // The enquiry only ever mattered as a way to find the group that asked, and
+  // that lookup has now happened and found nothing.
+  if (booking.party_size < 2) return null;
 
   const [{ data: offering }, { data: trekker }] = await Promise.all([
     admin.from("offerings").select("title").eq("id", booking.offering_id).maybeSingle(),

@@ -289,13 +289,16 @@ async function bookFromQuote(
   // best-effort: the booking is the thing that must not fail.
   // ...and a booking a group asked for is linked back to that group, whatever
   // its size, so the organiser does not end up with two pages for one trek.
-  if (enq.party_size > 1 || enq.id) {
-    try {
-      const { groupForBooking } = await import("~/lib/groups.server");
-      await groupForBooking(admin, booking.id);
-    } catch {
-      // swallow — the trekker can still make one by hand from /groups
-    }
+  //
+  // The condition that used to sit here — `enq.party_size > 1 || enq.id` — was
+  // always true, since enq.id is the enquiry we are accepting. groupForBooking
+  // is the one place that decides, so there is no second copy of the rule to
+  // drift out of step with it.
+  try {
+    const { groupForBooking } = await import("~/lib/groups.server");
+    await groupForBooking(admin, booking.id);
+  } catch {
+    // swallow — the trekker can still make one by hand from /groups
   }
   return booking.id;
 }
