@@ -69,6 +69,13 @@ export interface ReadinessInput {
   insuranceAttestedAt?: string | null;
   permits: Array<{ status?: string | null }>;
   timsStatus?: string | null;
+  /**
+   * Does this route require a TIMS card? Read from the route's own permit
+   * list (0102) rather than assumed. Two of the six routes carry TIMS; the
+   * step used to appear on all of them, and on a trek whose route has no TIMS
+   * permit it could never be anything but "waiting".
+   */
+  routeNeedsTims?: boolean;
   contractStatus?: string | null;
   meetingPoint?: string | null;
   /** Gear, hotels, transport — anything the office still has to book or pay. */
@@ -277,6 +284,7 @@ export function tripReadiness(input: ReadinessInput): Readiness {
                 : "Waiting on the trekker's papers.",
     });
 
+    if (input.routeNeedsTims !== false) {
     steps.push({
       key: "tims",
       label: "TIMS card issued",
@@ -294,6 +302,7 @@ export function tripReadiness(input: ReadinessInput): Readiness {
             ? "Ready to issue."
             : "Insurance has to be verified first (2026 rule).",
     });
+    }
   }
 
   // Everything the office books that is not the guide. One step, because the

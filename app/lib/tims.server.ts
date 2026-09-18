@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { stampsFor } from "~/lib/permits";
 
 /** Deterministic blue-card serial for a booking. Pure + testable. */
 export function timsCardNo(bookingId: string, year: number): string {
@@ -11,9 +12,24 @@ export type IssueResult =
   | { ok: false; reason: string };
 
 /**
- * Issue the blue TIMS card for a booking. Gated on the 2026 rule: insurance must
- * be verified (covering high-altitude trekking + heli evacuation). Idempotent —
- * a second call returns the existing card. Only ops call this.
+ * Issue the blue TIMS card for a booking.
+ *
+ * Gated on two things now. The 2026 rule — insurance verified, covering
+ * high-altitude trekking and helicopter evacuation — and the route actually
+ * requiring TIMS, which this never checked. TIMS exists as an ordinary permit
+ * row on two of the six routes; on the other four this function would print a
+ * card anyway, and the office read "TIMS card issued" beside "no permit
+ * application" for the same trek. Six cards went out that way.
+ *
+ * Refusing is not a dead end: the message names the route, and the office can
+ * add the TIMS permit to it from the route's own permits list if the route
+ * does require one. What it will not do any more is decide for itself.
+ *
+ * On success it writes BOTH models — the `tims_cards` row and the route's TIMS
+ * `permit_applications` row, moved to `ready` with the card number as its
+ * reference — so the two can no longer disagree.
+ *
+ * Idempotent: a second call returns the existing card. Only ops call this.
  */
 export async function issueTimsCard(
   admin: SupabaseClient,
@@ -30,7 +46,7 @@ export async function issueTimsCard(
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, start_date, end_date, party_size, insurance_verified_at, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(licence_no, users(full_name)), offering:offerings(title, meeting_point, route:routes(name, region, max_altitude_m))",
+      "id, start_date, end_date, party_size, insurance_verified_at, trekker:users!bookings_trekker_id_fkey(full_name, country_code), guide:guides(licence_no, users(full_name)), offering:offerings(title, meeting_point, route_id, route:routes(name, region, max_altitude_m))",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -40,6 +56,26 @@ export async function issueTimsCard(
   }
 
   const off: any = (b as any).offering;
+
+  // Does this route require TIMS at all? Asked of the permits model rather
+  // than assumed, which is the whole fix.
+  const routeName = off?.route?.name ?? off?.title ?? "this route";
+  if (!off?.route_id) {
+    return { ok: false, reason: `${routeName} has no route on it, so we cannot tell whether TIMS applies.` };
+  }
+  const { data: timsPermit } = await admin
+    .from("permits")
+    .select("id")
+    .eq("route_id", off.route_id)
+    .eq("code", "tims")
+    .maybeSingle();
+  if (!timsPermit) {
+    return {
+      ok: false,
+      reason: `${routeName} has no TIMS card in its permit list, so there is nothing to issue. If it does need one, add it to the route's permits first.`,
+    };
+  }
+
   const year = Number((b.start_date ?? new Date().toISOString()).slice(0, 4));
   const cardNo = timsCardNo(bookingId, year);
 
@@ -60,5 +96,27 @@ export async function issueTimsCard(
     status: "issued",
   });
   if (error) return { ok: false, reason: error.message };
+
+  // The same fact in the permits model. Upserted rather than inserted: the
+  // application may already exist, filed by the trigger when the booking
+  // confirmed (0013).
+  const { data: application } = await admin
+    .from("permit_applications")
+    .select("id")
+    .eq("booking_id", bookingId)
+    .eq("permit_id", timsPermit.id)
+    .maybeSingle();
+  const patch = {
+    status: "ready",
+    reference_no: cardNo,
+    ...stampsFor("ready"),
+  };
+  if (application) {
+    await admin.from("permit_applications").update(patch).eq("id", application.id);
+  } else {
+    await admin
+      .from("permit_applications")
+      .insert({ booking_id: bookingId, permit_id: timsPermit.id, ...patch });
+  }
   return { ok: true, cardNo };
 }

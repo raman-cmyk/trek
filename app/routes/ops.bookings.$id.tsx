@@ -96,7 +96,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       admin
         .from("permit_applications")
         .select(
-          "id, status, reference_no, scan_path, scan_uploaded_at, notes, permit_id, permit:permits(name, issuing_body, lead_time_days)",
+          "id, status, reference_no, scan_path, scan_uploaded_at, notes, permit_id, permit:permits(name, code, issuing_body, lead_time_days)",
         )
         .eq("booking_id", b.id),
       "the permits",
@@ -181,7 +181,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     rows<any>(
       admin
         .from("permits")
-        .select("id, name, issuing_body, route_id, lead_time_days")
+        .select("id, name, code, issuing_body, route_id, lead_time_days")
         .order("name"),
       "the permit types",
     ),
@@ -736,6 +736,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
         travellers={travellers}
         documents={documents}
         permits={permits}
+        permitTypes={permitTypes}
         tims={tims}
         contract={contract}
         payments={payments}
@@ -1032,48 +1033,6 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             </Panel>
           </div>
 
-          {/* Blue TIMS card (issued in-flow) */}
-          <div className="mt-4">
-            <Panel title="Blue TIMS card">
-              {tims ? (
-                <div className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-mono font-medium text-ink">{tims.card_no}</p>
-                    <p className="text-xs text-ink-soft">
-                      Issued {new Date(tims.issued_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a href={`/pdf/tims/${b.id}`} target="_blank" rel="noreferrer" className="rounded border border-border px-2 py-1 text-xs text-primary">
-                      PDF
-                    </a>
-                    <Badge tone="blue">{tims.status}</Badge>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-ink-soft">
-                    {b.insurance_verified_at
-                      ? "Ready to issue."
-                      : "Verify insurance first (2026 rule)."}
-                  </p>
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="issue_tims" />
-                    <button
-                      disabled={!b.insurance_verified_at}
-                      className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-                    >
-                      Issue blue card
-                    </button>
-                  </Form>
-                </div>
-              )}
-              {(actionData as any)?.error && (
-                <p className="mt-2 text-xs text-danger">{(actionData as any).error}</p>
-              )}
-            </Panel>
-          </div>
-
           <div className="mt-4">
             <Panel title="Company↔Guide contract">
               {contract ? (
@@ -1206,7 +1165,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             </div>
           )}
 
-          <Permits rows={permits} types={permitTypes} booking={b} />
+          <Permits rows={permits} types={permitTypes} booking={b} tims={tims} error={(actionData as any)?.error ?? null} />
         </div>
       </div>
     </div>
@@ -1839,6 +1798,7 @@ function Readiness({
   travellers,
   documents,
   permits,
+  permitTypes,
   tims,
   contract,
   payments,
@@ -1850,6 +1810,7 @@ function Readiness({
   travellers: any[];
   documents: any[];
   permits: any[];
+  permitTypes: any[];
   tims: any;
   contract: any;
   payments: any[];
@@ -1873,6 +1834,12 @@ function Readiness({
     insuranceAttestedAt: booking.insurance_attested_at,
     permits: permits ?? [],
     timsStatus: tims?.status ?? null,
+    // Asked of this route's permit list rather than assumed: four of the six
+    // routes have no TIMS row, and the step could never be anything but
+    // "waiting" on them (0102).
+    routeNeedsTims: (permitTypes ?? []).some(
+      (t: any) => t.route_id === (booking.offering?.route?.id ?? null) && t.code === "tims",
+    ),
     contractStatus: contract?.status ?? null,
     meetingPoint: booking.meeting_point ?? null,
     arrangements: arrangements ?? [],
@@ -2319,13 +2286,22 @@ function Permits({
   rows,
   types,
   booking,
+  tims,
+  error,
 }: {
   rows: any[];
   types: any[];
   booking: any;
+  tims: any;
+  error: string | null;
 }) {
   const list = rows ?? [];
   const routeId = booking.offering?.route?.id ?? null;
+  // TIMS is a permit like any other (0102). It used to have its own panel with
+  // its own issue button, which could not see this list — so a card could be
+  // issued for a route with no TIMS permit and the two halves of the screen
+  // disagreed about the same trek.
+  const routeTims = (types ?? []).find((t: any) => t.route_id === routeId && t.code === "tims");
   const already = new Set(list.map((r: any) => r.permit_id));
   // This route's own permits first, then everything else, and never one that
   // is already on the trip.
@@ -2405,6 +2381,48 @@ function Permits({
                     Save
                   </button>
                 </Form>
+
+                {/* The blue card itself, on the TIMS row rather than in a
+                    panel of its own. */}
+                {p.permit?.code === "tims" && (
+                  <div className="mt-1.5 rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs">
+                    {tims ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-ink">{tims.card_no}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-ink-soft">
+                            issued {fmtDate(tims.issued_at)}
+                          </span>
+                          <a
+                            href={`/pdf/tims/${booking.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded border border-sky-300 bg-white px-2 py-0.5 text-primary"
+                          >
+                            PDF
+                          </a>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-ink-soft">
+                          {booking.insurance_verified_at
+                            ? "Ready to issue the blue card."
+                            : "Verify insurance first (2026 rule)."}
+                        </span>
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="issue_tims" />
+                          <button
+                            disabled={!booking.insurance_verified_at}
+                            className="rounded bg-primary px-2 py-1 font-medium text-white disabled:opacity-40"
+                          >
+                            Issue blue card
+                          </button>
+                        </Form>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <details className="mt-1">
                   <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
@@ -2487,6 +2505,32 @@ function Permits({
             </Form>
           </details>
         )}
+
+        {/* The contradiction the office was reading on this page: a blue card
+            issued against a route whose permit list has no TIMS on it. Six of
+            those exist. Said here rather than left to be inferred. */}
+        {!routeTims && (
+          <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-ink">
+            {tims ? (
+              <>
+                <span className="font-medium">
+                  A blue TIMS card was issued for this trek, but{" "}
+                  {booking.offering?.route?.name ?? "this route"} has no TIMS card in
+                  its permit list.
+                </span>{" "}
+                Either the route is missing it, or the card should not have gone
+                out. Add TIMS to the route's permits if the route needs one.
+              </>
+            ) : (
+              <>
+                {booking.offering?.route?.name ?? "This route"} has no TIMS card in
+                its permit list, so none can be issued. Add it to the route's
+                permits if it needs one.
+              </>
+            )}
+          </p>
+        )}
+        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
       </Panel>
     </div>
   );

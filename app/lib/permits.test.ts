@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { bySoonest, manualEntryProblem, stampsFor } from "./permits";
+import {
+  PERMIT_CODES,
+  bySoonest,
+  manualEntryProblem,
+  permitCodeFor,
+  permitCodeLabel,
+  routeNeedsTims,
+  stampsFor,
+} from "./permits";
 
 describe("bySoonest", () => {
   it("puts the trek that leaves first at the top", () => {
@@ -69,5 +77,39 @@ describe("stampsFor", () => {
   it("stamps nothing for a permit that has not gone anywhere", () => {
     expect(stampsFor("awaiting_docs", now)).toEqual({});
     expect(stampsFor("rejected", now)).toEqual({});
+  });
+});
+
+describe("what kind of permit it is", () => {
+  it("finds TIMS by what it is, not by a string match on 'TIMS Card'", () => {
+    expect(permitCodeFor("TIMS Card")).toBe("tims");
+    expect(permitCodeFor("Trekkers' Information Management System (TIMS)")).toBe("tims");
+  });
+
+  it("keeps ACAP and MCAP apart — Manaslu Circuit carries both", () => {
+    expect(permitCodeFor("Annapurna Conservation Area Permit (ACAP)")).toBe("acap");
+    expect(permitCodeFor("Manaslu Conservation Area Permit (MCAP)")).toBe("mcap");
+    expect(permitCodeFor("Manaslu Restricted Area Permit")).toBe("restricted");
+  });
+
+  it("reads the seeded names the way 0102 backfilled them", () => {
+    expect(permitCodeFor("Sagarmatha National Park Entry")).toBe("park_entry");
+    expect(permitCodeFor("Khumbu Pasang Lhamu Rural Municipality Fee")).toBe("municipality");
+  });
+
+  it("says 'other' rather than guessing", () => {
+    expect(permitCodeFor("Some new fee nobody has seen")).toBe("other");
+  });
+
+  it("answers the question that was never asked: does this route need TIMS?", () => {
+    // Everest Base Camp has a park entry and a municipality fee and no TIMS
+    // row — and six blue cards have been issued against bookings on it.
+    expect(routeNeedsTims([{ code: "park_entry" }, { code: "municipality" }])).toBe(false);
+    expect(routeNeedsTims([{ code: "park_entry" }, { code: "tims" }])).toBe(true);
+    expect(routeNeedsTims([])).toBe(false);
+  });
+
+  it("has a word for every code, so no screen prints a slug", () => {
+    for (const c of PERMIT_CODES) expect(permitCodeLabel(c.code)).not.toBe(c.code);
   });
 });

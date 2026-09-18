@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { permitCodeFor } from "~/lib/permits";
 
 /**
  * Parsing and rules for a guide-proposed route, shared by the guide's builder
@@ -149,24 +150,71 @@ export async function uniqueRouteSlug(
   return `${base}-${Date.now().toString(36)}`;
 }
 
-/** Replace a route's permit rows with exactly what was submitted. */
+/**
+ * Set a route's permits to exactly what was submitted.
+ *
+ * This used to be `delete where route_id` followed by `insert`, which works
+ * right up until somebody has applied for one of those permits:
+ * `permit_applications.permit_id` is a foreign key, so the first edit to a
+ * route with any application on it takes the delete down and the whole save
+ * with it. Nobody had hit it because the only callers create new routes.
+ *
+ * So: match on `(route_id, code)` and update in place; insert what is new;
+ * and remove only the rows nobody submitted AND nobody has applied for. A
+ * permit with applications against it that the office dropped from the list
+ * is left alone rather than destroyed — the applications are the record that
+ * somebody paid for it.
+ */
 export async function saveRoutePermits(
   admin: SupabaseClient,
   routeId: string,
   permits: ParsedPermit[],
 ) {
-  await admin.from("permits").delete().eq("route_id", routeId);
-  if (!permits.length) return;
-  await admin.from("permits").insert(
-    permits.map((p) => ({
-      route_id: routeId,
-      name: p.name,
-      cost_usd_cents: p.cost_usd_cents,
-      // The office sets the rupee figure against the day's rate when it
-      // checks the route; a guide quoting dollars should not be asked to
-      // invent an exchange rate too.
-      cost_npr_paisa: 0,
-      lead_time_days: 3,
-    })),
-  );
+  const { data: existing } = await admin
+    .from("permits")
+    .select("id, code, name")
+    .eq("route_id", routeId);
+
+  const submitted = permits.map((p) => ({ ...p, code: permitCodeFor(p.name) }));
+  const keptIds = new Set<string>();
+
+  for (const p of submitted) {
+    // `other` has no unique code, so it matches on the name instead — two
+    // permits we have no name for are two different permits.
+    const match = (existing ?? []).find((e: any) =>
+      p.code === "other"
+        ? e.code === "other" && e.name === p.name
+        : e.code === p.code,
+    );
+    if (match) {
+      keptIds.add(match.id);
+      await admin
+        .from("permits")
+        .update({ name: p.name, code: p.code, cost_usd_cents: p.cost_usd_cents })
+        .eq("id", match.id);
+    } else {
+      await admin.from("permits").insert({
+        route_id: routeId,
+        name: p.name,
+        code: p.code,
+        cost_usd_cents: p.cost_usd_cents,
+        // The office sets the rupee figure against the day's rate when it
+        // checks the route; a guide quoting dollars should not be asked to
+        // invent an exchange rate too.
+        cost_npr_paisa: 0,
+        lead_time_days: 3,
+      });
+    }
+  }
+
+  const dropped = (existing ?? []).filter((e: any) => !keptIds.has(e.id));
+  for (const d of dropped) {
+    const { data: applied } = await admin
+      .from("permit_applications")
+      .select("id")
+      .eq("permit_id", d.id)
+      .limit(1);
+    if ((applied ?? []).length > 0) continue;
+    await admin.from("permits").delete().eq("id", d.id);
+  }
 }

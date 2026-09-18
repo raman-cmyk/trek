@@ -130,6 +130,15 @@ describe("what is blocked on what", () => {
     expect(step(r, "permits").state).toBe("open");
   });
 
+  it("leaves TIMS off a route that does not require one", () => {
+    // Everest Base Camp and Gokyo Lakes have a park entry and a municipality
+    // fee and no TIMS row (0102). The step used to appear anyway and could
+    // never be anything but "waiting".
+    const keys = tripReadiness({ ...TREK, routeNeedsTims: false }).steps.map((s) => s.key);
+    expect(keys).not.toContain("tims");
+    expect(keys).toContain("permits");
+  });
+
   it("holds TIMS until insurance is verified — the 2026 rule", () => {
     expect(step(tripReadiness(TREK), "tims").state).toBe("blocked");
     const ok = tripReadiness({ ...TREK, insuranceVerifiedAt: "2026-09-03" });

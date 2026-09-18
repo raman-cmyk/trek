@@ -63,3 +63,53 @@ export function stampsFor(status: string, now = new Date()): Record<string, stri
   if (status === "approved" || status === "ready") stamps.approved_at = iso;
   return stamps;
 }
+
+/* ── What kind of permit it is (0102) ───────────────────────────────────── */
+
+/**
+ * The codes a permit row carries, and the words the office uses for them.
+ *
+ * TIMS is in this list because it is an ordinary permit and always was. It had
+ * grown a second life as its own table, its own panel and its own issue
+ * button, which could not see the permits model and so issued blue cards for
+ * routes with no TIMS permit on them at all.
+ */
+export const PERMIT_CODES = [
+  { code: "tims", label: "TIMS card" },
+  { code: "park_entry", label: "National park entry" },
+  { code: "municipality", label: "Rural municipality fee" },
+  { code: "restricted", label: "Restricted area permit" },
+  { code: "acap", label: "ACAP (Annapurna)" },
+  { code: "mcap", label: "MCAP (Manaslu)" },
+  { code: "conservation", label: "Conservation area permit" },
+  { code: "other", label: "Something else" },
+] as const;
+
+export type PermitCode = (typeof PERMIT_CODES)[number]["code"];
+
+export const permitCodeLabel = (code: string): string =>
+  PERMIT_CODES.find((c) => c.code === code)?.label ?? code;
+
+/**
+ * Guess the code from the name the office typed.
+ *
+ * The same rules as the 0102 backfill, kept here so a permit added from the
+ * route form lands in the same buckets as the seeded ones. A guess, not a
+ * ruling: `other` is a real answer and the office can leave it there.
+ */
+export function permitCodeFor(name: string): PermitCode {
+  const n = name.toLowerCase();
+  if (n.includes("tims")) return "tims";
+  if (n.includes("national park")) return "park_entry";
+  if (n.includes("municipality")) return "municipality";
+  if (n.includes("restricted")) return "restricted";
+  if (n.includes("mcap") || n.includes("manaslu conservation")) return "mcap";
+  if (n.includes("acap") || n.includes("annapurna conservation")) return "acap";
+  if (n.includes("conservation")) return "conservation";
+  return "other";
+}
+
+/** Does this route's permit list include a TIMS card? */
+export function routeNeedsTims(permits: Array<{ code?: string | null }>): boolean {
+  return permits.some((p) => p.code === "tims");
+}
