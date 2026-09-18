@@ -143,3 +143,42 @@ What does fit, roughly in order of how cheap it is:
 gift card" button would be a form that cannot charge. Sequence is Stripe
 first, then credits (which need a ledger — issue, balance, expiry, and a
 redemption that cannot go negative), then gift cards on top of that ledger.
+
+---
+
+## From the "Trek Ops" spec — phases 2 to 5 (2026-09-18)
+
+Raman's ops document describes the whole operation. Phase 1 — "fix the trip
+page, staff must trust the numbers first" — is what this session built. The
+rest is his own phases 2 to 5, each its own build, and CLAUDE.md rule 7 says
+they wait rather than growing quietly out of Phase 1.
+
+**The slot/product model for experiences.** The whole Experiences Desk rests
+on it, and nothing of it exists: no slot, no vehicle, no driver, no pickup
+point anywhere in the schema (`departures` is dead schema). Every screen the
+spec draws for that desk — Today's run sheet, Tomorrow's evening check,
+Calendar fill rates, capacity and waitlists, merge-and-move-a-slot — needs it
+first. This is the biggest single item in the document.
+
+**Two desks.** Trek Desk and Experiences Desk as separate homes with separate
+navigation. Deliberately not built: there is one ops team, and splitting the
+screens before the second desk exists makes two half-empty rooms. Revisit when
+the Experiences Desk has its own people.
+
+**The guide app in two modes.** One app opening in trek mode or day mode by
+the job assigned, with offline taps, an SMS fallback for check-ins and an
+emergency button. Today's guide pages are web screens that need signal.
+
+**Customer portals.** The trekker's half largely exists now (roster, papers,
+"Before you go"). The guest portal for experiences — pay, waiver, pick a
+pickup point, confirm the night before, cancel within the rules — needs the
+slot model above.
+
+**Exception playbooks as code.** Charge declined at T-14, guide drops out,
+weather cancels a slot, altitude evacuation. Each is a sequence of messages,
+refunds and reassignments the spec spells out and nothing automates.
+
+**The two spec tasks that are not a booking's.** Creating an experience
+product and generating a month of slots belong to the product, not to whoever
+books it first, so `EXPERIENCE_TASKS` has thirteen rows rather than fifteen.
+They come back with the slot model.

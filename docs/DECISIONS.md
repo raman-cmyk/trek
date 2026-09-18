@@ -463,3 +463,58 @@ numeral hanging in a 4.5rem margin on top of that. Nothing lined up with
 anything: the title started 128px right of day one and the elevation graphic
 96px left of it. Any page with bands in it gets one shell constant and every
 band uses it.
+
+## A document belongs to a person, not to a booking (2026-09-18)
+
+`docsSettled` was `live.length > 0 && live.every(verified)` — no document
+type, no head count — so one verified passport and no insurance at all
+confirmed a booking for six and fired the permit trigger. Production held one
+party of 1 with three passports and three insurance files, filed under "xyz",
+"XYZ" and "INS", because every upload asked "whose is it?" as free text typed
+fresh on the day.
+
+Counting could not fix it: "Jon Smith" and "jon smith" are two people to a
+count. So `booking_travellers` (0099), and the confirmation rule became "every
+named traveller has a verified passport AND a verified insurance certificate,
+and the roster covers the whole party". `docsSettled` is deleted rather than
+deprecated — the old answer is not a fallback, it is a hole.
+
+And "replaced" is not "rejected" (0101). A second document of the same type
+for the same person replaces the first, which the partial unique index
+requires — but a rejection is something the office says to a trekker, and the
+trekker's page was about to read it back as "your passport needs redoing"
+above a reason saying it did not.
+
+## Facts stay derived; the checklist carries what nothing else knows (2026-09-18)
+
+The ops spec asks for thirty tasks per trek with owners and dates, and the
+plan had `trip-readiness.ts` read those rows instead of deriving its steps.
+Half the spec's tasks are facts this database already holds — the deposit is
+in `payments`, the permits are in `permit_applications` — and a row copied
+from a fact goes stale the moment the fact changes.
+
+So both, with a seam. `trip_tasks` (0103) carries the work nothing else knows
+about: flights booked, porter accepted, hotel confirmed, briefing pack sent,
+cash advance handed over. `trip-readiness.ts` keeps deriving the rest.
+`syncDerivedTasks` ticks the overlap off the rows and never un-ticks it, so
+the two cannot disagree and a task somebody deliberately marked done is not
+something a query argues with.
+
+## The board may be overridden, and the override is kept (2026-09-18)
+
+`/ops/pipeline` wrote whatever status the form carried; the only bound was the
+database check constraint, so a card could go from "pending deposit" to
+"completed" in one drag. The fix is not to forbid it — the office does know
+things the system does not, like a deposit paid in cash in Thamel. The facts'
+own answer is allowed, anything behind it is allowed (putting a card back is
+how a mistake is undone), and moving ahead of the facts needs a written reason
+stored on the booking (0104). In six months the question will be who did that.
+
+## A sweep notices the calendar; it does not re-litigate (2026-09-18)
+
+`runStatusSweep` is forward-only. Walking a confirmed trip backwards is a real
+move — a passport sent back does un-confirm a trek — but it belongs to the
+event that caused it, where the caller knows what changed. A nightly job that
+re-derives every booking in the database would have pulled thirteen confirmed
+trips back on its first run, on the strength of paperwork rules that were
+written after those trips were confirmed.

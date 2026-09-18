@@ -3179,3 +3179,100 @@ The worker has five secrets set: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 from the platform side that no email or SMS has ever been delivered.
 
 Green: 1,344 tests in 89 files, typecheck clean, `npm run build` passing.
+
+---
+
+## 2026-09-18 — Trek Ops Phase 1: making the trip page tell the truth
+
+Raman's "Trek Ops" spec sets its own order: *"Phase 1 — fix the trip page.
+Real payments, calculated status, one permits model, validation. Staff must
+trust the numbers first."* This session is that, minus Stripe, which he asked
+to leave until last.
+
+**Five things were found wrong before anything was built**, each verified
+against production rather than assumed:
+
+1. **Anyone could book a trek for nothing.** `MockStripe.retrievePaymentIntent`
+   returned `"succeeded"` unconditionally, the checkout action called
+   `fulfillDeposit` on it, and the live worker has no `STRIPE_SECRET_KEY`.
+   Closed first, on its own commit.
+2. **One passport confirmed a booking for six.** `docsSettled` read
+   `live.length > 0 && live.every(verified)` — no document type, no head
+   count — and confirming fires the permit trigger.
+3. **Blue TIMS cards were issued for routes with no TIMS permit.** Five of the
+   six issued. `issueTimsCard` checked the booking existed and insurance was
+   verified, and nothing else.
+4. **The board could be dragged anywhere.** `/ops/pipeline` wrote
+   `String(form.get("next"))` with no whitelist; pending_deposit → completed
+   was one click.
+5. **Nothing ever wrote `active`** except that drag, so a trek on the trail
+   could sit in the wrong column for a fortnight.
+
+**What shipped, in order.**
+
+*Free-booking hole* (`12f0508`) — mock Stripe answers
+`requires_payment_method`; both checkout actions refuse with a 503 that says
+nobody was billed.
+
+*Layout* (`8074928`) — itinerary collapsed to one line, the duplicate cost
+table removed, conversation and logistics into a sticky rail.
+
+*Validation and the insurer picker* (`f39d104`) — `validate.ts` (19 tests),
+`evaluatePolicy` moved server-side, and 0098 collapsing "world nomads" and
+"wolrd nomads" into one. Found on the way: the booking whose insurer is
+literally **"xyz" is insurance-verified and has a TIMS card issued against
+it**.
+
+*The traveller roster* (`52e17ff`, `ea63125`) — 0099 `booking_travellers`,
+0100 backfill (8 leads, 21 documents attached, 5 superseded, nothing deleted),
+0101 `superseded_at` so a replaced document is not read back to the trekker as
+a rejection. `travellers.ts` (19 tests). Roster panels on the trip page and
+the ops booking page; both upload forms pick a person instead of asking for a
+name. `trip-readiness.ts` counts papers per person: "Passports checked (1/2)"
+where it used to say done on the first upload.
+
+*One permits model* (`9dfdcfc`) — 0102 `permits.code`. `issueTimsCard` asks
+the route whether TIMS applies, refuses by name where it does not, and on
+success writes the permit application too so the two models cannot disagree.
+The blue-card panel folded into the permits list. `saveRoutePermits` upserts
+instead of delete-then-insert, which would have died on the first edit to any
+route with an application against it.
+
+*The checklist as rows* (`f7cc28b`) — 0103 `trip_tasks`, `task-template.ts`
+(the spec's 30 trek and 13 experience tasks as data, 14 tests), `tasks.ts` (10
+tests). Ops work it grouped by stage; the trekker sees "Before you go" with
+their rows first and ours underneath.
+
+*Derived status* (`5271aaf`) — `booking-status.ts` (21 tests) and its server
+half. Twelve hand-written `status:` writers now ask one function. Rejecting a
+document re-derives, which it never did. `runStatusSweep` runs daily and is
+forward-only.
+
+**Checked against production before each deploy.** The status sweep moves
+exactly one of the 38 bookings — an `active` trek whose dates have passed.
+The money fact had to read `balance_paid_at` before counting payment rows,
+because every booking made before Stripe was configured carries the stamp and
+no rows at all; counting rows alone would have reported all thirteen live
+bookings as unpaid.
+
+**Still open, for Raman.**
+
+1. **Stripe test keys and the webhook endpoint** — §2 of the plan, left until
+   last on his instruction. Nothing on the platform can take money until they
+   exist.
+2. `RESEND_API_KEY` — no email has ever been sent, so every notification in
+   the spec is a no-op.
+3. **The Khumbu question, unanswered on purpose.** Everest Base Camp and Gokyo
+   Lakes carry a Sagarmatha park entry and a Khumbu municipality fee and no
+   TIMS row, while five blue cards have been issued against Everest bookings.
+   Either that permit list is missing a row or those cards should not have
+   gone out. Not guessed at.
+4. Go-ahead to delete the 10 junk `trip_groups` rows (migration 0093 is
+   written; the bulk delete was blocked twice and a loader-level filter is
+   hiding them meanwhile).
+5. **Rotate the Cloudflare API token, the Supabase personal access token and
+   the Supabase database password** — deferred by him until the updates are
+   done, and the updates are now done.
+
+Green: 1,715 tests in 118 files, typecheck clean, `npm run build` passing,
+deployed (`e1681530`).
