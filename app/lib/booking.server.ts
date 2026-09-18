@@ -416,6 +416,20 @@ export async function advanceOnDepositPaid(admin: SupabaseClient, bookingId: str
     .update({ status: "booked" })
     .eq("booking_id", bookingId)
     .neq("status", "cancelled");
+
+  // The checklist (0103). Generated here rather than at enquiry: a trip
+  // nobody has paid for has no logistics, and thirty open tasks against it
+  // would bury the trips that do.
+  const { generateTasks } = await import("~/lib/tasks.server");
+  await generateTasks(admin, bookingId);
+
+  // The deposit itself is one of those tasks, and it is done by definition.
+  await admin
+    .from("trip_tasks")
+    .update({ state: "done", done_at: new Date().toISOString() })
+    .eq("booking_id", bookingId)
+    .eq("key", "deposit")
+    .eq("state", "open");
 }
 
 /** Cancel a booking, computing the refund per policy (docs/02).

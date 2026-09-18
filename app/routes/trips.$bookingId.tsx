@@ -5,6 +5,7 @@ import { requireUser } from "~/lib/auth.server";
 import { getStripe } from "~/lib/stripe.server";
 import { cancelBooking, createPayoutForBooking } from "~/lib/booking.server";
 import { uploadDocument } from "~/lib/documents.server";
+import { generateTasks, listTasks, syncDerivedTasks } from "~/lib/tasks.server";
 import {
   addTraveller,
   ensureLeadTraveller,
@@ -27,6 +28,7 @@ import { meetingTimeOf, permitProgress } from "~/lib/pipeline";
 import { firstName } from "~/lib/names";
 import { altitudeThresholdM } from "~/lib/insurance";
 import { DocumentSlot, NoInsuranceYet, TravellerRoster } from "~/components/TripDocuments";
+import { TripChecklist } from "~/components/TripChecklist";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { PreTrekBrief } from "~/components/PreTrekBrief";
 import { briefHeading, tripNoun } from "~/lib/pre-trek";
@@ -58,6 +60,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // type their own into an empty box.
   if (b.status !== "pending_deposit") await ensureLeadTraveller(admin, b.id);
   const travellers = await listTravellers(admin, b.id);
+  // The spec's "4 of 6 things left before your trek" (0103). The trekker sees
+  // the office's rows too — "are my permits done?" is a fair question.
+  await generateTasks(admin, b.id);
+  await syncDerivedTasks(admin, b.id);
+  const tasks = await listTasks(admin, b.id);
   // Their own next of kin, asked for alongside the documents (0063).
   const { data: me } = await admin
     .from("users")
@@ -117,6 +124,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       group: group ?? null,
       payments: payments ?? [],
       travellers,
+      tasks,
       documents: docs ?? [],
       permits: permits ?? [],
       guidePhone: phoneUnlocked ? (b as any).guide?.users?.phone ?? null : null,
@@ -362,7 +370,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function TripDetail({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, me, group, payments, travellers, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceRejected, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
+  const { booking: b, me, group, payments, travellers, tasks, documents, permits, guidePhone, briefUnlocked: brief, daysUntil, hasReviewed, recapSlug, tims, instalments, today, insuranceAttested, insuranceVerified, insuranceRejected, insuranceInterestSent, altitudeM, paidSoFar, refundPreview } =
     loaderData as any;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -536,6 +544,12 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
             </Button>
           </Form>
         </section>
+      )}
+
+      {/* What is left, and who has it. The trekker's own rows first, ours
+          underneath — "are my permits done?" should not need an email. */}
+      {!cancelled && b.status !== "pending_deposit" && (
+        <TripChecklist tasks={tasks} today={today} />
       )}
 
       {/* Documents — two things, asked for one at a time. The old form was a

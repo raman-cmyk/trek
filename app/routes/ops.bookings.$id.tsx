@@ -12,6 +12,15 @@ import {
 } from "~/lib/documents.server";
 import { cleanReason, docState, liveDocs, rejectionProblem } from "~/lib/doc-review";
 import {
+  completeTask,
+  generateTasks,
+  listTasks,
+  reopenTask,
+  syncDerivedTasks,
+  waiveTask,
+} from "~/lib/tasks.server";
+import { byStage, dueLabel, isOverdue, taskSummary } from "~/lib/tasks";
+import {
   addTraveller,
   ensureLeadTraveller,
   listTravellers,
@@ -194,6 +203,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   await ensureLeadTraveller(admin, b.id);
   const travellers = await listTravellers(admin, b.id);
 
+  // The spec's checklist (0103). Generated rather than hand-written, so this
+  // is safe on every load and picks up tasks added to the template since.
+  await generateTasks(admin, b.id);
+  await syncDerivedTasks(admin, b.id);
+  const tasks = await listTasks(admin, b.id);
+
   const loadError =
     [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements, permitTypes]
       .map((r) => r.error)
@@ -204,6 +219,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       booking: b,
       loadError,
       travellers,
+      tasks,
       documents: docs.rows,
       permits: permits.rows,
       contract: contract.row,
@@ -626,6 +642,31 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // The checklist. Thirty rows on a trek, and the office works them here.
+  if (intent === "task_done" || intent === "task_reopen" || intent === "task_waive") {
+    const taskId = String(form.get("task_id") ?? "");
+    const res =
+      intent === "task_done"
+        ? await completeTask(admin, {
+            bookingId: params.id!,
+            taskId,
+            by: user.id,
+            note: String(form.get("note") ?? ""),
+          })
+        : intent === "task_reopen"
+          ? await reopenTask(admin, { bookingId: params.id!, taskId })
+          : await waiveTask(admin, {
+              bookingId: params.id!,
+              taskId,
+              by: user.id,
+              reason: String(form.get("reason") ?? ""),
+            });
+    return data(res.ok ? { ok: true } : { error: res.error }, {
+      status: res.ok ? 200 : 400,
+      headers,
+    });
+  }
+
   // The roster. The office corrects a misspelling off a passport far more
   // often than the trekker does, and a permit is filed against this name.
   if (intent === "roster_add") {
@@ -689,6 +730,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
   const {
     booking: b,
     travellers,
+    tasks,
     documents,
     permits,
     contract,
@@ -1166,6 +1208,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
           )}
 
           <Permits rows={permits} types={permitTypes} booking={b} tims={tims} error={(actionData as any)?.error ?? null} />
+          <Checklist tasks={tasks} />
         </div>
       </div>
     </div>
@@ -2264,6 +2307,139 @@ function PaymentLog({ payments }: { payments: any[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The spec's checklist, worked from this page.
+ *
+ * Thirty rows on a trek and thirteen on a day experience, grouped by the
+ * stage the spec puts them in and ordered by date inside it. The office ticks
+ * them off here; nothing else writes them.
+ *
+ * Waiving needs a written reason, because a waived task with no reason is a
+ * checklist that has quietly stopped being one — six months later nobody can
+ * tell whether the porter was waived because the trekker carries their own
+ * pack or because somebody was in a hurry.
+ */
+function Checklist({ tasks }: { tasks: any[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  if ((tasks ?? []).length === 0) return null;
+  const s = taskSummary(tasks, today);
+
+  return (
+    <div className="mt-4">
+      <Panel title={`Checklist · ${s.done} of ${s.total}`}>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2">
+          <div className="h-1.5 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-mist">
+            <div
+              className={`h-full rounded-full ${s.overdue.length > 0 ? "bg-amber-500" : "bg-primary"}`}
+              style={{ width: `${s.percent}%` }}
+            />
+          </div>
+          <span className="text-xs text-ink-soft">{s.percent}%</span>
+          {s.overdue.length > 0 && (
+            <Badge tone="red">
+              {s.overdue.length} past its date
+            </Badge>
+          )}
+        </div>
+
+        {s.next && (
+          <p className="border-t border-border px-4 py-2 text-sm">
+            <span className="text-ink-soft">Next:</span>{" "}
+            <span className="text-ink">{s.next.label}</span>
+            <span className="text-ink-soft">
+              {" · "}
+              {OWNER_LABEL[s.next.owner as keyof typeof OWNER_LABEL] ?? s.next.owner}
+              {s.next.due_on ? ` · ${dueLabel(s.next, today)}` : ""}
+            </span>
+          </p>
+        )}
+
+        {byStage(tasks).map((group) => (
+          <div key={group.stage} className="border-t border-border">
+            <p className="bg-mist/40 px-4 py-1 text-xs font-medium uppercase tracking-wide text-ink-soft">
+              {group.stage}
+            </p>
+            <ul className="divide-y divide-border">
+              {group.tasks.map((t: any) => {
+                const late = isOverdue(t, today);
+                const settled = t.state === "done" || t.state === "waived";
+                return (
+                  <li key={t.id} className="px-4 py-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p
+                          className={`text-sm ${settled ? "text-ink-soft line-through" : "text-ink"}`}
+                        >
+                          {t.label}
+                        </p>
+                        <p className="text-xs text-ink-soft">
+                          {[
+                            OWNER_LABEL[t.owner as keyof typeof OWNER_LABEL] ?? t.owner,
+                            t.due_on ? dueLabel(t, today) : null,
+                            t.done_when,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        {t.state === "waived" && (
+                          <p className="mt-0.5 text-xs text-ink-soft">
+                            <span className="font-medium">Waived:</span> {t.waived_reason}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {late && <Badge tone="red">late</Badge>}
+                        {settled ? (
+                          <Form method="post">
+                            <input type="hidden" name="intent" value="task_reopen" />
+                            <input type="hidden" name="task_id" value={t.id} />
+                            <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                              Undo
+                            </button>
+                          </Form>
+                        ) : (
+                          <Form method="post">
+                            <input type="hidden" name="intent" value="task_done" />
+                            <input type="hidden" name="task_id" value={t.id} />
+                            <button className="rounded border border-border px-2 py-1 text-xs hover:bg-emerald-50">
+                              Done
+                            </button>
+                          </Form>
+                        )}
+                      </div>
+                    </div>
+
+                    {!settled && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+                          Does not apply…
+                        </summary>
+                        <Form method="post" className="mt-1.5 flex flex-wrap items-start gap-2">
+                          <input type="hidden" name="intent" value="task_waive" />
+                          <input type="hidden" name="task_id" value={t.id} />
+                          <input
+                            name="reason"
+                            required
+                            placeholder="Why not? Somebody will read this in six months."
+                            className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs text-ink outline-none focus:border-primary"
+                          />
+                          <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                            Waive
+                          </button>
+                        </Form>
+                      </details>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </Panel>
     </div>
   );
 }
