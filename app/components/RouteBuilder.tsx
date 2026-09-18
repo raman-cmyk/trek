@@ -193,56 +193,92 @@ export function RouteBuilder({
       <fieldset className="rounded-md border border-line bg-card p-4">
         <legend className="px-1 text-sm font-medium text-ink">Where you sleep, in order</legend>
         <p className="mb-2 text-caption text-muted">
-          One row per place you stop. The altitude is what draws the climb
-          profile on the route page.
+          One card per place you sleep. The days number themselves from the
+          nights, the height draws the climb profile, and what you write here
+          is the day-by-day a trekker reads on the route page.
         </p>
-        <ul className="space-y-2">
-          {stops.map((s, i) => (
-            <li key={i} className="rounded border border-line bg-paper p-2.5">
-              <div className="flex gap-2">
-                <span className="mt-2.5 font-mono text-caption text-muted">{i + 1}</span>
-                <input
-                  aria-label={`Place ${i + 1}`}
-                  value={s.place}
-                  onChange={(e) => setStop(i, { place: e.target.value })}
-                  placeholder="Namche Bazaar"
-                  className={`${field} min-w-0 flex-1`}
-                />
-                <input
-                  aria-label={`Altitude at stop ${i + 1}`}
-                  type="number"
-                  inputMode="numeric"
-                  value={s.altitude_m}
-                  onChange={(e) => setStop(i, { altitude_m: e.target.value })}
-                  placeholder="m"
-                  className={`${field} w-20 shrink-0`}
-                />
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <label className="text-caption text-muted">
-                  Nights here
+        {/* A day-by-day, framed as days.
+            This was one cramped row per stop: a place box, an altitude box and
+            a nights box, with no room to say what actually happens on the day.
+            The two inputs also fought over their width — `field` already
+            carries w-full, and the altitude box added w-20 shrink-0, so
+            Tailwind's w-full won and the box refused to shrink: the altitude
+            ran off the edge and the place name was squeezed to nothing.
+
+            Each stop is a card now, headed by the day it falls on — counted
+            from the nights before it, so adding a rest day renumbers the rest
+            without anyone doing arithmetic. */}
+        <ul className="space-y-3">
+          {stops.map((s, i) => {
+            const startDay =
+              1 + stops.slice(0, i).reduce((n, x) => n + Math.max(1, Number(x.nights) || 1), 0);
+            const nights = Math.max(1, Number(s.nights) || 1);
+            const endDay = startDay + nights - 1;
+            return (
+              <li key={i} className="rounded-card border border-line bg-paper p-3">
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <p className="font-mono text-caption font-medium text-ink">
+                    {startDay === endDay ? `Day ${startDay}` : `Days ${startDay}–${endDay}`}
+                  </p>
+                  {stops.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setStops((all) => all.filter((_, j) => j !== i))}
+                      className="text-caption text-ember underline"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <label className={label}>
+                  Where you sleep
                   <input
-                    aria-label={`Nights at stop ${i + 1}`}
-                    type="number"
-                    min={1}
-                    max={5}
-                    value={s.nights}
-                    onChange={(e) => setStop(i, { nights: e.target.value })}
-                    className="ml-1.5 w-14 rounded border border-line bg-card px-2 py-1 text-sm text-ink"
+                    value={s.place}
+                    onChange={(e) => setStop(i, { place: e.target.value })}
+                    placeholder="Namche Bazaar"
+                    className={field}
                   />
                 </label>
-                {stops.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setStops((all) => all.filter((_, j) => j !== i))}
-                    className="ml-auto text-caption text-ember underline"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
+
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className={label}>
+                    How high (m)
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={s.altitude_m}
+                      onChange={(e) => setStop(i, { altitude_m: e.target.value })}
+                      placeholder="3440"
+                      className={field}
+                    />
+                  </label>
+                  <label className={label}>
+                    Nights here
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={s.nights}
+                      onChange={(e) => setStop(i, { nights: e.target.value })}
+                      className={field}
+                    />
+                  </label>
+                </div>
+
+                <label className={`${label} mt-2`}>
+                  What happens on this day
+                  <textarea
+                    value={s.note}
+                    onChange={(e) => setStop(i, { note: e.target.value })}
+                    rows={2}
+                    placeholder="Steep climb through pine forest to the Sherpa capital. Afternoon free to acclimatise."
+                    className={field}
+                  />
+                </label>
+              </li>
+            );
+          })}
         </ul>
         <button
           type="button"
@@ -267,9 +303,13 @@ export function RouteBuilder({
           What each one costs per person. The office checks these against the
           current rates before the route goes up.
         </p>
+        {/* Two columns rather than a flex row with fixed widths: `field`
+            already carries w-full, so a w-24 beside it lost to Tailwind's own
+            ordering and the cost box ate the row. A grid cannot have that
+            argument. */}
         <ul className="space-y-2">
           {permits.map((p, i) => (
-            <li key={i} className="flex gap-2">
+            <li key={i} className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2">
               <input
                 aria-label={`Permit ${i + 1} name`}
                 value={p.name}
@@ -277,7 +317,7 @@ export function RouteBuilder({
                   setPermits((all) => all.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
                 }
                 placeholder="Manaslu restricted-area permit"
-                className={`${field} min-w-0 flex-1`}
+                className={`${field} min-w-0`}
               />
               <input
                 aria-label={`Permit ${i + 1} cost in dollars`}
@@ -291,7 +331,7 @@ export function RouteBuilder({
                   )
                 }
                 placeholder="$"
-                className={`${field} w-24 shrink-0`}
+                className={`${field} min-w-0`}
               />
             </li>
           ))}

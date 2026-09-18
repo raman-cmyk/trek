@@ -3,7 +3,8 @@ import type { Route } from "./+types/g.experiences.$id";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
-import { parseExperienceForm, saveOfferingPhotos } from "~/lib/offerings.server";
+import { parseExperienceForm, daysFromRoute,
+  saveOfferingPhotos } from "~/lib/offerings.server";
 import { Badge } from "~/components/ops/ui";
 import { fmtDate } from "~/lib/format";
 
@@ -108,6 +109,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const { patch, photos, error } = parseExperienceForm(form, { minPhotos: 3 });
   if (!patch) return data({ error }, { status: 400, headers });
+
+  // A trek is exactly as long as its route (offerings.server.ts).
+
+  patch.days = await daysFromRoute(admin, patch.route_id ?? null, patch.days);
 
   const { error: dbErr } = await admin.from("offerings").update(patch).eq("id", offering.id);
   if (dbErr) return data({ error: "That did not save. Try again." }, { status: 400, headers });

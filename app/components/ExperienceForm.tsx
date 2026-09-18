@@ -128,19 +128,17 @@ export function ExperienceForm({
    * their own route does not have, including one at twelve days on an
    * eight-day route.
    *
-   * Only when the route CHANGES, and never over a number somebody has just
-   * typed. A trek that genuinely adds days is not a mistake — "Everest Base
-   * Camp in fifteen days" on a fourteen-day route is the entire pitch — so the
-   * difference is shown rather than prevented, below.
+   * The route is now the only answer: the founder's call, after seeing that
+   * twelve live trips were listed at a length their own route did not have.
+   * A trip that wants to be longer needs a route that is longer — which the
+   * "add a route" panel now makes a thirty-second job rather than a reason to
+   * fudge the number here.
    */
   const lastRoute = useRef<string | null>(null);
   useEffect(() => {
     if (!chosen) return;
     if (lastRoute.current === chosen.id) return;
-    const first = lastRoute.current === null;
     lastRoute.current = chosen.id;
-    // On the first render of an existing listing, leave its saved length alone.
-    if (first && values?.days) return;
     if (chosen.typical_days) setDays(Math.max(1, chosen.typical_days));
   }, [chosen, values?.days]);
 
@@ -434,7 +432,21 @@ export function ExperienceForm({
       <div className="grid grid-cols-3 gap-3">
         <label className={label}>
           Days
-          <input type="number" name="days" min={1} max={60} value={days} onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))} className={field} required />
+          {/* Read-only once a route is chosen: the route has a stop for every
+              day, so it already knows. Still submitted, so nothing downstream
+              has to special-case it. */}
+          <input
+            type="number"
+            name="days"
+            min={1}
+            max={60}
+            value={days}
+            onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))}
+            readOnly={!!chosen?.typical_days}
+            aria-readonly={!!chosen?.typical_days}
+            className={`${field}${chosen?.typical_days ? " bg-mist text-ink-soft" : ""}`}
+            required
+          />
         </label>
         <label className={label}>
           Smallest group
@@ -447,39 +459,23 @@ export function ExperienceForm({
       </div>
 
       {/* ── The money. A library of lines, and the arithmetic done for them. */}
-      {/* What the route says, next to what you typed.
-          Not a rule — a trek that adds a day for acclimatisation is a better
-          trek, and several of the best listings here sell on exactly that. But
-          the difference has to be visible, because the itinerary a trekker
-          reads comes from the route's stops: list twelve days on an eight-day
-          route and four of them are days the page cannot show. */}
+      {/* Where the number comes from. */}
       {chosen?.typical_days ? (
         <p className="mt-2 text-caption text-muted">
-          {days === chosen.typical_days ? (
-            <>
-              {chosen.name} is{" "}
-              <span className="font-mono text-ink">{chosen.typical_days}</span> days, which
-              is what this trip runs.
-            </>
-          ) : (
-            <>
-              {chosen.name} is{" "}
-              <span className="font-mono text-ink">{chosen.typical_days}</span> days. You
-              have this trip at <span className="font-mono text-ink">{days}</span> —{" "}
-              {Math.abs(days - chosen.typical_days)}{" "}
-              {Math.abs(days - chosen.typical_days) === 1 ? "day" : "days"}{" "}
-              {days > chosen.typical_days ? "longer" : "shorter"}. Fine if you mean it —
-              say why in the summary, or{" "}
-              <button
-                type="button"
-                onClick={() => setDays(chosen.typical_days!)}
-                className="text-moss underline underline-offset-4"
-              >
-                use the route&rsquo;s {chosen.typical_days}
-              </button>
-              .
-            </>
-          )}
+          {chosen.name} has a stop for every day, so the length comes from the
+          route — <span className="font-mono text-ink">{chosen.typical_days}</span> days.
+          To run it longer, give the route the extra day (
+          <button
+            type="button"
+            onClick={() => {
+              setAddErr(null);
+              setAdding(true);
+            }}
+            className="text-moss underline underline-offset-4"
+          >
+            add a route
+          </button>
+          ) rather than listing days the itinerary cannot show.
         </p>
       ) : null}
 

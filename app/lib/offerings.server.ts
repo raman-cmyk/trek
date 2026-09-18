@@ -41,6 +41,35 @@ export interface ParsedPhoto {
  * mean a guide adds six photographs and sees none of them. Trekker photos are
  * the ones `approved` exists for.
  */
+/**
+ * A trek is exactly as long as its route.
+ *
+ * The form used to ask again, so the two drifted: twelve live trips were
+ * listed at a length their own route did not have, one of them at twelve days
+ * on an eight-day route. That is not a harmless disagreement — the itinerary a
+ * trekker reads is built from the route's stops, so the extra days were days
+ * the page could not show.
+ *
+ * Enforced here as well as in the form, because a form can be bypassed and
+ * this is the only place both editors and both create paths pass through.
+ * A trip with no route keeps whatever length it was given: a momo crawl has no
+ * route to be as long as.
+ */
+export async function daysFromRoute(
+  admin: SupabaseClient,
+  routeId: string | null | undefined,
+  fallback: number,
+): Promise<number> {
+  if (!routeId) return fallback;
+  const { data } = await admin
+    .from("routes")
+    .select("typical_days")
+    .eq("id", routeId)
+    .maybeSingle();
+  const n = Number(data?.typical_days);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback;
+}
+
 export async function saveOfferingPhotos(
   admin: SupabaseClient,
   offeringId: string,

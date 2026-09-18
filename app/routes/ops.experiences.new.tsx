@@ -2,7 +2,8 @@ import { Link, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/ops.experiences.new";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
-import { parseExperienceForm, saveOfferingPhotos, uniqueOfferingSlug } from "~/lib/offerings.server";
+import { parseExperienceForm, daysFromRoute,
+  saveOfferingPhotos, uniqueOfferingSlug } from "~/lib/offerings.server";
 
 /**
  * The office lists a trip for a guide.
@@ -58,6 +59,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   // often typing from a phone call and the pictures follow by email.
   const { patch, photos, error } = parseExperienceForm(form);
   if (!patch) return data({ error }, { status: 400, headers });
+  // A trek is exactly as long as its route (offerings.server.ts).
+  patch.days = await daysFromRoute(admin, patch.route_id ?? null, patch.days);
 
   const slug = await uniqueOfferingSlug(admin, patch.title);
   const { data: created, error: dbErr } = await admin

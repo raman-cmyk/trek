@@ -7,6 +7,7 @@ import {
   logOfferingEdit,
   parseExperienceForm,
   pauseOffering,
+  daysFromRoute,
   saveOfferingPhotos,
   unpauseOffering,
 } from "~/lib/offerings.server";
@@ -109,6 +110,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const { patch, photos, error } = parseExperienceForm(form);
   if (!patch) return data({ error }, { status: 400, headers });
+
+  // A trek is exactly as long as its route (offerings.server.ts).
+
+  patch.days = await daysFromRoute(admin, patch.route_id ?? null, patch.days);
 
   // Read it first so the trail records what actually moved, not a snapshot.
   const { data: before } = await admin

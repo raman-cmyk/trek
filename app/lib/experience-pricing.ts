@@ -24,6 +24,7 @@ export interface PriceLine {
   /** Stable across edits, so React keys and diffing behave. */
   id: string;
   label: string;
+  /** The price of ONE of whatever this line is: one porter, one jeep, one permit. */
   amountUsdCents: number;
   /** "group" divides across the party (a guide's fee); "person" does not. */
   basis: "person" | "group";
@@ -32,6 +33,48 @@ export interface PriceLine {
   /** An add-on the traveller chooses — priced, but outside the headline. */
   optional: boolean;
   bucket: PriceBucket;
+  /**
+   * How this cost grows with the party.
+   *
+   * "person" and "group" are the two the form has always had, and between them
+   * they cannot express the two costs that matter most on a real trek.
+   *
+   * A porter carries about 20 kg, which is two trekkers' duffels — so a party
+   * of three needs two porters, not three and not one. Priced "person", every
+   * trekker was charged for a whole porter; priced "group", one porter was
+   * expected to carry for twelve.
+   *
+   * A jeep seats six. A party of eight needs two of them, and the cost steps
+   * rather than sliding. Priced "group" it did not move at all: two people and
+   * twelve people were quoted the same transport.
+   *
+   * "unit" is that missing shape — one unit per `per` trekkers, rounded up.
+   * Absent means the old behaviour, so every breakdown written before this
+   * still prices exactly as it did.
+   */
+  scale?: "person" | "group" | "unit";
+  /** For "unit": how many trekkers one unit covers. A porter: 2. A jeep: 6. */
+  per?: number;
+  /** For "unit": what one of them is called, so the page can say "2 porters". */
+  unitLabel?: string;
+}
+
+/** What a line actually is, with the old two-way basis folded in. */
+export function lineScale(l: PriceLine): "person" | "group" | "unit" {
+  if (l.scale) return l.scale;
+  return l.basis === "group" ? "group" : "person";
+}
+
+/**
+ * How many porters, jeeps or whatever else this party needs.
+ *
+ * Rounded up, because half a jeep is a jeep. One, at least, for a line that
+ * exists at all.
+ */
+export function unitsFor(l: PriceLine, groupSize: number): number {
+  if (lineScale(l) !== "unit") return 1;
+  const per = Math.max(1, Math.floor(l.per ?? 1));
+  return Math.max(1, Math.ceil(Math.max(1, groupSize) / per));
 }
 
 export interface PriceBreakdown {
@@ -111,8 +154,13 @@ export function hasBreakdown(bd: PriceBreakdown | null | undefined): bd is Price
 /** Per-person contribution of one line at a given group size. */
 function linePerPerson(l: PriceLine, groupSize: number, days: number): number {
   const spans = l.cadence === "day" ? Math.max(1, days) : 1;
-  const total = l.amountUsdCents * spans;
-  return l.basis === "group" ? Math.round(total / groupSize) : total;
+  const g = Math.max(1, groupSize);
+  const scale = lineScale(l);
+  if (scale === "person") return l.amountUsdCents * spans;
+  // Both of the others are a cost the party shares: one guide, or three
+  // porters. What differs is how many of the thing the party needs.
+  const total = l.amountUsdCents * spans * unitsFor(l, g);
+  return Math.round(total / g);
 }
 
 export interface PricingLine {
@@ -360,10 +408,14 @@ export const COMPONENT_LIBRARY: Record<
 > = {
   trek: [
     { label: "Guide fee", basis: "group", cadence: "day", optional: false, bucket: "guide" },
-    { label: "Porter", basis: "person", cadence: "day", optional: false, bucket: "porters" },
+    // A porter carries about 20 kg — two trekkers' duffels. Priced per person
+    // every trekker was charged for a whole porter, which is roughly double.
+    { label: "Porter", basis: "group", scale: "unit", per: 2, unitLabel: "porter", cadence: "day", optional: true, bucket: "porters" },
     { label: "Permits", basis: "person", cadence: "trip", optional: false, bucket: "permits" },
     { label: "Teahouse & food", basis: "person", cadence: "day", optional: false, bucket: "logistics" },
-    { label: "Transport in and out", basis: "group", cadence: "trip", optional: false, bucket: "logistics" },
+    // A jeep seats six. Priced per group this did not move at all: two people
+    // and twelve people were quoted the same transport.
+    { label: "Transport in and out", basis: "group", scale: "unit", per: 6, unitLabel: "vehicle", cadence: "trip", optional: false, bucket: "logistics" },
     { label: "Domestic flights", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
     { label: "Gear hire", basis: "person", cadence: "trip", optional: true, bucket: "logistics" },
     { label: "Extra acclimatisation day", basis: "person", cadence: "trip", optional: true, bucket: "logistics" },
@@ -371,7 +423,7 @@ export const COMPONENT_LIBRARY: Record<
   day_hike: [
     { label: "Guide fee", basis: "group", cadence: "trip", optional: false, bucket: "guide" },
     { label: "Entry tickets", basis: "person", cadence: "trip", optional: false, bucket: "permits" },
-    { label: "Transport", basis: "group", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Transport", basis: "group", scale: "unit", per: 6, unitLabel: "vehicle", cadence: "trip", optional: false, bucket: "logistics" },
     { label: "Food", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
     { label: "Equipment", basis: "person", cadence: "trip", optional: true, bucket: "logistics" },
   ],
@@ -379,7 +431,7 @@ export const COMPONENT_LIBRARY: Record<
     { label: "Activity fee", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
     { label: "Instructor", basis: "group", cadence: "trip", optional: false, bucket: "guide" },
     { label: "Safety equipment", basis: "person", cadence: "trip", optional: false, bucket: "logistics" },
-    { label: "Transport", basis: "group", cadence: "trip", optional: false, bucket: "logistics" },
+    { label: "Transport", basis: "group", scale: "unit", per: 6, unitLabel: "vehicle", cadence: "trip", optional: false, bucket: "logistics" },
   ],
 };
 COMPONENT_LIBRARY.city = COMPONENT_LIBRARY.day_hike;
