@@ -44,7 +44,7 @@ import {
   kindLabel,
   sortArrangements,
 } from "~/lib/arrangements";
-import { hasBreakdown, computeExperiencePricing, addOns } from "~/lib/experience-pricing";
+import { hasBreakdown, addOns } from "~/lib/experience-pricing";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -684,7 +684,16 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
           trek is walking this is the thing the office opens the page for. */}
       <Itinerary booking={b} />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* Two columns that both carry weight.
+          
+          Everything used to hang off the wide column while the narrow one held
+          a single short panel, so the left of the page stopped and the right
+          scrolled for ever. The rail now keeps the people, the conversation
+          and the logistics, and sticks to the top of the viewport — on an
+          incident call the trekker's emergency number stays on screen however
+          far down the checklist you are. */}
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:sticky lg:top-4">
         <Panel title="Booking">
           <dl className="space-y-1 text-sm">
             <Row label="Status"><Badge tone="blue">{b.status.replace(/_/g, " ")}</Badge></Row>
@@ -701,6 +710,10 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             />
           </dl>
         </Panel>
+
+        <Conversation messages={messages} booking={b} />
+        <Arrangements rows={arrangements} />
+        </div>
 
         <div className="lg:col-span-2">
           <Panel title="Documents">
@@ -799,8 +812,6 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             <AddDocument defaultPerson={b.trekker?.full_name ?? ""} />
           </Panel>
 
-          <Conversation messages={messages} booking={b} />
-
           {/* Insurance (2026 gate) */}
           <div className="mt-4">
             <Panel title="Money">
@@ -861,8 +872,6 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
                 <WhatsIncluded booking={b} />
               </div>
             </Panel>
-
-            <Arrangements rows={arrangements} />
 
             <Panel title="Insurance">
               {/* The ask comes first, above whatever policy state they are
@@ -1302,9 +1311,29 @@ function Itinerary({ booking }: { booking: any }) {
     return new Date(t + (dayNo - 1) * 86_400_000).toISOString().slice(0, 10);
   };
 
+  // One line, unless they are walking.
+  //
+  // This used to sit full width above every panel, which put fourteen days of
+  // itinerary between the office and the work — and the itinerary is the one
+  // thing here nobody needs until the trek starts. Open by default only while
+  // it is active, which is exactly when "where are they today" is the question
+  // the page is being opened to answer.
+  const summary = [
+    `${stops.length} day${stops.length === 1 ? "" : "s"}`,
+    route?.max_altitude_m ? `max ${route.max_altitude_m} m` : null,
+    walking ? `day ${window.day} of ${window.total} today` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <Panel title={`The trek${route?.name ? ` — ${route.name}` : ""}`}>
-      <div className="flex flex-wrap items-center gap-2 pb-2 text-xs text-ink-soft">
+      <details open={walking}>
+        <summary className="cursor-pointer list-none text-sm text-ink-soft hover:text-ink">
+          <span className="font-mono">{summary}</span>
+          <span className="ml-2 text-xs underline underline-offset-4">day by day</span>
+        </summary>
+      <div className="flex flex-wrap items-center gap-2 pb-2 pt-2 text-xs text-ink-soft">
         {route?.region && <Badge tone="neutral">{route.region}</Badge>}
         {route?.difficulty && <Badge tone="neutral">{route.difficulty}</Badge>}
         {route?.max_altitude_m && <Badge tone="neutral">up to {route.max_altitude_m} m</Badge>}
@@ -1374,6 +1403,7 @@ function Itinerary({ booking }: { booking: any }) {
           The whole route →
         </Link>
       )}
+      </details>
     </Panel>
   );
 }
@@ -1395,36 +1425,20 @@ function WhatsIncluded({ booking }: { booking: any }) {
   if (!hasBreakdown(bd)) return null;
 
   const party = Math.max(1, Number(booking.party_size) || 1);
-  const pricing = computeExperiencePricing(bd, party, booking.start_date);
   // An add-on priced at nothing is an unfinished row in the builder, not
   // something to offer somebody.
   const extras = addOns(bd, party).filter((a) => a.perPersonUsdCents > 0);
-  if (pricing.lines.length === 0 && extras.length === 0) return null;
+  // The included lines are NOT listed here any more. They are the same money
+  // as the cost breakdown directly above, in a different order — which is
+  // what "the cost breakdown is shown twice" meant. Add-ons are the part the
+  // breakdown genuinely cannot show, because the booking does not record
+  // which of them this party took.
+  if (extras.length === 0) return null;
 
   return (
     <div className="mt-3 rounded-md border border-border">
-      <p className="border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
-        What the trip includes
-      </p>
-      <ul className="divide-y divide-border/60">
-        {pricing.lines.map((l) => (
-          <li key={l.key} className="flex justify-between gap-2 px-3 py-1.5 text-sm">
-            <span className="min-w-0">{l.label}</span>
-            {/* A line the guide listed but priced at nothing is part of the
-                trip that costs no extra — "$0.00" reads as a mistake. */}
-            <span className="shrink-0 font-mono tabular-nums text-ink-soft">
-              {l.amountUsdCents === 0 ? "included" : formatUsd(l.amountUsdCents)}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="border-t border-border px-3 py-1.5 text-xs text-ink-soft">
-        Per person at a party of {party}.
-      </p>
-
-      {extras.length > 0 && (
-        <>
-          <p className="border-t border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
+      <>
+          <p className="border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">
             Add-ons offered
           </p>
           <ul className="divide-y divide-border/60">
@@ -1438,11 +1452,11 @@ function WhatsIncluded({ booking }: { booking: any }) {
             ))}
           </ul>
           <p className="border-t border-border px-3 py-1.5 text-xs text-ink-soft">
-            Offered, not necessarily taken — the booking does not record which
-            of these this party chose, so they are not added up here.
+            Offered at a party of {party}, not necessarily taken — the booking
+            does not record which of these this party chose, so they are not
+            added up here.
           </p>
-        </>
-      )}
+      </>
     </div>
   );
 }
@@ -1792,8 +1806,9 @@ function Arrangements({ rows }: { rows: any[] }) {
   const list = sortArrangements(rows ?? [], today);
   const totals = arrangementTotals(rows ?? []);
 
+  // No mt-4: the rail that holds this spaces its own children.
   return (
-    <div className="mt-4">
+    <div>
       <Panel title="Gear, hotels & transport">
         {list.length === 0 ? (
           <p className="py-2 text-sm text-ink-soft">
@@ -2012,8 +2027,9 @@ function Conversation({ messages, booking }: { messages: any[]; booking: any }) 
       ? (booking.guide?.users?.full_name ?? "Guide")
       : (booking.trekker?.full_name ?? "Trekker");
 
+  // No mt-4: the rail that holds this spaces its own children.
   return (
-    <div className="mt-4">
+    <div>
       <Panel title="Guide ↔ trekker">
         {rows.length === 0 ? (
           <p className="py-2 text-sm text-ink-soft">
