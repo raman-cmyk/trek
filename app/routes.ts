@@ -205,6 +205,7 @@ export default [
   route("api/guide-voice", "routes/api.guide-voice.tsx"),
   route("api/message-photo", "routes/api.message-photo.tsx"),
   route("api/trip-intent", "routes/api.trip-intent.tsx"),
+  route("api/review-ask", "routes/api.review-ask.tsx"),
 
   // Recap OG image (binary resource route — outside the layout).
   route("recap/:slug/og", "routes/recap.$slug.og.tsx"),

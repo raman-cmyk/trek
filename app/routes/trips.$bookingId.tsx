@@ -426,6 +426,51 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           <StatTile glyph="people" value={b.party_size} label="Of you" />
         </StatRow>
       )}
+      {/* The review, directly under the numbers, because on a finished trip
+          it is the only thing left to do. It used to sit second-to-last, below
+          the emergency contact, the documents, the permits and the pre-trek
+          brief — thirteen blocks of preparation for a walk that had already
+          happened. */}
+      {b.status === "completed" && !hasReviewed && (
+        <section id="review" className="mt-6 scroll-mt-20">
+          <h2 className="mb-2 font-display text-xl">How was it?</h2>
+          <p className="mb-2 text-sm text-ink-soft">
+            Your guide is paid partly in reputation, and this is where it comes
+            from. It stays hidden until they review you too, or a fortnight
+            passes.
+          </p>
+          <Form
+            method="post"
+            encType="multipart/form-data"
+            className="space-y-3 rounded-card border border-border bg-card p-4"
+          >
+            <input type="hidden" name="intent" value="review" />
+            <label className="block text-sm">
+              <span className="text-ink-soft">Overall</span>
+              <select name="overall" defaultValue="5" className="mt-1 w-full rounded-button border border-border px-3 py-2">
+                {[5, 4, 3, 2, 1].map((n) => (
+                  <option key={n} value={n}>{n} ★</option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {["safety", "communication", "local_knowledge", "english", "pace", "value"].map((k) => (
+                <label key={k} className="text-xs text-ink-soft">
+                  {k.replace(/_/g, " ")}
+                  <select name={`sub_${k}`} defaultValue="5" className="mt-1 w-full rounded border border-border px-2 py-1 text-sm">
+                    {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <textarea name="body" rows={3} placeholder={`How was your ${tripNoun(b.offering?.kind ?? "")}?`} className="w-full rounded-button border border-border px-3 py-2 text-sm" />
+            <input name="credit_name" placeholder="Credit name for your photo (optional)" className="w-full rounded-button border border-border px-3 py-2 text-sm" />
+            <input type="file" name="photo" accept="image/*" className="text-sm" />
+            <p className="text-xs text-ink-soft">Your review is hidden until your guide reviews you too, or 14 days pass.</p>
+            <Button type="submit" size="sm" loading={nav.state !== "idle"}>Submit review</Button>
+          </Form>
+        </section>
+      )}
       {!cancelled && (
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
@@ -818,42 +863,6 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
         </section>
       )}
 
-      {/* Review (after completion) */}
-      {b.status === "completed" && !hasReviewed && (
-        <section className="mt-6">
-          <h2 className="mb-2 font-display text-xl">Leave a review</h2>
-          <Form
-            method="post"
-            encType="multipart/form-data"
-            className="space-y-3 rounded-card border border-border bg-card p-4"
-          >
-            <input type="hidden" name="intent" value="review" />
-            <label className="block text-sm">
-              <span className="text-ink-soft">Overall</span>
-              <select name="overall" defaultValue="5" className="mt-1 w-full rounded-button border border-border px-3 py-2">
-                {[5, 4, 3, 2, 1].map((n) => (
-                  <option key={n} value={n}>{n} ★</option>
-                ))}
-              </select>
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {["safety", "communication", "local_knowledge", "english", "pace", "value"].map((k) => (
-                <label key={k} className="text-xs text-ink-soft">
-                  {k.replace(/_/g, " ")}
-                  <select name={`sub_${k}`} defaultValue="5" className="mt-1 w-full rounded border border-border px-2 py-1 text-sm">
-                    {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </label>
-              ))}
-            </div>
-            <textarea name="body" rows={3} placeholder={`How was your ${tripNoun(b.offering?.kind ?? "")}?`} className="w-full rounded-button border border-border px-3 py-2 text-sm" />
-            <input name="credit_name" placeholder="Credit name for your photo (optional)" className="w-full rounded-button border border-border px-3 py-2 text-sm" />
-            <input type="file" name="photo" accept="image/*" className="text-sm" />
-            <p className="text-xs text-ink-soft">Your review is hidden until your guide reviews you too, or 14 days pass.</p>
-            <Button type="submit" size="sm" loading={nav.state !== "idle"}>Submit review</Button>
-          </Form>
-        </section>
-      )}
 
       {/* Actions */}
       <div className="mt-8 flex items-center gap-4">

@@ -6,6 +6,7 @@ import { Footer } from "~/components/public/Footer";
 import { createPublicClient, getEnv } from "~/lib/supabase.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 import { TripIntentDialog } from "~/components/public/TripIntentDialog";
+import { ReviewPrompt } from "~/components/public/ReviewPrompt";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -158,6 +159,13 @@ export default function PublicLayout({ loaderData }: Route.ComponentProps) {
           here rather than on the homepage because most first visits arrive
           from search on a guide or a route, not on the front door. */}
       <TripIntentDialog signedIn={Boolean(loaderData.account)} />
+
+      {/* And its opposite number: for people who DO have an account, asking
+          about the walk they have just finished. Mounted here for the same
+          reason — signing in lands you on the homepage, not on My trips. It
+          asks the server nothing until it has waited, checked the page is a
+          decent one to interrupt, and found it has not already asked. */}
+      <ReviewPrompt signedIn={Boolean(loaderData.account)} />
     </div>
   );
 }
