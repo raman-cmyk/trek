@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cleanReason, docsSettled, rejectionProblem } from "~/lib/doc-review";
+import { cleanReason, rejectionProblem } from "~/lib/doc-review";
+import { documentsComplete } from "~/lib/travellers";
 import { GUIDE_DOC_KINDS, type GuideDocKind } from "~/lib/guide-documents";
 
 const BUCKET = "documents";
@@ -159,9 +160,14 @@ export async function rejectDocument(
 }
 
 /**
- * Confirm a booking once every uploaded document is verified (and the balance
- * has been paid — the confirmed state means "balance paid + insurance verified",
+ * Confirm a booking once every traveller's papers are in and the balance is
+ * paid (the confirmed state means "balance paid + insurance verified",
  * docs/03). The permit-application trigger fires on this transition.
+ *
+ * "Every traveller's" is the fix. This used to ask `docsSettled(docs)`, which
+ * was `at least one live document and all of them verified` — no document
+ * type, no head count — so a party of six with one verified passport and no
+ * insurance at all was confirmed, and the permits went in behind it.
  */
 export async function confirmIfDocsComplete(
   admin: SupabaseClient,
@@ -169,19 +175,33 @@ export async function confirmIfDocsComplete(
 ): Promise<boolean> {
   const { data: docs } = await admin
     .from("booking_documents")
-    .select("verified_at, rejected_at")
+    .select("verified_at, rejected_at, traveller_id, type")
     .eq("booking_id", bookingId);
-  // Rejected documents are out of the reckoning: an upload inserts a new row
-  // rather than replacing the old one, so counting a rejection would keep the
-  // booking unconfirmable no matter what the trekker sent afterwards.
-  if (!docsSettled(docs ?? [])) return false;
+  const { data: travellers } = await admin
+    .from("booking_travellers")
+    .select("id, full_name, is_lead")
+    .eq("booking_id", bookingId);
 
   const { data: b } = await admin
     .from("bookings")
-    .select("status, balance_paid_at, deposit_usd_cents, total_usd_cents")
+    .select("status, balance_paid_at, deposit_usd_cents, total_usd_cents, party_size")
     .eq("id", bookingId)
     .single();
   if (!b) return false;
+
+  // Rejected documents are out of the reckoning: an upload inserts a new row
+  // rather than replacing the old one, so counting a rejection would keep the
+  // booking unconfirmable no matter what the trekker sent afterwards.
+  if (
+    !documentsComplete({
+      travellers: travellers ?? [],
+      docs: docs ?? [],
+      partySize: b.party_size ?? 1,
+    })
+  ) {
+    return false;
+  }
+
   // Require the balance to be settled (deposit == total counts as paid-in-full).
   const balanceSettled =
     !!b.balance_paid_at || b.deposit_usd_cents >= b.total_usd_cents;

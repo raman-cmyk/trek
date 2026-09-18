@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   cleanReason,
   docState,
-  docsSettled,
   liveDocs,
   outstanding,
   rejectionProblem,
@@ -55,28 +54,21 @@ describe("cleanReason", () => {
   });
 });
 
-describe("liveDocs and docsSettled", () => {
+describe("liveDocs", () => {
   it("drops rejected documents from the count", () => {
     expect(liveDocs([verified, rejected, pending])).toEqual([verified, pending]);
-  });
-
-  it("is settled only when everything still counted is verified", () => {
-    expect(docsSettled([verified, verified])).toBe(true);
-    expect(docsSettled([verified, pending])).toBe(false);
   });
 
   it("does not let a rejection block a booking forever", () => {
     // Re-uploading inserts a NEW row rather than replacing the old one, so a
     // rejected row left in the reckoning would keep the booking unconfirmable
     // no matter what the trekker sent afterwards.
-    expect(docsSettled([rejected, verified])).toBe(true);
+    expect(liveDocs([rejected, verified])).toEqual([verified]);
   });
 
-  it("is not settled with nothing uploaded, or nothing left after rejections", () => {
-    expect(docsSettled([])).toBe(false);
-    expect(docsSettled([rejected])).toBe(false);
-    expect(docsSettled([rejected, rejected])).toBe(false);
-  });
+  // Whether a booking's papers are complete is no longer answerable from a
+  // list of documents alone — it needs the roster — so those tests live in
+  // travellers.test.ts beside `documentsComplete`.
 });
 
 describe("outstanding", () => {

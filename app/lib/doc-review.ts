@@ -70,15 +70,15 @@ export function liveDocs<T extends ReviewedDoc>(docs: T[]): T[] {
 }
 
 /**
- * Is every document we are still counting verified?
+ * `docsSettled` used to live here, and it was wrong.
  *
- * A booking with nothing uploaded, or with nothing left after the rejections,
- * is not settled — there is simply nothing to confirm against.
+ * It asked `live.length > 0 && live.every(verified)` — which never looked at
+ * the document TYPE and never looked at how many people were going, so one
+ * verified passport and no insurance at all confirmed a booking for six and
+ * fired the permit trigger. The rule now needs the roster (0099), so it lives
+ * in `~/lib/travellers` as `documentsComplete`. It is gone from here rather
+ * than deprecated here: the old answer is not a fallback, it is a hole.
  */
-export function docsSettled(docs: ReviewedDoc[]): boolean {
-  const live = liveDocs(docs);
-  return live.length > 0 && live.every((d) => !!d.verified_at);
-}
 
 /** The rejections a trekker still has to act on. */
 export function outstanding<T extends ReviewedDoc>(docs: T[]): T[] {
