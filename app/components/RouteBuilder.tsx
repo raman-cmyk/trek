@@ -45,9 +45,20 @@ export function RouteBuilder({
   submitLabel = "Send it to the office",
   busy,
   initial,
+  onSubmitData,
 }: {
   submitLabel?: string;
   busy?: boolean;
+  /**
+   * Handle the submission here instead of posting to the page's own action.
+   *
+   * The experience form needs these exact fields, but it is already inside a
+   * <form>, and a form inside a form is markup a browser silently unpicks. So
+   * when this is set the builder is a plain form that hands its FormData back,
+   * and the caller renders it as a sibling of its own form rather than inside
+   * it. Same fields, same validation on the server.
+   */
+  onSubmitData?: (fd: FormData) => void;
   initial?: {
     name?: string;
     region?: string;
@@ -73,8 +84,18 @@ export function RouteBuilder({
   const days = stops.reduce((n, s) => n + Math.max(1, Number(s.nights) || 1), 0);
   const high = stops.reduce((m, s) => Math.max(m, Number(s.altitude_m) || 0), 0);
 
+  const Shell: any = onSubmitData ? "form" : Form;
+  const shellProps: any = onSubmitData
+    ? {
+        onSubmit: (e: React.FormEvent<HTMLFormElement>) => {
+          e.preventDefault();
+          onSubmitData(new FormData(e.currentTarget));
+        },
+      }
+    : { method: "post" };
+
   return (
-    <Form method="post" className="space-y-4">
+    <Shell {...shellProps} className="space-y-4">
       <input type="hidden" name="stops" value={JSON.stringify(stops)} />
       <input type="hidden" name="permits" value={JSON.stringify(permits)} />
 
@@ -291,6 +312,6 @@ export function RouteBuilder({
         The office checks it once. Until then you can put trips on it, but they
         cannot go live.
       </p>
-    </Form>
+    </Shell>
   );
 }

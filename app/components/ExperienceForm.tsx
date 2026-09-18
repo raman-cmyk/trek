@@ -4,6 +4,7 @@ import { Button } from "~/components/Button";
 import { type PriceBreakdown } from "~/lib/experience-pricing";
 import { PriceBuilder, toDraft, toSeasonDraft, type DraftLine } from "~/components/PriceBuilder";
 import { PhotoGallery, type GalleryPhoto } from "~/components/PhotoGallery";
+import { RouteBuilder } from "~/components/RouteBuilder";
 
 /**
  * One form for an experience, shared by the guide (/g/experiences) and the
@@ -108,7 +109,40 @@ export function ExperienceForm({
   const [photoCount, setPhotoCount] = useState(values?.photos?.length ?? 0);
   const [step, setStep] = useState(1);
   const formRef = useRef<HTMLFormElement>(null);
-  const chosen = routes.find((r) => r.id === routeId);
+  // The list can grow while the form is open (the panel below adds to it), so
+  // it lives in state rather than being read straight off the prop.
+  const [routeList, setRouteList] = useState(routes);
+  useEffect(() => setRouteList(routes), [routes]);
+  const [adding, setAdding] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
+
+  const chosen = routeList.find((r) => r.id === routeId);
+
+  /**
+   * Picking a route fills the days in.
+   *
+   * The route already knows how long it is — it has a stop for every day — and
+   * the form asked again anyway, defaulting to whatever the kind of trip
+   * defaults to. So the two drifted: twelve live trips are listed at a length
+   * their own route does not have, including one at twelve days on an
+   * eight-day route.
+   *
+   * Only when the route CHANGES, and never over a number somebody has just
+   * typed. A trek that genuinely adds days is not a mistake — "Everest Base
+   * Camp in fifteen days" on a fourteen-day route is the entire pitch — so the
+   * difference is shown rather than prevented, below.
+   */
+  const lastRoute = useRef<string | null>(null);
+  useEffect(() => {
+    if (!chosen) return;
+    if (lastRoute.current === chosen.id) return;
+    const first = lastRoute.current === null;
+    lastRoute.current = chosen.id;
+    // On the first render of an existing listing, leave its saved length alone.
+    if (first && values?.days) return;
+    if (chosen.typical_days) setDays(Math.max(1, chosen.typical_days));
+  }, [chosen, values?.days]);
 
   // A guide filling this in is on a phone in a lodge. Every keystroke is kept
   // locally, so closing the tab, losing signal or a browser deciding to
@@ -176,6 +210,7 @@ export function ExperienceForm({
   };
 
   return (
+    <>
     <Form
       method="post"
       ref={formRef}
@@ -302,7 +337,7 @@ export function ExperienceForm({
               <option value="" disabled>
                 — pick the route —
               </option>
-              {routes.map((r) => (
+              {routeList.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                   {r.status && r.status !== "live" ? " — waiting for the office" : ""}
@@ -311,12 +346,20 @@ export function ExperienceForm({
             </select>
           </label>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a
-              href="/g/routes/new"
+            {/* Opens here rather than navigating away. A guide halfway through
+                a listing — kind, route, days, five priced lines, photographs —
+                had to leave it to add a route and come back. The draft survived
+                in localStorage; the interruption is still where people stop. */}
+            <button
+              type="button"
+              onClick={() => {
+                setAddErr(null);
+                setAdding(true);
+              }}
               className="text-caption text-moss underline underline-offset-4"
             >
-              My route isn&rsquo;t listed →
-            </a>
+              My route isn&rsquo;t listed — add it here →
+            </button>
             {/* The office can correct the route itself without leaving the
                 listing: a wrong altitude here is wrong on every trip that
                 uses it. */}
@@ -404,6 +447,42 @@ export function ExperienceForm({
       </div>
 
       {/* ── The money. A library of lines, and the arithmetic done for them. */}
+      {/* What the route says, next to what you typed.
+          Not a rule — a trek that adds a day for acclimatisation is a better
+          trek, and several of the best listings here sell on exactly that. But
+          the difference has to be visible, because the itinerary a trekker
+          reads comes from the route's stops: list twelve days on an eight-day
+          route and four of them are days the page cannot show. */}
+      {chosen?.typical_days ? (
+        <p className="mt-2 text-caption text-muted">
+          {days === chosen.typical_days ? (
+            <>
+              {chosen.name} is{" "}
+              <span className="font-mono text-ink">{chosen.typical_days}</span> days, which
+              is what this trip runs.
+            </>
+          ) : (
+            <>
+              {chosen.name} is{" "}
+              <span className="font-mono text-ink">{chosen.typical_days}</span> days. You
+              have this trip at <span className="font-mono text-ink">{days}</span> —{" "}
+              {Math.abs(days - chosen.typical_days)}{" "}
+              {Math.abs(days - chosen.typical_days) === 1 ? "day" : "days"}{" "}
+              {days > chosen.typical_days ? "longer" : "shorter"}. Fine if you mean it —
+              say why in the summary, or{" "}
+              <button
+                type="button"
+                onClick={() => setDays(chosen.typical_days!)}
+                className="text-moss underline underline-offset-4"
+              >
+                use the route&rsquo;s {chosen.typical_days}
+              </button>
+              .
+            </>
+          )}
+        </p>
+      ) : null}
+
       <PriceBuilder kind={kind} days={days} initial={draft} initialSeasons={seasonDraft} />
 
       </Step>
@@ -457,6 +536,61 @@ export function ExperienceForm({
         Saved on this phone as you type. Losing signal won&rsquo;t lose your work.
       </p>
     </Form>
+
+    {/* Outside the form on purpose: RouteBuilder is itself a form, and a form
+        inside a form is markup a browser silently unpicks. */}
+    {adding && (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add a route"
+        className="fixed inset-0 z-50 overflow-y-auto bg-ink/40 p-4 sm:p-8"
+      >
+        <div className="mx-auto max-w-2xl rounded-photo border border-line bg-paper p-5 shadow-lift">
+          <div className="mb-4 flex items-baseline justify-between gap-3">
+            <h2 className="font-display text-2xl text-ink">Add a route</h2>
+            <button
+              type="button"
+              onClick={() => setAdding(false)}
+              className="text-sm text-muted hover:text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="mb-4 max-w-[60ch] text-sm text-ink-soft">
+            The office checks it before it shows on anyone else&rsquo;s listing, but you
+            can pick it for this trip straight away.
+          </p>
+          {addErr && (
+            <p className="mb-3 rounded bg-ember/10 px-3 py-2 text-sm text-ember">{addErr}</p>
+          )}
+          <RouteBuilder
+            busy={addBusy}
+            submitLabel="Add it and use it here"
+            onSubmitData={async (fd) => {
+              setAddErr(null);
+              setAddBusy(true);
+              try {
+                const res = await fetch("/api/route", { method: "POST", body: fd });
+                const json: any = await res.json();
+                if (!res.ok || !json?.route) {
+                  throw new Error(json?.error ?? "That route didn't save.");
+                }
+                setRouteList((list) => [...list, json.route]);
+                setRouteId(json.route.id);
+                if (json.route.typical_days) setDays(Math.max(1, json.route.typical_days));
+                setAdding(false);
+              } catch (e: any) {
+                setAddErr(e?.message ?? "That route didn't save. Try again.");
+              } finally {
+                setAddBusy(false);
+              }
+            }}
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
