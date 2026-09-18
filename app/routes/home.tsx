@@ -102,7 +102,11 @@ export async function loader({ context }: Route.LoaderArgs) {
           "id, slug, kind, route_id, title, summary, days, price_usd_cents, price_breakdown, max_party, cover_photo_url, guide_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, guide_years_experience, route_slug, route_name",
         ),
       client
-        .from("routes")
+        // route_lines, not routes: the same rows with each day stop reduced to
+        // what a map can draw. The full table ships the day-by-day prose, the
+        // distances and the walking hours — 34 KB of the 38 KB this query used
+        // to return, none of which the atlas renders (0092).
+        .from("route_lines")
         .select("id, slug, name, region, typical_days, max_altitude_m, difficulty, sort, day_stops")
         .order("sort"),
       client

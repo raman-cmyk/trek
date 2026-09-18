@@ -48,7 +48,17 @@ export default {
 
     if (cacheable) {
       const hit = await cache.match(request);
-      if (hit) return hit;
+      if (hit) {
+        // Hand the browser back the policy the route intended, not the relaxed
+        // one this cache needed in order to keep the page at all.
+        const out = new Response(hit.body, hit);
+        out.headers.set(
+          "cache-control",
+          "public, s-maxage=1800, stale-while-revalidate=86400, stale-if-error=86400, max-age=0, must-revalidate",
+        );
+        out.headers.set("x-worker-cache", "HIT");
+        return out;
+      }
     }
 
     const context = new RouterContextProvider();
@@ -61,9 +71,29 @@ export default {
       /(^|,)\s*public\b/.test(response.headers.get("cache-control") ?? "") &&
       !response.headers.has("set-cookie")
     ) {
+      /**
+       * What we store and what we send are not the same headers.
+       *
+       * The routes send `max-age=0, must-revalidate` on purpose: the visitor's
+       * OWN browser must check in, or signing out shows them the signed-in
+       * page for the next half hour. But cache.put honours those directives
+       * too, so the copy was stale the instant it was written and every single
+       * request came back a MISS — the cache was running and never once
+       * hitting, which is why Error 1102 kept happening through two rounds of
+       * cache work.
+       *
+       * The stored copy therefore carries only what makes it keepable. The
+       * response the visitor gets keeps the original header untouched.
+       */
+      const shared = response.headers.get("cache-control") ?? "";
+      const sMaxAge = /s-maxage=(\d+)/.exec(shared)?.[1] ?? "600";
+      const forCache = new Response(response.clone().body, response);
+      forCache.headers.set("cache-control", `public, max-age=${sMaxAge}`);
+      forCache.headers.set("x-worker-cache", "HIT");
+      ctx.waitUntil(cache.put(request, forCache));
+
       const stored = new Response(response.body, response);
       stored.headers.set("x-worker-cache", "MISS");
-      ctx.waitUntil(cache.put(request, stored.clone()));
       return stored;
     }
     return response;
