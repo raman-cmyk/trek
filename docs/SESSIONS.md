@@ -3276,3 +3276,37 @@ bookings as unpaid.
 
 Green: 1,715 tests in 118 files, typecheck clean, `npm run build` passing,
 deployed (`e1681530`).
+
+### Later the same day — a checklist builder
+
+Raman: *"lets build a checklist builder we need different checklist for
+different areas, for guide verification, for different types of guides
+verification, for experience, for bookings of day experience and trek
+experience."*
+
+The checklist shipped that morning (0103) was the right shape and the wrong
+ownership — it was thirty rows in a TypeScript file, and he cannot deploy. So
+the lists became data.
+
+- **0105** — `checklists` and `checklist_items` are the template;
+  `trip_tasks` is generalised into `checklist_tasks` with a subject, so a
+  booking, a guide and an experience all run lists through one model.
+- **0106** — six lists, 93 steps. The two booking lists are generated from
+  `task-template.ts`, so the seed and the ops spec cannot drift. Guide
+  verification splits into core / trekking guide / day guide or host. Putting
+  an experience live gets its first list ever.
+- `/ops/checklists` — write a list, copy an existing one, add and reorder
+  steps, set who owns each and when it falls due. `/ops/checklists/:key` is
+  the builder.
+- The same panel on the booking, guide and experience pages, because it is
+  the same thing run against three subjects.
+- Deleting a list that is already running is refused: switch it off instead,
+  which stops it being handed out and leaves the history readable.
+
+Found and left alone on purpose: **nothing in the data says what kind of
+guide somebody is.** `guides` has a tier and a list of regions and no type. So
+the core list starts itself, ops picks the trekking or day list, and
+`applies_to` is a label rather than a rule until guides carry a type.
+
+Green: 1,744 tests in 120 files, typecheck clean, build passing, deployed
+(`095f30d2`).

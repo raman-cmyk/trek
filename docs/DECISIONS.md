@@ -518,3 +518,39 @@ event that caused it, where the caller knows what changed. A nightly job that
 re-derives every booking in the database would have pulled thirteen confirmed
 trips back on its first run, on the strength of paperwork rules that were
 written after those trips were confirmed.
+
+## Checklists are data the office owns, not code we ship (2026-09-18)
+
+Three lists had grown up in three shapes — the guide verification check types
+in `guide-checks.ts`, a trek's thirty tasks in `task-template.ts`, and nothing
+at all for putting an experience live — and changing any of them meant a
+deploy by somebody who cannot deploy. They are now templates at
+`/ops/checklists` (0105) and a new list is a form, not a commit.
+
+Three decisions inside that one:
+
+**One task model, not one per area.** `trip_tasks` was a day old and was
+generalised into `checklist_tasks` with a subject rather than copied. Two task
+models is exactly the split that let TIMS be issued for routes with no TIMS
+permit (0102).
+
+**Guide verification splits into three lists, not one.** A guide walking a
+party to 5,364m is asked for altitude training, their own helicopter cover and
+a reference somebody actually rang; a host running a momo crawl in Thamel is
+asked for the languages on their profile, heard. One flat list for both was
+either too much for the host or too little for the guide, and in practice it
+was too little.
+
+**Nothing in the data says what kind of guide somebody is.** `guides` carries
+a tier and a list of regions and no type. So the core list starts itself and
+ops picks the trekking or day one; `applies_to` on a guide list is a label the
+office sorts by rather than a rule. When guides carry a type it becomes the
+automatic match and nothing else changes. Inventing a guide type to make the
+builder tidier would have been a schema decision taken for the sake of a
+dropdown.
+
+**The seam from 0103 holds.** Facts stay where they are and tick themselves:
+the six papers `guide_verifications` already holds tick the guide's list, and
+an experience's photographs and capacity tick its own. What is left is the
+work nothing else knows about — the introduction call, the reference, the
+test booking — which is what a checklist is actually for.
