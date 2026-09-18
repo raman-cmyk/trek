@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useReveal } from "~/components/PasswordField";
 import { Form, Link, redirect, useFetcher } from "react-router";
 import type { Route } from "./+types/signup";
 import { Button } from "~/components/Button";
@@ -109,6 +110,8 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
   const [v, setV] = useState<Values>({ first: "", last: "", country: "", email: "", password: "" });
   const [showMore, setShowMore] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Typing a password you cannot see, on a phone, in your second language.
+  const reveal = useReveal();
 
   const STEPS = ["name", "country", "email", "password"] as const;
   const busy = fetcher.state !== "idle";
@@ -316,15 +319,18 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
                 At least 8 characters. You’ll use it with{" "}
                 <span className="font-medium text-ink">{v.email}</span> to sign in.
               </p>
-              <input
-                ref={inputRef}
-                value={v.password}
-                onChange={(e) => setV({ ...v, password: e.target.value })}
-                type="password"
-                autoComplete="new-password"
-                placeholder="Create a password"
-                className="mt-8 w-full rounded-md border border-line bg-card px-4 py-3 text-lg outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
-              />
+              <div className="relative mt-8">
+                <input
+                  ref={inputRef}
+                  value={v.password}
+                  onChange={(e) => setV({ ...v, password: e.target.value })}
+                  type={reveal.type}
+                  autoComplete="new-password"
+                  placeholder="Create a password"
+                  className="w-full rounded-md border border-line bg-card px-4 py-3 pr-11 text-lg outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
+                />
+                {reveal.button}
+              </div>
             </>
           )}
 

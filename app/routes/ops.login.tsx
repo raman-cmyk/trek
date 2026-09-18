@@ -1,4 +1,5 @@
 import { Form, data, redirect, useNavigation } from "react-router";
+import { PasswordField } from "~/components/PasswordField";
 import { AuthSplit } from "~/components/design/AuthSplit";
 import { AUTH_SCENE } from "~/lib/auth-scene";
 import type { Route } from "./+types/ops.login";
@@ -88,13 +89,7 @@ export default function OpsLogin({ actionData, loaderData }: Route.ComponentProp
               Forgot password?
             </a>
           </div>
-          <input
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
-          />
+          <PasswordField name="password" className="mt-1" />
         </label>
         {actionData?.error && (
           <p className="text-sm text-danger">{actionData.error}</p>

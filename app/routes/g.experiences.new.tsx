@@ -1,6 +1,7 @@
 import { Link, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/g.experiences.new";
 import { getEnv } from "~/lib/supabase.server";
+import { guideGate, outstandingChecks } from "~/lib/guide-gate.server";
 import { requireUser } from "~/lib/auth.server";
 import { ExperienceForm } from "~/components/ExperienceForm";
 import {
@@ -19,17 +20,37 @@ import {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
+
+  // Shut until the papers are checked. Somebody who has done nothing but fill
+  // in a form was being handed a listing builder, which reads as "you are in".
+  const gate = await guideGate(admin, user.id);
+  if (!gate.canList) {
+    return data(
+      { gate, waitingOn: await outstandingChecks(admin, user.id), routes: [], guideId: user.id },
+      { headers },
+    );
+  }
+
   const { data: routes } = await admin
       .from("routes")
       .select("id, name, status, typical_days, max_altitude_m, day_stops, permits(name, cost_usd_cents)")
       .or(`status.eq.live,created_by_guide_id.eq.${user.id}`)
       .order("name");
-  return data({ routes: routes ?? [], guideId: user.id }, { headers });
+  return data({ gate, waitingOn: [] as string[], routes: routes ?? [], guideId: user.id }, { headers });
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
+  // Checked again here, not only in the loader: a form kept open across a
+  // suspension would otherwise still post.
+  const gate = await guideGate(admin, user.id);
+  if (!gate.canList) {
+    return data(
+      { error: "Your account is not verified yet, so listings cannot be saved." },
+      { status: 403, headers },
+    );
+  }
   const { patch, photos, error } = parseExperienceForm(await request.formData(), {
     minPhotos: 3,
   });
@@ -58,8 +79,64 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function NewExperience({ loaderData, actionData }: Route.ComponentProps) {
-  const { routes, guideId } = loaderData as any;
+  const { routes, guideId, gate, waitingOn } = loaderData as any;
   const nav = useNavigation();
+
+  // A locked page with no reason is how a good guide decides we are not
+  // serious. Say what is outstanding, and who is holding it.
+  if (!gate?.canList) {
+    return (
+      <div className="space-y-4">
+        <Link to="/g/experiences" className="text-sm text-primary hover:underline">
+          ← Your experiences
+        </Link>
+        <div className="rounded-card border border-border bg-card p-5">
+          <h1 className="font-display text-2xl text-ink">
+            {gate?.standing === "stopped"
+              ? "Your account is on hold"
+              : "We are checking your papers"}
+          </h1>
+          {gate?.standing === "stopped" ? (
+            <p className="mt-2 text-sm text-ink-soft">
+              You cannot add or change listings while that stands. Message the
+              office and we will tell you where it is.
+            </p>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-ink-soft">
+                Listings open as soon as a person in Kathmandu has been through
+                your file. It is one look, by a human, and it is what lets us
+                promise a trekker in Berlin that you are real.
+              </p>
+              {waitingOn?.length > 0 && (
+                <>
+                  <p className="mt-3 text-sm font-medium text-ink">
+                    Still with us:
+                  </p>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-ink-soft">
+                    {waitingOn.map((w: string) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p className="mt-3 text-sm text-ink-soft">
+                Nothing is lost in the meantime — finish your profile and your
+                photo, and the day you are verified you can list in minutes.
+              </p>
+            </>
+          )}
+          <Link
+            to="/g"
+            className="mt-4 inline-block rounded-button bg-pine px-3 py-1.5 text-sm font-medium text-paper hover:bg-moss"
+          >
+            Back to your dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div>

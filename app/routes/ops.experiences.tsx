@@ -30,11 +30,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const all = (offerings ?? []).sort(
     (a: any, b: any) => (order[a.status] ?? 9) - (order[b.status] ?? 9),
   );
-  const filter = resolveKey(OFFERING_FILTERS, new URL(request.url).searchParams.get("status"));
+  const url = new URL(request.url);
+  const filter = resolveKey(OFFERING_FILTERS, url.searchParams.get("status"));
+  const q = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
+
+  // Searched in memory rather than in the query: fifty-nine rows already come
+  // back for the status tabs' counts, and a second round trip to filter them
+  // would make the counts and the list disagree the moment one is cached.
+  const matches = (r: any) =>
+    !q ||
+    [r.title, r.guide?.users?.full_name, r.kind]
+      .filter(Boolean)
+      .some((v: string) => v.toLowerCase().includes(q.toLowerCase()));
+  const found = all.filter(matches);
+
   return data(
     {
-      rows: applyFilter(all, OFFERING_FILTERS, filter, (r: any) => r.status),
-      counts: countsFor(all, OFFERING_FILTERS, (r: any) => r.status),
+      rows: applyFilter(found, OFFERING_FILTERS, filter, (r: any) => r.status),
+      // Counted over what the search found, so a tab never promises a row the
+      // list cannot show.
+      counts: countsFor(found, OFFERING_FILTERS, (r: any) => r.status),
+      q,
+      total: all.length,
       filter,
       // Rendered on the server so "13 days ago" is the same on every screen.
       now: new Date().toISOString(),
@@ -89,7 +106,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function OpsExperiences({ loaderData, actionData }: Route.ComponentProps) {
-  const { rows, counts, filter, now } = loaderData as any;
+  const { rows, counts, filter, now, q, total } = loaderData as any;
   // Counted over everything, not the visible tab.
   const pending = counts.pending ?? 0;
 
@@ -99,6 +116,30 @@ export default function OpsExperiences({ loaderData, actionData }: Route.Compone
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <h1 className="font-display text-2xl text-ink">Experiences</h1>
           <StatusTabs filters={OFFERING_FILTERS} current={filter} counts={counts} />
+          {/* A GET form, so a search is a URL somebody can send to a
+              colleague. The status tab rides along in a hidden field or it
+              would be dropped on every submit. */}
+          <Form method="get" className="flex items-center gap-1.5">
+            {filter !== "all" && <input type="hidden" name="status" value={filter} />}
+            <input
+              name="q"
+              type="search"
+              defaultValue={q}
+              placeholder="Title, guide or kind"
+              className="w-48 rounded border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+            />
+            <button className="rounded border border-border px-2.5 py-1.5 text-sm text-ink hover:bg-mist">
+              Find
+            </button>
+            {q && (
+              <Link
+                to={filter === "all" ? "/ops/experiences" : `/ops/experiences?status=${filter}`}
+                className="text-xs text-ink-soft underline hover:text-ink"
+              >
+                clear
+              </Link>
+            )}
+          </Form>
         </div>
         <div className="flex items-center gap-4">
           {pending > 0 && (
@@ -137,6 +178,15 @@ export default function OpsExperiences({ loaderData, actionData }: Route.Compone
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-sm text-ink-soft">
+                  {q
+                    ? `Nothing matching “${q}” among the ${total} experiences.`
+                    : "No experiences here."}
+                </td>
+              </tr>
+            )}
             {rows.map((r: any) => (
               <tr key={r.id} className="align-top hover:bg-mist/40">
                 <td className="px-3 py-2">

@@ -1,4 +1,5 @@
 import { Form, data, redirect, useNavigation } from "react-router";
+import { PasswordField } from "~/components/PasswordField";
 import type { Route } from "./+types/g.login";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
@@ -104,13 +105,7 @@ export default function GuideLogin({ loaderData, actionData }: Route.ComponentPr
               Forgot password?
             </a>
           </div>
-          <input
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            className="mt-1 w-full rounded-button border border-border px-3 py-3 text-lg outline-none focus:border-primary"
-          />
+          <PasswordField name="password" className="mt-1 py-3 text-lg" />
         </label>
         {error && <p className="text-sm text-danger">{error}</p>}
         <Button type="submit" size="lg" loading={busy} className="w-full">

@@ -47,7 +47,7 @@ export function standards(): Standard[] {
     {
       key: "met",
       title: "We have met them",
-      detail: `Licence, government ID against that licence, phone, PAN, payout account and a wilderness first-aid certificate — ${PENDING_CHECKS.length} checks, done by a person in Kathmandu who signs and dates the file.`,
+      detail: `Licence, government ID against that licence, phone, payout account and a wilderness first-aid certificate — ${PENDING_CHECKS.length} checks, done by a person in Kathmandu who signs and dates the file.`,
       href: "/trust",
     },
     {

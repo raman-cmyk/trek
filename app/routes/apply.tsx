@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useReveal } from "~/components/PasswordField";
 import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/apply";
 import { GuideLanguages } from "~/components/GuideLanguages";
@@ -992,26 +993,34 @@ function TextField({
   type?: string;
   autoComplete?: string;
 }) {
+  // A password you cannot see is hard to type on a phone keyboard in your
+  // second language, and harder when somebody just read it to you.
+  const reveal = useReveal();
+  const isPassword = type === "password";
   return (
     <div>
       <label htmlFor={name} className="text-ink">{label}</label>
       {hint && <p className="mt-1 text-sm text-muted">{hint}</p>}
-      <input
-        id={name}
-        name={name}
-        type={type}
-        value={value}
-        autoComplete={autoComplete}
-        onChange={(e) => onChange(name, e.target.value)}
-        // Lighter than the value, so a placeholder never reads as something
-        // already filled in — "pemba@example.com" looked typed.
-        placeholder={placeholder}
-        className={cn(
-          "mt-2 h-[52px] w-full rounded-xl border bg-card px-3 text-ink placeholder:text-muted/50",
-          "focus:outline-none focus:ring-2 focus:ring-moss/30",
-          problem ? "border-ember" : "border-line focus:border-moss",
-        )}
-      />
+      <div className="relative">
+        <input
+          id={name}
+          name={name}
+          type={isPassword ? reveal.type : type}
+          value={value}
+          autoComplete={autoComplete}
+          onChange={(e) => onChange(name, e.target.value)}
+          // Lighter than the value, so a placeholder never reads as something
+          // already filled in — "pemba@example.com" looked typed.
+          placeholder={placeholder}
+          className={cn(
+            "mt-2 h-[52px] w-full rounded-xl border bg-card px-3 text-ink placeholder:text-muted/50",
+            "focus:outline-none focus:ring-2 focus:ring-moss/30",
+            isPassword && "pr-11",
+            problem ? "border-ember" : "border-line focus:border-moss",
+          )}
+        />
+        {isPassword && reveal.button}
+      </div>
       {problem && <p className="mt-1.5 text-sm text-ember">{problem}</p>}
     </div>
   );

@@ -1,4 +1,5 @@
 import { Form, Link, data, redirect, useNavigation } from "react-router";
+import { PasswordField } from "~/components/PasswordField";
 import type { Route } from "./+types/reset";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
@@ -120,24 +121,11 @@ export default function Reset({ loaderData, actionData }: Route.ComponentProps) 
       <Form method="post" className="mt-6 space-y-4">
         <label className="block">
           <span className="text-sm text-ink-soft">New password</span>
-          <input
-            name="password"
-            type="password"
-            required
-            autoFocus
-            autoComplete="new-password"
-            className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
-          />
+          <PasswordField name="password" autoComplete="new-password" className="mt-1" />
         </label>
         <label className="block">
           <span className="text-sm text-ink-soft">Type it once more</span>
-          <input
-            name="confirm"
-            type="password"
-            required
-            autoComplete="new-password"
-            className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
-          />
+          <PasswordField name="confirm" autoComplete="new-password" className="mt-1" />
         </label>
         {actionData && "error" in actionData && (actionData as any).error && (
           <p className="text-sm text-danger">{(actionData as any).error}</p>

@@ -1,4 +1,5 @@
 import { Form, data, redirect, useNavigation } from "react-router";
+import { PasswordField } from "~/components/PasswordField";
 import type { Route } from "./+types/login";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
@@ -91,13 +92,7 @@ export default function Login({ actionData, loaderData }: Route.ComponentProps) 
               Forgot password?
             </a>
           </div>
-          <input
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="mt-1 w-full rounded-button border border-border px-3 py-2 outline-none focus:border-primary"
-          />
+          <PasswordField name="password" className="mt-1" />
         </label>
         {actionData && "error" in actionData && (actionData as any).error && (
           <p className="text-sm text-danger">{(actionData as any).error}</p>

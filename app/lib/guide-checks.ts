@@ -37,15 +37,29 @@ export const CHECK_LABELS: Record<CheckType, string> = {
 /**
  * What a new application starts with. The rest are added by hand when the
  * office decides a particular guide needs them.
+ *
+ * `pan_card` is deliberately NOT here. A PAN is a tax number: it says nothing
+ * about whether somebody is safe to walk a stranger to 5,364m, and asking for
+ * it up front turned the first thing a guide saw into paperwork for an office
+ * they had not joined yet. It belongs with the payout details, after
+ * verification, when there is money to pay — see `AFTER_VERIFIED`.
  */
 export const PENDING_CHECKS: readonly CheckType[] = [
   "licence",
   "id_match",
   "phone",
-  "pan_card",
   "payout_account",
   "first_aid",
 ];
+
+/**
+ * Asked for once a guide is verified, not before.
+ *
+ * These are about paying somebody, not about trusting them. A guide fills
+ * them in from their own money page when they are in — the office does not
+ * chase them, and nothing is blocked while they are missing except a payout.
+ */
+export const AFTER_VERIFIED: readonly CheckType[] = ["pan_card"];
 
 export function checkLabel(t: string): string {
   return (CHECK_LABELS as Record<string, string>)[t] ?? t;
