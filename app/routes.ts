@@ -176,6 +176,7 @@ export default [
     route("ops/pipeline", "routes/ops.pipeline.tsx"),
     route("ops/bookings/:id", "routes/ops.bookings.$id.tsx"),
     route("ops/permits", "routes/ops.permits.tsx"),
+    route("ops/insurance", "routes/ops.insurance.tsx"),
     route("ops/payouts", "routes/ops.payouts.tsx"),
     route("ops/incidents", "routes/ops.incidents.tsx"),
     route("ops/moderation", "routes/ops.moderation.tsx"),

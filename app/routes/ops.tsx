@@ -68,6 +68,7 @@ const NAV = [
       { to: "/ops/routes", label: "Routes", badge: null },
       { to: "/ops/categories", label: "Homepage rows", badge: null },
       { to: "/ops/permits", label: "Permits", badge: null },
+      { to: "/ops/insurance", label: "Insurance", badge: null },
       { to: "/ops/contracts", label: "Contracts", badge: null },
       { to: "/ops/events", label: "Group trips", badge: null },
     ],

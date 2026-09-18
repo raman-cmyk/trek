@@ -8,8 +8,16 @@ import {
   rejectDocument,
   uploadDocument,
   deleteBookingDocument,
+  uploadPermitScan,
 } from "~/lib/documents.server";
 import { cleanReason, docState, rejectionProblem } from "~/lib/doc-review";
+import {
+  PERMIT_STATUSES,
+  PERMIT_TONE,
+  manualEntryProblem,
+  stampsFor,
+  type PermitStatus,
+} from "~/lib/permits";
 import { fmtDate } from "~/lib/format";
 import {
   missingDays,
@@ -50,7 +58,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     admin
       .from("bookings")
       .select(
-        "id, status, guide_id, start_date, end_date, party_size, meeting_point, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, hold_expires_at, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, offering:offerings(title, kind, days, price_breakdown, route:routes(name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
+        "id, status, guide_id, start_date, end_date, party_size, meeting_point, total_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, permit_handling_usd_cents, logistics_usd_cents, service_fee_usd_cents, fund_usd_cents, commission_usd_cents, deposit_usd_cents, guide_payout_npr_paisa, fx_rate_npr, hold_expires_at, insurance_provider, insurance_policy_no, insurance_meta, insurance_attested_at, insurance_verified_at, insurance_rejected_at, insurance_rejected_reason, insurance_help_asked_at, insurance_help_closed_at, offering:offerings(title, kind, days, price_breakdown, route:routes(id, name, slug, region, difficulty, max_altitude_m, typical_days, season_months, day_stops)), trekker:users!bookings_trekker_id_fkey(full_name, email, emergency_contact_name, emergency_contact_relationship, emergency_contact_phone, emergency_contact_email), guide:guides(users(full_name))",
       )
       .eq("id", params.id)
       .maybeSingle(),
@@ -59,8 +67,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if (booking.error) throw new Response(booking.error, { status: 500 });
   const b = booking.row;
   if (!b) throw new Response("Not found", { status: 404 });
-  const [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements] =
-    await Promise.all([
+  const [
+    docs,
+    permits,
+    contract,
+    tims,
+    instalments,
+    payments,
+    checkins,
+    payouts,
+    messages,
+    arrangements,
+    permitTypes,
+  ] = await Promise.all([
     rows<any>(
       admin.from("booking_documents").select("id, person_name, type, verified_at, rejected_at, rejected_reason").eq("booking_id", b.id),
       "this trek's documents",
@@ -68,7 +87,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     rows<any>(
       admin
         .from("permit_applications")
-        .select("id, status, reference_no, scan_path, permit:permits(name)")
+        .select(
+          "id, status, reference_no, scan_path, scan_uploaded_at, notes, permit_id, permit:permits(name, issuing_body, lead_time_days)",
+        )
         .eq("booking_id", b.id),
       "the permits",
     ),
@@ -145,12 +166,23 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         .eq("booking_id", b.id),
       "the arrangements",
     ),
+    // Which permits this trip could need. The route's own sort first — a
+    // Langtang trek needs Langtang's park entry, not Manaslu's — but the
+    // whole list is offered, because a trek that starts in one park and
+    // crosses into another is a real trip and the form should not argue.
+    rows<any>(
+      admin
+        .from("permits")
+        .select("id, name, issuing_body, route_id, lead_time_days")
+        .order("name"),
+      "the permit types",
+    ),
   ]);
   // One line naming whichever panels could not be read. A blank Documents
   // panel on a trek whose passports are the thing you came to check is the
   // failure mode this whole file is guarding against.
   const loadError =
-    [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements]
+    [docs, permits, contract, tims, instalments, payments, checkins, payouts, messages, arrangements, permitTypes]
       .map((r) => r.error)
       .filter(Boolean)
       .join(" ") || null;
@@ -167,6 +199,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       payouts: payouts.rows,
       messages: messages.rows,
       arrangements: arrangements.rows,
+      permitTypes: permitTypes.rows,
       // One row per day of the trek so far, in order — a gap reads as a gap
       // only when it sits between the days either side of it.
       safety: [
@@ -479,6 +512,88 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: true }, { headers });
   }
 
+  // ── Permits, on the trip they belong to ─────────────────────────────
+  //
+  // These were listed here and worked elsewhere: the office read "awaiting
+  // docs" on the booking page, then went to the permit tracker, found this
+  // trip among every other trip, and acted there. Same three writes the
+  // tracker makes, on the page where the question gets asked.
+  if (intent === "permit_add") {
+    const permitId = String(form.get("permit_id") ?? "");
+    const status = String(form.get("status") ?? "awaiting_docs");
+    const problem = manualEntryProblem({ bookingId: params.id!, permitId, status });
+    if (problem) return data({ error: problem }, { status: 400, headers });
+
+    const added = await admin.from("permit_applications").insert({
+      booking_id: params.id!,
+      permit_id: permitId,
+      status,
+      reference_no: String(form.get("reference_no") ?? "").trim() || null,
+      notes: String(form.get("notes") ?? "").trim() || null,
+      created_by: user.id,
+      ...stampsFor(status),
+    });
+    if (added.error) {
+      // 0074's unique index: the confirm trigger already made this one, or
+      // somebody logged it a moment ago.
+      const already = String((added.error as any).code ?? "") === "23505";
+      return data(
+        {
+          error: already
+            ? "That permit is already on this trip — it is in the list."
+            : added.error.message,
+        },
+        { status: 400, headers },
+      );
+    }
+    return data({ ok: true }, { headers });
+  }
+
+  if (intent === "permit_status") {
+    const status = String(form.get("status"));
+    if (!PERMIT_STATUSES.includes(status as PermitStatus)) {
+      return data({ error: "That is not a permit status." }, { status: 400, headers });
+    }
+    const saved = await admin
+      .from("permit_applications")
+      .update({
+        status,
+        reference_no: String(form.get("reference_no") ?? "").trim() || null,
+        ...stampsFor(status),
+      })
+      .eq("id", String(form.get("permit_application_id")))
+      .eq("booking_id", params.id!);
+    if (saved.error) return data({ error: saved.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
+  // The issued permit itself, so the trekker has something to show at a
+  // checkpost rather than our word that it is "ready".
+  if (intent === "permit_scan") {
+    const scan = form.get("scan");
+    if (!(scan instanceof File) || scan.size === 0) {
+      return data({ error: "Choose a file first." }, { status: 400, headers });
+    }
+    const res = await uploadPermitScan(admin, {
+      applicationId: String(form.get("permit_application_id")),
+      bookingId: params.id!,
+      file: scan,
+      uploadedBy: user.id,
+    });
+    return res.ok
+      ? data({ ok: true }, { headers })
+      : data({ error: res.error ?? "Upload failed." }, { status: 400, headers });
+  }
+
+  if (intent === "close_insurance_help") {
+    const done = await admin
+      .from("bookings")
+      .update({ insurance_help_closed_at: new Date().toISOString() })
+      .eq("id", params.id!);
+    if (done.error) return data({ error: done.error.message }, { status: 500, headers });
+    return data({ ok: true }, { headers });
+  }
+
   if (intent === "gen_contract") {
     await generateContractForBooking(admin, params.id!);
     return data({ ok: true }, { headers });
@@ -520,6 +635,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
     payouts,
     messages,
     arrangements,
+    permitTypes,
     safety,
     missedRun,
     loadError,
@@ -680,7 +796,6 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
               </ul>
             )}
 
-            <PermitDocs permits={permits} />
             <AddDocument defaultPerson={b.trekker?.full_name ?? ""} />
           </Panel>
 
@@ -750,6 +865,29 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             <Arrangements rows={arrangements} />
 
             <Panel title="Insurance">
+              {/* The ask comes first, above whatever policy state they are
+                  in, because it is the one thing here that WE owe THEM. The
+                  product told this person a real person was sorting their
+                  insurance out; the office has to be able to see that it
+                  said so (0097). */}
+              {b.insurance_help_asked_at && !b.insurance_help_closed_at && (
+                <div className="mb-3 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                  <p className="font-medium">
+                    They asked us to arrange their insurance — {fmtDate(b.insurance_help_asked_at)}
+                  </p>
+                  <p className="mt-0.5 text-xs">
+                    They have been told a person is on it. Find them cover with
+                    high-altitude and helicopter evacuation, then mark this
+                    dealt with.
+                  </p>
+                  <Form method="post" className="mt-1.5">
+                    <input type="hidden" name="intent" value="close_insurance_help" />
+                    <button className="rounded border border-sky-300 bg-white px-2 py-1 text-xs hover:bg-sky-100">
+                      Dealt with
+                    </button>
+                  </Form>
+                </div>
+              )}
               {b.insurance_attested_at ? (
                 <div className="space-y-2 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
@@ -989,20 +1127,7 @@ export default function OpsBooking({ loaderData, actionData }: Route.ComponentPr
             </div>
           )}
 
-          {permits.length > 0 && (
-            <div className="mt-4">
-              <Panel title="Permits">
-                <ul className="space-y-1 text-sm">
-                  {permits.map((p: any, i: number) => (
-                    <li key={i} className="flex items-center justify-between">
-                      <span>{p.permit?.name}</span>
-                      <Badge tone="amber">{p.status.replace(/_/g, " ")}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            </div>
-          )}
+          <Permits rows={permits} types={permitTypes} booking={b} />
         </div>
       </div>
     </div>
@@ -1093,60 +1218,6 @@ function CostBreakdown({ booking }: { booking: any }) {
           </p>
         )}
       </div>
-    </div>
-  );
-}
-
-/**
- * The permits, beside the passports rather than four panels further down.
- *
- * They are documents on this trip in exactly the way a passport is, and the
- * office was scrolling past everything else to find out whether TIMS had been
- * issued. The scan opens through the same redirect route the passports use.
- */
-function PermitDocs({ permits }: { permits: any[] }) {
-  if (!permits || permits.length === 0) return null;
-  return (
-    <div className="mt-3 border-t border-border pt-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Permits</p>
-      <ul className="mt-1.5 space-y-1.5">
-        {permits.map((p: any, i: number) => (
-          <li key={p.id ?? i} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="min-w-0">
-              {p.permit?.name ?? "Permit"}
-              {p.reference_no && (
-                <span className="ml-1.5 font-mono text-xs text-ink-soft">{p.reference_no}</span>
-              )}
-            </span>
-            <span className="flex items-center gap-2">
-              <Badge
-                tone={
-                  p.status === "ready"
-                    ? "green"
-                    : p.status === "rejected"
-                      ? "red"
-                      : "amber"
-                }
-              >
-                {String(p.status ?? "").replace(/_/g, " ")}
-              </Badge>
-              {p.scan_path && p.id && (
-                <a
-                  href={`/ops/doc/permit/${p.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded border border-border px-2 py-1 text-xs hover:bg-mist"
-                >
-                  View
-                </a>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <Link to="/ops/permits" className="mt-2 inline-block text-xs text-primary hover:underline">
-        File or attach permits →
-      </Link>
     </div>
   );
 }
@@ -2042,6 +2113,197 @@ function PaymentLog({ payments }: { payments: any[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The permits for this trip, worked from this page.
+ *
+ * They were listed here and acted on somewhere else: the office read
+ * "awaiting docs" on the booking, went to the permit tracker, found this trip
+ * among every other trip, and did the work there. Everything the tracker can
+ * do to a permit it can now do here — move it along, write the reference
+ * number on it, attach the issued permit itself.
+ *
+ * The list is also where a permit gets ADDED. A trek's permits are usually
+ * created for it when the booking confirms, but a route crossing into a
+ * second park, a restricted-area permit, a late TIMS — those are decided by a
+ * person, and the person was being sent to another screen to say so.
+ */
+function Permits({
+  rows,
+  types,
+  booking,
+}: {
+  rows: any[];
+  types: any[];
+  booking: any;
+}) {
+  const list = rows ?? [];
+  const routeId = booking.offering?.route?.id ?? null;
+  const already = new Set(list.map((r: any) => r.permit_id));
+  // This route's own permits first, then everything else, and never one that
+  // is already on the trip.
+  const addable = (types ?? [])
+    .filter((t: any) => !already.has(t.id))
+    .sort((a: any, b: any) => {
+      const mine = (t: any) => (routeId && t.route_id === routeId ? 0 : 1);
+      return mine(a) - mine(b) || String(a.name).localeCompare(String(b.name));
+    });
+
+  return (
+    <div className="mt-4">
+      <Panel title="Permits">
+        {list.length === 0 ? (
+          <p className="py-2 text-sm text-ink-soft">
+            No permit has been logged for this trip yet.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {list.map((p: any) => (
+              <li key={p.id} className="py-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink">{p.permit?.name ?? "Permit"}</p>
+                    <p className="text-xs text-ink-soft">
+                      {[
+                        p.permit?.issuing_body,
+                        p.permit?.lead_time_days && `${p.permit.lead_time_days} days to issue`,
+                        p.scan_uploaded_at && `attached ${fmtDate(p.scan_uploaded_at)}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "no issuing body on file"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone={PERMIT_TONE[p.status as PermitStatus] ?? "neutral"}>
+                      {String(p.status ?? "").replace(/_/g, " ")}
+                    </Badge>
+                    {p.scan_path && (
+                      <a
+                        href={`/ops/doc/permit/${p.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded border border-border px-2 py-1 text-xs hover:bg-mist"
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Status and reference in one save: the number written on the
+                    permit and the fact that it has been issued arrive from the
+                    counter together, and two forms meant the office saved one
+                    and forgot the other. */}
+                <Form method="post" className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="intent" value="permit_status" />
+                  <input type="hidden" name="permit_application_id" value={p.id} />
+                  <select
+                    name="status"
+                    defaultValue={p.status}
+                    className="rounded border border-border bg-card px-1.5 py-1 text-xs text-ink"
+                  >
+                    {PERMIT_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {st.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="reference_no"
+                    defaultValue={p.reference_no ?? ""}
+                    placeholder="reference no."
+                    className="w-32 rounded border border-border bg-card px-1.5 py-1 text-xs text-ink"
+                  />
+                  <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                    Save
+                  </button>
+                </Form>
+
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+                    {p.scan_path ? "Replace the attached permit…" : "Attach the issued permit…"}
+                  </summary>
+                  <Form
+                    method="post"
+                    encType="multipart/form-data"
+                    className="mt-1 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="intent" value="permit_scan" />
+                    <input type="hidden" name="permit_application_id" value={p.id} />
+                    <input
+                      type="file"
+                      name="scan"
+                      required
+                      accept="image/*,application/pdf"
+                      className="max-w-[13rem] text-xs"
+                    />
+                    <button className="rounded border border-border px-2 py-1 text-xs hover:bg-mist">
+                      Attach
+                    </button>
+                  </Form>
+                  <p className="mt-1 text-[11px] text-ink-soft">
+                    The trekker can show this at a checkpost, rather than our
+                    word that it is ready.
+                  </p>
+                </details>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {addable.length > 0 && (
+          <details className="mt-2 border-t border-border pt-2">
+            <summary className="cursor-pointer text-xs text-ink-soft hover:text-ink">
+              Add a permit…
+            </summary>
+            <Form method="post" className="mt-2 flex flex-wrap items-end gap-2">
+              <input type="hidden" name="intent" value="permit_add" />
+              <label className="min-w-0 flex-1 text-xs text-ink-soft">
+                <span className="block">Which</span>
+                <select
+                  name="permit_id"
+                  required
+                  className="mt-0.5 w-full rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                >
+                  {addable.map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {routeId && t.route_id === routeId ? " — this route" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-ink-soft">
+                <span className="block">Where it is</span>
+                <select
+                  name="status"
+                  defaultValue="awaiting_docs"
+                  className="mt-0.5 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                >
+                  {PERMIT_STATUSES.map((st) => (
+                    <option key={st} value={st}>
+                      {st.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-ink-soft">
+                <span className="block">Reference</span>
+                <input
+                  name="reference_no"
+                  className="mt-0.5 w-28 rounded border border-border bg-card px-2 py-1 text-sm text-ink"
+                />
+              </label>
+              <button className="rounded border border-border px-3 py-1.5 text-xs hover:bg-mist">
+                Add
+              </button>
+            </Form>
+          </details>
+        )}
+      </Panel>
     </div>
   );
 }

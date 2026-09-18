@@ -183,6 +183,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // that reaches a human, and a demand signal in email_log for whether the
   // real product is worth building.
   if (intent === "insurance_interest") {
+    // Written down BEFORE either email goes out (0097).
+    //
+    // This used to be two emails and nothing else: one telling the trekker a
+    // real person was on it, one to hello@guidesofnepal.com. If that mailbox
+    // is not being watched — or the mail provider is not configured, which it
+    // is not yet — the ask existed nowhere. We had promised somebody that a
+    // person was dealing with their insurance and left no trace of the
+    // promise. The row comes first so a mail failure can no longer lose it.
+    const asked = await admin
+      .from("bookings")
+      .update({ insurance_help_asked_at: new Date().toISOString(), insurance_help_asked_by: user.id })
+      .eq("id", b.id)
+      .is("insurance_help_closed_at", null);
+    if (asked.error) {
+      return data(
+        { error: "We could not record that just now — try again in a moment." },
+        { status: 500, headers },
+      );
+    }
+
     const { sendRichEmail } = await import("~/lib/notify.server");
     const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
     const { data: booking } = await admin
