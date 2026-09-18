@@ -2,7 +2,7 @@ import { Form, Link, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/groups.$slug.pay";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
-import { getStripe } from "~/lib/stripe.server";
+import { getStripe, canTakePayments } from "~/lib/stripe.server";
 import { Button } from "~/components/Button";
 import { useMoney } from "~/lib/currency-context";
 import { firstName } from "~/lib/names";
@@ -137,6 +137,23 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const form = await request.formData();
   const paymentIntentId = String(form.get("payment_intent_id") ?? "");
   const stripe = getStripe(env);
+  // Refuse out loud rather than booking a trek for nothing.
+  //
+  // With no STRIPE_SECRET_KEY the mock client used to report every payment
+  // succeeded, and this action fulfilled on that word — so pressing the button
+  // on a misconfigured deployment marked the booking paid with no money moved.
+  // The money is the one thing this page must never guess about.
+  if (!canTakePayments(env)) {
+    return data(
+      {
+        error:
+          "Card payments are not switched on yet, so nothing can be charged. " +
+          "Nobody has been billed. Please contact the office to pay another way.",
+      },
+      { status: 503 },
+    );
+  }
+
   const pi = await stripe.retrievePaymentIntent(paymentIntentId);
   if (pi.status !== "succeeded") {
     return data({ error: "Payment didn’t complete. Try again." }, { status: 400, headers });
@@ -283,8 +300,9 @@ export default function PayShare({ loaderData, actionData }: Route.ComponentProp
           </Form>
 
           {isMock && (
-            <p className="mt-2 text-center text-xs text-ink-soft">
-              Test mode — no card is charged.
+            <p className="mt-2 rounded-button border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs text-amber-900">
+              Card payments are not switched on. This button cannot charge
+              anything and will not record your share — it used to say it had.
             </p>
           )}
 

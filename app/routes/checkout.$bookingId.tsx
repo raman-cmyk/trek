@@ -3,7 +3,7 @@ import { Form, data, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/checkout.$bookingId";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
-import { getStripe } from "~/lib/stripe.server";
+import { getStripe, canTakePayments } from "~/lib/stripe.server";
 import { fulfillDeposit } from "~/lib/booking.server";
 import { PriceBreakdown } from "~/components/public/bits";
 import { Button } from "~/components/Button";
@@ -112,6 +112,23 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!b) throw new Response("Not found", { status: 404 });
 
   const stripe = getStripe(env);
+  // Refuse out loud rather than booking a trek for nothing.
+  //
+  // With no STRIPE_SECRET_KEY the mock client used to report every payment
+  // succeeded, and this action fulfilled on that word — so pressing the button
+  // on a misconfigured deployment marked the booking paid with no money moved.
+  // The money is the one thing this page must never guess about.
+  if (!canTakePayments(env)) {
+    return data(
+      {
+        error:
+          "Card payments are not switched on yet, so nothing can be charged. " +
+          "Nobody has been billed. Please contact the office to pay another way.",
+      },
+      { status: 503 },
+    );
+  }
+
   const pi = await stripe.retrievePaymentIntent(paymentIntentId);
   if (pi.status !== "succeeded") {
     return data({ error: "Payment didn’t complete. Try again." }, { status: 400 });
@@ -262,8 +279,10 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
         <input type="hidden" name="payment_intent_id" value={paymentIntentId} />
         <input type="hidden" name="instalment_count" value={count} />
         {isMock && (
-          <p className="mb-2 rounded-button bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Test mode — no real card charged. Add Stripe keys to take live payments.
+          <p className="mb-2 rounded-button border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Card payments are not switched on. This button cannot charge
+            anything and will not book the trip — it used to say it had. Add the
+            Stripe keys to take payments.
           </p>
         )}
         {actionData && "error" in actionData && (actionData as any).error && (

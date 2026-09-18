@@ -107,8 +107,23 @@ function rand(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
+/**
+ * The no-keys client.
+ *
+ * It used to answer `retrievePaymentIntent` with `succeeded` unconditionally,
+ * and both checkout actions call that and then fulfil the booking. With no
+ * STRIPE_SECRET_KEY — which is the state of the live worker — anyone who
+ * opened a checkout page and pressed the button got a booking marked paid
+ * with no money moving. That is a free trek, not a stub.
+ *
+ * Now it reports what an uncollected card actually is:
+ * `requires_payment_method`. Local work that genuinely needs a fake success
+ * opts in with ALLOW_FAKE_PAYMENTS=1, which is never set in production and is
+ * named so that reading it anywhere is a warning.
+ */
 class MockStripe implements StripeClient {
   isMock = true;
+  constructor(private allowFake = false) {}
   async createDepositIntent(args: {
     amountUsdCents: number;
     bookingId: string;
@@ -123,7 +138,8 @@ class MockStripe implements StripeClient {
     };
   }
   async retrievePaymentIntent(id: string) {
-    return { id, status: "succeeded" };
+    // No card was ever collected, so this is the truthful answer.
+    return { id, status: this.allowFake ? "succeeded" : "requires_payment_method" };
   }
   async refund(args: { paymentIntentId: string; amountUsdCents: number }) {
     return { id: rand("re_mock"), status: "succeeded" };
@@ -192,7 +208,19 @@ class RealStripe implements StripeClient {
 }
 
 export function getStripe(env: Env): StripeClient {
-  return env.STRIPE_SECRET_KEY
-    ? new RealStripe(env.STRIPE_SECRET_KEY)
-    : new MockStripe();
+  if (env.STRIPE_SECRET_KEY) return new RealStripe(env.STRIPE_SECRET_KEY);
+  const allowFake =
+    String((env as { ALLOW_FAKE_PAYMENTS?: string }).ALLOW_FAKE_PAYMENTS ?? "") === "1";
+  return new MockStripe(allowFake);
+}
+
+/**
+ * Can this environment actually take money?
+ *
+ * Asked by the two checkout actions before they fulfil anything, so that a
+ * misconfigured deployment refuses the payment out loud instead of quietly
+ * booking a trek for nothing.
+ */
+export function canTakePayments(env: Env): boolean {
+  return Boolean(env.STRIPE_SECRET_KEY);
 }
