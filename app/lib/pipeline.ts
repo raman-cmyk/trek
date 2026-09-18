@@ -41,9 +41,21 @@ interface StageDef {
   label: string;
   hint: string;
   /**
-   * Where this stage sits on the one timeline a trip has. Negative positions
-   * are the group forming before a booking exists; 0–5 are booking statuses,
-   * in the order a booking moves through them.
+   * The FIRST booking status at which this step is the one being worked on.
+   * Negative positions are the group forming before a booking exists; 0–5 are
+   * booking statuses, in the order a booking moves through them.
+   *
+   * "First at which it is current", not "the status that means it is done" —
+   * and the difference is a real bug this shipped with. A step used to carry
+   * the status named after it, so `deposit` sat at `deposit_paid`. The track
+   * then drew "Deposit paid" as the step you were ON at the exact moment the
+   * deposit had landed: an open circle over money already taken, and the tick
+   * a day behind the truth for the whole trip.
+   *
+   * The statuses are not symmetrical, which is what made it easy to miss.
+   * `docs_pending` means papers are BEING collected, so the papers step is
+   * current there. `deposit_paid` means the deposit is DONE. Pinning each step
+   * to where its work STARTS is the only reading that holds for both.
    */
   at: number;
 }
@@ -88,8 +100,8 @@ const START: StageDef[] = [
 const TRACKS: Record<OfferingKind, StageDef[]> = {
   trek: [
     ...START,
-    { key: "deposit", label: "Deposit paid", hint: "The dates are held. The balance is due before you fly.", at: 1 },
-    { key: "papers", label: "Passports & insurance", hint: "Everyone uploads a passport page and their insurance.", at: 2 },
+    { key: "deposit", label: "Deposit paid", hint: "The dates are held. The balance is due before you fly.", at: 0 },
+    { key: "papers", label: "Passports & insurance", hint: "Everyone uploads a passport page and their insurance.", at: 1 },
     { key: "permits", label: "Permits filed", hint: "TIMS and the park permits are with the office.", at: 3 },
     { key: "active", label: "On the trail", hint: "Walking. Your guide checks in each day.", at: 4 },
     { key: "done", label: "Home safe", hint: "Photos, the journal, and your guide gets paid.", at: 5 },
@@ -97,30 +109,30 @@ const TRACKS: Record<OfferingKind, StageDef[]> = {
   // Climbing and rafting: the papers matter, and so does what you can do.
   adventure: [
     ...START,
-    { key: "deposit", label: "Deposit paid", hint: "The date is held.", at: 1 },
-    { key: "papers", label: "Papers & experience", hint: "Insurance that covers the activity, and what you have done before.", at: 2 },
+    { key: "deposit", label: "Deposit paid", hint: "The date is held.", at: 0 },
+    { key: "papers", label: "Papers & experience", hint: "Insurance that covers the activity, and what you have done before.", at: 1 },
     { key: "permits", label: "Permit & gear checked", hint: "The permit is filed and your guide has been through the kit list.", at: 3 },
     { key: "active", label: "On the mountain", hint: "Underway with your guide.", at: 4 },
     { key: "done", label: "Down safe", hint: "Photos, the journal, and your guide gets paid.", at: 5 },
   ],
   day_hike: [
     ...START,
-    { key: "deposit", label: "Paid", hint: "The day is held.", at: 1 },
-    { key: "confirmed", label: "Meeting point sent", hint: "Where to be, what time, what to bring.", at: 3 },
+    { key: "deposit", label: "Paid", hint: "The day is held.", at: 0 },
+    { key: "confirmed", label: "Meeting point sent", hint: "Where to be, what time, what to bring.", at: 1 },
     { key: "active", label: "Out walking", hint: "Out with your guide today.", at: 4 },
     { key: "done", label: "Done", hint: "Photos, a review, and your guide gets paid.", at: 5 },
   ],
   food_culture: [
     ...START,
-    { key: "deposit", label: "Paid", hint: "Your seat is held.", at: 1 },
-    { key: "confirmed", label: "Where to meet", hint: "The address, the time, and anything you cannot eat.", at: 3 },
+    { key: "deposit", label: "Paid", hint: "Your seat is held.", at: 0 },
+    { key: "confirmed", label: "Where to meet", hint: "The address, the time, and anything you cannot eat.", at: 1 },
     { key: "active", label: "Out with your guide", hint: "Happening today.", at: 4 },
     { key: "done", label: "Done", hint: "Photos, a review, and your guide gets paid.", at: 5 },
   ],
   city: [
     ...START,
-    { key: "deposit", label: "Paid", hint: "Your place is held.", at: 1 },
-    { key: "confirmed", label: "Where to meet", hint: "The address and the time.", at: 3 },
+    { key: "deposit", label: "Paid", hint: "Your place is held.", at: 0 },
+    { key: "confirmed", label: "Where to meet", hint: "The address and the time.", at: 1 },
     { key: "active", label: "Out with your guide", hint: "Happening today.", at: 4 },
     { key: "done", label: "Done", hint: "Photos, a review, and your guide gets paid.", at: 5 },
   ],

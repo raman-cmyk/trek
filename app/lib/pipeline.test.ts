@@ -12,13 +12,54 @@ describe("the trip pipeline", () => {
     expect(stages.every((s, i) => i === 0 || s.state === "upcoming")).toBe(true);
   });
 
-  it("moves with the booking, not ahead of it", () => {
+  it("ticks the deposit the moment it is paid, and moves to the papers", () => {
+    // This asserted `deposit:current` on a booking whose status IS
+    // `deposit_paid`, which drew an open circle over money already taken and
+    // left the tick a step behind the truth for the rest of the trip. A step
+    // sits at the first status where its work STARTS, not the status named
+    // after it having finished.
     expect(keys("trek", { groupStatus: "booked", bookingStatus: "deposit_paid" })).toEqual([
+      "forming:done",
+      "ready:done",
+      "deposit:done",
+      "papers:current",
+      "permits:upcoming",
+      "active:upcoming",
+      "done:upcoming",
+    ]);
+  });
+
+  it("asks for the deposit while it is the thing outstanding", () => {
+    expect(keys("trek", { groupStatus: "booked", bookingStatus: "pending_deposit" })).toEqual([
       "forming:done",
       "ready:done",
       "deposit:current",
       "papers:upcoming",
       "permits:upcoming",
+      "active:upcoming",
+      "done:upcoming",
+    ]);
+  });
+
+  it("keeps the papers current while they are being collected", () => {
+    expect(keys("trek", { bookingStatus: "docs_pending" })).toEqual([
+      "forming:done",
+      "ready:done",
+      "deposit:done",
+      "papers:current",
+      "permits:upcoming",
+      "active:upcoming",
+      "done:upcoming",
+    ]);
+  });
+
+  it("moves to the permits once the booking is confirmed", () => {
+    expect(keys("trek", { bookingStatus: "confirmed" })).toEqual([
+      "forming:done",
+      "ready:done",
+      "deposit:done",
+      "papers:done",
+      "permits:current",
       "active:upcoming",
       "done:upcoming",
     ]);
@@ -30,14 +71,15 @@ describe("the trip pipeline", () => {
     expect(trackFor("food_culture").map((s) => s.key)).not.toContain("papers");
   });
 
-  it("reads a papers-stage booking as 'paid' on a track that has no papers stage", () => {
-    // A day hike never files permits, so docs_pending must not fall off the
-    // end of its shorter track.
+  it("reads a papers-stage booking on a track that has no papers stage", () => {
+    // A day hike collects no passports, so `docs_pending` on one of them just
+    // means paid and not yet confirmed — the money is in and the thing still
+    // outstanding is where to meet.
     expect(keys("day_hike", { bookingStatus: "docs_pending" })).toEqual([
       "forming:done",
       "ready:done",
-      "deposit:current",
-      "confirmed:upcoming",
+      "deposit:done",
+      "confirmed:current",
       "active:upcoming",
       "done:upcoming",
     ]);
