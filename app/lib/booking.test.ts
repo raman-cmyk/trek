@@ -263,8 +263,13 @@ describe("runBalanceSweep — what is actually still owed", () => {
     total_usd_cents: 5400,
     deposit_usd_cents: 1080,
     start_date: "2026-10-01",
+    end_date: "2026-10-14",
+    deposit_paid_at: "2026-09-01T00:00:00Z",
     balance_paid_at: null,
     instalment_count: 1,
+    // A trek, so the status the facts imply once the money is in is
+    // "papers being collected" rather than "confirmed".
+    offering: { kind: "trek" },
     ...over,
   });
   // Twelve days out: inside the charging window, outside the cancelling one.

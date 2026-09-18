@@ -212,10 +212,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       file,
     });
     if (!res.ok) return data({ error: res.error ?? "Upload failed." }, { status: 400 });
-    // Move deposit_paid → docs_pending once the first doc is in.
-    if (b.status === "deposit_paid") {
-      await admin.from("bookings").update({ status: "docs_pending" }).eq("id", b.id);
-    }
+    // The status follows from the facts rather than being named here — this
+    // upload may have been the last one owed.
+    const { applyBookingStatus } = await import("~/lib/booking-status.server");
+    await applyBookingStatus(admin, b.id);
     return data({ ok: "Uploaded — our team will verify it." }, { headers });
   }
 

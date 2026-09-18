@@ -61,7 +61,29 @@ export async function action({ request, context }: Route.ActionArgs) {
   const form = await request.formData();
   const id = String(form.get("bookingId"));
   const next = String(form.get("next"));
+  const reason = String(form.get("reason") ?? "");
+
+  // The move used to be whatever `next` the form carried, with no whitelist:
+  // the only bound was the database's check constraint, so a card could go
+  // from "pending deposit" straight to "completed" and the booking would say
+  // a trek nobody paid for was finished.
+  //
+  // Now the facts decide. Their own answer is always allowed and so is
+  // anything behind it — putting a card back is how a mistake is undone —
+  // and jumping ahead of them needs a written reason, because in six months
+  // the question will be who did that.
+  const { statusFacts } = await import("~/lib/booking-status.server");
+  const { moveProblem } = await import("~/lib/booking-status");
+  const facts = await statusFacts(admin, id);
+  if (!facts) return data({ error: "That booking is gone." }, { status: 404, headers });
+  const problem = moveProblem(next, facts, reason);
+  if (problem) return data({ error: problem }, { status: 400, headers });
+
   const patch: Record<string, unknown> = { status: next };
+  if (reason.trim()) {
+    patch.status_override_reason = reason.trim().slice(0, 600);
+    patch.status_override_at = new Date().toISOString();
+  }
   const stamp = STAMP[next];
   if (stamp) patch[stamp] = new Date().toISOString();
   // Looked at, not fired and forgotten. A refused update used to reload the
@@ -191,13 +213,36 @@ export default function OpsPipeline({ loaderData, actionData }: Route.ComponentP
                       </Link>
                     ) : (
                       NEXT[b.status] && (
-                        <Form method="post" className="mt-2">
-                          <input type="hidden" name="bookingId" value={b.id} />
-                          <input type="hidden" name="next" value={NEXT[b.status]!} />
-                          <button className="w-full rounded border border-border bg-card px-2 py-1 text-xs font-medium hover:border-primary hover:text-primary">
-                            → {COLUMN_LABELS[NEXT[b.status]!]}
-                          </button>
-                        </Form>
+                        <>
+                          <Form method="post" className="mt-2">
+                            <input type="hidden" name="bookingId" value={b.id} />
+                            <input type="hidden" name="next" value={NEXT[b.status]!} />
+                            <button className="w-full rounded border border-border bg-card px-2 py-1 text-xs font-medium hover:border-primary hover:text-primary">
+                              → {COLUMN_LABELS[NEXT[b.status]!]}
+                            </button>
+                          </Form>
+                          {/* Moving a card past what the trip's own facts
+                              support is allowed, and it leaves a mark (0104).
+                              Folded away, because it is the exception. */}
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-[11px] text-ink-soft hover:text-ink">
+                              Move it anyway…
+                            </summary>
+                            <Form method="post" className="mt-1 space-y-1">
+                              <input type="hidden" name="bookingId" value={b.id} />
+                              <input type="hidden" name="next" value={NEXT[b.status]!} />
+                              <input
+                                name="reason"
+                                required
+                                placeholder="Why? This is kept."
+                                className="w-full rounded border border-border bg-card px-1.5 py-1 text-[11px] text-ink"
+                              />
+                              <button className="w-full rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium">
+                                Move with a reason
+                              </button>
+                            </Form>
+                          </details>
+                        </>
                       )
                     )}
                   </div>

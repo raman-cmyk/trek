@@ -10,6 +10,9 @@ const requestHandler = createRequestHandler(
 const CRON_JOBS = [
   "enquiry-expiry",
   "balance-sweep",
+  // Before the retention sweep: a trek that completes today is what starts
+  // the 90-day clock on its documents.
+  "status-sweep",
   "document-retention",
   "review-release",
   "missed-checkin",

@@ -106,6 +106,9 @@ export async function addTraveller(
     added_by: args.addedBy,
   });
   if (ins.error) return { ok: false, error: "That name would not save. Try again." };
+  // One more person is one more passport owed, so a confirmed trip may not be.
+  const { applyBookingStatus } = await import("~/lib/booking-status.server");
+  await applyBookingStatus(admin, args.bookingId);
   return { ok: true, message: `${name} added.` };
 }
 
@@ -180,6 +183,8 @@ export async function removeTraveller(
   if (left.length > 0 && !left.some((x: any) => x.is_lead)) {
     await admin.from("booking_travellers").update({ is_lead: true }).eq("id", left[0].id);
   }
+  const { applyBookingStatus } = await import("~/lib/booking-status.server");
+  await applyBookingStatus(admin, args.bookingId);
   return { ok: true, message: `${(t as any).full_name} removed.` };
 }
 

@@ -9,6 +9,7 @@ import { outstandingUsdCents } from "~/lib/group-pay";
 import { missedRunEndingAt, needsWelfareCheck } from "~/lib/checkin";
 import type { StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
+import { applyBookingStatus } from "~/lib/booking-status.server";
 
 function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -812,9 +813,12 @@ export async function runBalanceSweep(
     if (owed === 0 && b.total_usd_cents > 0) {
       await admin
         .from("bookings")
-        .update({ balance_paid_at: new Date().toISOString(), status: "docs_pending" })
+        .update({ balance_paid_at: new Date().toISOString() })
         .eq("id", b.id)
         .is("balance_paid_at", null);
+      // The status follows from the facts rather than being named here: the
+      // trip may now be confirmed, or still waiting on a passport.
+      await applyBookingStatus(admin, b.id, todayIso);
       settled++;
       continue;
     }
@@ -846,8 +850,9 @@ export async function runBalanceSweep(
         });
         await admin
           .from("bookings")
-          .update({ balance_paid_at: new Date().toISOString(), status: "docs_pending" })
+          .update({ balance_paid_at: new Date().toISOString() })
           .eq("id", b.id);
+        await applyBookingStatus(admin, b.id, todayIso);
         charged++;
         if (env) {
           const { notifyBalanceCharged } = await import("~/lib/notifications.server");
@@ -918,9 +923,10 @@ async function sweepInstalments(
   if ((remaining ?? 0) === 0) {
     await admin
       .from("bookings")
-      .update({ balance_paid_at: new Date().toISOString(), status: "docs_pending" })
+      .update({ balance_paid_at: new Date().toISOString() })
       .eq("id", booking.id)
       .is("balance_paid_at", null);
+    await applyBookingStatus(admin, booking.id, todayIso);
   }
   return n;
 }
@@ -1027,4 +1033,42 @@ export async function approveProposal(
   }
 
   return bookingId;
+}
+
+/**
+ * Walk every live trip's status back past its own facts.
+ *
+ * `active` and `completed` are the two statuses no event produces: nothing
+ * happens on the morning a trek starts, so until now the only thing that ever
+ * wrote `active` was an ops drag on the kanban — which is why a trek on the
+ * trail today could sit in "confirmed" for a fortnight and a finished one
+ * stayed there until somebody noticed.
+ *
+ * Runs daily alongside the other sweeps. It only ever writes when the answer
+ * has changed, and it never touches a cancelled booking.
+ */
+export async function runStatusSweep(
+  admin: SupabaseClient,
+  todayIso: string,
+): Promise<{ checked: number; moved: Array<{ id: string; status: string }> }> {
+  const { data: live } = await admin
+    .from("bookings")
+    .select("id, status")
+    .in("status", ["deposit_paid", "docs_pending", "confirmed", "active"]);
+
+  const moved: Array<{ id: string; status: string }> = [];
+  for (const b of live ?? []) {
+    const res = await applyBookingStatus(admin, (b as any).id, todayIso, {
+      forwardOnly: true,
+    });
+    if (res.changed) moved.push({ id: (b as any).id, status: String(res.status) });
+    // A trek that just finished owes a payout row and a recap, the same way
+    // it would if the guide had closed it from the app.
+    if (res.changed && res.status === "completed") {
+      const { createRecap } = await import("~/lib/reviews.server");
+      await createRecap(admin, (b as any).id);
+      await createPayoutForBooking(admin, (b as any).id);
+    }
+  }
+  return { checked: (live ?? []).length, moved };
 }

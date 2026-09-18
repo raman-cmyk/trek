@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cleanReason, rejectionProblem } from "~/lib/doc-review";
-import { documentsComplete } from "~/lib/travellers";
 import { GUIDE_DOC_KINDS, type GuideDocKind } from "~/lib/guide-documents";
 
 const BUCKET = "documents";
@@ -214,64 +213,33 @@ export async function rejectDocument(
     .select("booking_id, person_name, type")
     .single();
   if (!doc) return { bookingId: null, personName: null, type: null };
+  // A confirmed trip whose passport has just been sent back is not confirmed
+  // any more, and nothing used to notice: `confirmIfDocsComplete` fired from
+  // verifying alone, never from rejecting.
+  const { applyBookingStatus } = await import("~/lib/booking-status.server");
+  await applyBookingStatus(admin, doc.booking_id);
   return { bookingId: doc.booking_id, personName: doc.person_name, type: doc.type };
 }
 
 /**
- * Confirm a booking once every traveller's papers are in and the balance is
- * paid (the confirmed state means "balance paid + insurance verified",
- * docs/03). The permit-application trigger fires on this transition.
+ * Re-derive this booking's status after a document changed.
  *
- * "Every traveller's" is the fix. This used to ask `docsSettled(docs)`, which
- * was `at least one live document and all of them verified` — no document
- * type, no head count — so a party of six with one verified passport and no
- * insurance at all was confirmed, and the permits went in behind it.
+ * It used to work out the answer itself — papers complete, balance settled,
+ * write "confirmed" — which made it the only re-evaluation in the codebase
+ * and the only one that noticed. A booking that became complete any other way
+ * (a payment settling, a traveller added, a rejection lifted) never did.
+ *
+ * Now it asks `applyBookingStatus`, which reads the same facts for every
+ * caller. Returns whether the booking is now confirmed or past it, which is
+ * what the callers use to decide whether to send the confirmation email.
  */
 export async function confirmIfDocsComplete(
   admin: SupabaseClient,
   bookingId: string,
 ): Promise<boolean> {
-  const { data: docs } = await admin
-    .from("booking_documents")
-    .select("verified_at, rejected_at, traveller_id, type")
-    .eq("booking_id", bookingId);
-  const { data: travellers } = await admin
-    .from("booking_travellers")
-    .select("id, full_name, is_lead")
-    .eq("booking_id", bookingId);
-
-  const { data: b } = await admin
-    .from("bookings")
-    .select("status, balance_paid_at, deposit_usd_cents, total_usd_cents, party_size")
-    .eq("id", bookingId)
-    .single();
-  if (!b) return false;
-
-  // Rejected documents are out of the reckoning: an upload inserts a new row
-  // rather than replacing the old one, so counting a rejection would keep the
-  // booking unconfirmable no matter what the trekker sent afterwards.
-  if (
-    !documentsComplete({
-      travellers: travellers ?? [],
-      docs: docs ?? [],
-      partySize: b.party_size ?? 1,
-    })
-  ) {
-    return false;
-  }
-
-  // Require the balance to be settled (deposit == total counts as paid-in-full).
-  const balanceSettled =
-    !!b.balance_paid_at || b.deposit_usd_cents >= b.total_usd_cents;
-  if (!balanceSettled) return false;
-  if (["confirmed", "active", "completed"].includes(b.status)) return true;
-
-  await admin
-    .from("bookings")
-    .update({ status: "confirmed" })
-    .eq("id", bookingId)
-    .in("status", ["deposit_paid", "docs_pending"]);
-  return true;
+  const { applyBookingStatus } = await import("~/lib/booking-status.server");
+  const { status } = await applyBookingStatus(admin, bookingId);
+  return ["confirmed", "active", "completed"].includes(String(status));
 }
 
 /** Delete documents 90 days after trek completion (retention sweep, docs/02). */

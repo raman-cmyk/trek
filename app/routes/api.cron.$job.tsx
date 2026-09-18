@@ -1,7 +1,12 @@
 import type { Route } from "./+types/api.cron.$job";
 import { getEnv, createAdminClient } from "~/lib/supabase.server";
 import { getStripe } from "~/lib/stripe.server";
-import { runEnquiryExpirySweep, runBalanceSweep, runMissedCheckinSweep } from "~/lib/booking.server";
+import {
+  runEnquiryExpirySweep,
+  runBalanceSweep,
+  runMissedCheckinSweep,
+  runStatusSweep,
+} from "~/lib/booking.server";
 import { runDocumentRetentionSweep } from "~/lib/documents.server";
 import { releaseStaleReviews } from "~/lib/reviews.server";
 
@@ -27,6 +32,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       break;
     case "balance-sweep":
       result = await runBalanceSweep(admin, getStripe(env), today, env);
+      break;
+    // `active` and `completed` are the two statuses nothing else produces —
+    // no event happens on the morning a trek starts (0104).
+    case "status-sweep":
+      result = await runStatusSweep(admin, today);
       break;
     case "document-retention":
       result = await runDocumentRetentionSweep(admin, today);
