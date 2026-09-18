@@ -166,10 +166,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ error: "Could not send your request." }, { status: 400, headers });
   }
 
-  // The guide hears about it immediately (SMS — many guides have no email).
+  // The guide hears about it immediately — in the app, and by SMS where we
+  // have a number. The in-app half is the one that actually arrives today.
   const { notifyNewEnquiry } = await import("~/lib/notifications.server");
   await notifyNewEnquiry(env, admin, {
     guideId,
+    enquiryId: enq.id,
     offeringTitle: off.title,
     startDate,
     partySize,

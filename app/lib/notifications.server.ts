@@ -14,13 +14,16 @@ async function bookingContacts(admin: SupabaseClient, bookingId: string) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, start_date, trekker:users!bookings_trekker_id_fkey(email, full_name), guide:guides!bookings_guide_id_fkey(users(email, phone, full_name)), offering:offerings(title)",
+      "id, start_date, guide_id, trekker:users!bookings_trekker_id_fkey(email, full_name), guide:guides!bookings_guide_id_fkey(users(email, phone, full_name)), offering:offerings(title)",
     )
     .eq("id", bookingId)
     .maybeSingle();
   if (!b) return null;
   return {
     startDate: b.start_date as string,
+    // `bookings.guide_id` references `guides(user_id)`, so it IS the guide's
+    // user id — which is what a notification needs and an SMS does not.
+    guideUserId: ((b as any).guide_id ?? null) as string | null,
     title: ((b as any).offering?.title ?? "your trip") as string,
     trekkerEmail: ((b as any).trekker?.email ?? null) as string | null,
     trekkerName: ((b as any).trekker?.full_name ?? "there") as string,
@@ -29,11 +32,62 @@ async function bookingContacts(admin: SupabaseClient, bookingId: string) {
   };
 }
 
+/**
+ * A booking request came in.
+ *
+ * The in-app half, which needs no API key and no phone number. This was the
+ * whole of the gap the founder reported: the only thing that happened when a
+ * request arrived was an SMS, and `sendGuideSms` is a `console.log` without
+ * `SPARROW_SMS_TOKEN` — so thirty-seven requests produced two notifications,
+ * and both of those were backfilled from an old email log.
+ */
+export async function notifyEnquiryInApp(
+  admin: SupabaseClient,
+  args: {
+    guideUserId: string;
+    enquiryId: string;
+    offeringTitle: string;
+    startDate: string;
+    partySize: number;
+  },
+) {
+  const { notifyInApp, notifyOpsInApp } = await import("~/lib/inapp.server");
+  const { opsHref } = await import("~/lib/inapp");
+  const about = { type: "enquiry", id: args.enquiryId };
+  const title = `New request: ${args.offeringTitle}`;
+  const body = `${args.startDate}, ${args.partySize} ${args.partySize === 1 ? "person" : "people"}. You have 24 hours to answer.`;
+
+  await notifyInApp(admin, {
+    userId: args.guideUserId,
+    kind: "new_enquiry",
+    title,
+    body,
+    href: "/g/enquiries",
+    about,
+  });
+  await notifyOpsInApp(admin, {
+    kind: "new_enquiry",
+    title,
+    body,
+    href: opsHref(about),
+    about,
+    // A guide who is also on the ops team already has the better link.
+    exclude: [args.guideUserId],
+  });
+}
+
 export async function notifyNewEnquiry(
   env: Env,
   admin: SupabaseClient,
-  args: { guideId: string; offeringTitle: string; startDate: string; partySize: number },
+  args: {
+    guideId: string;
+    enquiryId: string;
+    offeringTitle: string;
+    startDate: string;
+    partySize: number;
+  },
 ) {
+  await notifyEnquiryInApp(admin, { ...args, guideUserId: args.guideId });
   const { data: g } = await admin
     .from("users")
     .select("phone")
@@ -133,6 +187,48 @@ export async function notifyBalanceCharged(
     `We charged your remaining balance of $${(amountUsdCents / 100).toFixed(2)} for ${c.title} (14 days before departure, as agreed).\n${env.SITE_URL}/trips/${bookingId}`,
     { kind: "balance_charged" },
   );
+}
+
+/**
+ * A trip was cancelled — the half that needs no API key.
+ *
+ * Deliberately does NOT write the trekker's row: that one already arrives for
+ * free from the email path below, and writing it here too would double it.
+ * The guide and the office are the ones who were hearing nothing — the guide's
+ * only signal was an SMS that does not send, and the trip then vanishes from
+ * their list entirely (`g.bookings.tsx` filters cancelled out).
+ */
+export async function notifyCancelledInApp(
+  admin: SupabaseClient,
+  bookingId: string,
+  refundUsdCents: number,
+) {
+  const c = await bookingContacts(admin, bookingId);
+  if (!c) return;
+  const { notifyInApp, notifyOpsInApp } = await import("~/lib/inapp.server");
+  const { opsHref } = await import("~/lib/inapp");
+  const about = { type: "booking", id: bookingId };
+  const refund =
+    refundUsdCents > 0 ? ` A refund of $${(refundUsdCents / 100).toFixed(2)} is going back.` : "";
+
+  if (c.guideUserId) {
+    await notifyInApp(admin, {
+      userId: c.guideUserId,
+      kind: "booking_cancelled",
+      title: `Cancelled: ${c.title}`,
+      body: `${c.startDate} with ${c.trekkerName}. Your calendar is open again.`,
+      href: "/g/bookings",
+      about,
+    });
+  }
+  await notifyOpsInApp(admin, {
+    kind: "booking_cancelled",
+    title: `Cancelled: ${c.title}`,
+    body: `${c.trekkerName}, ${c.startDate}.${refund}`,
+    href: opsHref(about),
+    about,
+    exclude: c.guideUserId ? [c.guideUserId] : [],
+  });
 }
 
 export async function notifyBookingCancelled(

@@ -120,6 +120,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const { notifyNewEnquiry } = await import("~/lib/notifications.server");
   await notifyNewEnquiry(env, admin, {
     guideId: offering.guide_id,
+    enquiryId: enq.id,
     offeringTitle: offering.title,
     startDate: group.start_date,
     partySize: party,

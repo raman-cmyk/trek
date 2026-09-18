@@ -547,6 +547,12 @@ export async function cancelBooking(
     remaining -= amt;
   }
 
+  // The guide and the office are told in the app whatever else happens. This
+  // needs no API key and no phone number, and `env` here is OPTIONAL — a
+  // caller that omits it used to cancel a trip in total silence.
+  const { notifyCancelledInApp } = await import("~/lib/notifications.server");
+  await notifyCancelledInApp(admin, bookingId, outcome.refundToTrekkerUsdCents);
+
   if (env) {
     const { notifyBookingCancelled } = await import("~/lib/notifications.server");
     await notifyBookingCancelled(env, admin, bookingId, outcome.refundToTrekkerUsdCents);

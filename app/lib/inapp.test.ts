@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { badgeLabel, hrefFromBody, previewOf, shouldNotifyInApp, unreadCount, whenLabel } from "./inapp";
+import {
+  badgeLabel,
+  hrefFromBody,
+  notificationRow,
+  opsHref,
+  previewOf,
+  recipientsFor,
+  shouldNotifyInApp,
+  unreadCount,
+  whenLabel,
+} from "./inapp";
 
 const SITE = "https://guidesofnepal.com";
 
@@ -97,5 +107,96 @@ describe("whenLabel", () => {
 
   it("says nothing rather than Invalid Date", () => {
     expect(whenLabel("not a date", now)).toBe("");
+  });
+});
+
+describe("building the row", () => {
+  const base = { userId: "u1", kind: "new_enquiry", title: "New request" };
+
+  it("takes the link it was handed rather than hunting the text for one", () => {
+    const row = notificationRow({
+      ...base,
+      href: "/g/enquiries",
+      text: "Open https://guidesofnepal.com/trips/abc to see it",
+      siteUrl: "https://guidesofnepal.com",
+    });
+    expect(row?.href).toBe("/g/enquiries");
+  });
+
+  it("still finds the link in the text when nobody named one", () => {
+    const row = notificationRow({
+      ...base,
+      text: "Pay your deposit: https://guidesofnepal.com/checkout/abc",
+      siteUrl: "https://guidesofnepal.com",
+    });
+    expect(row?.href).toBe("/checkout/abc");
+  });
+
+  it("trims the title before cutting it to what the column will take", () => {
+    const row = notificationRow({ ...base, title: `   ${"x".repeat(250)}   ` });
+    expect(row?.title.length).toBe(200);
+    expect(row?.title.startsWith("x")).toBe(true);
+  });
+
+  it("refuses a title of nothing, rather than letting the database refuse it", () => {
+    // `length(btrim(title)) between 1 and 200` (0079). The old code did
+    // `subject.slice(0, 200)` with no trim, so a subject of spaces threw and
+    // the throw disappeared into a catch.
+    expect(notificationRow({ ...base, title: "   " })).toBeNull();
+    expect(notificationRow({ ...base, title: "" })).toBeNull();
+  });
+
+  it("refuses a row with nobody to send it to, or nothing to call it", () => {
+    expect(notificationRow({ ...base, userId: "" })).toBeNull();
+    expect(notificationRow({ ...base, kind: " " })).toBeNull();
+  });
+
+  it("never stores a link that leaves the site", () => {
+    expect(notificationRow({ ...base, href: "https://evil.example/x" })?.href).toBeNull();
+    expect(notificationRow({ ...base, href: "//evil.example/x" })?.href).toBeNull();
+    expect(notificationRow({ ...base, href: "/ops/pipeline" })?.href).toBe("/ops/pipeline");
+  });
+
+  it("carries what it is about, so a page can find it again", () => {
+    const row = notificationRow({ ...base, about: { type: "booking", id: "b1" } });
+    expect(row?.about_type).toBe("booking");
+    expect(row?.about_id).toBe("b1");
+  });
+});
+
+describe("where the office should land", () => {
+  it("sends them to the ops copy of a booking, not the trekker's page", () => {
+    // /notifications lets any signed-in account open a row, and /trips/:id
+    // matches on trekker_id — so the trekker link is a dead end for ops.
+    expect(opsHref({ type: "booking", id: "b1" })).toBe("/ops/bookings/b1");
+  });
+
+  it("sends them to the board for a request, which has no page of its own", () => {
+    expect(opsHref({ type: "enquiry", id: "e1" })).toBe("/ops/pipeline");
+  });
+
+  it("has nowhere to send them for a thing with no ops page", () => {
+    expect(opsHref({ type: "review", id: "r1" })).toBeNull();
+    expect(opsHref(null)).toBeNull();
+  });
+});
+
+describe("who the office is", () => {
+  it("does not tell the same person twice when a guide is also on the ops team", () => {
+    // The two rows carry different links, so they cannot be merged — the
+    // office copy is the one that goes, because the guide's is more useful.
+    expect(recipientsFor(["ops1", "guide1"], ["guide1"])).toEqual(["ops1"]);
+  });
+
+  it("collapses a duplicate id", () => {
+    expect(recipientsFor(["ops1", "ops1", "ops2"], [])).toEqual(["ops1", "ops2"]);
+  });
+
+  it("is empty when everybody has already been told", () => {
+    expect(recipientsFor(["ops1"], ["ops1"])).toEqual([]);
+  });
+
+  it("is empty when nobody is on the ops team, rather than throwing", () => {
+    expect(recipientsFor([], [])).toEqual([]);
   });
 });

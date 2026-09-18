@@ -80,6 +80,98 @@ export function previewOf(body: string, max = 160): string | null {
   return `${cut.slice(0, space > 40 ? space : max)}…`;
 }
 
+/* ── Building the row ───────────────────────────────────────────────────── */
+
+export interface NotificationDraft {
+  user_id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  about_type: string | null;
+  about_id: string | null;
+}
+
+/**
+ * The row itself, built once for both ways in: derived from an email, or
+ * written directly by something that has no email to send.
+ *
+ * Returns null rather than a row it knows the database will refuse. The title
+ * column is `length(btrim(title)) between 1 and 200` (0079), and the old code
+ * did `subject.slice(0, 200)` with no trim — so a subject of spaces threw, and
+ * the throw vanished into a catch. Refusing here says the same thing quietly
+ * and on purpose.
+ *
+ * The href is checked here rather than only at read time: `/notifications`
+ * already guards against an off-site link when it redirects, and a value that
+ * has to be re-checked every time it is read is a value that should not have
+ * been stored.
+ */
+export function notificationRow(input: {
+  userId: string;
+  kind: string;
+  title: string;
+  /** Free text. The preview is cut from it, and the link too if none is given. */
+  text?: string | null;
+  /** An in-app path. Beats anything found in the text. */
+  href?: string | null;
+  /** Only needed when the link has to be found in the text. */
+  siteUrl?: string;
+  about?: { type: string; id: string } | null;
+}): NotificationDraft | null {
+  const title = String(input.title ?? "").trim();
+  if (!title || !input.userId || !String(input.kind ?? "").trim()) return null;
+
+  const text = String(input.text ?? "");
+  const href = safeHref(input.href) ?? hrefFromBody(text, input.siteUrl ?? "");
+
+  return {
+    user_id: input.userId,
+    kind: input.kind,
+    title: title.slice(0, 200),
+    body: text ? previewOf(text) : null,
+    href,
+    about_type: input.about?.type ?? null,
+    about_id: input.about?.id ?? null,
+  };
+}
+
+/** A path on this site, or nothing. `//evil.com` is a URL, not a path. */
+function safeHref(href: string | null | undefined): string | null {
+  const h = String(href ?? "").trim();
+  if (!h.startsWith("/") || h.startsWith("//")) return null;
+  return h;
+}
+
+/**
+ * Where the office should land for a thing.
+ *
+ * The bell renders in the trekker layout and the guide layout, and
+ * `/notifications` lets any signed-in account open it — so an ops user tapping
+ * a notification that points at `/trips/:id` arrives at a page that matches on
+ * `trekker_id` and dead-ends. The office gets the same event addressed to the
+ * reader.
+ */
+export function opsHref(about: { type: string; id: string } | null | undefined): string | null {
+  if (!about) return null;
+  if (about.type === "booking") return `/ops/bookings/${about.id}`;
+  // There is no ops page for a single request; the board is where they are worked.
+  if (about.type === "enquiry") return "/ops/pipeline";
+  return null;
+}
+
+/**
+ * The office, minus anyone already told under another hat.
+ *
+ * On a team this small a guide can also hold `role='ops'`, and the two rows
+ * carry different links — so they cannot be merged, only deduped by dropping
+ * the office copy. The guide's own link is the more useful one.
+ */
+export function recipientsFor(opsUserIds: string[], alreadyTold: string[]): string[] {
+  const told = new Set(alreadyTold.filter(Boolean));
+  return [...new Set(opsUserIds.filter(Boolean))].filter((id) => !told.has(id));
+}
+
 export interface NotificationRow {
   id: string;
   kind: string;
