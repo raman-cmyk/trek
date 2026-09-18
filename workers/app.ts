@@ -40,14 +40,37 @@ function isCacheableRequest(request: Request): boolean {
   return true;
 }
 
+/**
+ * The key a page is stored under: its URL, plus the version of the Worker
+ * that rendered it.
+ *
+ * Without the version, a deploy changed the code and left every stored page
+ * alone — so a fix went live and the site kept serving the half-hour-old HTML
+ * to anyone who had not already forced a refresh. Mixing the version in means
+ * a deploy starts a fresh generation of keys; the old ones are simply never
+ * asked for again and fall out on their own.
+ *
+ * A Request, not a string, because that is what the Cache API takes. The path
+ * is a private one that no route serves.
+ */
+function cacheKeyFor(request: Request, env: Env): Request {
+  const version = (env as unknown as { CF_VERSION_METADATA?: { id?: string } })
+    .CF_VERSION_METADATA?.id;
+  if (!version) return request;
+  const url = new URL(request.url);
+  url.searchParams.set("__v", version);
+  return new Request(url.toString(), { method: "GET", headers: request.headers });
+}
+
 export default {
   async fetch(request, env, ctx) {
     // `caches.default` is Workers-only and absent from the DOM CacheStorage type.
     const cache = (caches as unknown as { default: Cache }).default;
     const cacheable = isCacheableRequest(request);
+    const key = cacheable ? cacheKeyFor(request, env) : request;
 
     if (cacheable) {
-      const hit = await cache.match(request);
+      const hit = await cache.match(key);
       if (hit) {
         // Hand the browser back the policy the route intended, not the relaxed
         // one this cache needed in order to keep the page at all.
@@ -90,7 +113,7 @@ export default {
       const forCache = new Response(response.clone().body, response);
       forCache.headers.set("cache-control", `public, max-age=${sMaxAge}`);
       forCache.headers.set("x-worker-cache", "HIT");
-      ctx.waitUntil(cache.put(request, forCache));
+      ctx.waitUntil(cache.put(key, forCache));
 
       const stored = new Response(response.body, response);
       stored.headers.set("x-worker-cache", "MISS");
