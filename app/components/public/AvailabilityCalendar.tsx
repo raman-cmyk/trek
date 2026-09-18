@@ -30,6 +30,7 @@ export function AvailabilityCalendar({
   value,
   onPick,
   guideName,
+  requestedDays,
 }: {
   openDays: string[];
   /** First-of-month ISO anchor (yyyy-mm-01) computed on the server. */
@@ -55,8 +56,19 @@ export function AvailabilityCalendar({
    * it should have his name on it.
    */
   guideName?: string;
+  /**
+   * Days this trekker has already asked for and not yet heard back about.
+   *
+   * It comes from the request, not from the calendar, and it has to: an open
+   * request holds nothing. Two people can ask for the same fortnight and the
+   * guide picks — so these days are still genuinely free, and marking them
+   * taken would be a lie. This says "you asked", which is the only thing
+   * that is true.
+   */
+  requestedDays?: string[];
 }) {
   const open = new Set(openDays);
+  const asked = new Set(requestedDays ?? []);
   const picking = !!select && !!onPick;
   const tripDays = Math.max(1, Math.floor(days || 1));
   const start = value?.start ?? null;
@@ -118,6 +130,15 @@ export function AvailabilityCalendar({
         : "text-ink-soft/45 line-through decoration-ink-soft/40",
     );
 
+  /**
+   * Asked for, waiting on an answer.
+   *
+   * Outlined rather than filled, with a dotted ring, so it is told apart from
+   * "your dates" — which is a solid bar — without asking anyone to
+   * distinguish two shades. Never colour alone, same rule as the rest.
+   */
+  const askedCls = "rounded border border-dashed border-pine/70 bg-pine/10 py-1 font-medium text-pine";
+
   const [y0, m0] = monthsFrom.split("-").map(Number);
   const months = Array.from({ length: Math.max(monthCount, 1) }, (_, offset) => {
     const d = new Date(Date.UTC(y0, m0 - 1 + offset, 1));
@@ -161,6 +182,14 @@ export function AvailabilityCalendar({
             Your dates
           </li>
         )}
+        {asked.size > 0 && (
+          <li className="flex items-center gap-2">
+            <span aria-hidden="true" className={cn(askedCls, "w-7 text-center text-xs")}>
+              12
+            </span>
+            You asked — waiting
+          </li>
+        )}
       </ul>
 
       <div className={cn("grid gap-6", !compact && "sm:grid-cols-2")}>
@@ -190,6 +219,9 @@ export function AvailabilityCalendar({
                 const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`;
                 const isOpen = open.has(iso);
                 const isChosen = chosen.has(iso);
+                // Chosen wins: they are looking at dates they are picking
+                // right now, which is newer than a request they sent before.
+                const isAsked = !isChosen && asked.has(iso);
                 const canPick = picking && isOpen && startable(iso);
 
                 // Painted as chosen: the whole walk, not just the day pressed.
@@ -206,7 +238,7 @@ export function AvailabilityCalendar({
                   // Taller when it is something you tap: a 22px row is a fine
                   // thing to read and a poor thing to hit with a thumb.
                   picking ? "py-2" : "py-1",
-                  isChosen ? chosenCls : dayCls(isOpen),
+                  isChosen ? chosenCls : isAsked ? askedCls : dayCls(isOpen),
                   canPick && !isChosen && "cursor-pointer hover:bg-accent/30",
                   // Free, but no trip of this length fits from here. Shown as
                   // free-but-dimmed rather than hidden: the guide IS free, and
@@ -215,7 +247,9 @@ export function AvailabilityCalendar({
                 );
 
                 const who = guideName ?? "the guide";
-                const why = !isOpen
+                const why = isAsked
+                  ? `You asked ${who} about this day — waiting on their answer`
+                  : !isOpen
                   ? `${who} is booked`
                   : select === "span" && !startable(iso)
                     ? `The trip would run into ${labelOf(firstTakenDay(iso, tripDays, open))}, when ${who} is booked`

@@ -20,6 +20,7 @@ import {
   monthInView,
   monthStart,
   shiftMonth,
+  spanDays,
   spanEnd,
 } from "~/lib/date-span";
 
@@ -112,11 +113,14 @@ function DatePick({
   availableDays,
   day,
   setDay,
+  requestedDays,
 }: {
   o: BookingWidgetOffering;
   availableDays: string[];
   day: string;
   setDay: (d: string) => void;
+  /** Days already asked about and not yet answered. */
+  requestedDays?: string[];
 }) {
   const days = Math.max(1, o.days || 1);
 
@@ -188,6 +192,7 @@ function DatePick({
         select="span"
         days={days}
         value={{ start: day || null, end: end || null }}
+        requestedDays={requestedDays}
         onPick={(next) => next.start && setDay(next.start)}
       />
 
@@ -279,6 +284,20 @@ function ConfigBody({
         standing?.bookingStatus ?? null,
         o.guide_first_name,
       );
+
+  /**
+   * The days they already asked about, marked on the calendar.
+   *
+   * Only while the request is genuinely live. Once the guide accepts, those
+   * days become `held` in availability and drop out of `openDays` anyway; and
+   * a request that ended — declined, expired, cancelled — is not something to
+   * keep drawing on a calendar somebody is trying to pick new dates on.
+   */
+  const requestedDays =
+    standing && (standing.status === "open" || standing.status === "quoted")
+      ? spanDays(standing.startDate, o.days || 1)
+      : undefined;
+
   return (
     <div className="space-y-4">
       <DatePick
@@ -286,6 +305,7 @@ function ConfigBody({
         availableDays={availableDays}
         day={day}
         setDay={setDay}
+        requestedDays={requestedDays}
       />
 
       <div className="flex items-center justify-between">
