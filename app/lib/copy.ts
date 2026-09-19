@@ -69,6 +69,34 @@ export const copy = {
         "Your page is not shown to anyone until you list one trip.",
       listOneTrip: "List a trip →",
     },
+    // Where a guide's wages go. Plain words: this is money, it is read on a
+    // phone, and for most guides it is a third language.
+    payout: {
+      title: "Where your money goes",
+      lede:
+        "We pay you in Nepali rupees, by hand, within 7 days of each trek ending. "
+        + "Tell us where to send it.",
+      methodLabel: "How you want to be paid",
+      methodBlank: "Choose one",
+      nameLabel: "Name on the account",
+      nameHint: "Exactly as your bank or wallet has it.",
+      bankLabel: "Which bank",
+      branchLabel: "Which branch",
+      qrTitle: "Your QR",
+      qrLede:
+        "A photo of your eSewa, Khalti or bank QR. Only our office can open it — "
+        + "it is never shown on your public page.",
+      qrReplace: "Replace it",
+      qrAdd: "Add your QR",
+      qrNone: "No QR yet.",
+      panTitle: "PAN number",
+      panLede:
+        "Your tax number, if you have one. Nothing waits on this — we pay you "
+        + "either way. We ask only because the office needs it at year end.",
+      ready: "We know where to send your money.",
+      notReady: "We cannot pay you yet",
+      saved: "Saved.",
+    },
   },
   empty: {
     noEnquiries:

@@ -3393,3 +3393,58 @@ Cloudflare tokens supplied turned out to be invalid against Cloudflare's own
 verify endpoint (they came from a screenshot, and `O`/`0` and `l`/`1` are not
 distinguishable in that font); the one from earlier in the conversation, in
 text, worked.
+
+---
+
+## Session — guide money (items 14 and 1b)
+
+### What the database said before anything was written
+
+- 12 payouts, **all `payable`, none ever `paid`** — about ₨896,000 owed across
+  8 guides.
+- **Not one of those 8 had a `payout_account` check row.** 8 such rows exist
+  in the whole database and none belongs to anyone owed money.
+- **0 `payout_proof` documents**, because no guide has ever been able to
+  upload anything: `uploadGuideDocument` had one caller and it was an ops route.
+- 4 of 56 guides with no payout method, 5 with no account number, 5 with no
+  name on the account.
+- `/ops/payouts`, the screen that pays people, selected `method` and nothing
+  else — no account, no name.
+
+### Built
+
+- **`app/lib/payout.ts`** (21 tests) — the plain-English predicates both the
+  guide's page and the ops ledger read from.
+- **`/g/payout`** — method with a real blank option, the number labelled for
+  the method chosen, bank + branch when it is a bank, the name on the account,
+  the QR, and (verified only) a PAN. Blank clears; switching to a wallet nulls
+  the bank fields.
+- **`/g/doc/:docId`** — a guide opens their own paper. Signed for ten minutes,
+  logged as `guide_self`, 404 for anything that is not theirs.
+- **`/ops/payouts`** — every payable row now shows the full payment
+  instruction, what is missing, whether the account was ever checked, and the
+  QR. Rows we cannot pay are not ticked. Its silent read and silent write are
+  gone, and it is **out of both `ops-pages.test.ts` allowlists**.
+- **`g.profile.tsx`** keeps the day rate and loses the payout fields — a price
+  belongs with the profile, a payment instruction with the money.
+- **0112** — `payout_bank_name`, `payout_branch`, `pan_number`; `pan_card`
+  added to the document kinds; an index for the newest QR per guide.
+
+### Checked on the live site, not just locally
+
+- A bank account with no bank name is refused; a complete one saves, and the
+  bank and branch persist.
+- **A JPEG posted as `application/octet-stream` — the phone-share case — was
+  stored as `image/jpeg`.** `payout_proof` documents went 0 → 1.
+- The owner opens the QR (302 to a signed URL, one `guide_self` access-log
+  row); another guide gets 404.
+- Switching to eSewa nulled the bank name and branch.
+- PAN: letters refused, wrong length refused, nine digits accepted and the
+  check moved `not_required` → `pending`. An unverified guide sees no PAN
+  field but still gets the payout form.
+- `/ops/payouts` renders all 12 rows with their instructions — and immediately
+  surfaced that **Binod Tamang and Lakpa Sherpa have bank accounts with no
+  bank name**, three payable rows that cannot be paid as recorded.
+
+Green: 1,870 tests in 123 files, typecheck clean, build passing. Applied and
+deployed (`90764b95`).

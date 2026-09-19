@@ -626,3 +626,85 @@ And "Journeys from other guides" is gone from `/g`, as asked. It was built so
 a guide could learn what a good write-up looks like; the "Write up a trek" row
 keeps that door open without giving a guide's own admin screen over to other
 people's work.
+
+---
+
+## A guide's money gets its own screen
+
+The founder: *"Fix the guide payout bank info talking area, upload your QR
+too."*
+
+The payout fields were a card on the profile page sharing a `<Form>` with the
+day rate, under the heading "Rate & payout". One free-text box called "Payout
+account" served an eSewa number and a bank account alike, with nowhere to
+record which bank or which branch — which is most of what a Nepali transfer
+needs. Every field was skip-if-blank, so a wrong number could be overwritten
+but never cleared. The method `<select>` had no empty option, so a guide who
+had chosen nothing saw "eSewa" selected and reasonably believed it was set:
+**4 of 56 guides have no method on file, 5 have no account number and no name.**
+
+**The split is by kind, not by page length.** A day rate is a *price* and
+stays on the profile. An account number is a *payment instruction* and moves
+to `/g/payout` with the QR and the PAN. Both being one form behind one heading
+is the confusion he was pointing at.
+
+**Blank now clears**, and switching from a bank to a wallet nulls the bank
+fields rather than leaving a stale bank name attached to an eSewa number.
+
+## The guide's first upload
+
+`uploadGuideDocument` had exactly one caller and it was an ops route, so no
+guide had ever uploaded anything: a guide proving their wallet WhatsApped a
+screenshot to the office and somebody there filed it. **There were 0
+`payout_proof` documents in the database.**
+
+Reused rather than rebuilt: the private `documents` bucket, the existing
+`payout_proof` kind (0048), `signedGuideDocumentUrl`'s ten-minute links and
+access log. Two things added from the `api.avatar` / `api.journal-photo`
+precedent, because `uploadGuideDocument` validates on `file.type` and that is
+**routinely empty for a screenshot shared out of another app** — which is
+exactly what a payout QR is:
+
+- the bytes are sniffed (`sniffImage`) and the file handed on with a type that
+  matches them, so the stored object and its content type always agree;
+- JPEGs go through `stripGps`, because a QR is photographed at home.
+
+Verified against production: a JPEG posted as `application/octet-stream` was
+stored as `image/jpeg`.
+
+**A guide can read their own papers back.** `/g/doc/:docId` is the ops route's
+twin — signed URL, redirect not a rendered link (rule 9), access log — with
+one rule of its own: the row must belong to the guide asking, and a document
+that is not theirs answers 404 exactly as a missing one does, so the endpoint
+cannot be used to discover which ids exist.
+
+## The payout ledger shows where the money goes
+
+`/ops/payouts` is the screen where a person types a number into a banking app.
+It showed the guide's name, the trek, the amount, and the word "esewa" —
+nothing else. Whoever ran the batch opened each guide's profile in another tab
+to find the account, for every line. **Twelve payouts outstanding, none ever
+marked paid**, which is not a coincidence.
+
+Each row now carries the full instruction, what is missing from it, whether
+anybody has ever checked it, and a link to the QR. A row we cannot pay is not
+ticked by default — default-checking one is how a batch gets marked paid that
+never went out.
+
+It found two immediately: **Binod Tamang and Lakpa Sherpa hold `bank` accounts
+with no bank name**, three payable rows between them, unpayable as recorded.
+
+**Checks are created by the guide, not by a backfill.** Not one of the eight
+guides owed money had a `payout_account` check row at all — the rows are made
+at application time and these guides predate it. Submitting details or a QR
+now creates the row as `pending`, so the office's job appears because somebody
+did something, rather than dropping fifty pending items into the queue at once.
+
+## PAN, finally wired to something
+
+`AFTER_VERIFIED` was added with `0109` and read by nothing, so the second half
+of *"let them only be able to add that after being verified"* did not exist. A
+verified guide now sees a PAN field on the money page — where a tax number
+belongs — validated as nine digits, and blocking nothing. Supplying one moves
+the check off the `not_required` that 0109 left it at; clearing it does not
+drag the office back into reviewing something that is no longer there.

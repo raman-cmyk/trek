@@ -6,6 +6,7 @@ import { requireUser } from "~/lib/auth.server";
 import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { Badge } from "~/components/ops/ui";
+import { payoutProblems, payoutReady } from "~/lib/payout";
 
 /**
  * The money page, answering the question a guide actually plans a life
@@ -27,7 +28,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
 
-  const [{ data: payouts }, { data: upcoming }] = await Promise.all([
+  const [{ data: payouts }, { data: upcoming }, { data: guide }] = await Promise.all([
     admin
       .from("payouts")
       .select(
@@ -45,13 +46,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .eq("guide_id", user.id)
       .in("status", ["deposit_paid", "docs_pending", "confirmed", "active"])
       .order("start_date"),
+    // Where the money is meant to go. Three tiles of rupees mean nothing if
+    // nobody knows the account to send them to — and four guides on file have
+    // never chosen a method at all.
+    admin
+      .from("guides")
+      .select(
+        "payout_method, payout_account, payout_account_name, payout_bank_name",
+      )
+      .eq("user_id", user.id)
+      .single(),
   ]);
 
-  return data({ payouts: payouts ?? [], upcoming: upcoming ?? [] }, { headers });
+  return data(
+    { payouts: payouts ?? [], upcoming: upcoming ?? [], guide },
+    { headers },
+  );
 }
 
 export default function GuideEarnings({ loaderData }: Route.ComponentProps) {
-  const { payouts, upcoming } = loaderData as any;
+  const { payouts, upcoming, guide } = loaderData as any;
+  const where = {
+    method: guide?.payout_method,
+    account: guide?.payout_account,
+    accountName: guide?.payout_account_name,
+    bankName: guide?.payout_bank_name,
+  };
+  const ready = payoutReady(where);
   const payable = payouts.filter((p: any) => p.status === "payable");
   const paid = payouts.filter((p: any) => p.status === "paid");
 
@@ -78,6 +99,30 @@ export default function GuideEarnings({ loaderData }: Route.ComponentProps) {
       <p className="rounded-photo bg-surface p-3 text-sm text-ink-soft">
         {copy.guide.earningsExplainer} Paid within 7 days of each trek ending.
       </p>
+
+      {/* Where it goes. Loud when we cannot pay them, quiet when we can —
+          a guide should learn that their account is missing here, on the
+          money page, and not by wondering why nothing arrived. */}
+      <Link
+        to="/g/payout"
+        className={
+          ready
+            ? "flex items-center justify-between gap-3 rounded-photo border border-border bg-card p-4"
+            : "flex items-center justify-between gap-3 rounded-photo border border-ember/40 bg-ember/5 p-4"
+        }
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-ink">
+            {copy.guide.payout.title}
+          </span>
+          <span className="mt-0.5 block text-caption text-ink-soft">
+            {ready ? copy.guide.payout.ready : payoutProblems(where).join(" ")}
+          </span>
+        </span>
+        <span aria-hidden className="shrink-0 text-primary">
+          →
+        </span>
+      </Link>
 
       {/* ── The season ahead ─────────────────────────────────────────────── */}
       {upcoming.length > 0 && (

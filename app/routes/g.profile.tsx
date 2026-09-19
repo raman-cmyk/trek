@@ -142,18 +142,14 @@ export async function action({ request, context }: Route.ActionArgs) {
     const dayRate = Number(form.get("day_rate_usd") ?? 0);
     const patch: Record<string, unknown> = {};
     if (dayRate > 0) patch.day_rate_usd_cents = Math.round(dayRate * 100);
-    const method = String(form.get("payout_method") ?? "");
-    if (["esewa", "khalti", "bank"].includes(method)) patch.payout_method = method;
-    const acct = String(form.get("payout_account") ?? "").trim();
-    if (acct) patch.payout_account = acct;
-    // The name the account is held in. Payouts are made by hand in NPR, and a
-    // number without a name is the single most common reason one bounces.
-    const acctName = String(form.get("payout_account_name") ?? "").trim();
-    if (acctName) patch.payout_account_name = acctName;
+    // The payout fields used to be written here too, and skip-if-blank, so a
+    // guide could overwrite a wrong account number but never clear it. They
+    // live on /g/payout now, which validates them together and lets blank mean
+    // blank.
     if (Object.keys(patch).length) {
       const saved = await write(
         admin.from("guides").update(patch).eq("user_id", user.id),
-        "your rate and payout details",
+        "your day rate",
       );
       if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
     }
@@ -965,10 +961,14 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         </Form>
       </section>
 
-      {/* Guide-editable commercial fields */}
+      {/* What you charge. Where your money GOES lives on /g/payout — a day
+          rate is a price and belongs with the profile; an account number is a
+          payment instruction and belongs with the money. Having both here, in
+          one form, behind the words "Rate & payout", is the confusion the
+          founder described. */}
       <Form method="post" className="space-y-3 rounded-card border border-border bg-card p-4">
         <input type="hidden" name="intent" value="commercial" />
-        <p className="text-sm font-medium text-ink">Rate & payout</p>
+        <p className="text-sm font-medium text-ink">Your day rate</p>
         <label className="block text-sm">
           <span className="text-ink-soft">Day rate (USD)</span>
           <input
@@ -977,39 +977,19 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
             defaultValue={guide?.day_rate_usd_cents ? guide.day_rate_usd_cents / 100 : ""}
             className="mt-1 w-full rounded-button border border-border px-3 py-2"
           />
-        </label>
-        <label className="block text-sm">
-          <span className="text-ink-soft">Payout method</span>
-          <select
-            name="payout_method"
-            defaultValue={guide?.payout_method ?? ""}
-            className="mt-1 w-full rounded-button border border-border px-3 py-2"
-          >
-            <option value="esewa">eSewa</option>
-            <option value="khalti">Khalti</option>
-            <option value="bank">Bank</option>
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="text-ink-soft">Payout account</span>
-          <input
-            name="payout_account"
-            defaultValue={guide?.payout_account ?? ""}
-            className="mt-1 w-full rounded-button border border-border px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="text-ink-soft">Name on the account</span>
-          <input
-            name="payout_account_name"
-            defaultValue={guide?.payout_account_name ?? ""}
-            placeholder="Exactly as your bank has it"
-            className="mt-1 w-full rounded-button border border-border px-3 py-2"
-          />
+          <span className="mt-0.5 block text-caption text-muted">
+            You keep all of it. Guides of Nepal adds its fee on top.
+          </span>
         </label>
         <Button type="submit" size="sm" loading={busy}>
           Save
         </Button>
+        <Link
+          to="/g/payout"
+          className="block border-t border-line pt-3 text-sm font-medium text-primary hover:underline"
+        >
+          Where your money goes — account, QR and PAN →
+        </Link>
       </Form>
 
       {/* What is left for ops. Bio and photos used to be asked for here and

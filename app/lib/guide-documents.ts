@@ -5,7 +5,7 @@
  * names, while the server validates against the same list. One place, so a
  * kind can never be offered in the form and rejected on save.
  *
- * Keep in step with the `kind` CHECK on guide_documents (migration 0048).
+ * Keep in step with the `kind` CHECK on guide_documents (0048, widened in 0112).
  */
 export const GUIDE_DOC_KINDS = [
   "licence",
@@ -16,6 +16,7 @@ export const GUIDE_DOC_KINDS = [
   "altitude_training",
   "insurance",
   "payout_proof",
+  "pan_card",
   "reference_letter",
   "other",
 ] as const;
@@ -31,6 +32,7 @@ export const GUIDE_DOC_LABELS: Record<GuideDocKind, string> = {
   altitude_training: "Altitude training",
   insurance: "Insurance",
   payout_proof: "Payout account proof",
+  pan_card: "PAN card",
   reference_letter: "Reference letter",
   other: "Other",
 };

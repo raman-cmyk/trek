@@ -99,6 +99,10 @@ export default [
     // rather than a button under the earnings.
     route("g/checkin", "routes/g.checkin.tsx"),
     route("g/earnings", "routes/g.earnings.tsx"),
+    route("g/payout", "routes/g.payout.tsx"),
+    // A guide opening one of their own papers. Ops has /ops/doc/:kind/:docId;
+    // this is the same signed-URL-and-log dance for the person it is about.
+    route("g/doc/:docId", "routes/g.doc.$docId.tsx"),
     route("g/profile", "routes/g.profile.tsx"),
     route("g/questions", "routes/g.questions.tsx"),
     route("g/messages", "routes/g.messages.tsx"),

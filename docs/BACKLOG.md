@@ -182,3 +182,16 @@ refunds and reassignments the spec spells out and nothing automates.
 product and generating a month of slots belong to the product, not to whoever
 books it first, so `EXPERIENCE_TASKS` has thirteen rows rather than fifteen.
 They come back with the slot model.
+
+**More ways to pay a guide.** `guides_payout_method_check` (0001) still allows
+only `esewa | khalti | bank`, which covers all 56 guides on file today. IME
+Pay and ConnectIPS are the obvious next two; adding either means a constraint
+migration, two `<select>`s and the `PAYOUT_METHODS` list in `app/lib/payout.ts`
+— which is now one list rather than three copies, so it is a small job when
+somebody actually asks.
+
+**Nobody can be paid from the payout screen without leaving it.** `/ops/payouts`
+shows where each guide's money goes and whether anyone has checked it, but the
+check itself is still passed from `/ops/people/:id`. Passing it in place would
+close the loop; it was left out because approving a payout account is a money
+decision and deserves its own thought about who may make it.
