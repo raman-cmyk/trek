@@ -29,6 +29,13 @@ export interface StripeClient {
     bookingId: string;
     customerEmail?: string;
     saveCard: boolean;
+    /**
+     * What this money is. Written onto the intent so the webhook can tell a
+     * booking's deposit from one group member's share — both carry the same
+     * booking id, and treating a share as a deposit confirms a whole trip on
+     * one person's payment.
+     */
+    purpose?: "deposit" | "share";
   }): Promise<DepositIntent>;
   /**
    * The intent as Stripe currently sees it.
@@ -138,6 +145,7 @@ class MockStripe implements StripeClient {
     amountUsdCents: number;
     bookingId: string;
     saveCard: boolean;
+    purpose?: "deposit" | "share";
   }): Promise<DepositIntent> {
     const id = rand("pi_mock");
     return {
@@ -187,11 +195,13 @@ class RealStripe implements StripeClient {
     bookingId: string;
     customerEmail?: string;
     saveCard: boolean;
+    purpose?: "deposit" | "share";
   }): Promise<DepositIntent> {
     const pi = await this.post("payment_intents", {
       amount: String(args.amountUsdCents),
       currency: "usd",
       "metadata[booking_id]": args.bookingId,
+      "metadata[purpose]": args.purpose ?? "deposit",
       ...(args.saveCard ? { setup_future_usage: "off_session" } : {}),
     });
     return {

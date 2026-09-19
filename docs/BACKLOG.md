@@ -195,3 +195,17 @@ shows where each guide's money goes and whether anyone has checked it, but the
 check itself is still passed from `/ops/people/:id`. Passing it in place would
 close the loop; it was left out because approving a payout account is a money
 decision and deserves its own thought about who may make it.
+
+**A group member's share has no backstop if the browser dies mid-payment.**
+The deposit has one: Stripe's `payment_intent.succeeded` webhook calls
+`fulfillDeposit`, so a card that cleared is honoured even if the tab closed
+before the page told the server. A share has nothing equivalent — it is
+credited only by the action behind the group payment form, because crediting
+one properly needs the member, the group's payment mode and the share
+arithmetic (`depositShares`/`shareState`), none of which the webhook has. The
+webhook now deliberately ignores share intents (`shouldFulfilDeposit`), since
+the alternative was worse: it used to read their booking id and mark the whole
+trip paid on one person's money. Closing this means giving the webhook enough
+context to credit a share, most cheaply by writing `group_member_id` into the
+intent's metadata alongside `purpose`. Nobody has lost a share yet because no
+real payment has ever been taken.

@@ -5,6 +5,7 @@ import {
   isPaid,
   outcomeOfStatus,
   payErrorMessage,
+  shouldFulfilDeposit,
 } from "./card-payment";
 
 describe("what a payment status means", () => {
@@ -99,5 +100,35 @@ describe("what a failed payment says", () => {
     expect(m).toContain("not been charged");
     expect(payErrorMessage({ message: "   " })).toBe(m);
     expect(payErrorMessage(undefined)).toBe(m);
+  });
+});
+
+describe("which succeeded payments may confirm a booking", () => {
+  it("fulfils a deposit", () => {
+    expect(shouldFulfilDeposit({ booking_id: "b1", purpose: "deposit" })).toBe(true);
+  });
+
+  it("refuses a group member's share, which would confirm the trip for everyone", () => {
+    // Eight people, one of them pays their share, and the booking is marked
+    // paid. The other seven are never asked. This is the whole reason the
+    // purpose is written onto the intent.
+    expect(shouldFulfilDeposit({ booking_id: "b1", purpose: "share" })).toBe(false);
+  });
+
+  it("treats an intent made before purpose existed as the deposit it was", () => {
+    expect(shouldFulfilDeposit({ booking_id: "b1" })).toBe(true);
+    expect(shouldFulfilDeposit({ booking_id: "b1", purpose: "" })).toBe(true);
+    expect(shouldFulfilDeposit({ booking_id: "b1", purpose: null })).toBe(true);
+  });
+
+  it("does nothing at all without a booking to fulfil", () => {
+    expect(shouldFulfilDeposit({ purpose: "deposit" })).toBe(false);
+    expect(shouldFulfilDeposit({ booking_id: "" })).toBe(false);
+    expect(shouldFulfilDeposit(null)).toBe(false);
+    expect(shouldFulfilDeposit(undefined)).toBe(false);
+  });
+
+  it("ignores a booking id that is not a string, whatever Stripe sent", () => {
+    expect(shouldFulfilDeposit({ booking_id: 12 as unknown as string })).toBe(false);
   });
 });

@@ -111,6 +111,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       amountUsdCents: mine.outstandingUsdCents,
       bookingId: booking.id,
       saveCard: false,
+      // One person's share, not the booking's deposit. The webhook reads this.
+      purpose: "share",
     });
     intent = {
       paymentIntentId: created.paymentIntentId,

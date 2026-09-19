@@ -116,3 +116,34 @@ export function payErrorMessage(err: { message?: string | null } | null | undefi
   if (m) return m;
   return "The payment could not be completed. Your card has not been charged — please try again.";
 }
+
+/* ── Which payments the webhook may act on ──────────────────────────────── */
+
+/**
+ * Should `payment_intent.succeeded` fulfil a booking's deposit?
+ *
+ * Every intent this application creates carries the booking id, including the
+ * one a single member of a group pays their own share with. The webhook read
+ * that id and called fulfillDeposit, which marks the WHOLE booking paid — so
+ * the first person in a group of eight to pay their share would have confirmed
+ * the trip for all of them, and the other seven would never be asked.
+ *
+ * It has never happened because the webhook refuses to run without real Stripe
+ * keys, and there have never been any. It would have started happening on the
+ * day they were added, which is the day this is being written.
+ *
+ * The browser is not a defence here. Stripe delivers the webhook the moment
+ * the card clears, while the page is still handing its form to the server, so
+ * "the share is recorded by then" is a race rather than a guarantee.
+ *
+ * Intents made before `purpose` existed are treated as deposits, which is what
+ * they were — at the time nothing else created one.
+ */
+export function shouldFulfilDeposit(
+  metadata: Record<string, unknown> | null | undefined,
+): boolean {
+  const bookingId = metadata?.booking_id;
+  if (typeof bookingId !== "string" || !bookingId) return false;
+  const purpose = metadata?.purpose;
+  return purpose === undefined || purpose === null || purpose === "" || purpose === "deposit";
+}

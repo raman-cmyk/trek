@@ -2,6 +2,7 @@ import type { Route } from "./+types/api.webhooks.stripe";
 import { getEnv, createAdminClient } from "~/lib/supabase.server";
 import { getStripe } from "~/lib/stripe.server";
 import { fulfillDeposit } from "~/lib/booking.server";
+import { shouldFulfilDeposit } from "~/lib/card-payment";
 
 // Stripe webhook (docs/02). Deposit success → booking deposit_paid + calendar
 // booked + notifications. Idempotent via fulfillDeposit.
@@ -24,10 +25,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (event.type === "payment_intent.succeeded") {
     const pi = event.data.object;
-    const bookingId = pi.metadata?.booking_id;
-    if (bookingId) {
+    // A group member's share carries the same booking id as the deposit does.
+    // Fulfilling on one would confirm the whole trip for everybody — see
+    // shouldFulfilDeposit. Shares are credited by the group payment action.
+    if (shouldFulfilDeposit(pi.metadata)) {
       const admin = createAdminClient(env);
-      await fulfillDeposit(admin, bookingId, pi.id);
+      await fulfillDeposit(admin, pi.metadata!.booking_id as string, pi.id);
     }
   }
   return new Response(JSON.stringify({ received: true }), {
