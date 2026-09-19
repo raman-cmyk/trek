@@ -1,5 +1,6 @@
-import { Form, NavLink, Outlet, data } from "react-router";
+import { Form, Link, NavLink, Outlet, data } from "react-router";
 import type { Route } from "./+types/ops";
+import { BRAND, LEGAL_ENTITY } from "~/lib/brand";
 import { cn } from "~/lib/cn";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { isSuperAdmin } from "~/lib/super-admin";
@@ -106,9 +107,15 @@ export default function OpsLayout({ loaderData }: Route.ComponentProps) {
     <div className="min-h-screen bg-surface text-ink">
       <div className="flex">
         <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-border bg-card">
+          {/* "Trek Ops" was the last visible pre-rename wordmark in the UI —
+              the exact thing app/lib/brand.ts exists to have eliminated. And,
+              like the guide shell, it was inert: no way back to the dashboard
+              from any of the thirty screens under it. */}
           <div className="border-b border-border px-4 py-4">
-            <p className="font-display text-lg">Trek Ops</p>
-            <p className="text-xs text-ink-soft">Grey Floor</p>
+            <Link to="/ops" className="block">
+              <span className="font-display text-lg text-ink">{BRAND}</span>
+              <span className="block text-xs text-ink-soft">Ops · {LEGAL_ENTITY}</span>
+            </Link>
           </div>
           {/* The find-anybody box. GET, so a search is a URL that can be
               shared with whoever is on shift. */}

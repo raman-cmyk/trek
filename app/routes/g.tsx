@@ -1,5 +1,6 @@
 import { Form, Link, NavLink, Outlet, data } from "react-router";
 import type { Route } from "./+types/g";
+import { BRAND } from "~/lib/brand";
 import { cn } from "~/lib/cn";
 import { checkinIsDue, needsClosing, trekDay } from "~/lib/checkin";
 import { getEnv } from "~/lib/supabase.server";
@@ -130,7 +131,15 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
-        <span className="font-display text-lg">Guides of Nepal</span>
+        {/* A wordmark is a way home. This was a plain <span> — inert — so a
+            guide three steps into the experience editor had the browser's
+            back button and nothing else. The same bug was fixed once for the
+            sign-in screens (AuthSplit) and both dashboard shells were missed.
+            It goes to /g rather than to the public site: a guide tapping it
+            wants their own trips, not the marketing page. */}
+        <Link to="/g" className="font-display text-lg text-ink hover:text-moss">
+          {BRAND}
+        </Link>
         <div className="flex items-center gap-3">
           <Link
             to="/notifications"

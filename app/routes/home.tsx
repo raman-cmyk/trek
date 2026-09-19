@@ -612,6 +612,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         ]}
       />
 
+      {/* 2c — The guide's way in, near the top.
+          Measured on a phone, this page is 24 screens tall and held exactly
+          two links to /apply: one in the masthead that is `display: none`
+          below 1024px, and one twenty screens down. A guide who opened the
+          site had, in practice, no way in.
+          A line rather than the section: "Your name on the work" stays where
+          it is, after the Split, because a recruitment pitch above a trekker's
+          first guide fails the question this whole product is measured by. */}
+      <GuideStrip count={stats.guides} />
+
       {/* 2b — The fear, answered head-on.
           Everything else on this page argues the guides are good. This is the
           question underneath — fourteen days from a road with a stranger —
@@ -1047,6 +1057,35 @@ function ReviewCard({ review, lead = false }: { review: HomeReview; lead?: boole
         )}
       </figcaption>
     </figure>
+  );
+}
+
+/**
+ * One line, high up, for the other half of the marketplace.
+ *
+ * Deliberately a band and not a card: it has to be skippable by the reader
+ * this page is for, and unmissable by the one it is not. It is the first
+ * thing on the page that is addressed to a guide, and on a phone it is the
+ * first link to /apply that exists at all.
+ */
+function GuideStrip({ count }: { count: number }) {
+  return (
+    <aside className="border-y border-line bg-mist/60">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3">
+        <p className="min-w-0 text-sm text-ink-soft">
+          <span className="font-medium text-ink">Guiding in Nepal?</span> Set your own day
+          rate and keep all of it — <span className="font-mono text-ink">{count}</span> guides
+          already do.
+        </p>
+        <Link
+          to="/apply"
+          prefetch="intent"
+          className="shrink-0 whitespace-nowrap rounded-pill border border-moss px-4 py-1.5 text-sm font-medium text-moss transition-colors hover:bg-moss hover:text-paper"
+        >
+          Guide with us →
+        </Link>
+      </div>
+    </aside>
   );
 }
 

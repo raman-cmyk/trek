@@ -176,7 +176,10 @@ export function Footer({
                   ["/insurance", "Insurance checker"],
                   ["/safety", "Trust & safety"],
                   ["/fund", "The Fund"],
-                  ["/hosts", "Guide with us"],
+                  // Not "Guide with us" — the header uses those exact words
+                  // for /apply, and two links with one label and two
+                  // destinations is how a reader learns not to trust either.
+                  ["/hosts", "What you'd earn guiding"],
                 ].map(([to, label]) => (
                   <li key={to}>
                     <Link to={to} className="hover:text-fern">

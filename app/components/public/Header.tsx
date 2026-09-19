@@ -221,12 +221,16 @@ export function Header({
           ) : (
             <>
               {/* The guide side of the marketplace, in the masthead where a
-                  guide can actually find it. Hidden on phones — a trekker on
-                  a 360px screen does not need it, and a guide will scroll. */}
+                  guide can actually find it.
+                  It was `text-ink-soft` — the quietest thing in a row that
+                  also holds a filled Sign up — so the one control a guide is
+                  looking for was the one styled to be overlooked. An outline
+                  makes it an action without competing with Sign up, which is
+                  still the only filled button here. */}
               <Link
                 to="/apply"
                 prefetch="intent"
-                className="hidden rounded-pill px-3 py-1.5 text-[15px] text-ink-soft transition-colors hover:text-ink lg:inline-block"
+                className="hidden rounded-pill border border-sage px-3 py-1.5 text-[15px] text-ink transition-colors hover:border-moss hover:bg-mist lg:inline-block"
               >
                 Guide with us
               </Link>
@@ -350,14 +354,31 @@ export function Header({
               </label>
             </div>
 
+            {/* The guide's way in.
+                This was a bordered card with no arrow, no hover and no
+                prefetch, under five browse rows that all had the three — so
+                it read as a footnote and the founder's report was that he
+                could not tell where to click. It is the sixth row now, in the
+                same idiom, carrying the words he said were the clearer ones:
+                "Guide with us", which is what the laptop has always said.
+                On a phone this is the ONLY visible way to /apply above the
+                twentieth screen, so it is the one row that gets the accent. */}
             {!account && (
               <Link
                 to="/apply"
-                className="mt-6 block rounded-md border border-line bg-card p-4"
+                prefetch="intent"
+                className="mt-6 flex items-center justify-between gap-3 rounded-md border border-moss bg-mist px-4 py-4 transition-colors hover:bg-sage/25"
               >
-                <span className="block font-medium text-ink">Are you a guide?</span>
-                <span className="mt-0.5 block text-sm text-muted">
-                  Licensed guides keep their own rate. Apply in ten minutes.
+                <span className="min-w-0">
+                  <span className="block font-display text-2xl tracking-[-0.02em] text-ink">
+                    Guide with us
+                  </span>
+                  <span className="mt-0.5 block text-sm text-muted">
+                    Licensed guides keep their own rate. Apply in ten minutes.
+                  </span>
+                </span>
+                <span aria-hidden className="shrink-0 text-moss">
+                  →
                 </span>
               </Link>
             )}
