@@ -16,7 +16,7 @@ async function bookingContacts(admin: SupabaseClient, bookingId: string) {
   const { data: b } = await admin
     .from("bookings")
     .select(
-      "id, start_date, guide_id, trekker:users!bookings_trekker_id_fkey(email, full_name), guide:guides!bookings_guide_id_fkey(users(email, phone, full_name)), offering:offerings(title)",
+      "id, start_date, guide_id, trekker:users!bookings_trekker_id_fkey(id, email, full_name), guide:guides!bookings_guide_id_fkey(users(email, phone, full_name)), offering:offerings(title)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -27,6 +27,7 @@ async function bookingContacts(admin: SupabaseClient, bookingId: string) {
     // user id — which is what a notification needs and an SMS does not.
     guideUserId: ((b as any).guide_id ?? null) as string | null,
     title: ((b as any).offering?.title ?? "your trip") as string,
+    trekkerId: ((b as any).trekker?.id ?? null) as string | null,
     trekkerEmail: ((b as any).trekker?.email ?? null) as string | null,
     trekkerName: ((b as any).trekker?.full_name ?? "there") as string,
     guidePhone: ((b as any).guide?.users?.phone ?? null) as string | null,
@@ -906,4 +907,60 @@ export async function notifyPayoutsSent(env: Env, admin: SupabaseClient, payoutI
       { kind: "payout_sent", userId: guideId },
     );
   }
+}
+
+/**
+ * A payment we tried to take did not go through.
+ *
+ * The single most expensive silence in the codebase. `runBalanceSweep` reads
+ * `if (res.status === "succeeded")` and has no else; `sweepInstalments` reads
+ * `if (res.status !== "succeeded") continue`. A declined card produced no
+ * email, no bell, no log and no retry note — and the next thing that happened
+ * to that trekker was their trip being cancelled at T-10 for non-payment,
+ * with the deposit generally forfeit under the trekker band.
+ *
+ * Four days of silence, and then the trip is gone.
+ *
+ * The `kind` carries the day, for two reasons: each day's warning genuinely
+ * is a different message as the deadline closes, and it makes `alreadySent`
+ * a per-day guard, so a sweep run twice in one day says nothing twice.
+ */
+export async function notifyPaymentFailed(
+  env: Env,
+  admin: SupabaseClient,
+  args: {
+    bookingId: string;
+    amountUsdCents: number;
+    /** Days from today to departure. */
+    daysUntil: number;
+    /** Days from today to the automatic cancellation. */
+    daysLeft: number;
+    what: "balance" | "instalment";
+  },
+) {
+  const c = await bookingContacts(admin, args.bookingId);
+  if (!c || !c.trekkerId) return;
+
+  const kind = `${args.what}_failed_t${Math.max(0, args.daysUntil)}`;
+  const { alreadySent } = await import("~/lib/email/send.server");
+  if (await alreadySent(admin, { userId: c.trekkerId, kind, subjectId: args.bookingId })) return;
+
+  const amount = `$${(args.amountUsdCents / 100).toFixed(2)}`;
+  const deadline =
+    args.daysLeft <= 1
+      ? "This is the last day before the booking is cancelled automatically."
+      : `The booking is cancelled automatically in ${args.daysLeft} days if it stays unpaid.`;
+
+  await sendEmail(
+    env,
+    c.trekkerEmail,
+    args.what === "balance"
+      ? `Your payment for ${c.title} did not go through`
+      : `An instalment for ${c.title} did not go through`,
+    `We tried to take ${amount} for ${c.title} (${c.startDate}) and your card was declined.\n\n` +
+      `Nothing has been taken. This is almost always an expiry date, a spending limit, or a bank blocking a payment from abroad — a call to your bank usually settles it.\n\n` +
+      `${deadline}\n\n` +
+      `Sort it out here: ${siteUrl(env)}/trips/${args.bookingId}`,
+    { kind, userId: c.trekkerId, about: { type: "booking", id: args.bookingId } },
+  );
 }

@@ -3,7 +3,7 @@ import { computePricing, computeDeposit, type PriceBreakdown } from "~/lib/prici
 import { partyAmounts, type PriceBreakdown as ExperienceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
-import { FX_RATE_NPR } from "~/lib/config";
+import { BALANCE_AUTOCANCEL_DAYS_BEFORE, FX_RATE_NPR } from "~/lib/config";
 import { isCancelledBooking, isUniqueViolation } from "~/lib/ask-guard";
 import { outstandingUsdCents } from "~/lib/group-pay";
 import { missedRunEndingAt, needsWelfareCheck } from "~/lib/checkin";
@@ -942,6 +942,18 @@ export async function runBalanceSweep(
           const { notifyBalanceCharged } = await import("~/lib/notifications.server");
           await notifyBalanceCharged(env, admin, b.id, owed);
         }
+      } else if (env) {
+        // The else that was never here. A declined card used to produce
+        // nothing at all, and the next thing that happened to this trekker
+        // was the T-10 cancellation with the deposit forfeit.
+        const { notifyPaymentFailed } = await import("~/lib/notifications.server");
+        await notifyPaymentFailed(env, admin, {
+          bookingId: b.id,
+          amountUsdCents: owed,
+          daysUntil,
+          daysLeft: daysUntil - BALANCE_AUTOCANCEL_DAYS_BEFORE,
+          what: "balance",
+        });
       }
     }
   }
@@ -957,7 +969,9 @@ export async function runBalanceSweep(
 async function sweepInstalments(
   admin: SupabaseClient,
   stripe: StripeClient,
-  booking: { id: string; balance_paid_at: string | null },
+  // start_date is already on the row the caller selects; it is named here so
+  // a failed instalment can say how long is left before the trip is cancelled.
+  booking: { id: string; balance_paid_at: string | null; start_date?: string | null },
   todayIso: string,
   env?: Env,
 ): Promise<number> {
@@ -978,7 +992,25 @@ async function sweepInstalments(
       saveCard: false,
     });
     const res = await stripe.retrievePaymentIntent(pi.paymentIntentId);
-    if (res.status !== "succeeded") continue;
+    if (res.status !== "succeeded") {
+      // `continue` was the whole of it. The row stayed `scheduled` and was
+      // retried silently every day until departure, and nobody was ever told
+      // that a payment they had agreed to had stopped going through.
+      if (env) {
+        const { notifyPaymentFailed } = await import("~/lib/notifications.server");
+        const daysUntil = booking.start_date
+          ? daysBetween(todayIso, booking.start_date)
+          : BALANCE_AUTOCANCEL_DAYS_BEFORE;
+        await notifyPaymentFailed(env, admin, {
+          bookingId: booking.id,
+          amountUsdCents: it.amount_usd_cents,
+          daysUntil,
+          daysLeft: daysUntil - BALANCE_AUTOCANCEL_DAYS_BEFORE,
+          what: "instalment",
+        });
+      }
+      continue;
+    }
     await admin.from("payments").insert({
       booking_id: booking.id,
       stripe_payment_intent: pi.paymentIntentId,
