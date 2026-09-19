@@ -957,3 +957,47 @@ it has just seen exactly what a trekker pays and exactly what the guide keeps
 guide, which fails the question in CLAUDE.md that every feature is measured
 by. A one-line band a screen and a half in is unmissable to the reader it is
 addressed to and skippable by the one it is not.
+
+## The card field is the Stripe integration, not the key
+
+Asked to "get Stripe live", the obvious reading is "add the secret key". That
+would have made things worse than they were. Nothing in this application had
+ever asked anybody for a card: the checkout minted a PaymentIntent, drew a
+button, and on submit asked Stripe whether that intent had succeeded. The
+mock said yes, so the flow looked complete. Real keys would have said
+`requires_payment_method` forever, because no card was ever collected — so
+the one effect of adding a key would have been to turn a clearly-labelled
+mock into a checkout that told every trekker "Payment didn't complete."
+
+So the key was not the work; the missing half was. Stripe's Payment Element,
+mounted the way the maps are mounted — dynamic `import()` inside an effect,
+because it touches `window` and these pages render on the server first.
+
+Three choices inside that are worth recording:
+
+**Vanilla `@stripe/stripe-js`, not `@stripe/react-stripe-js`.** The React
+wrapper wants an `<Elements>` provider holding a promise created at module
+scope, which fits badly with a publishable key that arrives from a loader and
+a page that renders on the server first. The vanilla API is what `RouteMap`
+already does with MapLibre, so it is one idiom rather than two.
+
+**The card field submits the existing `<Form>` rather than replacing it.**
+Every hidden input stays where it was, the server action receives exactly
+what it received before, and it still re-reads the intent from Stripe before
+fulfilling. The browser saying "paid" is a claim, not a fact.
+
+**Card payment methods only — `automatic_payment_methods` was left off.**
+Enabling it would surface methods that settle asynchronously, and the server
+contract is `succeeded` before anything is fulfilled. Cards (and the Apple
+and Google Pay wallets that ride on the card type) resolve synchronously, so
+the existing contract stays true. Revisit alongside a `processing` state the
+trip page can display honestly.
+
+## `SITE_URL` is a var, not a secret
+
+It is the public address of a public website. It sat as a worker secret, so
+it could be lost with an account and could not be read in the repo, and
+fourteen call sites each guessed a different fallback when it was missing.
+It now lives in `wrangler.jsonc` under `vars`, and every caller asks
+`siteUrl()`. Naming the real domain became correct today: `guidesofnepal.com`
+resolves and serves the worker, which it did not when this was last deferred.
