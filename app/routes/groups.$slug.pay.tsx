@@ -3,7 +3,8 @@ import type { Route } from "./+types/groups.$slug.pay";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { getSessionUser, getProfile } from "~/lib/auth.server";
 import { getStripe, canTakePayments } from "~/lib/stripe.server";
-import { Button } from "~/components/Button";
+import { CardPayment } from "~/components/CardPayment";
+import { isPaid, outcomeOfStatus } from "~/lib/card-payment";
 import { useMoney } from "~/lib/currency-context";
 import { firstName } from "~/lib/names";
 import { activeMembers, type GroupMember, type TripGroup } from "~/lib/groups";
@@ -90,16 +91,32 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("status", "pending")
     .maybeSingle();
 
-  let intent: { paymentIntentId: string; mock: boolean };
+  let intent: { paymentIntentId: string; clientSecret: string | null; mock: boolean } | null =
+    null;
   if (pending?.stripe_payment_intent && pending.amount_usd_cents === mine.outstandingUsdCents) {
-    intent = { paymentIntentId: pending.stripe_payment_intent, mock: !!stripe.isMock };
-  } else {
+    // Same as the deposit checkout: the browser needs the client secret to
+    // mount a card field, and a cancelled intent must be replaced rather than
+    // offered as something payable.
+    const existing = await stripe.retrievePaymentIntent(pending.stripe_payment_intent);
+    if (outcomeOfStatus(existing.status) !== "dead") {
+      intent = {
+        paymentIntentId: existing.id || pending.stripe_payment_intent,
+        clientSecret: existing.clientSecret,
+        mock: !!stripe.isMock,
+      };
+    }
+  }
+  if (!intent) {
     const created = await stripe.createDepositIntent({
       amountUsdCents: mine.outstandingUsdCents,
       bookingId: booking.id,
       saveCard: false,
     });
-    intent = { paymentIntentId: created.paymentIntentId, mock: created.mock };
+    intent = {
+      paymentIntentId: created.paymentIntentId,
+      clientSecret: created.clientSecret,
+      mock: created.mock,
+    };
     if (mine.outstandingUsdCents > 0) {
       await admin.from("payments").insert({
         booking_id: booking.id,
@@ -119,6 +136,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       mine,
       seats: activeMembers(members).length,
       paymentIntentId: intent.paymentIntentId,
+      clientSecret: intent.clientSecret,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null,
       isMock: intent.mock,
       isOrganiser: group.organiser_id === user.id,
     },
@@ -155,8 +174,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   const pi = await stripe.retrievePaymentIntent(paymentIntentId);
-  if (pi.status !== "succeeded") {
-    return data({ error: "Payment didn’t complete. Try again." }, { status: 400, headers });
+  if (!isPaid(pi.status)) {
+    return data(
+      {
+        error:
+          outcomeOfStatus(pi.status) === "wait"
+            ? "Your bank is still confirming this payment. Give it a moment and reload — do not pay again."
+            : "Payment didn’t complete. Your card has not been charged — please try again.",
+      },
+      { status: 400, headers },
+    );
   }
 
   // Idempotent on the intent: a double submit or a re-delivered webhook must
@@ -237,7 +264,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function PayShare({ loaderData, actionData }: Route.ComponentProps) {
-  const { group, booking, mine, seats, paymentIntentId, isMock } = loaderData as any;
+  const { group, booking, mine, seats, paymentIntentId, clientSecret, publishableKey, isMock } =
+    loaderData as any;
   const { m } = useMoney();
   const nav = useNavigation();
   const done = mine.outstandingUsdCents === 0;
@@ -294,17 +322,16 @@ export default function PayShare({ loaderData, actionData }: Route.ComponentProp
 
           <Form method="post" className="mt-4">
             <input type="hidden" name="payment_intent_id" value={paymentIntentId} />
-            <Button type="submit" className="w-full" loading={nav.state !== "idle"}>
-              Pay {m(mine.outstandingUsdCents)}
-            </Button>
+            {/* Draws the card field, or the reason there isn't one. Either
+                way there is never a button here that cannot take money. */}
+            <CardPayment
+              publishableKey={publishableKey}
+              clientSecret={clientSecret}
+              isMock={isMock}
+              disabled={nav.state !== "idle"}
+              label={`Pay ${m(mine.outstandingUsdCents)}`}
+            />
           </Form>
-
-          {isMock && (
-            <p className="mt-2 rounded-button border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs text-amber-900">
-              Card payments are not switched on. This button cannot charge
-              anything and will not record your share — it used to say it had.
-            </p>
-          )}
 
           <TrustPanel
             className="mt-4"

@@ -6,12 +6,13 @@ import { requireUser } from "~/lib/auth.server";
 import { getStripe, canTakePayments } from "~/lib/stripe.server";
 import { fulfillDeposit } from "~/lib/booking.server";
 import { PriceBreakdown } from "~/components/public/bits";
-import { Button } from "~/components/Button";
 import { computeDeposit } from "~/lib/pricing";
 import { useMoney } from "~/lib/currency-context";
 import { instalmentSchedule, maxInstalments } from "~/lib/instalments";
 import { fmtDateShort as fmtDate } from "~/lib/format";
 import { TrustPanel } from "~/components/public/TrustPanel";
+import { CardPayment } from "~/components/CardPayment";
+import { isPaid, outcomeOfStatus } from "~/lib/card-payment";
 
 export function meta() {
   return [{ title: "Pay your deposit" }, { name: "robots", content: "noindex" }];
@@ -60,16 +61,33 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     .eq("status", "pending")
     .maybeSingle();
 
-  let intent: { paymentIntentId: string; mock: boolean };
+  let intent: { paymentIntentId: string; clientSecret: string | null; mock: boolean } | null =
+    null;
   if (pending?.stripe_payment_intent && pending.amount_usd_cents === b.deposit_usd_cents) {
-    intent = { paymentIntentId: pending.stripe_payment_intent, mock: !!stripe.isMock };
-  } else {
+    // Reusing the pending intent means asking Stripe about it, for two
+    // reasons. The browser needs its client secret to mount a card field and
+    // we only ever stored the id; and an intent that has been cancelled can
+    // never be paid, so showing it would be a checkout that cannot work.
+    const existing = await stripe.retrievePaymentIntent(pending.stripe_payment_intent);
+    if (outcomeOfStatus(existing.status) !== "dead") {
+      intent = {
+        paymentIntentId: existing.id || pending.stripe_payment_intent,
+        clientSecret: existing.clientSecret,
+        mock: !!stripe.isMock,
+      };
+    }
+  }
+  if (!intent) {
     const created = await stripe.createDepositIntent({
       amountUsdCents: b.deposit_usd_cents,
       bookingId: b.id,
       saveCard: true,
     });
-    intent = { paymentIntentId: created.paymentIntentId, mock: created.mock };
+    intent = {
+      paymentIntentId: created.paymentIntentId,
+      clientSecret: created.clientSecret,
+      mock: created.mock,
+    };
     await admin.from("payments").upsert(
       {
         booking_id: b.id,
@@ -87,6 +105,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     {
       booking: b,
       paymentIntentId: intent.paymentIntentId,
+      clientSecret: intent.clientSecret,
+      // Safe to ship to the browser — it is the public half of the key pair.
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null,
       isMock: intent.mock,
       balance,
       today,
@@ -129,9 +150,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
   }
 
+  // Asked of Stripe, not of the browser, and judged by the same function the
+  // card field uses — so the two can never disagree about one payment.
   const pi = await stripe.retrievePaymentIntent(paymentIntentId);
-  if (pi.status !== "succeeded") {
-    return data({ error: "Payment didn’t complete. Try again." }, { status: 400 });
+  if (!isPaid(pi.status)) {
+    return data(
+      {
+        error:
+          outcomeOfStatus(pi.status) === "wait"
+            ? "Your bank is still confirming this payment. Give it a moment and reload — do not pay again."
+            : "Payment didn’t complete. Your card has not been charged — please try again.",
+      },
+      { status: 400 },
+    );
   }
   // Persist the chosen plan — clamped to what actually FITS before departure
   // (audit B6), NaN-safe. The picker offers the same bound; this guards POSTs.
@@ -149,7 +180,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Checkout({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, paymentIntentId, isMock, balance, today, maxN } = loaderData as any;
+  const { booking: b, paymentIntentId, clientSecret, publishableKey, isMock, balance, today, maxN } =
+    loaderData as any;
   const guideName = (b.guide?.users?.full_name ?? "").split(" ")[0] || null;
   const nav = useNavigation();
   const { m } = useMoney();
@@ -278,23 +310,25 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
       <Form method="post" className="mt-6">
         <input type="hidden" name="payment_intent_id" value={paymentIntentId} />
         <input type="hidden" name="instalment_count" value={count} />
-        {isMock && (
-          <p className="mb-2 rounded-button border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Card payments are not switched on. This button cannot charge
-            anything and will not book the trip — it used to say it had. Add the
-            Stripe keys to take payments.
-          </p>
-        )}
         {actionData && "error" in actionData && (actionData as any).error && (
           <p className="mb-2 rounded-button bg-ember/10 px-3 py-2 text-sm text-ember">
             {(actionData as any).error}
           </p>
         )}
-        <Button type="submit" size="lg" loading={nav.state !== "idle"} className="w-full">
-          {payInFull
-            ? `Pay ${m(b.total_usd_cents)}`
-            : `Pay ${m(b.deposit_usd_cents)} deposit`}
-        </Button>
+        {/* The card field submits this form itself once Stripe clears the
+            payment; when payments are not configured it draws the refusal
+            instead, so there is never a button here that cannot charge. */}
+        <CardPayment
+          publishableKey={publishableKey}
+          clientSecret={clientSecret}
+          isMock={isMock}
+          disabled={nav.state !== "idle"}
+          label={
+            payInFull
+              ? `Pay ${m(b.total_usd_cents)}`
+              : `Pay ${m(b.deposit_usd_cents)} deposit`
+          }
+        />
       </Form>
       <p className="mt-2 text-center text-xs text-ink-soft">
         {payInFull

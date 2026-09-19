@@ -30,7 +30,17 @@ export interface StripeClient {
     customerEmail?: string;
     saveCard: boolean;
   }): Promise<DepositIntent>;
-  retrievePaymentIntent(id: string): Promise<{ id: string; status: string }>;
+  /**
+   * The intent as Stripe currently sees it.
+   *
+   * `clientSecret` comes back too because the checkout reuses a pending
+   * intent across reloads and only ever stored its id. Without the secret
+   * the browser cannot mount a card field for the payment it is looking at,
+   * so a reload would silently become a page you cannot pay on.
+   */
+  retrievePaymentIntent(
+    id: string,
+  ): Promise<{ id: string; status: string; clientSecret: string | null }>;
   refund(args: {
     paymentIntentId: string;
     amountUsdCents: number;
@@ -139,7 +149,11 @@ class MockStripe implements StripeClient {
   }
   async retrievePaymentIntent(id: string) {
     // No card was ever collected, so this is the truthful answer.
-    return { id, status: this.allowFake ? "succeeded" : "requires_payment_method" };
+    return {
+      id,
+      status: this.allowFake ? "succeeded" : "requires_payment_method",
+      clientSecret: null,
+    };
   }
   async refund(args: { paymentIntentId: string; amountUsdCents: number }) {
     return { id: rand("re_mock"), status: "succeeded" };
@@ -192,7 +206,7 @@ class RealStripe implements StripeClient {
       headers: { Authorization: `Bearer ${this.secret}` },
     });
     const pi = (await res.json()) as any;
-    return { id: pi.id, status: pi.status };
+    return { id: pi.id, status: pi.status, clientSecret: pi.client_secret ?? null };
   }
   async refund(args: { paymentIntentId: string; amountUsdCents: number }) {
     const re = await this.post("refunds", {
