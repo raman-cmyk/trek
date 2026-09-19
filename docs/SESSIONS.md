@@ -3847,17 +3847,49 @@ container has none — `scratchpad/` did not survive, so there is no Cloudflare
 token to deploy with either. Nothing here should be described as working
 until a test card has gone through it.
 
+### Stripe is live in test mode
+
+Raman sent the test keys, and the rest was done from here rather than from a
+dashboard. The webhook endpoint was created through Stripe's API
+(`we_1UHOaW…` → `https://guidesofnepal.com/api/webhooks/stripe`, listening to
+`payment_intent.succeeded` alone), which also hands back the signing secret,
+so none of it needed a browser.
+
+`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` and `STRIPE_WEBHOOK_SECRET` are
+on the worker, `SITE_URL` was overwritten with the real domain rather than
+deleted — the wrangler var and the secret now say the same thing, so it does
+not matter which wins — and the worker is deployed.
+
+Verified against the live site, not assumed:
+
+- The webhook answered `400 bad signature` to a forged event and
+  `200 {"received":true}` to one signed with the endpoint's real secret. It
+  answered `404` before, because `getStripe` was returning the mock. That is
+  the whole server half proven: real client, real verification, and the
+  secret on the worker matching the one Stripe will sign with.
+- `/checkout/:id` redirects an anonymous visitor to `/login` on
+  `guidesofnepal.com`, so the route still works and `SITE_URL` is right.
+
+### Still not verified: the card field has never been drawn
+
+Everything above is the server. Nobody has seen the Payment Element render,
+because reaching a checkout page needs a booking in `pending_deposit`, and a
+booking only reaches that state when a **guide accepts an enquiry**
+(`acceptEnquiry`, from `/g/enquiries`) or a trekker approves a proposal. Ops
+cannot do either, and the guide passwords are still unknown. Do not describe
+the card step as working until a test card has gone through it.
+
+The cheapest way in is the Supabase `service_role` key, which would allow a
+throwaway booking to be seeded and the page driven in a real browser.
+
 ### Blocked, and on what
 
-Everything left needs credentials, as text and not as a screenshot — two
-Cloudflare tokens have already failed on OCR.
-
-- **Cloudflare API token + account id.** Without it nothing can be deployed
-  or have a secret set, so none of the above is live.
-- **Stripe test keys** (`sk_test_…`, `pk_test_…`) and, after the endpoint is
-  created, the webhook signing secret (`whsec_…`). The endpoint is
-  `https://guidesofnepal.com/api/webhooks/stripe` and the only event it reads
-  is `payment_intent.succeeded`.
+- **Supabase `service_role` key** (or a guide password), to get to a checkout
+  page and actually look at it.
+- **`RESEND_API_KEY`.** With it, adding the domain and writing its DNS
+  records is fully automatable now: the Cloudflare token carries `DNS → Edit`,
+  and Resend's API returns the records when a domain is added. No dashboard
+  needed on either side.
 - **`RESEND_API_KEY`**, plus verifying `guidesofnepal.com` in Resend — the
   from-lines are `no-reply@` and `hello@` at that domain, so mail will bounce
   until the DNS records Resend issues are added in Cloudflare. Possible now
