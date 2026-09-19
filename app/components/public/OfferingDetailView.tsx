@@ -30,6 +30,9 @@ import {
   transportLabels,
   tripLanguages,
 } from "~/lib/offering-details";
+import { lovedFor, tripFacts, type TripFact } from "~/lib/trip-facts";
+import { FREE_CANCELLATION_DAYS } from "~/lib/policy";
+import { cn } from "~/lib/cn";
 import { Glyph } from "~/components/design/Chip";
 import { FactStrip } from "~/components/design/FactStrip";
 
@@ -84,6 +87,24 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
     .filter((a) => addons.has(a.id))
     .reduce((sum, a) => sum + a.perPersonUsdCents, 0);
   const grandPP = pricing ? pricing.perPersonUsdCents + addonsPP : null;
+  /**
+   * Does the price actually fall as the party grows?
+   *
+   * Viator's strip says "Group discounts" on every listing. Ours says it only
+   * where it is true, and "true" is the real pricing function answering at
+   * both ends of the party rather than a copywriter's assumption — a fixed
+   * per-person trip with no fee to split gets no such line.
+   */
+  const groupPriceDrops = (() => {
+    const b = effBreakdown ?? breakdown;
+    const hi = Number(o.max_party);
+    const lo = Math.max(1, Number(o.min_party) || 1);
+    if (!b || !hasBreakdown(b) || !(hi > lo)) return false;
+    return (
+      computeExperiencePricing(b, hi, null).perPersonUsdCents <
+      computeExperiencePricing(b, lo, null).perPersonUsdCents
+    );
+  })();
   const toggleAddon = (k: string) =>
     setAddons((s) => {
       const n = new Set(s);
@@ -294,6 +315,27 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
               →
             </span>
           </Link>
+
+          {/* ── What this trip is, in one block.
+               "The section directly below the images includes details like
+               timing, pickup availability, discounts and English language
+               availability, and a 'Why travellers love this' block" — the
+               founder, comparing us with Viator. We held nearly all of it and
+               had it scattered: the meeting point two screens down, how hard
+               it is at the very bottom under "Other details", the languages
+               beside it, and the party size only inside the booking widget.
+               Built by app/lib/trip-facts.ts, which shows only what this trip
+               has actually filled in. */}
+          <TripSummary
+            facts={tripFacts(o as any, {
+              languages: tripLanguages((o as any).languages, guideLanguages),
+              groupPriceDrops,
+              freeCancellationDays: FREE_CANCELLATION_DAYS,
+            })}
+            rating={rating}
+            reviews={reviews}
+            guideFirstName={o.guide_name.split(" ")[0]}
+          />
 
           {/* Porter-welfare pledge (v3 Phase 3) */}
           {o.guide_porter_welfare && (
@@ -654,7 +696,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           )}
 
           {reviews.length > 0 && (
-            <section className="space-y-4">
+            <section id="reviews" className="scroll-mt-6 space-y-4">
               <h2 className="font-display text-xl">Reviews</h2>
               {/* The spread, not only its mean: somebody deciding between two
                   strangers wants to know whether a 4.6 is everybody agreeing
@@ -799,6 +841,93 @@ function GuideNumbers({
  * one of those questions arrived as a message — and "not suitable if you have
  * limited mobility" arrived after somebody had already paid.
  */
+/**
+ * The facts, and why the people who went rated it.
+ *
+ * Two halves of the same question — "what is this, and was it any good?" —
+ * asked at the point a reader has just decided they like the guide. The
+ * reviews here are the two fullest; the whole list stays further down the
+ * page in the order it was written, so this hides nothing.
+ */
+function TripSummary({
+  facts,
+  rating,
+  reviews,
+  guideFirstName,
+}: {
+  facts: TripFact[];
+  rating: { value: number; count: number } | null;
+  reviews: Array<{
+    id: string;
+    overall: number;
+    body: string | null;
+    published_at: string | null;
+    author_name: string | null;
+    author_country: string | null;
+  }>;
+  guideFirstName: string;
+}) {
+  const loved = lovedFor(reviews);
+  if (facts.length === 0 && loved.length === 0) return null;
+
+  return (
+    <section className="-mt-2 overflow-hidden rounded-card border border-line bg-card">
+      {facts.length > 0 && (
+        <dl className="grid gap-x-8 gap-y-4 p-5 sm:grid-cols-2">
+          {facts.map((f) => (
+            <div key={f.key} className="flex min-w-0 gap-2.5">
+              <span aria-hidden className="mt-0.5 shrink-0 text-moss">
+                <Glyph name="check" />
+              </span>
+              <span className="min-w-0">
+                <dt className="font-medium text-ink">{f.label}</dt>
+                {f.hint && <dd className="mt-0.5 text-sm text-ink-soft">{f.hint}</dd>}
+              </span>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {loved.length > 0 && (
+        <div className="border-t border-line bg-mist/40 p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="font-display text-lg text-ink">
+              Why travellers loved this
+            </h2>
+            {rating && (
+              <p className="text-sm text-ink-soft">
+                <Stars value={rating.value} count={rating.count} /> for {guideFirstName}
+              </p>
+            )}
+          </div>
+          {/* One review does not want half a row with a hole beside it. */}
+          <ul className={cn("mt-3 grid gap-3", loved.length > 1 && "sm:grid-cols-2")}>
+            {loved.map((r) => (
+              <li key={r.id} className="min-w-0 rounded-button border border-line bg-card p-3.5">
+                <Stars value={r.overall} />
+                <blockquote className="mt-1.5 text-sm leading-relaxed text-ink">
+                  &ldquo;{r.body}&rdquo;
+                </blockquote>
+                <p className="mt-2 text-caption text-muted">
+                  {r.author_name}
+                  {r.author_country ? `, ${r.author_country}` : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+          {reviews.length > loved.length && (
+            <p className="mt-3 text-sm">
+              <a href="#reviews" className="text-moss underline-offset-4 hover:underline">
+                Read all {reviews.length} reviews →
+              </a>
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function OtherDetails({ o, languages }: { o: any; languages: string[] }) {
   const level = activityLevel(o.activity_level);
   const access = accessibilityRows(o.accessibility);

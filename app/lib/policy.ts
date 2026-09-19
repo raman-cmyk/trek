@@ -44,6 +44,14 @@ export interface CancellationOutcome {
   platformAbsorbsFees: boolean;
 }
 
+/**
+ * Days before departure a trekker can still cancel for a full refund.
+ *
+ * The number was typed into the checkout page, two payment pages and the band
+ * ladder below, which is four places for it to drift apart in.
+ */
+export const FREE_CANCELLATION_DAYS = 30;
+
 /** Stripe processing fee estimate: 2.9% + $0.30 (docs/02 — non-refundable). */
 export function estimateStripeFeeUsdCents(amountUsdCents: number): number {
   if (amountUsdCents <= 0) return 0;
@@ -54,7 +62,7 @@ export function bandFor(input: CancellationInput): CancellationBand {
   if (input.reason === "guide") return "guide_cancel";
   if (input.reason === "force_majeure") return "force_majeure";
   const d = input.daysUntilStart;
-  if (d >= 30) return "ge30";
+  if (d >= FREE_CANCELLATION_DAYS) return "ge30";
   if (d >= 15) return "d15_29";
   if (d >= 7) return "d7_14";
   return "lt7";
