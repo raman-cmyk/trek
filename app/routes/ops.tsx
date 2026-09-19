@@ -7,6 +7,10 @@ import {
   requireOps,
 } from "~/lib/supabase.server";
 
+export function meta() {
+  return [{ title: "Operations — Trek" }, { name: "robots", content: "noindex" }];
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { profile, admin, headers } = await requireOps(request, env);

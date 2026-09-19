@@ -1,84 +1,145 @@
 import { describe, expect, it } from "vitest";
-import { isJpeg, stripGps } from "./exif";
+import { isJpeg, sanitizeImage, stripGps } from "./exif";
 
-/**
- * Builds a minimal but structurally real JPEG: SOI, an APP1/Exif segment with
- * a one- or two-entry IFD0, then SOS. Enough for the stripper to walk.
- */
-function jpegWithExif({ gps }: { gps: boolean }) {
-  const entries: { tag: number; value: number }[] = [
-    { tag: 0x0132, value: 0x11223344 }, // DateTime pointer-ish; just a payload
-  ];
-  if (gps) entries.push({ tag: 0x8825, value: 0x0000004a });
-
-  const ifdLen = 2 + entries.length * 12 + 4;
-  const tiffLen = 8 + ifdLen;
-  const exifLen = 6 + tiffLen;
-  const segLen = 2 + exifLen;
-
-  const out = new Uint8Array(2 + 2 + segLen + 2);
-  const v = new DataView(out.buffer);
-  let p = 0;
-  v.setUint16(p, 0xffd8); p += 2; // SOI
-  v.setUint16(p, 0xffe1); p += 2; // APP1
-  v.setUint16(p, segLen); p += 2;
-  out.set([0x45, 0x78, 0x69, 0x66, 0x00, 0x00], p); p += 6; // "Exif\0\0"
-
-  const tiff = p;
-  v.setUint16(p, 0x4d4d); p += 2; // big-endian
-  v.setUint16(p, 42); p += 2;
-  v.setUint32(p, 8); p += 4; // IFD0 at tiff+8
-  v.setUint16(p, entries.length); p += 2;
-  for (const e of entries) {
-    v.setUint16(p, e.tag); p += 2;
-    v.setUint16(p, 4); p += 2; // LONG
-    v.setUint32(p, 1); p += 4;
-    v.setUint32(p, e.value); p += 4;
-  }
-  v.setUint32(p, 0); p += 4; // next IFD
-  v.setUint16(p, 0xffda); // SOS
-  return { bytes: out, tiff };
+function segment(marker: number, payload: number[]) {
+  const out = new Uint8Array(payload.length + 4);
+  out.set([0xff, marker, 0, payload.length + 2]);
+  out.set(payload, 4);
+  return [...out];
 }
 
-describe("stripGps", () => {
-  it("blanks the GPS IFD pointer and reports it", () => {
-    const { bytes } = jpegWithExif({ gps: true });
-    const before = new Uint8Array(bytes);
-    const r = stripGps(bytes);
-    expect(r.understood).toBe(true);
-    expect(r.strippedGps).toBe(true);
-    expect(before).not.toEqual(r.bytes);
-    // Second pass finds nothing left to strip.
-    expect(stripGps(r.bytes).strippedGps).toBe(false);
+function jpegWithExif() {
+  return new Uint8Array([
+    0xff, 0xd8,
+    ...segment(0xe1, [0x45, 0x78, 0x69, 0x66, 0, 0, 0x47, 0x50, 0x53]),
+    ...segment(0xdb, [1, 2, 3]),
+    0xff, 0xda, 0, 2, 1, 2, 3, 0xff, 0xd9,
+  ]);
+}
+
+function jpegWithSafeAndLocationExif() {
+  const tiff = new Uint8Array(74);
+  const view = new DataView(tiff.buffer);
+  view.setUint16(0, 0x4d4d);
+  view.setUint16(2, 42);
+  view.setUint32(4, 8);
+  view.setUint16(8, 3);
+  // Orientation = 6.
+  view.setUint16(10, 0x0112);
+  view.setUint16(12, 3);
+  view.setUint32(14, 1);
+  view.setUint16(18, 6);
+  // DateTime points to TIFF offset 50.
+  view.setUint16(22, 0x0132);
+  view.setUint16(24, 2);
+  view.setUint32(26, 20);
+  view.setUint32(30, 50);
+  // GPS IFD pointer points to a sentinel payload.
+  view.setUint16(34, 0x8825);
+  view.setUint16(36, 4);
+  view.setUint32(38, 1);
+  view.setUint32(42, 70);
+  new TextEncoder().encodeInto("2026:09:19 12:34:56\0", tiff.subarray(50, 70));
+  tiff.set([0x47, 0x50, 0x53, 0], 70);
+  return new Uint8Array([
+    0xff, 0xd8,
+    ...segment(0xe1, [...new TextEncoder().encode("Exif\0\0"), ...tiff]),
+    ...segment(0xdb, [1, 2, 3]),
+    0xff, 0xda, 0, 2, 1, 2, 3, 0xff, 0xd9,
+  ]);
+}
+
+function pngChunk(type: string, payload: number[] = []) {
+  const out = new Uint8Array(12 + payload.length);
+  new DataView(out.buffer).setUint32(0, payload.length);
+  out.set([...type].map((c) => c.charCodeAt(0)), 4);
+  out.set(payload, 8);
+  return [...out];
+}
+
+function webpChunk(type: string, payload: number[]) {
+  const out = new Uint8Array(8 + payload.length + (payload.length % 2));
+  out.set([...type].map((c) => c.charCodeAt(0)), 0);
+  new DataView(out.buffer).setUint32(4, payload.length, true);
+  out.set(payload, 8);
+  return [...out];
+}
+
+describe("sanitizeImage", () => {
+  it("physically removes a JPEG EXIF segment", () => {
+    const bytes = jpegWithExif();
+    const result = stripGps(bytes);
+    expect(result.understood).toBe(true);
+    expect(result.strippedGps).toBe(true);
+    expect(result.bytes.byteLength).toBeLessThan(bytes.byteLength);
+    expect(new TextDecoder().decode(result.bytes)).not.toContain("GPS");
+    expect(isJpeg(result.bytes)).toBe(true);
   });
 
-  it("leaves a photo with no GPS untouched", () => {
-    const { bytes } = jpegWithExif({ gps: false });
-    const before = new Uint8Array(bytes);
-    const r = stripGps(bytes);
-    expect(r.understood).toBe(true);
-    expect(r.strippedGps).toBe(false);
-    expect(r.bytes).toEqual(before);
+  it("keeps orientation and capture time while removing the GPS payload", () => {
+    const result = sanitizeImage(jpegWithSafeAndLocationExif());
+    const text = new TextDecoder().decode(result.bytes);
+    expect(result).toMatchObject({ understood: true, strippedGps: true, extension: "jpg" });
+    expect(text).toContain("2026:09:19 12:34:56");
+    expect(text).not.toContain("GPS");
+    // Rebuilt big-endian orientation entry: tag, short, count 1, value 6.
+    expect([...result.bytes]).toEqual(expect.arrayContaining([0x01, 0x12, 0, 3]));
   });
 
-  it("keeps the other EXIF tags — the dates are how we check a journal", () => {
-    const { bytes } = jpegWithExif({ gps: true });
-    const r = stripGps(bytes);
-    const v = new DataView(r.bytes.buffer, r.bytes.byteOffset, r.bytes.byteLength);
-    // SOI(2) + APP1(2) + len(2) + "Exif\0\0"(6) = TIFF at 12; IFD0 at 20;
-    // first entry at 22, its 4-byte value at +8.
-    expect(v.getUint32(30)).toBe(0x11223344);
+  it("removes metadata between progressive JPEG scans", () => {
+    const bytes = new Uint8Array([
+      0xff, 0xd8,
+      ...segment(0xdb, [1, 2, 3]),
+      0xff, 0xda, 0, 2,
+      1, 0xff, 0, 2, 0xff, 0xd0, 3,
+      ...segment(0xe1, [0x45, 0x78, 0x69, 0x66, 0, 0, 0x47, 0x50, 0x53]),
+      0xff, 0xda, 0, 2,
+      4, 5, 6,
+      0xff, 0xd9,
+    ]);
+    const result = sanitizeImage(bytes);
+    expect(result).toMatchObject({ understood: true, strippedGps: true, extension: "jpg" });
+    expect(new TextDecoder().decode(result.bytes)).not.toContain("GPS");
+    expect([...result.bytes].filter((byte, i, all) => byte === 0xda && all[i - 1] === 0xff)).toHaveLength(2);
   });
 
-  it("refuses to claim it understood a non-JPEG", () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]);
-    expect(isJpeg(png)).toBe(false);
-    expect(stripGps(png).understood).toBe(false);
+  it("removes PNG EXIF and text chunks while retaining image chunks", () => {
+    const bytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ...pngChunk("IHDR", new Array(13).fill(0)),
+      ...pngChunk("eXIf", [0x47, 0x50, 0x53]),
+      ...pngChunk("IDAT", [1, 2]),
+      ...pngChunk("IEND"),
+    ]);
+    const result = sanitizeImage(bytes);
+    expect(result).toMatchObject({ understood: true, strippedGps: true, extension: "png" });
+    expect(new TextDecoder().decode(result.bytes)).not.toContain("eXIf");
+    expect(new TextDecoder().decode(result.bytes)).toContain("IDAT");
   });
 
-  it("does not run off the end of a truncated file", () => {
-    const { bytes } = jpegWithExif({ gps: true });
-    const cut = bytes.slice(0, 12);
-    expect(() => stripGps(cut)).not.toThrow();
+  it("removes WebP EXIF chunks and fixes the RIFF length", () => {
+    const chunks = [
+      ...webpChunk("VP8X", [0x0c, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      ...webpChunk("EXIF", [0x47, 0x50, 0x53]),
+      ...webpChunk("VP8 ", [1, 2]),
+    ];
+    const bytes = new Uint8Array(12 + chunks.length);
+    bytes.set([0x52, 0x49, 0x46, 0x46]);
+    new DataView(bytes.buffer).setUint32(4, bytes.length - 8, true);
+    bytes.set([0x57, 0x45, 0x42, 0x50], 8);
+    bytes.set(chunks, 12);
+    const result = sanitizeImage(bytes);
+    expect(result).toMatchObject({ understood: true, strippedGps: true, extension: "webp" });
+    expect(new TextDecoder().decode(result.bytes)).not.toContain("EXIF");
+    expect(new DataView(result.bytes.buffer).getUint32(4, true)).toBe(result.bytes.length - 8);
+    expect(new TextDecoder().decode(result.bytes).match(/VP8X/g)).toHaveLength(1);
+  });
+
+  it("fails closed for a truncated container", () => {
+    expect(sanitizeImage(jpegWithExif().slice(0, 10)).understood).toBe(false);
+  });
+
+  it("rejects an unsupported format", () => {
+    expect(sanitizeImage(new Uint8Array([1, 2, 3, 4])).understood).toBe(false);
   });
 });

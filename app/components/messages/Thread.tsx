@@ -4,6 +4,7 @@ import { SmartImage } from "~/components/SmartImage";
 import { TierBadge } from "~/components/public/bits";
 import { Composer } from "./Composer";
 import { cn } from "~/lib/cn";
+import { isPrivateMessagePhotoUrl } from "~/lib/message-attachments";
 
 export interface ThreadMessage {
   id: string;
@@ -61,6 +62,7 @@ export function Thread({
   cannedReplies,
   action,
   masked = true,
+  attachmentThread,
 }: {
   messages: ThreadMessage[];
   partner: ThreadPartner;
@@ -72,6 +74,7 @@ export function Thread({
   action?: string;
   /** False once the deposit is paid and contact details flow freely. */
   masked?: boolean;
+  attachmentThread?: { type: "booking" | "conversation" | "enquiry"; id: string };
 }) {
   const [prefill, setPrefill] = useState<string | null>(null);
   // Optimistic tail: what you just sent, before the server has answered.
@@ -131,6 +134,7 @@ export function Thread({
       <Composer
         action={action}
         masked={masked}
+        attachmentThread={attachmentThread}
         prefill={prefill}
         onPrefillConsumed={() => setPrefill(null)}
         cannedReplies={isGuide ? cannedReplies : undefined}
@@ -247,7 +251,7 @@ function Bubble({
   pendingLabel?: string;
   showStatus?: boolean;
 }) {
-  const isPhoto = /^https?:\/\/\S+\.(jpe?g|png|webp)(\?|$)/i.test(m.text.trim());
+  const isPhoto = isPrivateMessagePhotoUrl(m.text.trim());
   return (
     <li className={cn("flex flex-col", m.mine ? "items-end" : "items-start")}>
       <div

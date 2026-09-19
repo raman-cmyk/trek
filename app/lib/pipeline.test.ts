@@ -24,6 +24,15 @@ describe("the trip pipeline", () => {
     ]);
   });
 
+  it("never labels a pending deposit as paid", () => {
+    const { stages, currentKey } = tripPipeline("food_culture", {
+      bookingStatus: "pending_deposit",
+    });
+    expect(currentKey).toBe("ready");
+    expect(stages.find((s) => s.key === "ready")?.state).toBe("current");
+    expect(stages.find((s) => s.key === "deposit")?.state).toBe("upcoming");
+  });
+
   it("gives a trek permits and papers, and a food tour neither", () => {
     expect(trackFor("trek").map((s) => s.key)).toContain("permits");
     expect(trackFor("food_culture").map((s) => s.key)).not.toContain("permits");

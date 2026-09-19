@@ -1,15 +1,14 @@
 import type { Route } from "./+types/api.journal-photo";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
-import { isJpeg, stripGps } from "~/lib/exif";
+import { sanitizeImage } from "~/lib/exif";
 
 /**
  * Journal photo upload.
  *
  * A guide uploads straight off their phone, so the file arrives carrying the
- * coordinates of every teahouse and campsite on the trek. We keep the dates —
- * they are how ops checks a journal against the trek it claims to be — and
- * remove the GPS pointer before anything is stored (app/lib/exif.ts).
+ * coordinates of every teahouse and campsite on the trek. We rebuild accepted
+ * image containers from an allowlist before anything is stored.
  *
  * Anything we cannot parse is refused rather than stored: "we could not read
  * it, so we could not clean it" is the only safe answer for a file that is
@@ -17,18 +16,22 @@ import { isJpeg, stripGps } from "~/lib/exif";
  */
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  // Guides upload their own; ops uploads on their behalf (concierge model).
-  let auth: Awaited<ReturnType<typeof requireUser>>;
-  try {
-    auth = await requireUser(request, env, "guide");
-  } catch {
-    auth = await requireUser(request, env, "ops");
+  const { user, profile, admin, headers } = await requireUser(request, env);
+  if (profile.role !== "guide" && profile.role !== "ops") {
+    return Response.json({ error: "Not allowed." }, { status: 403, headers });
   }
-  const { user, admin, headers } = auth;
 
   const form = await request.formData();
   const file = form.get("file");
-  const guideId = String(form.get("guide_id") ?? user.id);
+  const requestedGuideId = String(form.get("guide_id") ?? user.id);
+  const guideId = profile.role === "ops" ? requestedGuideId : user.id;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guideId)) {
+    return Response.json({ error: "Unknown guide." }, { status: 400, headers });
+  }
+  if (profile.role === "ops") {
+    const { data: guide } = await admin.from("guides").select("user_id").eq("user_id", guideId).maybeSingle();
+    if (!guide) return Response.json({ error: "Unknown guide." }, { status: 404, headers });
+  }
   if (!(file instanceof File)) {
     return Response.json({ error: "No file." }, { status: 400, headers });
   }
@@ -41,38 +44,26 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const buf = await file.arrayBuffer();
   const bytes = new Uint8Array(buf as ArrayBuffer);
-  let body: Uint8Array<ArrayBuffer> = bytes;
-  let strippedGps = false;
-
-  if (isJpeg(bytes)) {
-    const r = stripGps(bytes);
-    if (!r.understood) {
-      return Response.json(
-        { error: "We couldn't read that photo, so we couldn't clear its location. Try another." },
-        { status: 400, headers },
-      );
-    }
-    body = r.bytes;
-    strippedGps = r.strippedGps;
-  } else if (file.type !== "image/png" && file.type !== "image/webp") {
+  const cleaned = sanitizeImage(bytes);
+  if (!cleaned.understood || !cleaned.contentType || !cleaned.extension) {
     return Response.json(
-      { error: "Photos only — JPEG, PNG or WebP." },
+      { error: "We couldn't safely remove location data from that photo. Try another JPEG, PNG or WebP." },
       { status: 400, headers },
     );
   }
 
   // Deterministic-ish name without Math.random (workerd-friendly) — the guide
   // folder is what the storage policy checks.
-  const ext = isJpeg(bytes) ? "jpg" : file.type === "image/png" ? "png" : "webp";
+  const ext = cleaned.extension;
   const path = `${guideId}/${Date.now()}-${file.name.replace(/[^\w.-]/g, "_").slice(-40)}.${ext}`;
 
   const { error } = await admin.storage
     .from("journal-photos")
-    .upload(path, body, { contentType: file.type || "image/jpeg", upsert: false });
+    .upload(path, cleaned.bytes, { contentType: cleaned.contentType, upsert: false });
   if (error) {
     return Response.json({ error: error.message }, { status: 400, headers });
   }
 
   const { data } = admin.storage.from("journal-photos").getPublicUrl(path);
-  return Response.json({ url: data.publicUrl, strippedGps }, { headers });
+  return Response.json({ url: data.publicUrl, strippedGps: cleaned.strippedGps }, { headers });
 }

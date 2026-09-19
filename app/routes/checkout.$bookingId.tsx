@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, data, redirect, useNavigation } from "react-router";
+import { Form, data, redirect, useFetcher, useNavigation } from "react-router";
 import type { Route } from "./+types/checkout.$bookingId";
 import { getEnv } from "~/lib/supabase.server";
 import { requireUser } from "~/lib/auth.server";
@@ -20,7 +20,7 @@ export function meta() {
 }
 
 const BOOKING_COLS =
-  "id, status, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents, permit_handling_usd_cents, logistics_usd_cents, fund_usd_cents, start_date, hold_expires_at, offering:offerings(title, kind), guide:guides(slug, tier, users(full_name))";
+  "id, status, total_usd_cents, deposit_usd_cents, guide_fee_usd_cents, porter_fee_usd_cents, permit_fees_usd_cents, service_fee_usd_cents, commission_usd_cents, permit_handling_usd_cents, logistics_usd_cents, fund_usd_cents, start_date, hold_expires_at, offering:offerings(title, kind), guide:guides(slug, tier, users(full_name))";
 
 function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -46,7 +46,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   if ((b as any).offering?.kind === "trek") {
     const dueNow = computeDeposit(b.total_usd_cents, daysBetween(today, b.start_date));
     if (dueNow > b.deposit_usd_cents) {
-      await admin.from("bookings").update({ deposit_usd_cents: dueNow }).eq("id", b.id);
+      const { error } = await admin.from("bookings").update({ deposit_usd_cents: dueNow }).eq("id", b.id);
+      if (error) throw new Response("Could not update the deposit.", { status: 500 });
       b.deposit_usd_cents = dueNow;
     }
   }
@@ -54,34 +55,63 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // Reuse a pending PaymentIntent across reloads/back-navigation instead of
   // minting a new one on every GET (audit P9).
   const stripe = getStripe(env);
+  const maxN = maxInstalments(today, b.start_date);
   const { data: pending } = await admin
     .from("payments")
-    .select("stripe_payment_intent, amount_usd_cents")
+    .select("stripe_payment_intent, amount_usd_cents, instalment_count, plan_selected_at")
     .eq("booking_id", b.id)
     .eq("type", "deposit")
     .eq("status", "pending")
     .maybeSingle();
 
   let intent: { paymentIntentId: string; mock: boolean };
+  let initialCount = 1;
   if (pending?.stripe_payment_intent && pending.amount_usd_cents === b.deposit_usd_cents) {
     intent = { paymentIntentId: pending.stripe_payment_intent, mock: !!stripe.isMock };
+    const saved = Number(pending.instalment_count);
+    initialCount = Number.isFinite(saved) ? Math.max(1, Math.min(maxN, Math.floor(saved))) : 1;
+    if (!pending.plan_selected_at || pending.instalment_count !== initialCount) {
+      const { error } = await admin
+        .from("payments")
+        .update({ instalment_count: initialCount, plan_selected_at: new Date().toISOString() })
+        .eq("booking_id", b.id)
+        .eq("stripe_payment_intent", pending.stripe_payment_intent)
+        .eq("status", "pending");
+      if (error) throw new Response("Could not prepare the payment plan safely.", { status: 500 });
+    }
   } else {
+    if (pending?.stripe_payment_intent) {
+      await stripe.cancelPaymentIntent(pending.stripe_payment_intent);
+      const { error } = await admin
+        .from("payments")
+        .update({ status: "failed" })
+        .eq("booking_id", b.id)
+        .eq("stripe_payment_intent", pending.stripe_payment_intent)
+        .eq("status", "pending");
+      if (error) throw new Response("Could not replace the old payment request.", { status: 500 });
+    }
     const created = await stripe.createDepositIntent({
       amountUsdCents: b.deposit_usd_cents,
       bookingId: b.id,
       saveCard: true,
     });
     intent = { paymentIntentId: created.paymentIntentId, mock: created.mock };
-    await admin.from("payments").upsert(
+    const { error } = await admin.from("payments").upsert(
       {
         booking_id: b.id,
         stripe_payment_intent: created.paymentIntentId,
         type: "deposit",
         amount_usd_cents: b.deposit_usd_cents,
         status: "pending",
+        instalment_count: 1,
+        plan_selected_at: new Date().toISOString(),
       },
-      { onConflict: "stripe_payment_intent" },
+      { onConflict: "stripe_payment_intent,type" },
     );
+    if (error) {
+      await stripe.cancelPaymentIntent(created.paymentIntentId);
+      throw new Response("Could not prepare payment safely.", { status: 500 });
+    }
   }
 
   const balance = b.total_usd_cents - b.deposit_usd_cents;
@@ -96,7 +126,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       // browser's — a device an hour out would otherwise invent an hour of
       // hold that does not exist.
       serverNow: new Date().toISOString(),
-      maxN: maxInstalments(today, b.start_date),
+      maxN,
+      initialCount,
     },
     { headers },
   );
@@ -111,39 +142,71 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   // Confirm ownership, then confirm the (mock) payment succeeded and fulfill.
   const { data: b } = await admin
     .from("bookings")
-    .select("id, start_date")
+    .select("id, start_date, status")
     .eq("id", params.bookingId)
     .eq("trekker_id", user.id)
     .maybeSingle();
   if (!b) throw new Response("Not found", { status: 404 });
-
-  const stripe = getStripe(env);
-  const pi = await stripe.retrievePaymentIntent(paymentIntentId);
-  if (pi.status !== "succeeded") {
-    return data({ error: "Payment didn’t complete. Try again." }, { status: 400 });
+  if (b.status !== "pending_deposit") {
+    return data({ error: "This booking is no longer waiting for a deposit." }, { status: 409, headers });
   }
+
   // Persist the chosen plan — clamped to what actually FITS before departure
-  // (audit B6), NaN-safe. The picker offers the same bound; this guards POSTs.
+  // (audit B6), NaN-safe. This happens before reading Stripe so a webhook can
+  // never race ahead with a stale/default plan.
   const today = new Date().toISOString().slice(0, 10);
   const maxN = maxInstalments(today, b.start_date);
   const raw = Number(form.get("instalment_count"));
   const instalmentCount = Number.isFinite(raw)
     ? Math.max(1, Math.min(maxN, Math.floor(raw)))
     : 1;
-  await admin.from("bookings").update({ instalment_count: instalmentCount }).eq("id", b.id);
-  await fulfillDeposit(admin, params.bookingId, paymentIntentId);
+  const { data: selectedPlan, error: planError } = await admin
+    .from("payments")
+    .update({ instalment_count: instalmentCount, plan_selected_at: new Date().toISOString() })
+    .eq("booking_id", params.bookingId)
+    .eq("stripe_payment_intent", paymentIntentId)
+    .eq("type", "deposit")
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (planError || !selectedPlan) {
+    return data(
+      { error: "That payment is not the active deposit for this booking." },
+      { status: 400, headers },
+    );
+  }
+
+  // The picker saves before payment confirmation so the webhook always sees
+  // the selected plan even if the user closes this page immediately after.
+  if (form.get("intent") === "select_plan") {
+    return data({ planSaved: true, instalmentCount }, { headers });
+  }
+
+  const stripe = getStripe(env);
+  const pi = await stripe.retrievePaymentIntent(paymentIntentId);
+  let settled;
+  try {
+    settled = await fulfillDeposit(admin, params.bookingId, pi, instalmentCount);
+  } catch {
+    return data(
+      { error: "That payment does not match this booking. No booking state was changed." },
+      { status: 400, headers },
+    );
+  }
+  if (!settled.applied) return redirect(`/trips/${params.bookingId}`, { headers });
   const { notifyDepositPaid } = await import("~/lib/notifications.server");
   await notifyDepositPaid(env, admin, params.bookingId);
   return redirect(`/trips/${params.bookingId}`, { headers });
 }
 
 export default function Checkout({ loaderData, actionData }: Route.ComponentProps) {
-  const { booking: b, paymentIntentId, isMock, balance, today, maxN, serverNow } =
+  const { booking: b, paymentIntentId, isMock, balance, today, maxN, serverNow, initialCount } =
     loaderData as any;
   const guideName = (b.guide?.users?.full_name ?? "").split(" ")[0] || null;
   const nav = useNavigation();
+  const planFetcher = useFetcher();
   const { m } = useMoney();
-  const [count, setCount] = useState(1);
+  const [count, setCount] = useState(initialCount);
   const schedule = instalmentSchedule(balance, count, today, b.start_date);
   // Concrete free-cancellation date (v3 §12): 30 days before departure.
   // UTC throughout so SSR and the client agree (audit P6.2).
@@ -164,6 +227,9 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
   ];
 
   const payInFull = balance <= 0;
+  const feeBase = Math.max(0, b.guide_fee_usd_cents + b.porter_fee_usd_cents);
+  const feePercent = feeBase > 0 ? Math.round((b.service_fee_usd_cents / feeBase) * 100) : null;
+  const currentFeeModel = b.commission_usd_cents === b.service_fee_usd_cents;
   const guideFirst = (b.guide?.users?.full_name ?? "your guide").split(" ")[0];
   return (
     <main className="mx-auto max-w-md px-4 py-10">
@@ -212,7 +278,17 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
               <button
                 key={n}
                 type="button"
-                onClick={() => setCount(n)}
+                onClick={() => {
+                  setCount(n);
+                  planFetcher.submit(
+                    {
+                      intent: "select_plan",
+                      payment_intent_id: paymentIntentId,
+                      instalment_count: String(n),
+                    },
+                    { method: "post" },
+                  );
+                }}
                 className={
                   "rounded-full px-3 py-1 text-sm " +
                   (count === n ? "bg-primary text-white" : "border border-border text-ink hover:bg-mist")
@@ -250,10 +326,12 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
             note: "Trek holds it until the trek starts. Nothing goes to anyone before that.",
           },
           {
-            label: guideName
-              ? `${guideName} is paid in full for their own fee.`
-              : "Your guide is paid in full for their own fee.",
-            note: "Our 10% is added on top and printed on the line above — it does not come out of theirs.",
+            label: currentFeeModel
+              ? (guideName ? `${guideName} is paid in full for their own fee.` : "Your guide is paid in full for their own fee.")
+              : "This booking keeps the pricing agreed when it was created.",
+            note: currentFeeModel
+              ? `Our ${feePercent ?? 10}% is added on top and printed on the line above — it does not come out of theirs.`
+              : `Its original ${feePercent ?? 0}% service fee and guide payout snapshot will not be silently repriced.`,
           },
           inFreeWindow
             ? {
@@ -291,7 +369,12 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
             {(actionData as any).error}
           </p>
         )}
-        <Button type="submit" size="lg" loading={nav.state !== "idle"} className="w-full">
+        <Button
+          type="submit"
+          size="lg"
+          loading={nav.state !== "idle" || planFetcher.state !== "idle"}
+          className="w-full"
+        >
           {payInFull
             ? `Pay ${m(b.total_usd_cents)}`
             : `Pay ${m(b.deposit_usd_cents)} deposit`}
@@ -300,7 +383,9 @@ export default function Checkout({ loaderData, actionData }: Route.ComponentProp
       <p className="mt-2 text-center text-xs text-ink-soft">
         {payInFull
           ? "That's everything — you're confirmed the moment payment goes through."
-          : `The balance of ${m(balance)} is charged automatically 14 days before you start.`}
+          : count > 1
+            ? `The remaining ${m(balance)} follows the ${count}-payment schedule above.`
+            : `The balance of ${m(balance)} is charged automatically 14 days before you start.`}
       </p>
       <p className="mt-1 text-center text-xs text-ink-soft">
         Charged in USD — other currencies shown are approximate.

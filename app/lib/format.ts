@@ -28,10 +28,15 @@ export function fmtDateRange(startIso: string, endIso: string): string {
   if (!startIso || !endIso) return "";
   const s = new Date(startIso + "T00:00:00Z");
   const e = new Date(endIso + "T00:00:00Z");
-  const sameMonth = s.getUTCMonth() === e.getUTCMonth() && s.getUTCFullYear() === e.getUTCFullYear();
-  return sameMonth
-    ? `${s.getUTCDate()}–${fmtDate(endIso)}`
-    : `${fmtDateShort(startIso)} – ${fmtDate(endIso)}`;
+  if (startIso === endIso) return fmtDate(startIso);
+  const month = (d: Date) => d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  const sameYear = s.getUTCFullYear() === e.getUTCFullYear();
+  const sameMonth = sameYear && s.getUTCMonth() === e.getUTCMonth();
+  if (sameMonth) return `${month(s)} ${s.getUTCDate()}–${e.getUTCDate()}, ${e.getUTCFullYear()}`;
+  if (sameYear) {
+    return `${month(s)} ${s.getUTCDate()} – ${month(e)} ${e.getUTCDate()}, ${e.getUTCFullYear()}`;
+  }
+  return `${month(s)} ${s.getUTCDate()}, ${s.getUTCFullYear()} – ${month(e)} ${e.getUTCDate()}, ${e.getUTCFullYear()}`;
 }
 
 /** Human labels for booking statuses — never show the raw enum. */

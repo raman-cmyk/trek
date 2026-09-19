@@ -34,6 +34,7 @@ describe("where a notification leads", () => {
   it("refuses anything that is not our own path", () => {
     expect(hrefFor("deposit_paid", "https://evil.example/x")).toBe("/trips");
     expect(hrefFor("deposit_paid", "//evil.example/x")).toBe("/trips");
+    expect(hrefFor("deposit_paid", "/\\evil.example/x")).toBe("/trips");
     expect(hrefFor("deposit_paid", "javascript:alert(1)")).toBe("/trips");
   });
 });

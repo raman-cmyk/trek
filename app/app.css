@@ -20,14 +20,14 @@
   --color-card:       #ffffff; /* card surfaces on paper */
   --color-wheat:      #d9cda9; /* warm neutral: photo placeholder, empty states */
   --color-ember:      #a8482a; /* SYSTEM ONLY: errors, expired, cancellations */
-  --color-muted:      #6b7a6e; /* secondary text, captions, metadata */
+  --color-muted:      #59685d; /* secondary text, captions, metadata — WCAG AA on paper */
   --color-line:       #e2e0d6; /* hairline borders on cream */
 
   /* Legacy semantic aliases → remapped to the green system so existing
      components recolour without churn. New code should use the tokens above. */
   --color-primary:       #3e6b4a; /* → moss */
   --color-primary-hover: #1b3b2a; /* → pine */
-  --color-ink-soft:      #6b7a6e; /* → muted */
+  --color-ink-soft:      #59685d; /* → muted */
   --color-surface:       #fbf9f3; /* → paper */
   --color-border:        #e2e0d6; /* → line */
   --color-accent:        #3e6b4a; /* → moss (verified ticks, rating stars) */

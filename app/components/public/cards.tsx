@@ -73,10 +73,12 @@ export function GuideCard({
   guide,
   rating,
   languages,
+  eager = false,
 }: {
   guide: PublicGuide;
   rating?: { value: number; count: number };
   languages?: string[];
+  eager?: boolean;
 }) {
   const { mr } = useMoney();
   return (
@@ -91,6 +93,9 @@ export function GuideCard({
           alt={`${guide.full_name}, trekking guide in ${guide.home_district ?? "Nepal"}`}
           width={300}
           height={375}
+          eager={eager}
+          optimize
+          sizes="(min-width: 1024px) 288px, (min-width: 640px) 33vw, 50vw"
           className="aspect-[4/5] w-full"
         />
         {/* Tier badge on a paper pill, top-right of the photo (§8). */}

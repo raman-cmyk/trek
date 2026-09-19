@@ -27,6 +27,8 @@ export default [
     route("safety", "routes/safety.tsx"),
     route("trust", "routes/trust.tsx"),
     route("insurance", "routes/insurance.tsx"),
+    route("privacy", "routes/privacy.tsx"),
+    route("terms", "routes/terms.tsx"),
     route("apply", "routes/apply.tsx"),
     route("login", "routes/login.tsx"),
     route("blocked", "routes/blocked.tsx"),

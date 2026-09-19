@@ -6,6 +6,7 @@ import { maskMessage } from "~/lib/mask";
 import { Thread } from "~/components/messages/Thread";
 import { statusLabel } from "~/lib/format";
 import { firstName } from "~/lib/names";
+import { isPrivateMessagePhotoUrl } from "~/lib/message-attachments";
 
 export function meta() {
   return [{ title: "Messages" }, { name: "robots", content: "noindex" }];
@@ -141,7 +142,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!body) return data({ ok: false, error: "Write something first." }, { headers });
 
   const preDeposit = booking.status === "pending_deposit";
-  const { rendered, flaggedReason } = maskMessage(body);
+  const attachment = isPrivateMessagePhotoUrl(body);
+  const { rendered, flaggedReason } = attachment
+    ? { rendered: body, flaggedReason: null }
+    : maskMessage(body);
   const { error: insertErr } = await admin.from("messages").insert({
     booking_id: booking.id,
     sender_id: user.id,
@@ -176,6 +180,7 @@ export default function BookingThread({ loaderData }: Route.ComponentProps) {
       isGuide={isGuide}
       cannedReplies={canned}
       masked={masked}
+      attachmentThread={{ type: "booking", id: booking.id }}
     />
   );
 }

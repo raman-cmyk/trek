@@ -22,6 +22,15 @@ export interface StripeEvent {
   data: { object: Record<string, any> };
 }
 
+export interface PaymentIntentDetails {
+  id: string;
+  status: string;
+  amount: number;
+  amountReceived: number;
+  currency: string;
+  metadata: { booking_id?: string };
+}
+
 export interface StripeClient {
   isMock: boolean;
   createDepositIntent(args: {
@@ -30,7 +39,8 @@ export interface StripeClient {
     customerEmail?: string;
     saveCard: boolean;
   }): Promise<DepositIntent>;
-  retrievePaymentIntent(id: string): Promise<{ id: string; status: string }>;
+  retrievePaymentIntent(id: string): Promise<PaymentIntentDetails>;
+  cancelPaymentIntent(id: string): Promise<void>;
   refund(args: {
     paymentIntentId: string;
     amountUsdCents: number;
@@ -114,7 +124,7 @@ class MockStripe implements StripeClient {
     bookingId: string;
     saveCard: boolean;
   }): Promise<DepositIntent> {
-    const id = rand("pi_mock");
+    const id = `pi_mock_${args.bookingId}_${args.amountUsdCents}`;
     return {
       paymentIntentId: id,
       clientSecret: `${id}_secret_${rand("cs")}`,
@@ -123,8 +133,19 @@ class MockStripe implements StripeClient {
     };
   }
   async retrievePaymentIntent(id: string) {
-    return { id, status: "succeeded" };
+    const match = /^pi_mock_(.+)_([0-9]+)$/.exec(id);
+    if (!match) throw new Error("unknown mock payment intent");
+    const amount = Number(match[2]);
+    return {
+      id,
+      status: "succeeded",
+      amount,
+      amountReceived: amount,
+      currency: "usd",
+      metadata: { booking_id: match[1] },
+    };
   }
+  async cancelPaymentIntent() {}
   async refund(args: { paymentIntentId: string; amountUsdCents: number }) {
     return { id: rand("re_mock"), status: "succeeded" };
   }
@@ -175,8 +196,19 @@ class RealStripe implements StripeClient {
     const res = await fetch(`https://api.stripe.com/v1/payment_intents/${id}`, {
       headers: { Authorization: `Bearer ${this.secret}` },
     });
+    if (!res.ok) throw new Error(`stripe retrieve payment_intent: ${res.status} ${await res.text()}`);
     const pi = (await res.json()) as any;
-    return { id: pi.id, status: pi.status };
+    return {
+      id: pi.id,
+      status: pi.status,
+      amount: Number(pi.amount),
+      amountReceived: Number(pi.amount_received),
+      currency: String(pi.currency ?? ""),
+      metadata: { booking_id: pi.metadata?.booking_id },
+    };
+  }
+  async cancelPaymentIntent(id: string) {
+    await this.post(`payment_intents/${id}/cancel`, {});
   }
   async refund(args: { paymentIntentId: string; amountUsdCents: number }) {
     const re = await this.post("refunds", {
@@ -192,7 +224,9 @@ class RealStripe implements StripeClient {
 }
 
 export function getStripe(env: Env): StripeClient {
-  return env.STRIPE_SECRET_KEY
-    ? new RealStripe(env.STRIPE_SECRET_KEY)
-    : new MockStripe();
+  if (env.STRIPE_SECRET_KEY) return new RealStripe(env.STRIPE_SECRET_KEY);
+  const site = env.SITE_URL ? new URL(env.SITE_URL) : null;
+  const local = !site || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(site.hostname);
+  if (env.STRIPE_MOCK_MODE === "true" && local) return new MockStripe();
+  throw new Error("STRIPE_SECRET_KEY is required outside explicit local mock mode");
 }

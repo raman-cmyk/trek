@@ -21,6 +21,14 @@ export function meta(_: Route.MetaArgs) {
   ];
 }
 
+export function loader({ request }: Route.LoaderArgs) {
+  const hostname = new URL(request.url).hostname;
+  if (import.meta.env.PROD || !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(hostname)) {
+    throw new Response("Not found", { status: 404 });
+  }
+  return null;
+}
+
 // A self-contained demo image (data URI) so the blur-up cross-fade works with
 // no network — the real app stores photos in Supabase Storage.
 const DEMO_IMG =

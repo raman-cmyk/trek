@@ -35,18 +35,22 @@ const EXT: Record<string, string> = {
  */
 export async function action({ request, context }: Route.ActionArgs) {
   const env = getEnv(context);
-  // Guides record their own; ops uploads on their behalf (concierge model).
-  let auth: Awaited<ReturnType<typeof requireUser>>;
-  try {
-    auth = await requireUser(request, env, "guide");
-  } catch {
-    auth = await requireUser(request, env, "ops");
+  const { user, profile, admin, headers } = await requireUser(request, env);
+  if (profile.role !== "guide" && profile.role !== "ops") {
+    return Response.json({ error: "Not allowed." }, { status: 403, headers });
   }
-  const { user, admin, headers } = auth;
 
   const form = await request.formData();
   const file = form.get("file");
-  const guideId = String(form.get("guide_id") ?? user.id);
+  const requestedGuideId = String(form.get("guide_id") ?? user.id);
+  const guideId = profile.role === "ops" ? requestedGuideId : user.id;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guideId)) {
+    return Response.json({ error: "Unknown guide." }, { status: 400, headers });
+  }
+  if (profile.role === "ops") {
+    const { data: guide } = await admin.from("guides").select("user_id").eq("user_id", guideId).maybeSingle();
+    if (!guide) return Response.json({ error: "Unknown guide." }, { status: 404, headers });
+  }
   if (!(file instanceof File)) {
     return Response.json({ error: "No recording." }, { status: 400, headers });
   }

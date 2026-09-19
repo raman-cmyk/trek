@@ -9,7 +9,8 @@ export function loader({ context }: Route.LoaderArgs) {
   const PRIVATE = [
     "/ops",
     "/_dev",
-    "/g",
+    "/g$",
+    "/g/",
     "/trips",
     "/checkout",
     "/messages",

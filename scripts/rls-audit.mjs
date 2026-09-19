@@ -45,10 +45,12 @@ const DENY_TABLES = [
   "permit_applications",
   "departures",
   "departure_members",
+  "events",
 ];
 
 // Anon SHOULD read these public views (the marketplace).
-const ALLOW_VIEWS = ["public_guides", "public_offerings", "public_reviews"];
+const ALLOW_VIEWS = ["public_guides", "public_offerings", "public_reviews", "public_events"];
+const MAY_BE_EMPTY = new Set(["public_events"]);
 
 async function auditDenyReads() {
   console.log("\n[1] Base tables must not leak to anon");
@@ -66,6 +68,7 @@ async function auditAllowViews() {
     const { data, error } = await anon.from(v).select("*").limit(5);
     if (error) bad(`${v}: unexpected error ${error.message}`);
     else if (data && data.length > 0) ok(`${v}: ${data.length} row(s) visible`);
+    else if (MAY_BE_EMPTY.has(v)) ok(`${v}: readable (no seed rows)`);
     else bad(`${v}: returned 0 rows (should expose seed data)`);
   }
 }

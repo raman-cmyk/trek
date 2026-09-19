@@ -4,6 +4,7 @@ import type { Route } from "./+types/signup";
 import { Button } from "~/components/Button";
 import { createSupabaseServerClient, getEnv } from "~/lib/supabase.server";
 import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.server";
+import { safeRedirectPath } from "~/lib/redirects";
 
 export function meta() {
   return [
@@ -12,13 +13,13 @@ export function meta() {
   ];
 }
 
-function safeNext(raw: string | null | undefined): string {
-  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/guides";
-}
-
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const next = safeNext(new URL(request.url).searchParams.get("next"));
+  const next = safeRedirectPath(
+    new URL(request.url).searchParams.get("next"),
+    request.url,
+    "/guides",
+  );
   const { user } = await getSessionUser(request, env);
   if (!user) return { next, signedInAs: null };
   // Do NOT silently redirect an already-signed-in visitor away from signup.
@@ -74,7 +75,10 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     }
   }
-  return redirect(safeNext(String(form.get("next") ?? "")), { headers });
+  return redirect(
+    safeRedirectPath(String(form.get("next") ?? ""), request.url, "/guides"),
+    { headers },
+  );
 }
 
 const POPULAR = [

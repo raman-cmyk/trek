@@ -234,13 +234,13 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
           />
           Women guides
         </label>
-        <select name="tier" defaultValue={filters.fTier} className={SELECT_CLS}>
+        <select aria-label="Guide tier" name="tier" defaultValue={filters.fTier} className={SELECT_CLS}>
           <option value="">Any tier</option>
           <option value="1">✓ Verified</option>
           <option value="2">✓✓ Trusted</option>
           <option value="3">★ Elite</option>
         </select>
-        <select name="lang" defaultValue={filters.fLang} className={SELECT_CLS}>
+        <select aria-label="Language" name="lang" defaultValue={filters.fLang} className={SELECT_CLS}>
           <option value="">Any language</option>
           {facets.languages.map((l) => (
             <option key={l} value={l}>
@@ -248,7 +248,7 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
             </option>
           ))}
         </select>
-        <select name="district" defaultValue={filters.fDistrict} className={SELECT_CLS}>
+        <select aria-label="Home district" name="district" defaultValue={filters.fDistrict} className={SELECT_CLS}>
           <option value="">Any district</option>
           {facets.districts.map((d) => (
             <option key={d} value={d}>
@@ -256,7 +256,7 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
             </option>
           ))}
         </select>
-        <select name="sort" defaultValue={filters.sort} className={SELECT_CLS}>
+        <select aria-label="Sort guides" name="sort" defaultValue={filters.sort} className={SELECT_CLS}>
           <option value="recommended">Recommended</option>
           <option value="price">Price</option>
           <option value="experience">Most experienced</option>
@@ -300,12 +300,13 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {guides.map((g) => (
+          {guides.map((g, index) => (
             <GuideCard
               key={g.user_id}
               guide={g}
               rating={ratings[g.user_id]}
               languages={langMap[g.user_id]}
+              eager={index === 0}
             />
           ))}
         </div>

@@ -42,6 +42,7 @@ export function PromiseForm({ guide, busy, then }: { guide: Guide; busy: boolean
       </p>
       <textarea
         name="only_with_me"
+        aria-label="Only with me promise"
         rows={2}
         maxLength={90}
         defaultValue={guide?.only_with_me ?? ""}
@@ -429,11 +430,13 @@ export function CannedAnswers({ canned }: { canned: Array<any> }) {
           <input type="hidden" name="canned_id" value={c.id} />
           <input
             name="label"
+            aria-label={`Quick answer name: ${c.label}`}
             defaultValue={c.label}
             className="w-full rounded-button border border-border px-3 py-2 text-sm font-medium"
           />
           <textarea
             name="body"
+            aria-label={`Quick answer text: ${c.label}`}
             rows={3}
             defaultValue={c.body}
             className="w-full rounded-button border border-border px-3 py-2 text-base"
@@ -456,11 +459,13 @@ export function CannedAnswers({ canned }: { canned: Array<any> }) {
         <input type="hidden" name="intent" value="canned" />
         <input
           name="label"
+          aria-label="New quick answer name"
           placeholder="Short name, e.g. Porters"
           className="w-full rounded-button border border-border px-3 py-2 text-sm"
         />
         <textarea
           name="body"
+          aria-label="New quick answer text"
           rows={3}
           placeholder="The answer you keep writing again and again."
           className="w-full rounded-button border border-border px-3 py-2 text-base"
@@ -546,6 +551,7 @@ export function AskTeam({ busy }: { busy: boolean }) {
       </p>
       <textarea
         name="note"
+        aria-label="Change request"
         rows={3}
         placeholder="e.g. My licence number has a typo — it should end 4471."
         className="w-full rounded-button border border-border px-3 py-2 text-sm"
@@ -656,6 +662,7 @@ export function GuidePhotos({
         <input
           ref={fileRef}
           type="file"
+          aria-label="Choose a profile photo"
           accept="image/jpeg,image/png,image/webp"
           capture={compact ? "user" : undefined}
           className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-button file:border-0 file:bg-mist file:px-3 file:py-2 file:text-sm file:text-ink"
@@ -733,7 +740,7 @@ export function GuideVoice({ url, busy }: { url: string | null; busy: boolean })
 
       {url && !fresh && (
         <div className="space-y-2">
-          <audio controls src={url} className="w-full" />
+          <audio controls src={url} aria-label="Current voice introduction" className="w-full" />
           <Form method="post">
             <input type="hidden" name="intent" value="voice" />
             <button name="delete" value="1" className="text-xs text-ember underline">
@@ -762,7 +769,7 @@ export function GuideVoice({ url, busy }: { url: string | null; busy: boolean })
         {err && <p className="text-sm text-ember">{err}</p>}
         {fresh && (
           <>
-            <audio controls src={fresh} className="w-full" />
+            <audio controls src={fresh} aria-label="New voice introduction" className="w-full" />
             <p className="text-xs text-ink-soft">Listen back before you save it.</p>
             <Button type="submit" size="sm" loading={busy}>
               Use this recording

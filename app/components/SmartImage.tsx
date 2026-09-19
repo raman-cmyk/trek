@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "~/lib/cn";
+import { publicImageTransform } from "~/lib/images";
 
 /**
  * Progressive blur-up image (docs/06 §3.5) — critical to the feel.
@@ -20,6 +21,8 @@ export function SmartImage({
   avgColor = "var(--color-wheat)",
   placeholder,
   eager = false,
+  optimize = false,
+  sizes,
   cover = false,
   className,
   imgClassName,
@@ -33,12 +36,16 @@ export function SmartImage({
   placeholder?: string;
   /** True for above-the-fold LCP images (eager + high priority). */
   eager?: boolean;
+  /** Request right-sized Supabase variants, with automatic origin fallback. */
+  optimize?: boolean;
+  sizes?: string;
   /** Fill the parent box (skip the aspect-ratio lock) — full-bleed heroes. */
   cover?: boolean;
   className?: string;
   imgClassName?: string;
 }) {
   const [loaded, setLoaded] = useState(false);
+  const [transformFailed, setTransformFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   // No src means NO <img>. `src=""` is not "no image" to a browser — it
   // resolves against the current URL, fetches the HTML page, fails to decode
@@ -47,6 +54,12 @@ export function SmartImage({
   // thread and the journal: every avatar_url that is null (trekkers, ops, and
   // guides still in review) produced one.
   const hasSrc = typeof src === "string" && src.trim().length > 0;
+  const oneX = optimize && !transformFailed
+    ? publicImageTransform(src, width, height)
+    : null;
+  const twoX = optimize && !transformFailed
+    ? publicImageTransform(src, width * 2, height * 2)
+    : null;
 
   // Cached images can finish loading before hydration, so the onLoad event
   // never fires on the client. Reconcile against the actual element state.
@@ -96,7 +109,9 @@ export function SmartImage({
       )}
       <img
         ref={imgRef}
-        src={src}
+        src={oneX ?? src}
+        srcSet={oneX && twoX ? `${oneX} ${width}w, ${twoX} ${width * 2}w` : undefined}
+        sizes={oneX ? sizes : undefined}
         alt={alt}
         width={width}
         height={height}
@@ -104,6 +119,12 @@ export function SmartImage({
         decoding={eager ? "sync" : "async"}
         fetchPriority={eager ? "high" : undefined}
         onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (oneX) {
+            setTransformFailed(true);
+            setLoaded(false);
+          }
+        }}
         className={cn(
           "h-full w-full object-cover transition-opacity duration-base ease-out-soft",
           loaded ? "opacity-100" : "opacity-0",

@@ -114,9 +114,9 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
         </div>
       </header>
 
-      <div className="flex-1 p-4 pb-24">
+      <main className="flex-1 p-4 pb-24">
         <Outlet />
-      </div>
+      </main>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md border-t border-line bg-paper/95 backdrop-blur-md"

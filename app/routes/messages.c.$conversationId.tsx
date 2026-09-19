@@ -6,6 +6,7 @@ import { maskMessage } from "~/lib/mask";
 import { Thread } from "~/components/messages/Thread";
 import { money } from "~/lib/currency";
 import { firstName } from "~/lib/names";
+import { isPrivateMessagePhotoUrl } from "~/lib/message-attachments";
 
 export function meta() {
   return [{ title: "Message your guide" }, { name: "robots", content: "noindex" }];
@@ -125,6 +126,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       bookPath: isGuide ? null : bookPath || (guideRow?.slug ? `/guides/${guideRow.slug}` : null),
       canned,
       isGuide,
+      conversationId: convo.id,
     },
     { headers },
   );
@@ -138,7 +140,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!body) return data({ ok: false }, { headers });
 
   // Pre-booking: contact info is always masked; bypass attempts flag to ops.
-  const { rendered, flaggedReason } = maskMessage(body);
+  const attachment = isPrivateMessagePhotoUrl(body);
+  const { rendered, flaggedReason } = attachment
+    ? { rendered: body, flaggedReason: null }
+    : maskMessage(body);
   const { error: insertErr } = await admin.from("messages").insert({
     conversation_id: convo.id,
     sender_id: user.id,
@@ -166,7 +171,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function Conversation({ loaderData }: Route.ComponentProps) {
-  const { messages, partner, bookPath, canned, isGuide } = loaderData as any;
+  const { messages, partner, bookPath, canned, isGuide, conversationId } = loaderData as any;
   return (
     <Thread
       messages={messages}
@@ -175,6 +180,7 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
       bookHref={bookPath}
       isGuide={isGuide}
       cannedReplies={canned}
+      attachmentThread={{ type: "conversation", id: conversationId }}
     />
   );
 }
