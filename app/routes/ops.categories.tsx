@@ -162,6 +162,20 @@ export default function OpsCategories({ loaderData, actionData }: Route.Componen
         </p>
       </div>
 
+      {/* Said here because it was not said anywhere, and its absence made a
+          working system look like a missing one: four rows were built, none
+          switched live, nobody picked, and the homepage went on showing the
+          rows written into app/lib/intents.ts — so nothing done on this page
+          changed anything a visitor could see. */}
+      <p className="rounded border border-border bg-surface p-3 text-sm text-ink-soft">
+        <span className="font-medium text-ink">A row shows on the homepage when two
+        things are true:</span>{" "}
+        it is <b>live</b>, not a draft, and it holds at least its minimum number of
+        guides. Until then the homepage falls back to the rows built into the site,
+        which this page cannot change. You can also put a guide in several rows at
+        once from their own page, under Homepage rows.
+      </p>
+
       {actionData && "error" in (actionData as any) && (actionData as any).error && (
         <p role="alert" className="rounded border border-danger/40 bg-danger/5 p-3 text-sm text-danger">
           {(actionData as any).error}

@@ -2,7 +2,7 @@ import { Form, Link, data, useNavigation, useSearchParams } from "react-router";
 import type { Route } from "./+types/ops.people.$id";
 import { Badge, EmptyRow, Panel } from "~/components/ops/ui";
 import { ChecklistPanel } from "~/components/ops/ChecklistPanel";
-import { rows } from "~/lib/ops.server";
+import { rows, write } from "~/lib/ops.server";
 import { ACTION_KINDS, MAX_SUSPENSION_DAYS, REASON_MAX, REASON_MIN } from "~/lib/moderation";
 import { Button } from "~/components/Button";
 import { cn } from "~/lib/cn";
@@ -33,6 +33,7 @@ import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { TAKEN_STATUSES, availabilityCounts, horizonEnd } from "~/lib/open-days";
 import { checklistLabelFor } from "~/lib/guide-licence";
+import { cleanSort, membershipChanges, whyNotLive } from "~/lib/categories";
 import { AvatarPicker } from "~/components/AvatarPicker";
 
 /**
@@ -284,10 +285,51 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       .map((l) => ({ key: l.key, name: l.name }));
   }
 
+  /**
+   * The homepage rows this guide is in.
+   *
+   * The category system has existed since 0067 and had no screen here: eighteen
+   * action intents on this page and not one mention of categories, so putting
+   * one guide in five rows meant opening five panels on /ops/categories and
+   * scrolling the whole roster in each. `guide_categories_guide_idx` was
+   * created for exactly this query and was used by nothing.
+   */
+  let categories: any[] = [];
+  let categoryMine: Array<{ category_id: string; sort: number }> = [];
+  let categoryCounts: Record<string, number> = {};
+  let categoriesError: string | null = null;
+  if (isGuide) {
+    const [all, picks] = await Promise.all([
+      rows<any>(
+        admin
+          .from("categories")
+          .select("id, slug, label, blurb, auto_skill, live, sort, min_guides")
+          .order("sort"),
+        "the homepage rows",
+      ),
+      rows<any>(
+        admin.from("guide_categories").select("category_id, guide_id, sort"),
+        "who is in which row",
+      ),
+    ]);
+    categories = all.rows;
+    categoryMine = picks.rows
+      .filter((r: any) => r.guide_id === id)
+      .map((r: any) => ({ category_id: r.category_id, sort: r.sort }));
+    for (const r of picks.rows) {
+      categoryCounts[r.category_id] = (categoryCounts[r.category_id] ?? 0) + 1;
+    }
+    categoriesError = all.error ?? picks.error;
+  }
+
   return data(
     {
       person,
       isGuide,
+      categories,
+      categoryMine,
+      categoryCounts,
+      categoriesError,
       blocks: blocks.rows,
       blocksError: blocks.error,
       tasks,
@@ -573,6 +615,63 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ ok: "Route confirmed." }, { headers });
   }
 
+  /**
+   * Which homepage rows this guide appears in, and where in each.
+   *
+   * Saved as a whole form rather than a tick per row, so membership and
+   * position go in together — and `membershipChanges` writes only what moved,
+   * because re-upserting an unchanged row churns `created_at`, the only record
+   * of when somebody was put in a row.
+   */
+  if (intent === "categories") {
+    const wanted = form.getAll("category").map((raw) => {
+      const categoryId = String(raw);
+      return { category_id: categoryId, sort: cleanSort(form.get(`sort_${categoryId}`)) };
+    });
+    const current = await rows<any>(
+      admin.from("guide_categories").select("category_id, sort").eq("guide_id", id),
+      "the rows they are in",
+    );
+    if (current.error) {
+      return data({ error: current.error }, { status: 500, headers });
+    }
+    const change = membershipChanges(current.rows, wanted);
+
+    const steps: Array<{ label: string; run: () => any }> = [];
+    if (change.remove.length) {
+      steps.push({
+        label: "taking them out of a row",
+        run: () =>
+          admin
+            .from("guide_categories")
+            .delete()
+            .eq("guide_id", id)
+            .in("category_id", change.remove),
+      });
+    }
+    for (const m of [...change.add, ...change.update]) {
+      steps.push({
+        label: "putting them in a row",
+        run: () =>
+          admin
+            .from("guide_categories")
+            .upsert(
+              { category_id: m.category_id, guide_id: id, sort: m.sort },
+              { onConflict: "category_id,guide_id" },
+            ),
+      });
+    }
+    for (const step of steps) {
+      const out = await write(step.run(), step.label);
+      if (!out.ok) return data({ error: out.error }, { status: 500, headers });
+    }
+    const n = wanted.length;
+    return data(
+      { ok: n === 0 ? "Out of every row." : `In ${n} ${n === 1 ? "row" : "rows"}.` },
+      { headers },
+    );
+  }
+
   if (intent === "strike") {
     const reason = str("reason");
     if (reason.length < 4) {
@@ -840,6 +939,8 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                 )}
               </Panel>
             )}
+
+            {d.isGuide && <CategoryPanel d={d} busy={busy} />}
 
             <Panel title="Reviews">
               {d.reviews.length === 0 ? (
@@ -1816,6 +1917,106 @@ function Stat({
       </p>
       <p className="text-xs text-ink-soft">{label}</p>
     </div>
+  );
+}
+
+/**
+ * Which homepage rows this guide is in.
+ *
+ * "Need to make a system in which i can create a categorization based on
+ * profile, we need to be able to assign one person to multiple category that
+ * appears in the live home page." The system shipped in 0067 and every part
+ * of it worked — the founder had simply never been able to reach it from a
+ * guide, only from the category, so a guide in five rows meant five panels on
+ * /ops/categories and the whole roster scrolled in each.
+ *
+ * The note under each row is the other half of the answer. All four
+ * categories were drafts with nobody picked, so the homepage was showing the
+ * hard-coded rows from app/lib/intents.ts and nothing done in ops changed
+ * them — which is exactly what "the system does not exist" looks like from
+ * the outside.
+ */
+function CategoryPanel({ d, busy }: { d: any; busy: boolean }) {
+  const mine = new Map<string, number>(
+    (d.categoryMine ?? []).map((m: any) => [m.category_id, m.sort]),
+  );
+  return (
+    <Panel title="Homepage rows">
+      {d.categoriesError && (
+        <p className="mb-2 rounded bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          {d.categoriesError}
+        </p>
+      )}
+      {d.categories.length === 0 ? (
+        <EmptyRow>
+          No rows yet —{" "}
+          <Link to="/ops/categories" className="font-medium text-primary hover:underline">
+            make one
+          </Link>
+          .
+        </EmptyRow>
+      ) : (
+        <Form method="post" className="space-y-3">
+          <input type="hidden" name="intent" value="categories" />
+          <p className="text-sm text-ink-soft">
+            Tick every row this guide should appear in. The number is where they sit in
+            it — smaller is nearer the front.
+          </p>
+          <ul className="divide-y divide-border">
+            {d.categories.map((c: any) => {
+              const on = mine.has(c.id);
+              const why = whyNotLive(c, d.categoryCounts[c.id] ?? 0);
+              return (
+                <li key={c.id} className="flex items-start gap-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    name="category"
+                    value={c.id}
+                    defaultChecked={on}
+                    id={`cat-${c.id}`}
+                    className="mt-1 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <label htmlFor={`cat-${c.id}`} className="font-medium">
+                      {c.label}
+                    </label>
+                    {c.auto_skill && (
+                      <p className="text-xs text-ink-soft">
+                        Also sweeps in everyone who ticked &ldquo;{c.auto_skill}&rdquo;.
+                      </p>
+                    )}
+                    {/* Said out loud, because a tick that changes nothing
+                        visible is how this whole system came to look broken. */}
+                    <p className={cn("text-xs", why ? "text-amber-700" : "text-ink-soft")}>
+                      {why ?? "On the homepage now."}
+                    </p>
+                  </div>
+                  <label className="shrink-0 text-xs text-ink-soft">
+                    <span className="sr-only">Position in {c.label}</span>
+                    <input
+                      type="number"
+                      name={`sort_${c.id}`}
+                      defaultValue={mine.get(c.id) ?? 100}
+                      min={0}
+                      max={999}
+                      className="w-16 rounded border border-border bg-surface px-2 py-1 text-right text-sm"
+                    />
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex items-center gap-3">
+            <Button size="sm" type="submit" loading={busy}>
+              Save rows
+            </Button>
+            <Link to="/ops/categories" className="text-sm text-primary hover:underline">
+              Manage the rows themselves →
+            </Link>
+          </div>
+        </Form>
+      )}
+    </Panel>
   );
 }
 

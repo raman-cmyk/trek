@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_MEMBER_SORT,
   categoryIsReady,
   categoryProblems,
+  cleanSort,
   membersOf,
+  membershipChanges,
   orderCategories,
   slugifyCategory,
+  whyNotLive,
   type Category,
 } from "./categories";
 
@@ -115,5 +119,78 @@ describe("orderCategories", () => {
       cat({ id: "2", label: "Middle", sort: 1 }),
     ]);
     expect(out.map((c) => c.label)).toEqual(["Middle", "Apple", "Zebra"]);
+  });
+});
+
+describe("cleanSort", () => {
+  it("keeps a sensible position and defaults the rest", () => {
+    expect(cleanSort("3")).toBe(3);
+    expect(cleanSort("0")).toBe(0);
+    expect(cleanSort(" 12 ")).toBe(12);
+    expect(cleanSort("")).toBe(DEFAULT_MEMBER_SORT);
+    expect(cleanSort(null)).toBe(DEFAULT_MEMBER_SORT);
+    expect(cleanSort("first")).toBe(DEFAULT_MEMBER_SORT);
+  });
+
+  it("will not let a typo push somebody off the end of a row", () => {
+    expect(cleanSort("-4")).toBe(0);
+    expect(cleanSort("99999")).toBe(999);
+    expect(cleanSort("2.6")).toBe(3);
+  });
+});
+
+describe("membershipChanges", () => {
+  const m = (id: string, sort = 100) => ({ category_id: id, sort });
+
+  it("works out what to add, move and drop from one save", () => {
+    const out = membershipChanges([m("a", 1), m("b", 100), m("c", 5)], [m("a", 1), m("b", 2), m("d", 100)]);
+    expect(out.add).toEqual([m("d", 100)]);
+    expect(out.update).toEqual([m("b", 2)]);
+    expect(out.remove).toEqual(["c"]);
+  });
+
+  it("writes nothing when nothing changed", () => {
+    // Re-upserting eleven unchanged rows on every save would churn
+    // created_at, which is the only record of when somebody was put in a row.
+    const same = [m("a", 1), m("b", 100)];
+    expect(membershipChanges(same, same)).toEqual({ add: [], update: [], remove: [] });
+  });
+
+  it("empties a guide out of every row", () => {
+    expect(membershipChanges([m("a"), m("b")], []).remove.sort()).toEqual(["a", "b"]);
+  });
+
+  it("fills a guide into several rows at once, which is the point of it", () => {
+    const out = membershipChanges([], [m("a", 1), m("b", 1), m("c", 1)]);
+    expect(out.add).toHaveLength(3);
+    expect(out.remove).toEqual([]);
+  });
+});
+
+describe("whyNotLive", () => {
+  const c = (over: Partial<{ live: boolean; min_guides: number; label: string }>) => ({
+    live: true,
+    min_guides: 3,
+    label: "Photographers",
+    ...over,
+  });
+
+  it("says nothing about a row that is actually showing", () => {
+    expect(whyNotLive(c({}), 4)).toBeNull();
+  });
+
+  it("names the one thing left to do on a finished draft", () => {
+    // All four categories were drafts with nobody in them, which is why the
+    // founder concluded the whole system did not exist.
+    expect(whyNotLive(c({ live: false }), 5)).toContain("switch it live");
+  });
+
+  it("counts how many guides short a draft is", () => {
+    expect(whyNotLive(c({ live: false }), 2)).toContain("one guide");
+    expect(whyNotLive(c({ live: false }), 0)).toContain("3 guides");
+  });
+
+  it("explains a live row nobody can see", () => {
+    expect(whyNotLive(c({}), 1)).toContain("needs 3 guides and has 1");
   });
 });

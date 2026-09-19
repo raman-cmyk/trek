@@ -116,3 +116,90 @@ export function categoryIsReady(category: Category, memberCount: number): boolea
 export function orderCategories(categories: Category[]): Category[] {
   return [...categories].sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
 }
+
+/* ── Putting one guide in several rows ──────────────────────────────────── */
+
+/**
+ * Where a hand-picked guide sits in their row.
+ *
+ * `guide_categories.sort` has existed since 0067 and `membersOf` orders by
+ * it, but no screen ever wrote it — so every hand-pick sat at the default of
+ * 100 and the order of a homepage row was whatever Postgres happened to
+ * return. Small numbers first, because that is what `membersOf` does.
+ */
+export const DEFAULT_MEMBER_SORT = 100;
+
+export function cleanSort(raw: FormDataEntryValue | string | null | undefined): number {
+  const text = String(raw ?? "").trim();
+  // An empty box means "wherever" — not position zero, which is the front.
+  // Number("") is 0, which is the whole reason this line is here.
+  if (text === "") return DEFAULT_MEMBER_SORT;
+  const n = Number(text);
+  if (!Number.isFinite(n)) return DEFAULT_MEMBER_SORT;
+  return Math.max(0, Math.min(999, Math.round(n)));
+}
+
+export interface Membership {
+  category_id: string;
+  sort: number;
+}
+
+export interface MembershipChanges {
+  add: Membership[];
+  /** Already a member, but at a different position. */
+  update: Membership[];
+  /** Category ids this guide is no longer in. */
+  remove: string[];
+}
+
+/**
+ * What to write so the guide's rows match what the office just ticked.
+ *
+ * A whole-form save rather than a tick per row: the screen sets membership
+ * and position together, and re-upserting eleven unchanged rows on every save
+ * would churn `created_at` — which is the only record of when somebody was
+ * put in a row.
+ */
+export function membershipChanges(
+  current: readonly Membership[],
+  wanted: readonly Membership[],
+): MembershipChanges {
+  const now = new Map(current.map((m) => [m.category_id, m.sort]));
+  const next = new Map(wanted.map((m) => [m.category_id, m.sort]));
+
+  const add: Membership[] = [];
+  const update: Membership[] = [];
+  for (const [category_id, sort] of next) {
+    if (!now.has(category_id)) add.push({ category_id, sort });
+    else if (now.get(category_id) !== sort) update.push({ category_id, sort });
+  }
+  const remove = [...now.keys()].filter((id) => !next.has(id));
+  return { add, update, remove };
+}
+
+/**
+ * Why this row is not on the homepage, in one sentence, or null if it is.
+ *
+ * The founder built four categories, switched none of them live, picked
+ * nobody for any of them, and concluded the system did not exist — because
+ * the rows he could see were the hard-coded ones in app/lib/intents.ts and
+ * nothing he did in ops changed them. The screen has to say this out loud.
+ */
+export function whyNotLive(
+  category: Pick<Category, "live" | "min_guides" | "label">,
+  memberCount: number,
+): string | null {
+  if (!category.live) {
+    return memberCount >= category.min_guides
+      ? "Ready, but still a draft — switch it live to put it on the homepage."
+      : `A draft, and ${short(category.min_guides - memberCount)} short of its minimum.`;
+  }
+  if (memberCount < category.min_guides) {
+    return `Live, but hidden: it needs ${category.min_guides} guides and has ${memberCount}.`;
+  }
+  return null;
+}
+
+function short(n: number): string {
+  return n === 1 ? "one guide" : `${n} guides`;
+}
