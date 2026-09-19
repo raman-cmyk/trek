@@ -25,6 +25,7 @@ export function Composer({
   cannedReplies,
   onOptimistic,
   masked = true,
+  attachmentThread,
 }: {
   action?: string;
   disabled?: boolean;
@@ -37,6 +38,7 @@ export function Composer({
   onOptimistic?: (text: string) => void;
   /** Is contact masking actually active on this thread right now? */
   masked?: boolean;
+  attachmentThread?: { type: "booking" | "conversation" | "enquiry" | "group"; id: string };
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -90,6 +92,13 @@ export function Composer({
     setAttachMsg(null);
     const body = new FormData();
     body.append("file", file);
+    if (!attachmentThread) {
+      setAttachMsg("Open the conversation before attaching a photo.");
+      setAttaching(false);
+      return;
+    }
+    body.append("thread_type", attachmentThread.type);
+    body.append("thread_id", attachmentThread.id);
     try {
       const res = await fetch("/api/message-photo", { method: "POST", body });
       const json: any = await res.json();

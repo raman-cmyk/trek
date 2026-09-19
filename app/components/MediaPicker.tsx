@@ -198,8 +198,7 @@ export function MediaPicker({
       {error && <p className="text-sm text-ember">{error}</p>}
       {strippedGps && (
         <p className="text-caption text-muted">
-          We removed the location from your photos before saving. The date stays
-          — that is how the office checks a journal is the trek it says it is.
+          We removed location and other hidden metadata from your photos before saving.
         </p>
       )}
     </div>

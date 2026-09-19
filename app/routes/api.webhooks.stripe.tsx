@@ -27,7 +27,20 @@ export async function action({ request, context }: Route.ActionArgs) {
     const bookingId = pi.metadata?.booking_id;
     if (bookingId) {
       const admin = createAdminClient(env);
-      await fulfillDeposit(admin, bookingId, pi.id);
+      try {
+        await fulfillDeposit(admin, bookingId, {
+          id: String(pi.id),
+          status: String(pi.status),
+          amount: Number(pi.amount),
+          amountReceived: Number(pi.amount_received),
+          currency: String(pi.currency ?? ""),
+          metadata: { booking_id: String(bookingId) },
+        });
+      } catch {
+        // A mismatch or missing pending association must be retried/investigated,
+        // not acknowledged as a successful fulfilment.
+        return new Response("payment not bound to booking", { status: 409 });
+      }
     }
   }
   return new Response(JSON.stringify({ received: true }), {

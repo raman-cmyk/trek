@@ -4,6 +4,7 @@ import { SmartImage } from "~/components/SmartImage";
 import { Composer } from "./Composer";
 import { TripPipeline } from "~/components/TripPipeline";
 import { cn } from "~/lib/cn";
+import { isPrivateMessagePhotoUrl } from "~/lib/message-attachments";
 
 export interface GroupThreadMessage {
   id: string;
@@ -153,7 +154,7 @@ export function GroupThread({
                           )}
                         </p>
                       )}
-                      <p
+                      <div
                         className={cn(
                           "mt-0.5 inline-block whitespace-pre-line rounded-lg px-3 py-2 text-left text-[15px] leading-relaxed",
                           m.mine
@@ -163,8 +164,10 @@ export function GroupThread({
                               : "bg-mist text-ink",
                         )}
                       >
-                        {m.text}
-                      </p>
+                        {isPrivateMessagePhotoUrl(m.text) ? (
+                          <img src={m.text} alt="Shared photo" className="max-h-72 rounded-lg" loading="lazy" />
+                        ) : m.text}
+                      </div>
                     </div>
                   </li>
                 );
@@ -181,6 +184,7 @@ export function GroupThread({
           // Nothing is masked here: this is a room the group already shares,
           // and the note about hidden phone numbers would simply be false.
           masked={false}
+          attachmentThread={{ type: "group", id: group.id }}
         />
       ) : (
         <p className="border-t border-line bg-card px-4 py-3 text-caption text-muted">

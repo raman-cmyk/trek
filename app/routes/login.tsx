@@ -6,19 +6,15 @@ import { ensureTrekkerProfile, getProfile, getSessionUser } from "~/lib/auth.ser
 import { activeBlockFor } from "~/lib/blocking.server";
 import { blockedMessage } from "~/lib/blocking";
 import { fmtDate } from "~/lib/format";
+import { safeRedirectPath } from "~/lib/redirects";
 
 export function meta() {
   return [{ title: "Sign in" }, { name: "robots", content: "noindex" }];
 }
 
-function safeNext(raw: string | null): string {
-  // Only allow same-site absolute paths.
-  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
-}
-
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
-  const next = safeNext(new URL(request.url).searchParams.get("next"));
+  const next = safeRedirectPath(new URL(request.url).searchParams.get("next"), request.url, "/");
   const { user } = await getSessionUser(request, env);
   if (!user) return { next };
   // Send people where their role can actually go. Redirecting everyone to
@@ -48,7 +44,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ error: blockedMessage(block, fmtDate) }, { status: 403, headers });
   }
   await ensureTrekkerProfile(env, res.user);
-  return redirect(safeNext(String(form.get("next") ?? "/")), { headers });
+  return redirect(safeRedirectPath(String(form.get("next") ?? "/"), request.url, "/"), { headers });
 }
 
 export default function Login({ actionData, loaderData }: Route.ComponentProps) {

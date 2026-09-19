@@ -11,6 +11,7 @@
  * Titles, hrefs and the unread count, kept pure so the bell, the list and the
  * writer cannot disagree about what a notification is.
  */
+import { safeInternalPath } from "./redirects";
 
 export interface InAppRow {
   id: string;
@@ -64,12 +65,7 @@ const FALLBACK_HREF: Record<string, string> = {
 };
 
 export function hrefFor(kind: string, href: string | null | undefined): string {
-  const h = (href ?? "").trim();
-  // Only our own paths. A notification row is written by the server, but a
-  // row that ever carried an absolute URL would be an open redirect on a
-  // click somebody trusts.
-  if (h.startsWith("/") && !h.startsWith("//")) return h;
-  return FALLBACK_HREF[kind] ?? "/";
+  return safeInternalPath((href ?? "").trim(), FALLBACK_HREF[kind] ?? "/");
 }
 
 /** "4 minutes ago", for a list read at a glance. */

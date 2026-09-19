@@ -27,14 +27,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
   const { user, admin, headers } = await requireUser(request, env, "guide");
 
-  const [{ data: payouts }, { data: upcoming }] = await Promise.all([
+  const [{ data: payouts, error: payoutsError }, { data: upcoming, error: upcomingError }] = await Promise.all([
     admin
       .from("payouts")
       .select(
         "id, amount_npr_paisa, status, paid_at, booking:bookings(offering:offerings(title), end_date)",
       )
       .eq("guide_id", user.id)
-      .order("created_at", { ascending: false }),
+      .order("paid_at", { ascending: false, nullsFirst: true }),
     // The season ahead: accepted work that has not completed. pending_deposit
     // is excluded on purpose — money is not real until a deposit lands.
     admin
@@ -46,6 +46,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       .in("status", ["deposit_paid", "docs_pending", "confirmed", "active"])
       .order("start_date"),
   ]);
+
+  if (payoutsError || upcomingError) {
+    throw new Response("Earnings are temporarily unavailable.", { status: 503, headers });
+  }
 
   return data({ payouts: payouts ?? [], upcoming: upcoming ?? [] }, { headers });
 }

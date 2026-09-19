@@ -20,6 +20,7 @@ export function getEnv(context: Readonly<RouterContextProvider>): Env {
  */
 export function createSupabaseServerClient(request: Request, env: Env) {
   const headers = new Headers();
+  const secure = new URL(request.url).protocol === "https:";
   const supabase = createServerClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     cookies: {
       getAll() {
@@ -31,7 +32,7 @@ export function createSupabaseServerClient(request: Request, env: Env) {
         for (const { name, value, options } of cookiesToSet) {
           headers.append(
             "Set-Cookie",
-            serializeCookieHeader(name, value, options),
+            serializeCookieHeader(name, value, { ...options, secure }),
           );
         }
       },

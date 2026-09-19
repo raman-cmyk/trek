@@ -1,10 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computePricing, computeDeposit, type PriceBreakdown } from "~/lib/pricing";
 import { partyAmounts, type PriceBreakdown as ExperienceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
-import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
 import { DEPOSIT_HOLD_HOURS, FX_RATE_NPR } from "~/lib/config";
-import type { StripeClient } from "~/lib/stripe.server";
+import type { PaymentIntentDetails, StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
 
 function daysBetween(a: string, b: string) {
@@ -237,87 +236,20 @@ async function bookFromQuote(
 export async function fulfillDeposit(
   admin: SupabaseClient,
   bookingId: string,
-  paymentIntentId: string,
+  paymentIntent: PaymentIntentDetails,
+  instalmentCount?: number,
 ): Promise<{ applied: boolean }> {
-  // Idempotency: bail if this PaymentIntent was already recorded succeeded.
-  const { data: existing } = await admin
-    .from("payments")
-    .select("id")
-    .eq("stripe_payment_intent", paymentIntentId)
-    .eq("status", "succeeded")
-    .maybeSingle();
-  if (existing) return { applied: false };
-
-  const { data: booking } = await admin
-    .from("bookings")
-    .select("id, status, deposit_usd_cents, total_usd_cents, instalment_count, guide_id, start_date, end_date, enquiry_id, offering:offerings(kind)")
-    .eq("id", bookingId)
-    .single();
-  if (!booking) return { applied: false };
-  // Only fulfill a booking still awaiting its deposit — guards against a stray
-  // or duplicate webhook (even one carrying a different PaymentIntent) after the
-  // deposit has already been recorded.
-  if (booking.status !== "pending_deposit") return { applied: false };
-
-  // Checkout may have pre-created this row as `pending` (PI reuse) — settle it
-  // rather than inserting a duplicate.
-  await admin.from("payments").upsert(
-    {
-      booking_id: bookingId,
-      stripe_payment_intent: paymentIntentId,
-      type: "deposit",
-      amount_usd_cents: booking.deposit_usd_cents,
-      status: "succeeded",
-    },
-    { onConflict: "stripe_payment_intent,type" },
-  );
-
-  await admin
-    .from("bookings")
-    .update({ status: "deposit_paid", deposit_paid_at: new Date().toISOString() })
-    .eq("id", bookingId)
-    .eq("status", "pending_deposit");
-
-  // Paid in full at checkout (day experiences / inside the full-payment
-  // window): there is no balance to sweep — advance straight past it. Day
-  // experiences need no documents, so they confirm immediately (v3 §1e).
-  const balance = booking.total_usd_cents - booking.deposit_usd_cents;
-  if (balance <= 0) {
-    const isTrek = (booking as any).offering?.kind === "trek";
-    await admin
-      .from("bookings")
-      .update({
-        balance_paid_at: new Date().toISOString(),
-        status: isTrek ? "docs_pending" : "confirmed",
-      })
-      .eq("id", bookingId);
-  }
-
-  // Generate the interest-free instalment schedule for the balance (v3 §1d).
-  if ((booking.instalment_count ?? 1) > 1 && balance > 0) {
-    const today = new Date().toISOString().slice(0, 10);
-    const sched = instalmentSchedule(balance, booking.instalment_count, today, booking.start_date);
-    await admin.from("instalments").insert(
-      sched.map((s) => ({
-        booking_id: bookingId,
-        seq: s.seq,
-        amount_usd_cents: s.amountUsdCents,
-        due_date: s.dueDate,
-      })),
-    );
-  }
-
-  // held → booked for the trek days.
-  await admin
-    .from("availability")
-    .update({ status: "booked" })
-    .eq("booking_id", bookingId);
-
-  if (booking.enquiry_id) {
-    await admin.from("enquiries").update({ status: "converted" }).eq("id", booking.enquiry_id);
-  }
-  // Notifications fire here (Resend/SMS) — wired in M7.
-  return { applied: true };
+  const { data: applied, error } = await admin.rpc("settle_booking_deposit", {
+    p_booking_id: bookingId,
+    p_payment_intent: paymentIntent.id,
+    p_status: paymentIntent.status,
+    p_amount_received: paymentIntent.amountReceived,
+    p_currency: paymentIntent.currency,
+    p_metadata_booking_id: paymentIntent.metadata.booking_id ?? null,
+    p_instalment_count: instalmentCount ?? null,
+  });
+  if (error) throw new Error(`deposit settlement failed: ${error.message}`);
+  return { applied: applied === true };
 }
 
 /** Cancel a booking, computing the refund per policy (docs/02).
@@ -578,11 +510,19 @@ export async function runBalanceSweep(
   let cancelled = 0;
   let instalmentsCharged = 0;
   for (const b of due ?? []) {
-    // Instalment bookings pay the balance on their own schedule — never
-    // auto-charge the whole balance or cancel them via the 14-day sweep.
+    // Instalment bookings pay the balance on their own schedule. Old
+    // inconsistent rows with no schedule deliberately fall through to the
+    // standard balance path so they cannot evade collection forever.
     if ((b.instalment_count ?? 1) > 1) {
-      instalmentsCharged += await sweepInstalments(admin, stripe, b, todayIso, env);
-      continue;
+      const { count: scheduleCount, error: scheduleError } = await admin
+        .from("instalments")
+        .select("id", { count: "exact", head: true })
+        .eq("booking_id", b.id);
+      if (scheduleError) throw new Error(`instalment schedule check failed: ${scheduleError.message}`);
+      if ((scheduleCount ?? 0) > 0) {
+        instalmentsCharged += await sweepInstalments(admin, stripe, b, todayIso, env);
+        continue;
+      }
     }
     const daysUntil = daysBetween(todayIso, b.start_date);
     const balance = Math.max(0, b.total_usd_cents - b.deposit_usd_cents);
@@ -717,6 +657,7 @@ export async function approveProposal(
     .eq("id", p.enquiry_id)
     .maybeSingle();
   if (!enq) return null;
+  if (enq.trekker_id !== p.trekker_id || enq.guide_id !== p.guide_id) return null;
   // A booking already out of this enquiry means approving a second proposal
   // would sell the same trip twice. Checked against the bookings themselves
   // rather than the enquiry's status, which is the thing that could drift.

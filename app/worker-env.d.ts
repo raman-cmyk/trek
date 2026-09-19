@@ -9,6 +9,7 @@ interface Env {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PUBLISHABLE_KEY?: string;
+  STRIPE_MOCK_MODE?: string;
   RESEND_API_KEY?: string;
   SPARROW_SMS_TOKEN?: string;
   POSTHOG_KEY?: string;

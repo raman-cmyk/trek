@@ -16,6 +16,8 @@
     "db:reset": "supabase db reset",
     "db:start": "supabase start",
     "audit:rls": "node scripts/rls-audit.mjs",
+    "security:migrate-message-photos": "node scripts/migrate-legacy-message-photos.mjs",
+    "security:resanitize-photos": "node scripts/resanitize-public-photos.mjs",
     "db:stop": "supabase stop"
   },
   "dependencies": {
@@ -27,7 +29,7 @@
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
     "isbot": "^5.1.17",
-    "maplibre-gl": "^6.3.0",
+    "maplibre-gl": "^6.10.0",
     "marked": "^18.0.9",
     "pdf-lib": "^1.17.1",
     "react": "^19.1.0",

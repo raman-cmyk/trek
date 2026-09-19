@@ -52,6 +52,7 @@ describe("nothing on the way back is trusted", () => {
   it("refuses to carry an off-site destination", () => {
     expect(packed({ returnTo: "https://evil.example/x" })?.returnTo).toBe("/");
     expect(packed({ returnTo: "//evil.example" })?.returnTo).toBe("/");
+    expect(packed({ returnTo: "/\\evil.example" })?.returnTo).toBe("/");
     expect(packed({ returnTo: 42 })?.returnTo).toBe("/");
   });
 

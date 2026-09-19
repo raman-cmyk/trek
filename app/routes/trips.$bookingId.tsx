@@ -409,7 +409,7 @@ export default function TripDetail({ loaderData, actionData }: Route.ComponentPr
           you had to make before you could do either, and both slots looked
           like one job. They are two jobs, and one of them people cannot do at
           all until they have bought something. */}
-      {isTrek && !cancelled && b.status !== "pending_deposit" && (
+      {isTrek && !cancelled && !["pending_deposit", "completed"].includes(b.status) && (
         <section className="mt-6 space-y-3">
           <h2 className="font-display text-xl">Documents</h2>
           <p className="text-sm text-ink-soft">

@@ -13,6 +13,8 @@ SUPABASE_SERVICE_ROLE_KEY= # server only, never exposed to the client
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PUBLISHABLE_KEY=
+# Mock payments are allowed only with this explicit flag on a localhost SITE_URL.
+STRIPE_MOCK_MODE=true
 
 # Email / SMS / analytics — wired in M7-M9
 RESEND_API_KEY=

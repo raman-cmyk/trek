@@ -12,6 +12,7 @@
  * back — the replay runs the same validation a fresh POST does — so this is a
  * convenience, not an authority.
  */
+import { safeInternalPath } from "./redirects";
 
 export interface PendingEnquiry {
   offeringId: string;
@@ -39,7 +40,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** A same-site path, never an absolute URL — this is used as a destination. */
 function ownPath(v: unknown): string {
   const s = typeof v === "string" ? v.trim() : "";
-  return s.startsWith("/") && !s.startsWith("//") ? s.slice(0, 300) : "/";
+  return safeInternalPath(s.slice(0, 300), "/");
 }
 
 export function packPending(

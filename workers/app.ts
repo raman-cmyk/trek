@@ -40,15 +40,28 @@ function isCacheableRequest(request: Request): boolean {
   return true;
 }
 
+function withTransportSecurity(response: Response, request: Request): Response {
+  if (new URL(request.url).protocol !== "https:") return response;
+  const secured = new Response(response.body, response);
+  secured.headers.set("Strict-Transport-Security", "max-age=31536000");
+  return secured;
+}
+
 export default {
   async fetch(request, env, ctx) {
+    const requestUrl = new URL(request.url);
+    if (requestUrl.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(requestUrl.hostname)) {
+      requestUrl.protocol = "https:";
+      return Response.redirect(requestUrl.toString(), 308);
+    }
+
     // `caches.default` is Workers-only and absent from the DOM CacheStorage type.
     const cache = (caches as unknown as { default: Cache }).default;
     const cacheable = isCacheableRequest(request);
 
     if (cacheable) {
       const hit = await cache.match(request);
-      if (hit) return hit;
+      if (hit) return withTransportSecurity(hit, request);
     }
 
     const context = new RouterContextProvider();
@@ -64,9 +77,9 @@ export default {
       const stored = new Response(response.body, response);
       stored.headers.set("x-worker-cache", "MISS");
       ctx.waitUntil(cache.put(request, stored.clone()));
-      return stored;
+      return withTransportSecurity(stored, request);
     }
-    return response;
+    return withTransportSecurity(response, request);
   },
 
   // Cloudflare Cron Trigger → self-fetch each cron route with the secret.

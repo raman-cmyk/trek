@@ -167,6 +167,8 @@ export function Footer({
                   ["/trust", "How verification works"],
                   ["/insurance", "Insurance checker"],
                   ["/safety", "Trust & safety"],
+                  ["/privacy", "Privacy"],
+                  ["/terms", "Terms"],
                   ["/fund", "The Fund"],
                   ["/hosts", "Guide on Trek"],
                 ].map(([to, label]) => (
@@ -214,9 +216,8 @@ function Stat({ n, label }: { n?: number; label: string }) {
   if (n == null) return null;
   return (
     <div className="flex items-baseline gap-2">
-      <dt className="sr-only">{label}</dt>
-      <dd className="font-mono text-paper">{n.toLocaleString("en-US")}</dd>
-      <span className="text-sage">{label}</span>
+      <dt className="text-sage">{label}</dt>
+      <dd className="order-first font-mono text-paper">{n.toLocaleString("en-US")}</dd>
     </div>
   );
 }
