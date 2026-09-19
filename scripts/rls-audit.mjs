@@ -91,13 +91,16 @@ async function auditGuidePhotosVerifiedOnly() {
   if (error) return bad(`guide_photos: unexpected error ${error.message}`);
   if (!photos || photos.length === 0) return ok("guide_photos: none visible (acceptable)");
   const ids = [...new Set(photos.map((p) => p.guide_id))];
-  // guide_photos.guide_id == guides.user_id == public_guides.user_id.
-  const { data: verified } = await anon
-    .from("public_guides")
-    .select("user_id")
-    .in("user_id", ids);
-  const verifiedIds = new Set((verified ?? []).map((g) => g.user_id));
-  const unverified = ids.filter((id) => !verifiedIds.has(id));
+  // public_guides also requires a live offering, so it is intentionally a
+  // narrower set than verified guides. Test the exact security-definer helper
+  // used by the photo policy instead of misclassifying verified guides whose
+  // listings are not currently live.
+  const unverified = [];
+  for (const uid of ids) {
+    const { data: verified, error: verifyError } = await anon.rpc("is_verified_guide", { uid });
+    if (verifyError) return bad(`guide_photos: verification check failed (${verifyError.message})`);
+    if (!verified) unverified.push(uid);
+  }
   if (unverified.length === 0) ok(`guide_photos: all ${photos.length} rows belong to verified guides`);
   else bad(`guide_photos: ${unverified.length} unverified guide(s) exposed photos`);
 }
