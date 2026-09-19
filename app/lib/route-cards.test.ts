@@ -3,7 +3,11 @@ import {
   gradeLevel,
   groupByRegion,
   isRange,
+  lengthOf,
+  lengthsOf,
   matches,
+  monthsOf,
+  resultHeading,
   priceSpread,
   profileOf,
   profilePath,
@@ -197,16 +201,44 @@ describe("filtering and sorting", () => {
     ...over,
   });
   const cards = [
-    card({ name: "Everest Base Camp", region: "Khumbu", max_altitude_m: 5644, typical_days: 14, lo: 54300, difficulty: "hard" }),
-    card({ name: "Mardi Himal", region: "Annapurna", max_altitude_m: 4500, typical_days: 5, lo: 26400 }),
-    card({ name: "Rara Lake", region: "Karnali", max_altitude_m: 3200, typical_days: 10, lo: null }),
+    card({ name: "Everest Base Camp", region: "Khumbu", max_altitude_m: 5644, typical_days: 14, lo: 54300, difficulty: "hard", season_months: [3, 4, 10, 11] }),
+    card({ name: "Mardi Himal", region: "Annapurna", max_altitude_m: 4500, typical_days: 5, lo: 26400, season_months: [3, 4, 5, 10] }),
+    card({ name: "Rara Lake", region: "Karnali", max_altitude_m: 3200, typical_days: 10, lo: null, season_months: [5, 6, 9] }),
   ];
 
-  it("keeps everything on 'all', and narrows on region or grade", () => {
-    expect(cards.filter((c) => matches(c, "all", "all"))).toHaveLength(3);
-    expect(cards.filter((c) => matches(c, "Khumbu", "all"))).toHaveLength(1);
-    expect(cards.filter((c) => matches(c, "all", "moderate"))).toHaveLength(2);
-    expect(cards.filter((c) => matches(c, "Khumbu", "moderate"))).toHaveLength(0);
+  it("keeps everything on the empty filter, and narrows on region or grade", () => {
+    expect(cards.filter((c) => matches(c))).toHaveLength(3);
+    expect(cards.filter((c) => matches(c, { region: "Khumbu" }))).toHaveLength(1);
+    expect(cards.filter((c) => matches(c, { grade: "moderate" }))).toHaveLength(2);
+    expect(cards.filter((c) => matches(c, { region: "Khumbu", grade: "moderate" }))).toHaveLength(0);
+  });
+
+  it("narrows on how long you have got", () => {
+    expect(cards.filter((c) => matches(c, { length: "short" })).map((c) => c.name)).toEqual([
+      "Mardi Himal",
+    ]);
+    expect(cards.filter((c) => matches(c, { length: "week" })).map((c) => c.name)).toEqual([
+      "Rara Lake",
+    ]);
+    expect(cards.filter((c) => matches(c, { length: "fortnight" })).map((c) => c.name)).toEqual([
+      "Everest Base Camp",
+    ]);
+  });
+
+  it("narrows on the month somebody is coming", () => {
+    // The monsoon answer: in June the only thing on this list is Rara, which
+    // sits in the rain shadow. That is the whole point of the facet.
+    expect(cards.filter((c) => matches(c, { month: "6" })).map((c) => c.name)).toEqual([
+      "Rara Lake",
+    ]);
+    expect(cards.filter((c) => matches(c, { month: "10" }))).toHaveLength(2);
+  });
+
+  it("returns nothing for a value nobody offers, rather than everything", () => {
+    // A hand-edited URL that means nothing should not read as "no filter".
+    expect(cards.filter((c) => matches(c, { month: "1" }))).toHaveLength(0);
+    expect(cards.filter((c) => matches(c, { length: "weekend" }))).toHaveLength(0);
+    expect(cards.filter((c) => matches(c, { grade: "brutal" }))).toHaveLength(0);
   });
 
   it("sorts by altitude, days and name", () => {
@@ -223,6 +255,56 @@ describe("filtering and sorting", () => {
     const before = cards.map((c) => c.name);
     sortCards(cards, "altitude");
     expect(cards.map((c) => c.name)).toEqual(before);
+  });
+});
+
+describe("lengthOf", () => {
+  it("puts a trek in the shape of holiday it fits", () => {
+    expect(lengthOf(4)).toBe("short");
+    expect(lengthOf(6)).toBe("short");
+    expect(lengthOf(7)).toBe("week");
+    expect(lengthOf(14)).toBe("fortnight");
+    expect(lengthOf(21)).toBe("long");
+  });
+
+  it("has no opinion about a route with no length recorded", () => {
+    expect(lengthOf(null)).toBeNull();
+    expect(lengthOf(0)).toBeNull();
+  });
+});
+
+describe("the facets are built from the data, not from a calendar", () => {
+  const c = (over: Partial<Card>): Card => ({
+    slug: "s", name: "A route", region: "Khumbu", typical_days: 10,
+    max_altitude_m: 4000, difficulty: "moderate", guides: 0, lo: null, ...over,
+  });
+
+  it("offers only the months something is actually walked in", () => {
+    // Nothing we run is in season in January. Offering it would be a filter
+    // that always returns an empty page — the same lie as a shelf with one
+    // card on it.
+    const months = monthsOf([
+      c({ season_months: [3, 4, 10] }),
+      c({ season_months: [4, 10, 11] }),
+    ]);
+    expect(months.map((m) => m.month)).toEqual([3, 4, 10, 11]);
+    expect(months.find((m) => m.month === 4)!.count).toBe(2);
+    expect(months.find((m) => m.month === 3)!.label).toBe("March");
+  });
+
+  it("drops a length bucket nothing falls into", () => {
+    const lengths = lengthsOf([c({ typical_days: 5 }), c({ typical_days: 6 })]);
+    expect(lengths.map((l) => l.value)).toEqual(["short"]);
+    expect(lengths[0].count).toBe(2);
+  });
+});
+
+describe("resultHeading", () => {
+  it("says the same number the filter bar says", () => {
+    expect(resultHeading(24, 24)).toBe("All 24 routes");
+    expect(resultHeading(8, 24)).toBe("8 routes match");
+    expect(resultHeading(1, 24)).toBe("1 route matches");
+    expect(resultHeading(0, 24)).toBe("No routes match");
   });
 });
 

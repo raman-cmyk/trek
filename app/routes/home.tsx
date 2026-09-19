@@ -4,7 +4,7 @@ import { copy } from "~/lib/copy";
 import { pageMeta, absoluteUrl, jsonLd, websiteLd } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
-import { guideRatings } from "~/lib/ratings.server";
+import { guideRatings, type Rating } from "~/lib/ratings.server";
 import { useState } from "react";
 import {
   GuideCard,
@@ -43,7 +43,7 @@ import { Chip } from "~/components/design/Chip";
 import { PhotoCard } from "~/components/design/PhotoCard";
 import { GlassPill } from "~/components/design/Glass";
 import { KIND_GLYPH } from "~/components/public/cards";
-import { featuredReview } from "~/lib/featured-review";
+import { topReviews } from "~/lib/featured-review";
 import { Standards, SmallestStep } from "~/components/public/Standards";
 import { TREK_REGIONS, inRegion } from "~/lib/trek-regions";
 import { profileOf } from "~/lib/route-cards";
@@ -111,7 +111,9 @@ export async function loader({ context }: Route.LoaderArgs) {
         .order("sort"),
       client
         .from("public_reviews")
-        .select("id, overall, body, published_at, author_name, author_country, offering_slug")
+        .select(
+          "id, overall, body, published_at, author_name, author_country, offering_slug, guide_id, guide_slug",
+        )
         .order("published_at", { ascending: false })
         .limit(40),
       // Same helper /fund uses — the two numbers must never disagree.
@@ -434,12 +436,37 @@ export async function loader({ context }: Route.LoaderArgs) {
     // Not the newest — the most convincing. The newest was 4.0 stars about a
     // yoga class, on a page selling a fortnight at altitude. The kind comes
     // from the offerings this page already has in hand, mapped by slug.
-    review: featuredReview(
+    //
+    // Three of them, each about a different guide, and each carrying the
+    // guide it is about: a quotation a reader cannot act on is a poster, and
+    // the whole point of this company is that the person has a name.
+    reviews: topReviews(
       ((reviews ?? []) as any[]).map((r) => ({
         ...r,
         kind: kindBySlug.get(r.offering_slug) ?? null,
       })),
-    ),
+      3,
+    ).map((r: any) => {
+      const guide = all.find((g) => g.slug === r.guide_slug);
+      const trip = (offerings ?? []).find((o: any) => o.slug === r.offering_slug);
+      return {
+        id: r.id,
+        overall: r.overall,
+        body: r.body,
+        published_at: r.published_at,
+        author_name: r.author_name,
+        author_country: r.author_country,
+        guide: guide
+          ? {
+              slug: guide.slug,
+              name: guide.full_name,
+              avatar: guide.avatar_url,
+              rating: ratings[guide.user_id] ?? null,
+            }
+          : null,
+        trip: trip ? { slug: trip.slug, title: trip.title } : null,
+      };
+    }),
     journals: (journals ?? []) as PublicJournal[],
     // Four real guides for the numbers band. "49 verified guides" is an
     // abstraction; four people looking at you is the argument this company
@@ -484,7 +511,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     ratings,
     langMap,
     splitOffering,
-    review,
+    reviews,
     journals,
     stats,
     statFaces,
@@ -832,34 +859,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <GiantSplit offering={splitOffering as PublicOffering} />
       )}
 
-      {/* 8 — One review, big, half over the photo. */}
-      {review && (
-        <section className="relative">
-          <SmartImage
-            src="/img/routes/gokyo-lakes.jpg"
-            alt="Gokyo lake and the Ngozumpa moraine"
-            width={1400}
-            height={620}
-            className="h-[52vh] w-full"
-          />
-          <div className="mx-auto max-w-6xl px-4">
-            <figure className="relative z-10 -mt-28 max-w-xl border border-line bg-paper p-7 sm:-mt-36 sm:p-9">
-              <Stars value={review.overall} />
-              <blockquote className="mt-3 text-xl leading-relaxed text-ink">
-                “{review.body}”
-              </blockquote>
-              <figcaption className="mt-4 font-mono text-sm text-ink-soft">
-                — {review.author_name}
-                {review.author_country ? `, ${review.author_country}` : ""} ·{" "}
-                {fmtDate(review.published_at)}
-              </figcaption>
-            </figure>
-          </div>
-          <p className="mx-auto mt-3 max-w-6xl px-4 pb-2 text-right font-mono text-[11px] text-ink-soft">
-            third lake, Gokyo, 4,790 m
-          </p>
-        </section>
-      )}
+      {/* 8 — What they said afterwards.
+          This was one quotation on a half-screen stock photograph of Gokyo,
+          in a square-cornered card pulled up over the left third of it. The
+          photograph had nothing to do with the review, the right half of it
+          was empty, and the quotation named nobody and linked nowhere — so
+          the single most persuasive thing on the page was the one thing a
+          reader could not act on.
+          Three now, each about a different guide, each with that guide's
+          face and name and the trip they led, in the site's own card. */}
+      {reviews.length > 0 && <Reviews reviews={reviews} />}
 
       {/* 8b — The other side of the marketplace. Guides are the supply and
           the product; a marketplace that only ever talks to buyers starves.
@@ -909,6 +918,128 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
     </main>
+  );
+}
+
+interface HomeReview {
+  id: string;
+  overall: number;
+  body: string | null;
+  published_at: string;
+  author_name: string | null;
+  author_country: string | null;
+  guide: { slug: string; name: string; avatar: string | null; rating: Rating | null } | null;
+  trip: { slug: string; title: string } | null;
+}
+
+/**
+ * What they said afterwards.
+ *
+ * The first one large because it is the best one we have, the other two
+ * beside it because one testimonial reads as the only testimonial. Every
+ * card names the guide, shows their face and links to them: on a site whose
+ * argument is that you book a person rather than an agency, an anonymous
+ * quotation is the one shape this section must not take.
+ *
+ * Nothing here is written by us — `topReviews` picks from what trekkers
+ * published, and the section simply does not render when nothing clears the
+ * bar (app/lib/featured-review.ts).
+ */
+function Reviews({ reviews }: { reviews: HomeReview[] }) {
+  const [lead, ...rest] = reviews;
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-14">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <h2 className="font-display text-display-m text-ink">What they said afterwards</h2>
+        <p className="text-sm text-muted">
+          Every review is left by somebody who finished the trek. We do not edit them.
+        </p>
+      </div>
+
+      <div className="mt-7 grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+        <ReviewCard review={lead} lead />
+        {rest.length > 0 && (
+          // min-w-0, like the card beside it: without it the column is
+          // floored by the nowrap "led their <trip>" line inside, and at
+          // 360px the cards rendered 447px wide and were silently clipped by
+          // an ancestor's overflow-hidden — no scrollbar, just cut words.
+          <div className="grid min-w-0 gap-5 sm:grid-cols-2 lg:grid-cols-1">
+            {rest.map((r) => (
+              <ReviewCard key={r.id} review={r} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ReviewCard({ review, lead = false }: { review: HomeReview; lead?: boolean }) {
+  const { guide, trip } = review;
+  return (
+    <figure
+      className={cn(
+        "flex min-w-0 flex-col rounded-card border border-line bg-card shadow-card",
+        // The lead card is as tall as the two stacked beside it, and these
+        // reviews are a hundred characters long — left to stretch, the
+        // quotation sat at the top of a third of a screen of nothing.
+        // Centred, the height reads as room rather than as a gap.
+        lead ? "justify-center p-6 sm:p-8" : "p-5",
+      )}
+    >
+      <Stars value={review.overall} />
+      {/* The quotation is the whole point, so it gets the size. Left to
+          itself it stretches to the width of a 1280px column and stops being
+          readable — a measure keeps it at a paragraph's width. */}
+      <blockquote
+        className={cn(
+          "mt-3 text-ink",
+          lead
+            ? "max-w-[34ch] font-display text-2xl leading-snug sm:text-[28px]"
+            : "text-base leading-relaxed",
+        )}
+      >
+        “{review.body}”
+      </blockquote>
+
+      <figcaption className={cn("border-t border-line pt-4", lead ? "mt-6" : "mt-5")}>
+        <p className="text-sm text-ink-soft">
+          <span className="font-medium text-ink">{review.author_name}</span>
+          {review.author_country ? `, ${review.author_country}` : ""} ·{" "}
+          <span className="font-mono">{fmtDate(review.published_at)}</span>
+        </p>
+
+        {guide && (
+          // The face and the name: the thing a reader can do something with.
+          <Link
+            to={`/guides/${guide.slug}`}
+            prefetch="intent"
+            className="group mt-3 flex items-center gap-3"
+          >
+            <SmartImage
+              src={guide.avatar ?? ""}
+              alt={guide.name}
+              width={48}
+              height={48}
+              className={cn("shrink-0 rounded-full ring-2 ring-sage", lead ? "h-12 w-12" : "h-10 w-10")}
+            />
+            <span className="min-w-0">
+              <span className="block truncate font-medium text-ink group-hover:text-moss">
+                {guide.name}
+              </span>
+              <span className="block truncate text-caption text-muted">
+                {trip ? `led their ${trip.title}` : "guided this trip"}
+              </span>
+            </span>
+            {guide.rating && (
+              <span className="ml-auto shrink-0">
+                <Stars value={guide.rating.value} count={guide.rating.count} />
+              </span>
+            )}
+          </Link>
+        )}
+      </figcaption>
+    </figure>
   );
 }
 

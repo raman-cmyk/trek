@@ -10,8 +10,10 @@ import { RouteCard, type RouteCardData } from "~/components/public/RouteCard";
 import {
   GRADES,
   SORTS,
-  groupByRegion,
+  lengthsOf,
   matches,
+  monthsOf,
+  resultHeading,
   priceSpread,
   profileOf,
   regionsOf,
@@ -25,7 +27,7 @@ import { BookingAssurance } from "~/components/public/BookingAssurance";
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 
 /**
- * Every route we run, organised by altitude.
+ * Every route we run, in one grid.
  *
  * The page used to be twenty-four identical cards under a map. The thing that
  * actually separates these walks — the shape of the climb — was on none of
@@ -37,6 +39,15 @@ export { publicCacheHeaders as headers } from "~/lib/cache-headers";
  * range the guides who walk it actually charge. Filtering happens in the
  * browser over a list that server-renders complete, so the crawler and a
  * phone with no JavaScript both get all twenty-four.
+ *
+ * It used to be shelved by region, on the theory that a reader picks a
+ * mountain first. Twelve regions over twenty-four routes meant **seven
+ * shelves held exactly one route** — a heading, a rule and a lone card in a
+ * three-wide row, seven times down the page — and the shelf counts disagreed
+ * with the count in the filter bar because the shelves were built from the
+ * list minus the three featured ones. Region is a filter now, alongside the
+ * three other questions people actually ask of a trek: how hard, how long,
+ * and what month they are coming.
  */
 export function meta({ loaderData: data }: Route.MetaArgs) {
   return [
@@ -104,6 +115,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       difficulty: String(r.difficulty ?? ""),
       summary: r.summary ?? article?.meta ?? null,
       season: seasonLabel(r.season_months),
+      season_months: r.season_months ?? [],
       photo,
       profile: profileOf(r.day_stops),
       lo: spread.lo,
@@ -113,23 +125,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     } satisfies RouteCardData;
   });
 
-  // The faces for the closing band: real guides, whoever has a photo.
-  const { data: bandGuides } = await client
-    .from("public_guides")
-    .select("slug, full_name, avatar_url")
-    .not("avatar_url", "is", null)
-    // Enough to fill the band rather than leave one row of faces floating on
-    // a field of green. All forty-nine have a photograph.
-    .limit(54);
-
   return {
     cards,
     guideCount: guideCount ?? 0,
-    band: (bandGuides ?? []).map((g: any) => ({
-      slug: g.slug,
-      name: g.full_name,
-      avatar: g.avatar_url,
-    })),
     mapped: cards.map((c) => ({
       slug: c.slug,
       name: c.name,
@@ -143,15 +141,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
-  const { cards, mapped, guideCount, band, search } = loaderData as any;
+  const { cards, mapped, guideCount, search } = loaderData as any;
   // In the URL rather than in useState: a page filtered to Langtang was not a
   // link you could send anybody, and a reload threw it away.
   const params = new URLSearchParams(search);
-  const region = params.get("region") || "all";
-  const grade = params.get("grade") || "all";
+  const facets = {
+    region: params.get("region") || "all",
+    grade: params.get("grade") || "all",
+    length: params.get("length") || "all",
+    month: params.get("month") || "all",
+  };
   const [sort, setSort] = useState<SortKey>("altitude");
 
   const regions = useMemo(() => regionsOf(cards), [cards]);
+  const lengths = useMemo(() => lengthsOf(cards), [cards]);
+  const months = useMemo(() => monthsOf(cards), [cards]);
   const routeGroups = useMemo(
     () => [
       {
@@ -167,6 +171,17 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
         })),
       },
       {
+        param: "length",
+        title: "How long you have got",
+        type: "one" as const,
+        anyLabel: "Any length",
+        options: lengths.map((l: any) => ({
+          value: l.value,
+          label: l.label,
+          count: l.count,
+        })),
+      },
+      {
         param: "grade",
         title: "How hard",
         type: "one" as const,
@@ -177,22 +192,28 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           label: g.charAt(0).toUpperCase() + g.slice(1),
         })),
       },
+      {
+        param: "month",
+        title: "When you are coming",
+        type: "one" as const,
+        anyLabel: "Any month",
+        showFirst: 6,
+        // Only the months something is walked in. Three routes in July is
+        // the honest answer about the monsoon, and the one a reader
+        // booking for July most needs.
+        options: months.map((m: any) => ({
+          value: String(m.month),
+          label: m.label,
+          count: m.count,
+        })),
+      },
     ],
-    [regions],
+    [regions, lengths, months],
   );
   const list = useMemo(
-    () => sortCards(cards.filter((c: any) => matches(c, region, grade)), sort),
-    [cards, region, grade, sort],
+    () => sortCards(cards.filter((c: any) => matches(c, facets)), sort),
+    [cards, facets.region, facets.grade, facets.length, facets.month, sort],
   );
-
-  // "Start here" only makes sense when nothing is filtered — once you have
-  // asked for Langtang, three other routes above the answer are noise.
-  const untouched = region === "all" && grade === "all";
-  const featured = untouched
-    ? [...cards].sort((a: any, b: any) => b.guides - a.guides).slice(0, 3)
-    : [];
-  const featuredSlugs = new Set(featured.map((f: any) => f.slug));
-  const rest = untouched ? list.filter((c: any) => !featuredSlugs.has(c.slug)) : list;
 
   return (
     <main className="bg-paper">
@@ -267,7 +288,7 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
 
             <div className="flex shrink-0 items-center gap-3">
               <span className="hidden font-mono text-caption text-muted sm:inline">
-                {list.length} routes
+                {list.length} {list.length === 1 ? "route" : "routes"}
               </span>
               <div className="hidden gap-0.5 rounded-pill border border-line bg-card p-1 md:flex">
                 {SORTS.map(([key, label]) => (
@@ -305,65 +326,31 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
 
       {/* ── The routes ─────────────────────────────────────────────────── */}
       <div className="mx-auto max-w-6xl px-4 py-10" id="all-routes">
-        {featured.length > 0 && (
-          <>
-            <h2 className="border-b border-line pb-2.5 font-display text-2xl text-ink">
-              Start here
-            </h2>
-            <div className="mt-5 grid gap-5 lg:grid-cols-3">
-              {featured.map((r: any, i: number) => (
-                <RouteCard key={r.slug} route={r} featured eager={i === 0} />
-              ))}
-            </div>
-            <h2 className="mt-12 border-b border-line pb-2.5 font-display text-2xl text-ink">
-              Every route
-            </h2>
-          </>
-        )}
+        {/* One grid. The count above it is the count in the bar, because
+            there is now only one list for either of them to be counting. */}
+        <h2 className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line pb-2.5 font-display text-2xl text-ink">
+          {resultHeading(list.length, cards.length)}
+          {list.length < cards.length && (
+            <Link
+              to="/routes"
+              className="font-sans text-caption font-normal text-muted underline-offset-4 hover:text-moss hover:underline"
+            >
+              Show all {cards.length} →
+            </Link>
+          )}
+        </h2>
 
-        {/* Shelved by region unless they have already picked one.
-            Twenty-four treks in one grid asks a reader to hold twenty-four
-            things in their head and rank them; nobody does that. They pick a
-            region first — "we want to see Everest" — and choose inside it. */}
-        {region === "all" ? (
-          groupByRegion(rest).map((g) => (
-            <section key={g.region} className="mt-8 first:mt-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line pb-2">
-                <h3 className="font-display text-xl text-ink">
-                  {g.region}
-                  {g.note && (
-                    <span className="ml-2 font-sans text-sm font-normal text-muted">
-                      {g.note}
-                    </span>
-                  )}
-                </h3>
-                <Link
-                  to={`/routes?region=${encodeURIComponent(g.region)}`}
-                  className="text-caption text-muted underline-offset-4 hover:text-moss hover:underline"
-                >
-                  {g.routes.length} {g.routes.length === 1 ? "route" : "routes"} →
-                </Link>
-              </div>
-              <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {g.routes.map((r: any) => (
-                  <RouteCard key={r.slug} route={r} />
-                ))}
-              </div>
-            </section>
-          ))
-        ) : (
-          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {rest.map((r: any) => (
-              <RouteCard key={r.slug} route={r} />
-            ))}
-          </div>
-        )}
+        <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {list.map((r: any, i: number) => (
+            // The first row is above the fold on every width, so it does not
+            // wait for the observer before it starts fetching.
+            <RouteCard key={r.slug} route={r} eager={i < 3} />
+          ))}
+        </div>
 
         {list.length === 0 && (
           <div className="py-16 text-center">
-            <p className="text-muted">
-              Nothing at that grade in {region === "all" ? "Nepal" : region} — yet.
-            </p>
+            <p className="text-muted">Nothing matches all of that — yet.</p>
             <Link
               to="/routes"
               className="mt-4 inline-block rounded-pill border border-line bg-card px-4 py-2 text-sm font-medium text-ink hover:border-moss hover:text-moss"
@@ -388,39 +375,6 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
           </Link>
         </div>
       </div>
-
-      {/* ── The people ─────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-pine">
-        <div className="absolute inset-0 grid auto-rows-min grid-cols-6 opacity-40 sm:grid-cols-9 lg:grid-cols-[repeat(18,1fr)]">
-          {band.map((g: any) => (
-            <span key={g.slug} className="aspect-square overflow-hidden">
-              <img
-                src={g.avatar}
-                alt=""
-                loading="lazy"
-                className="h-full w-full object-cover grayscale"
-              />
-            </span>
-          ))}
-        </div>
-        {/* Forty-nine faces never divide evenly into a row, so the last one is
-            always short. The wash hides where the grid runs out. */}
-        <div className="absolute inset-0 bg-gradient-to-b from-pine/50 via-pine/80 to-pine" />
-        <div className="relative mx-auto max-w-3xl px-4 py-20 text-center sm:py-24">
-          <h2 className="font-display text-display-l text-paper">
-            {guideCount} people. Pick one.
-          </h2>
-          <p className="mx-auto mt-3 max-w-[46ch] text-sage">
-            Every face here is a guide we have met in person, licensed for what they lead. None of them is an agency.
-          </p>
-          <Link
-            to="/guides"
-            className="mt-7 inline-block rounded-pill bg-paper px-5 py-3 font-medium text-ink transition duration-quick hover:bg-mist"
-          >
-            Browse the guides
-          </Link>
-        </div>
-      </section>
 
       <div className="mx-auto max-w-6xl px-4">
         <BookingAssurance className="mt-16" />

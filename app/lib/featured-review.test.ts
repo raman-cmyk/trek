@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { featuredReview, MIN_BODY, MIN_STARS, scoreReview } from "./featured-review";
+import { featuredReview, MIN_BODY, MIN_STARS, scoreReview, topReviews } from "./featured-review";
 
 const r = (o: Partial<Parameters<typeof scoreReview>[0]> = {}) => ({
   id: Math.random().toString(36).slice(2),
@@ -66,5 +66,47 @@ describe("featuredReview", () => {
 
   it("copes with a review whose kind we could not resolve", () => {
     expect(featuredReview([r({ kind: null })])).not.toBeNull();
+  });
+});
+
+describe("topReviews", () => {
+  const r = (over: any) => ({
+    id: over.id ?? "r",
+    overall: 5,
+    body: "x".repeat(120),
+    published_at: "2026-01-01T00:00:00Z",
+    kind: "trek",
+    ...over,
+  });
+
+  it("does not quote the same guide twice", () => {
+    // Pemba has the two strongest reviews on the platform. Three quotations
+    // about one man argues for Pemba, not for a marketplace of fifty-six.
+    const picks = topReviews([
+      r({ id: "pemba-ebc", guide_slug: "pemba-sherpa", body: "x".repeat(400) }),
+      r({ id: "pemba-manaslu", guide_slug: "pemba-sherpa", body: "x".repeat(380) }),
+      r({ id: "nima", guide_slug: "nima-tamang", body: "x".repeat(200) }),
+      r({ id: "lakpa", guide_slug: "lakpa-sherpa", body: "x".repeat(150) }),
+    ]);
+    expect(picks.map((p) => p.id)).toEqual(["pemba-ebc", "nima", "lakpa"]);
+  });
+
+  it("keeps every review that has no guide recorded", () => {
+    const picks = topReviews([r({ id: "a" }), r({ id: "b" }), r({ id: "c" })]);
+    expect(picks).toHaveLength(3);
+  });
+
+  it("applies the same floors as the single pick, and returns fewer rather than worse", () => {
+    expect(topReviews([r({ overall: 4 }), r({ body: "too short" })])).toEqual([]);
+    expect(topReviews(null)).toEqual([]);
+    expect(topReviews([r({ id: "only" })])).toHaveLength(1);
+  });
+
+  it("agrees with featuredReview about which one is best", () => {
+    const list = [
+      r({ id: "short-trip", kind: "food_culture" }),
+      r({ id: "the-trek", body: "x".repeat(400) }),
+    ];
+    expect(topReviews(list)[0].id).toBe(featuredReview(list)!.id);
   });
 });

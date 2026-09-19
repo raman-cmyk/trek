@@ -25,6 +25,8 @@ export interface Reviewable {
   author_country?: string | null;
   /** The kind of offering reviewed, where the caller has it. */
   kind?: string | null;
+  /** Whose trip it was, for showing three different faces rather than one. */
+  guide_slug?: string | null;
 }
 
 /** Below this, a quotation argues against us. */
@@ -57,10 +59,40 @@ export function scoreReview(r: Reviewable): number {
  * changing to something worse.
  */
 export function featuredReview<T extends Reviewable>(reviews: T[] | null | undefined): T | null {
+  return topReviews(reviews, 1)[0] ?? null;
+}
+
+/**
+ * The best few, each about a different guide.
+ *
+ * The front page shows three now rather than one, and the obvious ranking
+ * put Pemba in two of the three slots: he has the two longest five-star
+ * treks on the platform. Three quotations about the same man is a testimonial
+ * for Pemba, not for a marketplace whose whole argument is that there are
+ * fifty-six of him — so the second review about a guide already quoted is
+ * passed over for the next best one about somebody else.
+ *
+ * Reviews with no guide recorded are never folded together; each stands on
+ * its own.
+ */
+export function topReviews<T extends Reviewable>(
+  reviews: T[] | null | undefined,
+  limit = 3,
+): T[] {
   const scored = (reviews ?? [])
     .map((r) => ({ r, s: scoreReview(r) }))
     .filter((x) => x.s >= 0)
     .sort((a, b) =>
       b.s - a.s || Date.parse(b.r.published_at) - Date.parse(a.r.published_at));
-  return scored.length ? scored[0].r : null;
+
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const { r } of scored) {
+    const guide = r.guide_slug ?? "";
+    if (guide && seen.has(guide)) continue;
+    if (guide) seen.add(guide);
+    out.push(r);
+    if (out.length === limit) break;
+  }
+  return out;
 }

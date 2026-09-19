@@ -172,6 +172,30 @@ export interface Card {
   difficulty: string;
   guides: number;
   lo: number | null;
+  /** Month numbers the route is walked in, for the "when are you coming" filter. */
+  season_months?: number[] | null;
+}
+
+/**
+ * How long you have got, in the shapes a holiday actually comes in.
+ *
+ * Not a slider. A trekker does not think "between 9 and 13 days"; they think
+ * "I have a week" or "I have taken the fortnight off", and the four buckets
+ * below split the twenty-four routes 3 / 7 / 8 / 6 — which is what a facet
+ * has to do to be worth its line in the panel.
+ */
+export const LENGTHS: Array<{ value: string; label: string; min: number; max: number }> = [
+  { value: "short", label: "Up to 6 days", min: 0, max: 6 },
+  { value: "week", label: "7 to 10 days", min: 7, max: 10 },
+  { value: "fortnight", label: "11 to 14 days", min: 11, max: 14 },
+  { value: "long", label: "15 days or more", min: 15, max: Number.POSITIVE_INFINITY },
+];
+
+/** Which bucket a route falls in, or null if it has no length recorded. */
+export function lengthOf(days: number | null | undefined): string | null {
+  const d = Number(days);
+  if (!Number.isFinite(d) || d <= 0) return null;
+  return LENGTHS.find((l) => d >= l.min && d <= l.max)?.value ?? null;
 }
 
 export type SortKey = "altitude" | "days" | "price" | "name";
@@ -183,11 +207,30 @@ export const SORTS: Array<[SortKey, string]> = [
   ["name", "A to Z"],
 ];
 
-export function matches<T extends Card>(c: T, region: string, grade: string): boolean {
-  return (
-    (region === "all" || c.region === region) &&
-    (grade === "all" || String(c.difficulty).toLowerCase() === grade)
-  );
+/**
+ * What the reader has narrowed to. Every field is "all" until they say
+ * otherwise, and an unknown value narrows to nothing rather than being
+ * quietly ignored — a URL somebody edited by hand should not silently
+ * return the whole list as though it had worked.
+ */
+export interface Facets {
+  region?: string;
+  grade?: string;
+  length?: string;
+  /** Month number, 1–12. */
+  month?: string;
+}
+
+export function matches<T extends Card>(c: T, f: Facets = {}): boolean {
+  const { region = "all", grade = "all", length = "all", month = "all" } = f;
+  if (region !== "all" && c.region !== region) return false;
+  if (grade !== "all" && String(c.difficulty).toLowerCase() !== grade) return false;
+  if (length !== "all" && lengthOf(c.typical_days) !== length) return false;
+  if (month !== "all") {
+    const m = Number(month);
+    if (!(c.season_months ?? []).includes(m)) return false;
+  }
+  return true;
 }
 
 /**
@@ -218,6 +261,50 @@ export function regionsOf(cards: Card[]): Array<{ region: string; count: number 
   return [...counts.entries()]
     .map(([region, count]) => ({ region, count }))
     .sort((a, b) => b.count - a.count || a.region.localeCompare(b.region));
+}
+
+/**
+ * The months anyone walks in, each with how many routes are in season.
+ *
+ * Built from the data rather than from January to December: nothing we run
+ * is in season in January, and offering a month that returns an empty page
+ * is the same lie as a shelf with one card on it. June, July and August come
+ * back with three or four — which is the honest answer about the monsoon,
+ * and exactly the thing somebody booking for July needs to see.
+ */
+export function monthsOf(cards: Card[]): Array<{ month: number; label: string; count: number }> {
+  const counts = new Map<number, number>();
+  for (const c of cards) {
+    for (const m of c.season_months ?? []) {
+      if (m >= 1 && m <= 12) counts.set(m, (counts.get(m) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([month, count]) => ({ month, label: monthName(month), count }));
+}
+
+/**
+ * The heading over the grid.
+ *
+ * It says the same number the filter bar says, because there is one list
+ * now. The shelved version counted the shelves from the list minus three
+ * featured routes while the bar counted all twenty-four, so the page
+ * disagreed with itself in two places a reader could see at once.
+ */
+export function resultHeading(shown: number, total: number): string {
+  if (shown === 0) return "No routes match";
+  if (shown === total) return `All ${total} routes`;
+  return shown === 1 ? "1 route matches" : `${shown} routes match`;
+}
+
+/** The length buckets that actually hold routes, with their counts. */
+export function lengthsOf(cards: Card[]): Array<{ value: string; label: string; count: number }> {
+  return LENGTHS.map((l) => ({
+    value: l.value,
+    label: l.label,
+    count: cards.filter((c) => lengthOf(c.typical_days) === l.value).length,
+  })).filter((l) => l.count > 0);
 }
 
 /* ── Regions as the page's own shelves ──────────────────────────────────── */

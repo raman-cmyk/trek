@@ -21,6 +21,8 @@ export interface RouteCardData {
   difficulty: string;
   summary: string | null;
   season: string;
+  /** The raw month numbers, for the "when are you coming" filter on /routes. */
+  season_months?: number[] | null;
   photo: string | null;
   profile: Profile | null;
   lo: number | null;
@@ -42,17 +44,14 @@ export interface RouteCardData {
  */
 export function RouteCard({
   route,
-  featured = false,
   eager = false,
 }: {
   route: RouteCardData;
-  featured?: boolean;
   eager?: boolean;
 }) {
   // Rounded: a trek is not priced to the cent, and "$397.76–$463.30" is two
   // numbers nobody can compare at a glance.
   const { mr } = useMoney();
-  const height = featured ? 190 : 132;
   const spread = { lo: route.lo, hi: route.hi, guides: route.guides };
   const altitude = route.max_altitude_m?.toLocaleString("en-US") ?? "—";
   const profileLabel =
@@ -65,18 +64,14 @@ export function RouteCard({
       <Link to={`/routes/${route.slug}`} prefetch="intent" className="block">
         {/* One box, one shape, photo or not — otherwise a row of cards steps
             up and down as the routes with photographs run out. */}
-        <div
-          className={`relative overflow-hidden bg-gradient-to-b from-mist to-sage/35 ${
-            featured ? "aspect-[16/9]" : "aspect-[16/7]"
-          }`}
-        >
+        <div className="relative aspect-[16/7] overflow-hidden bg-gradient-to-b from-mist to-sage/35">
           {route.photo ? (
             <>
               <SmartImage
                 src={route.photo}
                 alt={`${route.name} trek`}
                 width={800}
-                height={featured ? 450 : 350}
+                height={350}
                 eager={eager}
                 cover
                 className="absolute inset-0 h-full w-full"
@@ -92,7 +87,6 @@ export function RouteCard({
                       profile={route.profile}
                       variant="photo"
                       height={56}
-                      bold={featured}
                       label={profileLabel}
                       className="block h-14 w-full"
                     />
@@ -103,8 +97,7 @@ export function RouteCard({
           ) : route.profile ? (
             <RouteProfile
               profile={route.profile}
-              height={height}
-              bold={featured}
+              height={132}
               label={profileLabel}
               className="absolute inset-0 block h-full w-full"
             />
@@ -124,9 +117,7 @@ export function RouteCard({
 
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h3
-            className={`font-display text-ink ${featured ? "text-display-m" : "text-xl"} leading-tight`}
-          >
+          <h3 className="font-display text-xl leading-tight text-ink">
             <Link to={`/routes/${route.slug}`} prefetch="intent" className="hover:text-moss">
               {route.name}
             </Link>

@@ -11,22 +11,20 @@ export function RouteProfile({
   profile,
   variant = "paper",
   height = 132,
-  bold = false,
   className,
   label,
 }: {
   profile: Profile;
   variant?: "paper" | "photo";
   height?: number;
-  bold?: boolean;
   className?: string;
   label: string;
 }) {
   const W = 600;
   const { line, area, summit } = profilePath(profile, W, height);
   const photo = variant === "photo";
-  // Unique per render target: two cards for the same route (featured and in
-  // the grid) would otherwise share a gradient id and the second would win.
+  // Unique per render target: two cards for the same route would otherwise
+  // share a gradient id and the second would win.
   const uid = `${label.replace(/\W+/g, "")}-${variant}-${height}`;
 
   return (
@@ -76,7 +74,7 @@ export function RouteProfile({
         d={line}
         fill="none"
         stroke={photo ? "#ffffff" : "var(--color-pine)"}
-        strokeWidth={bold ? 2.6 : 2}
+        strokeWidth="2"
         strokeLinejoin="round"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
@@ -84,7 +82,7 @@ export function RouteProfile({
       <circle
         cx={summit.x}
         cy={summit.y}
-        r={bold ? 4.5 : 3.6}
+        r={3.6}
         fill={photo ? "var(--color-chartreuse)" : "var(--color-card)"}
         stroke={photo ? "#ffffff" : "var(--color-pine)"}
         strokeWidth="2"
