@@ -4,7 +4,7 @@ import { partyAmounts, type PriceBreakdown as ExperienceBreakdown , hasBreakdown
 import { instalmentSchedule } from "~/lib/instalments";
 import { computeCancellation } from "~/lib/policy";
 import { FX_RATE_NPR } from "~/lib/config";
-import { isCancelledBooking } from "~/lib/ask-guard";
+import { isCancelledBooking, isUniqueViolation } from "~/lib/ask-guard";
 import { outstandingUsdCents } from "~/lib/group-pay";
 import { missedRunEndingAt, needsWelfareCheck } from "~/lib/checkin";
 import type { StripeClient } from "~/lib/stripe.server";
@@ -337,16 +337,37 @@ export async function fulfillDeposit(
 
   // Checkout may have pre-created this row as `pending` (PI reuse) — settle it
   // rather than inserting a duplicate.
-  const { error: payErr } = await admin.from("payments").upsert(
-    {
-      booking_id: bookingId,
-      stripe_payment_intent: paymentIntentId,
-      type: "deposit",
-      amount_usd_cents: booking.deposit_usd_cents,
-      status: "succeeded",
-    },
-    { onConflict: "stripe_payment_intent,type" },
-  );
+  // Insert, and if the checkout already left a pending row for this intent,
+  // settle that one instead.
+  //
+  // Deliberately NOT an upsert. The unique index this table relies on is
+  // partial (`where stripe_payment_intent is not null`, from 0028), and
+  // Postgres will only infer a non-partial index for ON CONFLICT — so every
+  // upsert here returned 42P10 and silently recorded nothing. 0114 fixes the
+  // index, but this path must not wait for a migration to start recording
+  // money, and it is better off not depending on the shape of an index that
+  // PostgREST cannot fully express.
+  //
+  // The race is covered: two writers both inserting means the loser gets
+  // 23505 from that same index and takes the update path.
+  let payErr: { message: string } | null = null;
+  const { error: insErr } = await admin.from("payments").insert({
+    booking_id: bookingId,
+    stripe_payment_intent: paymentIntentId,
+    type: "deposit",
+    amount_usd_cents: booking.deposit_usd_cents,
+    status: "succeeded",
+  });
+  if (insErr && isUniqueViolation(insErr)) {
+    const { error: updErr } = await admin
+      .from("payments")
+      .update({ status: "succeeded", amount_usd_cents: booking.deposit_usd_cents })
+      .eq("stripe_payment_intent", paymentIntentId)
+      .eq("type", "deposit");
+    payErr = updErr;
+  } else {
+    payErr = insErr;
+  }
   // This is the record that money arrived, and it used to be fired without
   // anyone reading the answer. It always failed (0114), so the first real
   // deposit taken on this platform advanced a booking while leaving the

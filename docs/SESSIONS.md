@@ -3922,10 +3922,25 @@ index is on the pair, so it would have missed even a non-partial index.
 marked paid with no payment row cannot be reconciled or refunded, and the
 idempotency guard reads that very row.
 
-**Not deployed, deliberately.** 0114 has to be applied first: until the index
-exists the upsert still fails, and `fulfillDeposit` now treats that as fatal.
-Applying it needs a Supabase personal access token (`sbp_…`) for
-`scripts/remote-apply.sh` — the service_role key cannot run DDL.
+The first attempt at this asked Raman for a Supabase access token so 0114
+could be applied before the code shipped. He pushed back — he had already
+sent the service_role key — and he was right to. The key genuinely cannot
+alter an index (there is no SQL-execution endpoint on PostgREST; every
+`rpc/exec_sql` shape 404s), but the migration was never the only way out.
+
+Both callers now **insert and fall back to an update on 23505** instead of
+upserting. That works against the partial index exactly as it stands, needs
+no migration, and is the better shape regardless: it does not depend on an
+index PostgREST cannot express. The race is covered by the same index — two
+writers both inserting means the loser takes the update path.
+
+0114 stays in the tree as tidying, not as a blocker.
+
+**Deployed and re-verified end to end**: a second throwaway booking, paid
+with 4242, produced `bookings.status = deposit_paid` AND
+`payments{type: deposit, status: succeeded, amount: 22302}` with the intent
+id. Both test bookings have since been deleted and `payments` is back to its
+original 11 rows.
 
 ### Email sends, and the 65 addresses that would have poisoned it
 

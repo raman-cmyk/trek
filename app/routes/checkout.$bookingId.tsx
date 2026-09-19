@@ -13,6 +13,7 @@ import { fmtDateShort as fmtDate } from "~/lib/format";
 import { TrustPanel } from "~/components/public/TrustPanel";
 import { CardPayment } from "~/components/CardPayment";
 import { isPaid, outcomeOfStatus } from "~/lib/card-payment";
+import { isUniqueViolation } from "~/lib/ask-guard";
 
 export function meta() {
   return [{ title: "Pay your deposit" }, { name: "robots", content: "noindex" }];
@@ -91,16 +92,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     // The conflict target has to name the real index, which is on the PAIR
     // (see 0114). Naming the column alone was a second reason this upsert
     // could never succeed, on top of the index being partial.
-    const { error: payErr } = await admin.from("payments").upsert(
-      {
-        booking_id: b.id,
-        stripe_payment_intent: created.paymentIntentId,
-        type: "deposit",
-        amount_usd_cents: b.deposit_usd_cents,
-        status: "pending",
-      },
-      { onConflict: "stripe_payment_intent,type" },
-    );
+    // A plain insert, not an upsert: the unique index is partial and cannot
+    // be inferred by ON CONFLICT, which is why this write failed silently for
+    // months (see fulfillDeposit and 0114). The intent id was minted a moment
+    // ago, so a duplicate can only be a concurrent load of this same page —
+    // which means the row is already there, and that is not a problem.
+    const { error: insErr } = await admin.from("payments").insert({
+      booking_id: b.id,
+      stripe_payment_intent: created.paymentIntentId,
+      type: "deposit",
+      amount_usd_cents: b.deposit_usd_cents,
+      status: "pending",
+    });
+    const payErr = insErr && !isUniqueViolation(insErr) ? insErr : null;
     // Looked at, not fired and forgotten. This write failing silently for
     // months is why a real deposit could succeed at Stripe and leave no trace
     // in the payments table. It must not block the checkout — the intent is

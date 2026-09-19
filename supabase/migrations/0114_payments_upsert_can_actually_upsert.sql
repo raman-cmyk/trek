@@ -24,6 +24,13 @@
 -- Dropping the predicate is behaviour-preserving. Unique indexes treat NULLs
 -- as distinct by default, so rows with no intent id still do not collide with
 -- each other — exactly what the WHERE clause was achieving.
+--
+-- NOT URGENT, and nothing is waiting on it. The code no longer upserts at
+-- all: both callers insert and fall back to an update on 23505, which works
+-- against the partial index exactly as it stands. That is the better shape
+-- regardless — it does not depend on an index PostgREST cannot express — so
+-- this migration is tidying, not a fix anything is blocked on. Apply it when
+-- a Supabase access token is to hand.
 
 drop index if exists payments_intent_type_uniq;
 
