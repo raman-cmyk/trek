@@ -3365,6 +3365,31 @@ is not being found: no trip listed means not on the site (0110).
 
 Green: 1,848 tests in 122 files, typecheck clean, build passing.
 
-**Not applied or deployed.** This container started fresh and `scratchpad/`
-went with it, so there is no Supabase token, no Cloudflare token and no DB
-access this session. Migration 0111 and the deploy are waiting on those.
+### Applied and deployed, and checked on the live site
+
+`0111` applied over the Management API; `availability_day_taken_idx` and
+`availability_guide_taken_day_idx` exist, `availability_day_open_idx` is gone.
+Deployed as version `10424b14`.
+
+Verified against production, not just locally:
+
+- **Laxman's `/treks/gokyo` went from nothing to 354 bookable start days** —
+  22 Sep 2026 through 8 Sep 2027, which is right for a 12-day trek with the
+  three-day lead time and the one-year horizon — and renders "Request to book"
+  where it rendered "No open dates right now". He now appears in
+  `/guides?from=&to=` and `/experiences?from=&to=` a month out.
+- **Nothing regressed for the seeded guides.** Pemba's held and booked days
+  are still excluded from his one-day experience, his free days still offered.
+- **`/g` signed in as a guide**: seven rows, "Trips you offer" / "Trips you're
+  leading", live badges (7 upcoming, 1 question, 2 unreplied reviews); five
+  tabs on the bar; none of "Your experiences", "Your journeys", "Booked
+  trips", "Block dates", "Journeys from other guides" or the duplicate footer
+  link anywhere in the HTML. "Get more work" no longer counts open days.
+
+One thing worth writing down: `scratchpad/` was **not** in `.gitignore`, and
+this session stages with `git add -A`. Checked the whole history first — no
+token has ever been committed — and added the line. Two of the three
+Cloudflare tokens supplied turned out to be invalid against Cloudflare's own
+verify endpoint (they came from a screenshot, and `O`/`0` and `l`/`1` are not
+distinguishable in that font); the one from earlier in the conversation, in
+text, worked.
