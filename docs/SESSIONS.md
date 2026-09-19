@@ -3769,3 +3769,100 @@ needed" reminder fire.
 
 **Rotate the credentials** — the Supabase token, the two Cloudflare tokens and
 the database password.
+
+## 19 Sep 2026 (second session) — the card field, and one address for the site
+
+Raman asked to "get Stripe live, then Resend". Stripe turned out not to be a
+configuration job.
+
+### The domain came up on its own
+
+The last session left `guidesofnepal.com` stuck: Cloudflare's zone was
+`initializing` and its nameservers were refusing queries, waiting on a button
+only Raman could press. It resolves now — `liberty`/`bjorn.ns.cloudflare.com`
+answer, and both the apex and `www` serve the worker with a 200. That
+unblocked everything below that mentions the domain.
+
+Still true, and still worth doing: the apex, `www` and
+`trek.raman-7d9.workers.dev` all serve the same pages with no redirect
+between them, so there is no canonical host. The canonical *tags* now all
+agree (see `SITE_URL` below), which is the half that protects the SEO; a
+redirect is the other half and is not built.
+
+### Stripe: the key was never the missing piece
+
+Nothing in this application had ever asked anybody for a card. The checkout
+created a PaymentIntent, drew a button, and on submit asked Stripe whether
+that intent had succeeded — which the mock always said. Real keys would have
+answered `requires_payment_method` forever. Adding `STRIPE_SECRET_KEY` on its
+own would have converted a clearly-labelled mock into a checkout that told
+every trekker "Payment didn't complete. Try again.", permanently.
+
+So the card step was built, on both flows that take money — the deposit
+checkout and a group member's share. `app/lib/card-payment.ts` holds the
+deciding: `outcomeOfStatus()` is the single place a PaymentIntent status is
+read, so the browser and the server cannot reach different conclusions about
+one payment — the failure mode there is a charged card, a page saying it
+failed, and somebody paying twice. `CardPayment.tsx` mounts Stripe's Payment
+Element inside the existing `<Form>`, so the action receives what it always
+received and still re-reads the intent from Stripe before fulfilling.
+
+`retrievePaymentIntent` now returns the client secret too. The checkout
+reuses a pending intent across reloads and only ever stored its id, so
+without it a reload became a page you could not pay on.
+
+### A group member's share would have confirmed the whole trip
+
+Found while checking which webhook events to register. Every intent carries
+the booking id, a share included, and the webhook read that id and called
+`fulfillDeposit` — which marks the entire booking paid. The first of eight
+people to pay their share would have confirmed the trip for all of them.
+
+It had never fired because the webhook refuses to run without real keys.
+It would have started firing on the day they were added. Intents now carry
+`metadata[purpose]`, and `shouldFulfilDeposit()` decides. A share still has
+no webhook backstop if the browser dies mid-payment — crediting one needs the
+member and the share arithmetic the webhook has no access to — so that is
+written down in BACKLOG.md rather than half-built.
+
+### One address for the site
+
+Every email and SMS is mostly a link, and the address was assembled fourteen
+ways. Ten call sites interpolated `env.SITE_URL` bare, so with it unset a
+guide's SMS read `Reply: undefined/messages/abc`. Nobody had seen it because
+nothing has ever sent anything — all 39 rows in `email_log` still say
+`skipped · no_api_key`. It would have been seen in the first message after
+the keys landed. `app/lib/site-url.ts` is now the only answer, `SITE_URL` is
+a var in `wrangler.jsonc` rather than a secret, and `absoluteUrl` no longer
+falls back to `http://localhost:5173` — which fed every canonical tag, the
+sitemap and robots.txt.
+
+Green: 2,008 tests in 130 files, typecheck clean, build passing. No migration.
+
+### Not verified
+
+**The card field has never been rendered.** It typechecks and its logic is
+tested, but drawing a Payment Element needs real Stripe test keys, and this
+container has none — `scratchpad/` did not survive, so there is no Cloudflare
+token to deploy with either. Nothing here should be described as working
+until a test card has gone through it.
+
+### Blocked, and on what
+
+Everything left needs credentials, as text and not as a screenshot — two
+Cloudflare tokens have already failed on OCR.
+
+- **Cloudflare API token + account id.** Without it nothing can be deployed
+  or have a secret set, so none of the above is live.
+- **Stripe test keys** (`sk_test_…`, `pk_test_…`) and, after the endpoint is
+  created, the webhook signing secret (`whsec_…`). The endpoint is
+  `https://guidesofnepal.com/api/webhooks/stripe` and the only event it reads
+  is `payment_intent.succeeded`.
+- **`RESEND_API_KEY`**, plus verifying `guidesofnepal.com` in Resend — the
+  from-lines are `no-reply@` and `hello@` at that domain, so mail will bounce
+  until the DNS records Resend issues are added in Cloudflare. Possible now
+  that the zone is active; it was not last session.
+- **Supabase token** for `dbq.py`, to check anything against the live schema.
+- **Rotate the credentials** once the list above is done — the Supabase
+  token, the two Cloudflare tokens and the database password. Deferred
+  deliberately, still outstanding.
