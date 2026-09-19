@@ -7,6 +7,7 @@ import { BookingAssurance } from "~/components/public/BookingAssurance";
 export { publicCacheHeaders as headers } from "~/lib/cache-headers";
 import { inRegion, regionBySlug, TREK_REGIONS } from "~/lib/trek-regions";
 import { guideRatings } from "~/lib/ratings.server";
+import { photosByOffering } from "~/lib/offering-photos.server";
 import { BRAND } from "~/lib/brand";
 
 /**
@@ -98,7 +99,8 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
   const shownIds = theirs.slice(0, 8).map((g: any) => g.user_id);
   // Languages were never loaded here, so the left half of every card's bottom
   // row was blank on a region page and filled in on /guides.
-  const [ratings, langMap] = await Promise.all([
+  const shownTrips = trips.slice(0, 8);
+  const [ratings, langMap, photos] = await Promise.all([
     guideRatings(client, theirs.map((g: any) => g.user_id)),
     (async () => {
       const map: Record<string, string[]> = {};
@@ -111,6 +113,8 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
       }
       return map;
     })(),
+    // The pictures beyond each trip's cover, for the slider on the card.
+    photosByOffering(client, shownTrips.map((t: any) => t.id)),
   ]);
 
   return data(
@@ -119,10 +123,11 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
       origin: new URL(request.url).origin,
       canonical: absoluteUrl(env.SITE_URL, `/nepal/${region.slug}`),
       routes: mine,
-      trips: trips.slice(0, 8),
+      trips: shownTrips,
       guides: theirs.slice(0, 8),
       ratings,
       langMap,
+      photos,
       kindMap,
       routeCount: mine.length,
       guideCount: theirs.length,
@@ -131,7 +136,7 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 }
 
 export default function RegionPage({ loaderData }: Route.ComponentProps) {
-  const { region, routes, trips, guides, ratings, langMap, kindMap, routeCount, guideCount } =
+  const { region, routes, trips, guides, ratings, langMap, photos, kindMap, routeCount, guideCount } =
     loaderData as any;
 
   return (
@@ -184,7 +189,12 @@ export default function RegionPage({ loaderData }: Route.ComponentProps) {
           </h2>
           <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {trips.map((o: any) => (
-              <OfferingCard key={o.id} offering={o} rating={ratings[o.guide_id]} />
+              <OfferingCard
+                key={o.id}
+                offering={o}
+                rating={ratings[o.guide_id]}
+                photos={photos[o.id]}
+              />
             ))}
           </div>
         </section>

@@ -33,12 +33,13 @@ import {
 import { lovedFor, tripFacts, type TripFact } from "~/lib/trip-facts";
 import { FREE_CANCELLATION_DAYS } from "~/lib/policy";
 import { cn } from "~/lib/cn";
+import { galleryPhotos } from "~/lib/offering-photos";
 import { Glyph } from "~/components/design/Chip";
 import { FactStrip } from "~/components/design/FactStrip";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const { o, photos, availableDays, reviews, rating, permitPp, routeStops, routeHero, routeMaxAltitude, routeOverview, routeHighlights } = data;
-  const { guideLanguages, guideStats, alsoByGuide, alsoOnRoute, railRatings } = data;
+  const { guideLanguages, guideStats, alsoByGuide, alsoOnRoute, railRatings, railPhotos } = data;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
@@ -122,19 +123,7 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
    *
    * The cover leads, then anything not already in the list.
    */
-  const carousel: Photo[] = (() => {
-    const out: Photo[] = [];
-    const seen = new Set<string>();
-    const push = (url: string | null | undefined, alt: string, credit: string | null) => {
-      const u = (url ?? "").trim();
-      if (!u || seen.has(u)) return;
-      seen.add(u);
-      out.push({ url: u, alt, credit });
-    };
-    push(o.cover_photo_url, o.title, null);
-    for (const p of photos) push(p.url, p.alt_text, p.credit_name);
-    return out;
-  })();
+  const carousel: Photo[] = galleryPhotos(o.cover_photo_url, photos, o.title);
   // A fourteen-day trek used to answer "what do I do for two weeks?" with the
   // one line its guide had typed, while the route it walks held all fourteen
   // days one table away. Falls back to those, and says so.
@@ -765,7 +754,12 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           <div className="mt-4">
             <Rail>
               {alsoByGuide.map((x: any) => (
-                <OfferingCard key={x.id} offering={x} rating={railRatings[x.guide_id]} />
+                <OfferingCard
+                  key={x.id}
+                  offering={x}
+                  rating={railRatings[x.guide_id]}
+                  photos={railPhotos?.[x.id]}
+                />
               ))}
             </Rail>
           </div>
@@ -787,7 +781,12 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           <div className="mt-4">
             <Rail>
               {alsoOnRoute.map((x: any) => (
-                <OfferingCard key={x.id} offering={x} rating={railRatings[x.guide_id]} />
+                <OfferingCard
+                  key={x.id}
+                  offering={x}
+                  rating={railRatings[x.guide_id]}
+                  photos={railPhotos?.[x.id]}
+                />
               ))}
             </Rail>
           </div>

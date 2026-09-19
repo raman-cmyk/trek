@@ -13,19 +13,34 @@ export interface Photo {
  * Photo carousel with dot pagination (docs/06 §7). Arrows on desktop hover,
  * swipeable on touch. Dots cap at 5 with edge-shrinking. SSR renders the first
  * image so the page has complete HTML with JS disabled.
+ *
+ * `size="card"` is the same thing at the size of a tile in a grid of twelve:
+ * arrows only while the card is hovered or something inside it has focus,
+ * smaller dots, the picture requested at card resolution rather than at
+ * 1600px, and only the frames actually needed in the DOM.
  */
 export function Carousel({
   photos,
   aspect = "16/9",
   rounded = true,
   autoMs = 0,
+  size = "hero",
+  cover = false,
+  className,
+  imgClassName,
 }: {
   photos: Photo[];
   aspect?: string;
   rounded?: boolean;
   /** Turn itself over every N ms. 0 is off, which is the default. */
   autoMs?: number;
+  size?: "hero" | "card";
+  /** Crop to fill rather than fit — what a fixed-ratio card tile wants. */
+  cover?: boolean;
+  className?: string;
+  imgClassName?: string;
 }) {
+  const small = size === "card";
   const [i, setI] = useState(0);
   const [touchX, setTouchX] = useState<number | null>(null);
   const [held, setHeld] = useState(false);
@@ -51,7 +66,7 @@ export function Carousel({
 
   return (
     <div
-      className={cn("relative overflow-hidden", rounded && "rounded-card")}
+      className={cn("group/car relative overflow-hidden", rounded && "rounded-card", className)}
       style={{ aspectRatio: aspect }}
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
@@ -68,7 +83,14 @@ export function Carousel({
         setTouchX(null);
       }}
     >
-      {photos.map((p, idx) => (
+      {photos.map((p, idx) =>
+        // On a card, only the frame on screen and the one after it exist.
+        // Otherwise every frame sits in the DOM at opacity 0 — fine for one
+        // hero, and twelve tiles × five photographs on a browse grid, all of
+        // them fetched, on the cheap Android phone over 3G that rule 6 is
+        // about. The first frame always renders, so the page still shows a
+        // photograph with JavaScript off.
+        small && idx > Math.max(i, 0) + 1 ? null : (
         <div
           key={idx}
           className={cn(
@@ -79,11 +101,13 @@ export function Carousel({
           <SmartImage
             src={p.url}
             alt={p.alt}
-            width={1600}
-            height={900}
+            width={small ? 400 : 1600}
+            height={small ? 300 : 900}
             avgColor={p.avgColor}
+            cover={cover}
             eager={idx === 0}
             className="h-full w-full"
+            imgClassName={imgClassName}
           />
           {p.credit && (
             <span className="absolute bottom-2 left-2 rounded-pill bg-black/40 px-2 py-0.5 text-xs text-white">
@@ -91,31 +115,56 @@ export function Carousel({
             </span>
           )}
         </div>
-      ))}
+        ),
+      )}
 
       {n > 1 && (
         <>
-          <button
-            onClick={() => go(-1)}
-            aria-label="Previous photo"
-            className="absolute left-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 rounded-full bg-card/90 text-ink shadow-card hover:bg-card sm:block"
+          {/* z-20: on an OfferingCard the title link stretches an invisible
+              ::after over the whole tile, and without this the arrows sit
+              under it and every tap opens the trip instead of turning the
+              photograph over. */}
+          {[-1, 1].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                go(d);
+              }}
+              aria-label={d < 0 ? "Previous photo" : "Next photo"}
+              className={cn(
+                "absolute top-1/2 z-20 hidden -translate-y-1/2 rounded-full bg-card/90 text-ink shadow-card hover:bg-card sm:block",
+                d < 0 ? "left-2" : "right-2",
+                // Out of the way until somebody is actually looking at this
+                // card: twelve tiles each wearing two buttons is a control
+                // panel, not a grid of photographs.
+                small
+                  ? "h-7 w-7 text-sm opacity-0 transition-opacity duration-quick group-hover/car:opacity-100 focus-visible:opacity-100"
+                  : "h-8 w-8",
+              )}
+            >
+              {d < 0 ? "‹" : "›"}
+            </button>
+          ))}
+          {/* On a card the guide chip overlaps the bottom edge of the
+              photograph by twelve pixels and was sitting on top of the dots. */}
+          <div
+            className={cn(
+              "absolute left-1/2 z-20 flex -translate-x-1/2 gap-1.5",
+              small ? "bottom-5" : "bottom-2",
+            )}
           >
-            ‹
-          </button>
-          <button
-            onClick={() => go(1)}
-            aria-label="Next photo"
-            className="absolute right-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 rounded-full bg-card/90 text-ink shadow-card hover:bg-card sm:block"
-          >
-            ›
-          </button>
-          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
             {photos.slice(0, 5).map((_, d) => (
               <span
                 key={d}
                 className={cn(
-                  "h-1.5 rounded-full bg-white transition-all",
-                  d === Math.min(i, 4) ? "w-4 opacity-100" : "w-1.5 opacity-60",
+                  "rounded-full bg-white shadow-card transition-all",
+                  small ? "h-1" : "h-1.5",
+                  d === Math.min(i, 4)
+                    ? cn("opacity-100", small ? "w-3" : "w-4")
+                    : cn("opacity-60", small ? "w-1" : "w-1.5"),
                 )}
               />
             ))}

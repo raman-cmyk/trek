@@ -24,6 +24,7 @@ import {
   type PriceBreakdown,
 } from "~/lib/experience-pricing";
 import { guideRatings, offeringsRating } from "~/lib/ratings.server";
+import { photosByOffering } from "~/lib/offering-photos.server";
 import { JOURNAL_COLS, type PublicJournal } from "~/lib/journals";
 import { cn } from "~/lib/cn";
 import { CLIMB_ROUTES } from "~/lib/climb";
@@ -172,10 +173,14 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   // The guides who run this route, and what people said about them. The card
   // line under each title is their rating, not a pricing footnote.
-  const guideRatingsById = await guideRatings(
-    client,
-    [...new Set((offerings ?? []).map((o: any) => o.guide_id).filter(Boolean))],
-  );
+  const [guideRatingsById, offeringPhotos] = await Promise.all([
+    guideRatings(
+      client,
+      [...new Set((offerings ?? []).map((o: any) => o.guide_id).filter(Boolean))],
+    ),
+    // The pictures beyond each trip's cover, for the slider on its card.
+    photosByOffering(client, ((offerings ?? []) as any[]).map((o) => o.id)),
+  ]);
   // The cheapest price actually quoted on this route — the same figure the
   // trip pages and the comparison table show, so the route's headline cannot
   // undercut the trips inside it.
@@ -196,6 +201,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
   return {
     guideRatingsById,
+    offeringPhotos,
     route,
     blocks: publishedBlocks((blockRows ?? []) as any),
     permits: permits ?? [],
@@ -286,7 +292,7 @@ function BuiltRoutePage({
 }
 
 function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
-  const { route, permits, offerings, journals, guides, article, related, guideRatingsById } =
+  const { route, permits, offerings, journals, guides, article, related, guideRatingsById, offeringPhotos } =
     loaderData as any;
   const { m } = useMoney();
   const [activeDay, setActiveDay] = useState<number | null>(null);
@@ -593,6 +599,7 @@ function StandardRoutePage({ loaderData }: { loaderData: unknown }) {
                   key={o.id}
                   offering={o}
                   rating={guideRatingsById[(o as any).guide_id]}
+                  photos={offeringPhotos[o.id]}
                 />
               ))}
             </Rail>

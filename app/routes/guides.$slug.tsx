@@ -15,6 +15,8 @@ import {
   getEnv,
 } from "~/lib/supabase.server";
 import { guideRatings } from "~/lib/ratings.server";
+import { photosByOffering } from "~/lib/offering-photos.server";
+import type { PhotoRow } from "~/lib/offering-photos";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 import { QuestionWall } from "~/components/public/QuestionWall";
 import { TAKEN_STATUSES, horizonEnd, openDaysIn } from "~/lib/open-days";
@@ -437,10 +439,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const openDays = openDaysIn({ from: todayIso, to: horizonEnd(todayIso) }, busy, todayIso);
   const openIn90 = openDays.filter((d: string) => d <= in90).length;
 
+  // The pictures beyond each trip's cover, for the slider on its card.
+  const offeringPhotos = await photosByOffering(
+    client,
+    ((offerings ?? []) as any[]).map((o) => o.id),
+  );
+
   return {
     guide,
     preview,
     openIn90,
+    offeringPhotos,
     photos: (photos ?? []) as Array<{
       url: string;
       alt_text: string;
@@ -576,6 +585,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
     monthAnchor,
     preview,
     openIn90,
+    offeringPhotos,
   } = loaderData as any;
   const { m, mr } = useMoney();
   const first = guide.full_name.split(" ")[0];
@@ -953,7 +963,7 @@ export default function GuideProfile({ loaderData }: Route.ComponentProps) {
                     the guide's face, the verified tick and the rating was the
                     one a reader never saw. The grid leaves a gap beside a lone
                     card; a card that reads like every other card is worth it. */}
-                <OfferingGrid offerings={offerings} rating={rating} />
+                <OfferingGrid offerings={offerings} rating={rating} photos={offeringPhotos} />
               </section>
             )}
 
@@ -1418,10 +1428,13 @@ function SectionHead({
 function OfferingGrid({
   offerings,
   rating,
+  photos,
 }: {
   offerings: PublicOffering[];
   /** Every trip on this page is this guide's, so one rating serves them all. */
   rating?: { value: number; count: number } | null;
+  /** Each trip's pictures beyond its cover, by offering id — the card slider. */
+  photos?: Record<string, PhotoRow[]>;
 }) {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? offerings : offerings.slice(0, 6);
@@ -1429,7 +1442,7 @@ function OfferingGrid({
     <>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((o) => (
-          <OfferingCard key={o.id} offering={o} rating={rating} />
+          <OfferingCard key={o.id} offering={o} rating={rating} photos={photos?.[o.id]} />
         ))}
       </div>
       {!showAll && offerings.length > shown.length && (

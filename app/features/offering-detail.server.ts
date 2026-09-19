@@ -3,6 +3,7 @@ import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.se
 import { getSessionUser } from "~/lib/auth.server";
 import { one } from "~/lib/ops.server";
 import { guideRatings } from "~/lib/ratings.server";
+import { photosByOffering } from "~/lib/offering-photos.server";
 import { absoluteUrl } from "~/lib/seo";
 import { offeringPath } from "~/components/public/cards";
 import { TAKEN_STATUSES, horizonEnd, openDaysIn } from "~/lib/open-days";
@@ -123,6 +124,12 @@ export async function loadOfferingDetail(
     ...new Set([...(alsoByGuide ?? []), ...(alsoOnRoute ?? [])].map((r: any) => r.guide_id)),
   ];
   const railRatings = railGuideIds.length ? await guideRatings(client, railGuideIds) : {};
+  // And their photographs, so the cards on the rails flip through pictures the
+  // same way the ones in a browse grid do.
+  const railPhotos = await photosByOffering(
+    client,
+    [...(alsoByGuide ?? []), ...(alsoOnRoute ?? [])].map((r: any) => r.id),
+  );
   const permitPp = (permits ?? []).reduce(
     (s: number, p: { cost_usd_cents: number }) => s + p.cost_usd_cents,
     0,
@@ -167,6 +174,7 @@ export async function loadOfferingDetail(
     }>,
     rating: ratings[o.guide_id] ?? null,
     railRatings,
+    railPhotos,
     alsoByGuide: (alsoByGuide ?? []) as any[],
     alsoOnRoute: (alsoOnRoute ?? []) as any[],
     // Empty means "whatever this guide speaks", which is the normal case —

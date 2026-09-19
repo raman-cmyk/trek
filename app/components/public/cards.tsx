@@ -9,6 +9,8 @@ import { GuideChip, OnlyWithMe, Stars, TierBadge } from "./bits";
 import { Fallback } from "~/components/design/Fallback";
 import { GlassPill } from "~/components/design/Glass";
 import { Glyph, type ChipGlyph } from "~/components/design/Chip";
+import { Carousel } from "~/components/public/Carousel";
+import { galleryPhotos, type PhotoRow } from "~/lib/offering-photos";
 
 export interface PublicGuide {
   user_id: string;
@@ -245,13 +247,24 @@ export function GuideCard({
 export function OfferingCard({
   offering,
   rating,
+  photos,
 }: {
   offering: PublicOffering;
   /** The guide's rating. Absent is normal — a new guide has none. */
   rating?: CardRating | null;
+  /**
+   * The guide's other uploads for this trip, beyond the cover.
+   *
+   * `public_offerings` carries only `cover_photo_url`, so a page that wants
+   * the slider fetches these in one batched select (offering-photos.server)
+   * and hands them down. Left out, the card renders exactly what it always
+   * rendered — one photograph — which is what nearly every trip has.
+   */
+  photos?: readonly PhotoRow[] | null;
 }) {
   const { mr } = useMoney();
   const from = offeringFromUsdCents(offering);
+  const gallery = galleryPhotos(offering.cover_photo_url, photos, offering.title);
   const line = ratingLine(rating, {
     years: offering.guide_years_experience,
     tier: offering.guide_tier,
@@ -263,10 +276,25 @@ export function OfferingCard({
     // one big tap target and the chip still wins where it sits.
     <div className="group relative flex h-full flex-col overflow-hidden rounded-photo border border-line bg-card shadow-card transition duration-instant ease-out-soft hover:-translate-y-0.5 hover:border-sage hover:shadow-lift">
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-wheat">
-        {offering.cover_photo_url ? (
+        {/* More than one picture and it turns over; one and this is the same
+            single <SmartImage> as before, which is the case on fifty-four of
+            the fifty-seven live trips. The first frame renders on the server
+            either way, so a card with JavaScript off still shows a
+            photograph (rule 5). */}
+        {gallery.length > 1 ? (
+          <Carousel
+            photos={gallery}
+            aspect="4/3"
+            rounded={false}
+            size="card"
+            cover
+            className="absolute inset-0 h-full w-full"
+            imgClassName="transition duration-slow group-hover:scale-[1.03]"
+          />
+        ) : gallery.length === 1 ? (
           <SmartImage
-            src={offering.cover_photo_url}
-            alt={offering.title}
+            src={gallery[0].url}
+            alt={gallery[0].alt}
             width={400}
             height={300}
             cover

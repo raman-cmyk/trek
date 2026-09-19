@@ -5,6 +5,8 @@ import { pageMeta, absoluteUrl, jsonLd, websiteLd } from "~/lib/seo";
 import { createAdminClient, createPublicClient, getEnv } from "~/lib/supabase.server";
 import { fundCollected } from "~/lib/fund.server";
 import { guideRatings, type Rating } from "~/lib/ratings.server";
+import { photosByOffering } from "~/lib/offering-photos.server";
+import type { PhotoRow } from "~/lib/offering-photos";
 import { useState } from "react";
 import {
   GuideCard,
@@ -142,7 +144,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   const all = (guides ?? []) as HomeGuide[];
   const ids = all.map((g) => g.user_id);
 
-  const [ratings, langMap, freeRuns] = await Promise.all([
+  const [ratings, langMap, freeRuns, offeringPhotos] = await Promise.all([
     guideRatings(client, ids),
     (async () => {
       const map: Record<string, string[]> = {};
@@ -156,6 +158,9 @@ export async function loader({ context }: Route.LoaderArgs) {
       return map;
     })(),
     openRunsByGuide(client, { from: today, to: weekEnd }, ids),
+    // Every picture a trip has beyond its cover, so a card in the browse grid
+    // can flip through them (offering-photos.server.ts). One select, 14 rows.
+    photosByOffering(client, ((offerings ?? []) as any[]).map((o) => o.id)),
   ]);
 
   // What kind of trip each review is about, for picking the featured one.
@@ -419,6 +424,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     // recompute a price the server already had — 165 KB of a 407 KB page, and
     // CPU the worker does not have to spare. See card-offering.ts.
     experiences: experiences.map(toCardOffering),
+    offeringPhotos,
     freeThisWeek: freeThisWeek.slice(0, 8).map(pick),
     freeThisWeekTotal: freeThisWeek.length,
     freeRuns,
@@ -498,6 +504,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     categoryRows,
     rows,
     experiences,
+    offeringPhotos,
     freeThisWeek,
     freeThisWeekTotal,
     atlasTrails,
@@ -692,7 +699,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           people-rails followed by a block of things read as two catalogues
           bolted together. Alternating them keeps every row a fresh reason to
           book — which is what each row is for. */}
-      <ExperienceBrowser experiences={experiences} ratings={ratings} />
+      <ExperienceBrowser experiences={experiences} ratings={ratings} photos={offeringPhotos} />
 
       {rows.length > 2 && (
         <div className="bg-card py-4">
@@ -1158,10 +1165,13 @@ const KINDS = [
 function ExperienceBrowser({
   experiences,
   ratings,
+  photos,
 }: {
   experiences: any[];
   /** Guide ratings by guide id — the card's last line. */
   ratings: Record<string, { value: number; count: number }>;
+  /** Each trip's pictures beyond its cover, by offering id — the card slider. */
+  photos: Record<string, PhotoRow[]>;
 }) {
   const [kind, setKind] = useState<string>("");
   const [region, setRegion] = useState<string>("");
@@ -1291,7 +1301,12 @@ function ExperienceBrowser({
         <>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shown.map((o: PublicOffering) => (
-              <OfferingCard key={o.id} offering={o} rating={ratings[(o as any).guide_id]} />
+              <OfferingCard
+                key={o.id}
+                offering={o}
+                rating={ratings[(o as any).guide_id]}
+                photos={photos[o.id]}
+              />
             ))}
           </div>
           {!showAll && matched.length > shown.length && (

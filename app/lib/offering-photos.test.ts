@@ -1,108 +1,81 @@
-import { describe, expect, it, vi } from "vitest";
-import { saveOfferingPhotos } from "./offerings.server";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { byOffering, galleryPhotos } from "./offering-photos";
 
-/**
- * The photographs an editor can see are the photographs it owns.
- *
- * The delete used to be scoped to the editor's own `source`, so the office and
- * the guide could not see each other's rows. The office opened a trip, removed
- * three photographs, saved — and the guide's came straight back, because the
- * delete never touched them. Every save also re-inserted the whole shown list
- * under the saver's source, so the rows multiplied: one live trip reached nine
- * rows for three actual pictures.
- */
-function fakeAdmin() {
-  const calls: any = { deleted: [], inserted: [] };
-  const from = (_t: string) => ({
-    delete: () => ({
-      eq: (col: string, val: string) => {
-        calls.deleted.push({ col, val });
-        // A second .eq() is what the old code did; record it so the test can
-        // prove it is gone.
-        return Object.assign(Promise.resolve({ error: null }), {
-          eq: (c2: string, v2: string) => {
-            calls.deleted.push({ col: c2, val: v2 });
-            return Promise.resolve({ error: null });
-          },
-        });
-      },
-    }),
-    insert: (rows: any[]) => {
-      calls.inserted.push(...rows);
-      return Promise.resolve({ error: null });
-    },
-  });
-  return { client: { from } as any, calls };
-}
+describe("galleryPhotos", () => {
+  const extras = [
+    { url: "/b.jpg", alt_text: "The pass", credit_name: "Nima" },
+    { url: "/c.jpg", alt_text: null, credit_name: null },
+  ];
 
-const P = (url: string, alt = "") => ({ url, alt });
-
-describe("saveOfferingPhotos", () => {
-  it("clears every photo on the trip, not just its own source", async () => {
-    const { client, calls } = fakeAdmin();
-    await saveOfferingPhotos(client, "off-1", [P("a.jpg")], "ops");
-    expect(calls.deleted).toEqual([{ col: "offering_id", val: "off-1" }]);
-    // If a `source` filter ever comes back, the guide's photographs become
-    // undeletable from the office again.
-    expect(calls.deleted.some((d: any) => d.col === "source")).toBe(false);
-  });
-
-  it("removing a photo actually removes it", async () => {
-    const { client, calls } = fakeAdmin();
-    await saveOfferingPhotos(client, "off-1", [P("a.jpg"), P("c.jpg")], "ops");
-    expect(calls.inserted.map((r: any) => r.url)).toEqual(["a.jpg", "c.jpg"]);
-  });
-
-  it("collapses the duplicates the form has been posting back", async () => {
-    const { client, calls } = fakeAdmin();
-    await saveOfferingPhotos(
-      client,
-      "off-1",
-      [P("a.jpg"), P("b.jpg"), P("a.jpg"), P("b.jpg"), P("a.jpg")],
-      "ops",
-    );
-    expect(calls.inserted.map((r: any) => r.url)).toEqual(["a.jpg", "b.jpg"]);
-  });
-
-  it("keeps the order it was given, because the first one is the cover", async () => {
-    const { client, calls } = fakeAdmin();
-    await saveOfferingPhotos(client, "off-1", [P("z.jpg"), P("a.jpg"), P("m.jpg")], "guide");
-    expect(calls.inserted.map((r: any) => [r.url, r.sort])).toEqual([
-      ["z.jpg", 0],
-      ["a.jpg", 1],
-      ["m.jpg", 2],
+  it("leads with the cover, then everything else in order", () => {
+    // The cover is the picture somebody chose to represent the trip. It used
+    // to be dropped entirely whenever a guide had uploaded anything.
+    expect(galleryPhotos("/a.jpg", extras, "Gokyo Lakes").map((p) => p.url)).toEqual([
+      "/a.jpg",
+      "/b.jpg",
+      "/c.jpg",
     ]);
   });
 
-  it("drops blank urls rather than storing a row that renders nothing", async () => {
-    const { client, calls } = fakeAdmin();
-    await saveOfferingPhotos(client, "off-1", [P(""), P("  "), P("a.jpg")], "ops");
-    expect(calls.inserted.map((r: any) => r.url)).toEqual(["a.jpg"]);
+  it("shows the same file once", () => {
+    // A guide who sets the cover from an upload has it in both places, and a
+    // slider that turns over onto the identical photograph looks broken.
+    expect(galleryPhotos("/b.jpg", extras, "Gokyo Lakes").map((p) => p.url)).toEqual([
+      "/b.jpg",
+      "/c.jpg",
+    ]);
   });
 
-  it("still gives a blank caption something true", async () => {
-    const { client, calls } = fakeAdmin();
-    await saveOfferingPhotos(client, "off-1", [P("a.jpg", "   ")], "ops");
-    expect(calls.inserted[0].alt_text).toBe("Photograph from this trip");
+  it("falls back to the trip's title for alt text, never to nothing", () => {
+    const [cover, , unlabelled] = galleryPhotos("/a.jpg", extras, "Gokyo Lakes");
+    expect(cover.alt).toBe("Gokyo Lakes");
+    expect(unlabelled.alt).toBe("Gokyo Lakes");
   });
 
-  it("clearing the list leaves none behind", async () => {
-    const { client, calls } = fakeAdmin();
-    const out = await saveOfferingPhotos(client, "off-1", [], "ops");
-    expect(out.ok).toBe(true);
-    expect(calls.inserted).toEqual([]);
-    expect(calls.deleted).toEqual([{ col: "offering_id", val: "off-1" }]);
+  it("keeps the credit where a photographer is named", () => {
+    expect(galleryPhotos(null, extras, "Gokyo Lakes")[0].credit).toBe("Nima");
   });
 
-  it("reports a failed delete instead of quietly inserting on top of it", async () => {
-    const bad = {
-      from: () => ({
-        delete: () => ({ eq: () => Promise.resolve({ error: { message: "nope" } }) }),
-        insert: () => Promise.resolve({ error: null }),
-      }),
-    } as any;
-    const out = await saveOfferingPhotos(bad, "off-1", [P("a.jpg")], "ops");
-    expect(out.ok).toBe(false);
-    expect(out.error).toContain("nope");
+  it("is empty for a trip with no picture at all, so the card draws its fallback", () => {
+    expect(galleryPhotos(null, [], "Gokyo Lakes")).toEqual([]);
+    expect(galleryPhotos("   ", null, "Gokyo Lakes")).toEqual([]);
+  });
+});
+
+describe("byOffering", () => {
+  it("groups one batched select by trip, in the order the rows arrived", () => {
+    const rows = [
+      { offering_id: "a", url: "/1.jpg" },
+      { offering_id: "b", url: "/2.jpg" },
+      { offering_id: "a", url: "/3.jpg" },
+    ];
+    expect(byOffering(rows).a.map((r) => r.url)).toEqual(["/1.jpg", "/3.jpg"]);
+    expect(byOffering(rows).b).toHaveLength(1);
+    expect(byOffering(null)).toEqual({});
+  });
+});
+
+/**
+ * The slider needs its photographs handed to it, and a prop is easy to lose.
+ *
+ * `public_offerings` carries `cover_photo_url` and no photo array, so a page
+ * that renders an OfferingCard without fetching `offering_photos` shows one
+ * picture per trip and nothing fails — no type error, no runtime error, just a
+ * card that quietly stopped turning over. The same trap `card-rating.test.ts`
+ * was written for, one prop along.
+ */
+describe("the pages that render an OfferingCard", () => {
+  const dir = join(import.meta.dirname, "..", "routes");
+  const pages = readdirSync(dir).filter((f) => {
+    if (!f.endsWith(".tsx") || f.startsWith("_dev.")) return false;
+    return /<OfferingCard[\s/>]/.test(readFileSync(join(dir, f), "utf8"));
+  });
+
+  it.each(pages)("%s hands the card its photographs", (page) => {
+    const src = readFileSync(join(dir, page), "utf8");
+    expect(src).toContain("photosByOffering");
+    expect(src).toMatch(/photos=\{/);
   });
 });

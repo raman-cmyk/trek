@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { guideRatings } from "~/lib/ratings.server";
+import { photosByOffering } from "~/lib/offering-photos.server";
 import { toCardOffering } from "~/lib/card-offering";
 import type { Route } from "./+types/experiences";
 import { pageMeta, absoluteUrl } from "~/lib/seo";
@@ -156,13 +157,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // What other people said about each guide on this page. One query for the
   // whole grid — the card line that used to read "per person · less in a
   // group" says this instead.
-  const ratings = await guideRatings(
-    client,
-    [...new Set(offerings.map((o: any) => o.guide_id).filter(Boolean))],
-  );
+  // ...and every picture each trip has beyond its cover, for the slider on
+  // the card. One batched select for the whole grid, the same shape as the
+  // ratings query above (offering-photos.server.ts).
+  const [ratings, photos] = await Promise.all([
+    guideRatings(client, [...new Set(offerings.map((o: any) => o.guide_id).filter(Boolean))]),
+    photosByOffering(client, offerings.map((o: any) => o.id)),
+  ]);
 
   return {
     ratings,
+    photos,
     // Trimmed for the same reason as the homepage — see card-offering.ts.
     offerings: offerings.map(toCardOffering),
     total: totalCount ?? offerings.length,
@@ -175,7 +180,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Experiences({ loaderData }: Route.ComponentProps) {
-  const { offerings, total, kind, filters, today, search, ratings } = loaderData;
+  const { offerings, total, kind, filters, today, search, ratings, photos } = loaderData;
   const params = new URLSearchParams(search);
   // Built here rather than in the component so the options can carry counts
   // from the rows that are actually on the page.
@@ -308,7 +313,12 @@ export default function Experiences({ loaderData }: Route.ComponentProps) {
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {offerings.map((o) => (
-            <OfferingCard key={o.id} offering={o} rating={ratings[(o as any).guide_id]} />
+            <OfferingCard
+              key={o.id}
+              offering={o}
+              rating={ratings[(o as any).guide_id]}
+              photos={photos[o.id]}
+            />
           ))}
         </div>
       )}
