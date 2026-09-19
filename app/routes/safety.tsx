@@ -7,7 +7,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Trust & safety — how we verify guides and keep you safe",
     description:
-      "Every guide is verified: licence, ID, references, first-aid. Daily check-ins on the trail, required evacuation insurance, and an ops team in Kathmandu.",
+      "Every guide is verified: the licence their work needs, ID, references, first-aid. Daily check-ins on the trail, required evacuation insurance, and an ops team in Kathmandu.",
     canonical: data?.canonical ?? "",
   });
 }

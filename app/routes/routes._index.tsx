@@ -411,7 +411,7 @@ export default function RoutesIndex({ loaderData }: Route.ComponentProps) {
             {guideCount} people. Pick one.
           </h2>
           <p className="mx-auto mt-3 max-w-[46ch] text-sage">
-            Every face here is a licensed guide we have met in person. None of them is an agency.
+            Every face here is a guide we have met in person, licensed for what they lead. None of them is an agency.
           </p>
           <Link
             to="/guides"

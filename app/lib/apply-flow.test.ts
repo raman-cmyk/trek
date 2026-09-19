@@ -51,6 +51,9 @@ describe("the order things are asked in", () => {
 });
 
 describe("validateStep", () => {
+  // A guide who has said what they run — the step-two answer everything
+  // after it depends on.
+  const work = { day_rate_npr: "5000", guide_kinds: "trek" };
   const you = {
     full_name: "Pemba Sherpa",
     phone: "9812345678",
@@ -85,21 +88,43 @@ describe("validateStep", () => {
   it("wants a day rate, and only a sane one", () => {
     expect(validateStep("work", {}).map((p) => p.field)).toContain("day_rate_npr");
     expect(validateStep("work", { day_rate_npr: "nope" }).map((p) => p.field)).toContain("day_rate_npr");
-    expect(validateStep("work", { day_rate_npr: "5000" })).toEqual([]);
+    expect(validateStep("work", { ...work })).toEqual([]);
+  });
+
+  it("wants to know what they will take people on", () => {
+    // It decides which licence the next step asks for, so it cannot be left
+    // blank: a food host would otherwise be sent to a trekking-licence field.
+    expect(validateStep("work", { day_rate_npr: "5000" }).map((p) => p.field)).toContain(
+      "guide_kinds",
+    );
   });
 
   it("does not object to years left blank, but does to sixty-one of them", () => {
-    expect(validateStep("work", { day_rate_npr: "5000", years_experience: "" })).toEqual([]);
+    expect(validateStep("work", { ...work, years_experience: "" })).toEqual([]);
     expect(
-      validateStep("work", { day_rate_npr: "5000", years_experience: "61" }).map((p) => p.field),
+      validateStep("work", { ...work, years_experience: "61" }).map((p) => p.field),
     ).toContain("years_experience");
   });
 
-  it("asks for the three things printed on a licence", () => {
-    expect(validateStep("licence", {}).map((p) => p.field).sort()).toEqual([
+  it("asks a trekking guide for the things printed on a licence", () => {
+    expect(validateStep("licence", { guide_kinds: "trek" }).map((p) => p.field).sort()).toEqual([
       "home_district",
       "licence_expiry",
       "licence_no",
+    ]);
+  });
+
+  it("asks a heritage guide for theirs too", () => {
+    expect(validateStep("licence", { guide_kinds: "city" }).map((p) => p.field)).toContain(
+      "licence_no",
+    );
+  });
+
+  it("asks a food host for nothing but the district they are from", () => {
+    // The whole point: a momo-crawl host could not get past this step without
+    // a trekking licence they have no reason to hold.
+    expect(validateStep("licence", { guide_kinds: "food_culture" }).map((p) => p.field)).toEqual([
+      "home_district",
     ]);
   });
 
@@ -114,7 +139,7 @@ describe("validateStep", () => {
     const messages = [
       ...validateStep("you", {}),
       ...validateStep("work", {}),
-      ...validateStep("licence", {}),
+      ...validateStep("licence", { guide_kinds: "trek" }),
       ...validateStep("id", {}),
       ...validateStep("review", {}),
     ].map((p) => p.message.toLowerCase());
@@ -131,13 +156,18 @@ describe("validateStep", () => {
 
 describe("canAdvance", () => {
   it("blocks on a problem and clears when it is fixed", () => {
-    expect(canAdvance("licence", {})).toBe(false);
+    expect(canAdvance("licence", { guide_kinds: "trek" })).toBe(false);
     expect(
       canAdvance("licence", {
+        guide_kinds: "trek",
         licence_no: "TG-1234",
         licence_expiry: "2029-05-01",
         home_district: "Solukhumbu",
       }),
+    ).toBe(true);
+    // And a host who needs no licence clears it with the district alone.
+    expect(
+      canAdvance("licence", { guide_kinds: "day_hike", home_district: "Kaski" }),
     ).toBe(true);
   });
 });
@@ -149,6 +179,7 @@ describe("resumeAt", () => {
     email: "p@example.com",
     password: "longenough",
     day_rate_npr: "5000",
+    guide_kinds: "trek",
   };
 
   it("returns to the step the draft was left on", () => {
@@ -207,6 +238,7 @@ describe("resuming a draft that has no password in it", () => {
     phone: "9812345678",
     email: "subas@example.com",
     day_rate_npr: "4500",
+    guide_kinds: "trek",
     // no password, on purpose
   };
 

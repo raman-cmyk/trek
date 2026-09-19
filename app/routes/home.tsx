@@ -164,6 +164,12 @@ export async function loader({ context }: Route.LoaderArgs) {
   // Which guides lead which region — the region rows and "women guiding
   // Annapurna" both need it, and it's one pass over data we already have.
   const routeById = new Map((routes ?? []).map((r) => [r.id, r]));
+  // What each guide runs, from the catalogue already in hand.
+  const kindsByGuide: Record<string, string[]> = {};
+  for (const o of offerings ?? []) {
+    const list = (kindsByGuide[o.guide_id] ??= []);
+    if (!list.includes(o.kind)) list.push(o.kind);
+  }
   const regionsByGuide: Record<string, Set<string>> = {};
   for (const o of offerings ?? []) {
     const r = o.route_id ? routeById.get(o.route_id) : null;
@@ -207,7 +213,9 @@ export async function loader({ context }: Route.LoaderArgs) {
     hook_line: g.hook_line,
     only_with_me: g.only_with_me,
     day_rate_usd_cents: g.day_rate_usd_cents,
-    median_response_mins: g.median_response_mins,
+    // What they run. The whole catalogue is already loaded on this page for
+    // the region rows, so this costs no extra query.
+    kinds: kindsByGuide[g.user_id] ?? [],
   });
 
   // Curated rows first: they are this week's judgement, and the evergreen
@@ -952,7 +960,7 @@ function Row({
       <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-4 px-4 pb-2">
         {guides.map((g) => (
           <div key={g.user_id} className="flex w-[10.5rem] shrink-0 snap-start sm:w-52">
-            <GuideCard guide={g} rating={ratings[g.user_id]} languages={langMap[g.user_id]} />
+            <GuideCard guide={g} rating={ratings[g.user_id]} languages={langMap[g.user_id]} kinds={(g as any).kinds} />
           </div>
         ))}
         {/* Only offer the tail card when there is actually more behind it. */}
@@ -1210,7 +1218,7 @@ function GuideCall({ count }: { count: number }) {
               </Link>
             </div>
             <p className="mt-3 text-caption text-muted">
-              Licensed guides only. Ten minutes, and we call you.
+              Verified guides only. Ten minutes, and we call you.
             </p>
           </div>
 

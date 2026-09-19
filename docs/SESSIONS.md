@@ -3504,3 +3504,49 @@ HTML, because this form renders its steps client-side.
 
 Green: 1,890 tests in 124 files, typecheck clean, build passing. Deployed
 (`661a2c7a`).
+
+---
+
+## Session — five screenshots: licences, the card, the experience page
+
+### Built
+
+- **Licence by kind** — `app/lib/guide-licence.ts` (12 tests) + migration
+  **0113** `guides.guide_kinds`. The form asks what you will take people on
+  before it asks for papers, then asks for the card that work actually needs.
+  Public copy rewritten in eight places from "licensed" to "licensed for what
+  they lead", because the old claim stopped being true.
+- **The guide card** — the `~42 min` chip gone (it was never computed; the
+  seed typed it), what the guide runs in its place, reviews down beside the
+  rate. `app/lib/offering-kinds.ts` (6 tests) replaces five copies of the
+  same label list.
+- **The trek page** — an Overview section that finally reads the route's own
+  `overview` and `highlights` (there since 0076, rendered nowhere a buyer
+  looks); one titled "What's included" with both columns; the price box's
+  colliding heading renamed; the elevation curve and Day-N pins off the hero,
+  which is the carousel now, auto-rotating and pausing on hover/focus/touch.
+- **`/apply` sidebar** — the six reasons to guide with us, translated into
+  Nepali, beside the live earnings figure.
+
+### Checked on the live site
+
+- `/guides`: no `~42 min` anywhere; cards read "Treks · Day hikes",
+  "Treks · Food & culture · City walks".
+- `/apply` as a **food host**: "No licence needed", no licence number field.
+  Switch to **trek**: the field appears under "Trekking guide licence".
+- `/treks/ebc-classic-with-pemba`: Overview carries the route's full text;
+  "In the price" / "Not in the price"; no `trail-line-draw`, no Day-N pins
+  over the photo.
+- The benefits panel renders on the application.
+
+Green: 1,911 tests in 126 files, typecheck clean, build passing. 0113 applied,
+deployed (`c2cdf45f`).
+
+### Not done, and why
+
+The photographs. 57 live experiences share 14 photos; day hikes, adventure and
+city walks have none at all; 24 routes share 7 images and nine of them show
+the same generic file. The Everest Base Camp hero is a forested gorge with no
+mountain in it. The founder's answer: *"All of the guides and experiences that
+we have rn are place holders chill"* — so the gallery is built and waiting,
+and real photographs are a content job, not a code one.

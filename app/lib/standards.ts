@@ -47,7 +47,13 @@ export function standards(): Standard[] {
     {
       key: "met",
       title: "We have met them",
-      detail: `Licence, government ID against that licence, phone, payout account and a wilderness first-aid certificate — ${PENDING_CHECKS.length} checks, done by a person in Kathmandu who signs and dates the file.`,
+      // "Licensed for what they lead" rather than "licensed", because that is
+      // now what is true. Nepal requires a trekking guide licence to lead a
+      // trek and a tour guide licence at the heritage sites; it requires
+      // neither for a food walk, and until 0113 this form demanded a trekking
+      // card from a momo host who had no reason to hold one. Overclaiming on
+      // a trust page is the one thing this module exists not to do.
+      detail: `Licensed for what they lead, government ID against that licence, phone, payout account and a wilderness first-aid certificate — ${PENDING_CHECKS.length} checks, done by a person in Kathmandu who signs and dates the file.`,
       href: "/trust",
     },
     {

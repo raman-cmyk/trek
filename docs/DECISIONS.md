@@ -792,3 +792,98 @@ what the server accepts.
 Every sign-in screen had the wordmark as plain text. The one link on the page
 lived on the photograph and was `hidden md:block`, so on a phone there was
 nothing at all. One `<Link>` in `AuthSplit` fixes all six screens.
+
+---
+
+## A guide is licensed for what they lead, not licensed full stop
+
+The founder, on the application form:
+
+> "I think we need to first ask what are they filling form for, because we
+>  need different licence for different things. For example, trek different;
+>  we don't need licence for day hikes and all, but anything involved with
+>  national heritage Pashupati and all should be done by licenced guides."
+
+Every applicant was asked for a trekking licence number, its expiry and a
+photograph of the card, and could not advance without all three. So a
+momo-crawl host had to produce a trekking licence they have no reason to
+hold, and a heritage walk through Pashupatinath — which *does* need a
+licensed guide — was being checked against the wrong card entirely.
+
+**The rule is his, and it lives in a table** (`app/lib/guide-licence.ts`), not
+in a condition buried in a form: treks need a trekking guide licence, city and
+heritage walks need a tour guide licence, day hikes, food walks and adventure
+days need none. When the rule changes, one file changes.
+
+**The vocabulary is `offerings.kind`**, not a new one. What a guide says they
+will run and what they can then list are the same five words, so the booking
+pipeline, the pricing components and the per-kind checklists all agree without
+translation. Migration **0113** adds `guides.guide_kinds` — a column two
+earlier migrations explicitly predicted and worked around ("nothing in the
+data says what kind of guide somebody is", 0105 and 0106). Every existing
+guide is backfilled to `{trek}`, which is a statement of what happened: all 56
+applied under a flow that demanded a trekking licence.
+
+**A guide who needs no licence still gets a `licence` check row**, as
+`not_required` rather than omitted. The office checklists tick themselves off
+these rows by name, so an omitted row would leave "Trekking licence seen"
+sitting open forever with nothing able to close it.
+
+**The office checklist now picks itself.** `guide_trek` and `guide_day` have
+existed since 0106 and had never been matched automatically for want of this
+column. `runChecklist` gets an `appliesTo` and `pickChecklist` does the rest.
+
+### The public copy this made untrue
+
+Fourteen places promised something the rule no longer supports — and
+`standards.ts` says of itself that *"nothing here is aspirational, and that is
+the whole point"*. Rewritten rather than left overclaiming:
+
+- trust: "a named human with a licence we've seen" → *"licensed for what they
+  lead — and we have seen the card"*
+- homepage recruitment: "Licensed guides only" → *"Verified guides only"*
+- tier 1: "Government licence…" → *"The licence their work needs, photo ID
+  against it, and a working phone"*; the bullet now names which card for which
+  work
+- the guide card's fallback line: "Licensed, and we have met them" →
+  *"Checked, and we have met them"*
+- and the same in `safety.tsx`, `guides.tsx`, `routes._index.tsx`, `Footer.tsx`
+
+## The reply-time chip was never measured
+
+The founder asked for "~42 min" off the guide card. It should never have been
+on it: **nothing in the codebase has ever computed `median_response_mins`.**
+Every value on the site was typed into the seed file, and Pemba's was
+literally `42`. A number a trekker weighs a person by has to be measured or
+absent.
+
+In its place the card now says **what the guide actually runs** — "Treks · Day
+hikes · Food & culture" — which is the thing somebody is choosing between and
+which the card had never carried. It costs no extra query on the homepage or a
+region page (both already load the catalogue) and one batched select on
+`/guides`. Reviews moved down beside the rate, which is the pair somebody
+weighs at the end of reading a card.
+
+Five copies of the offering-kind labels collapsed into `app/lib/offering-kinds.ts`.
+
+## The trek page: an overview that existed and was never read
+
+`routes.overview` and `routes.highlights` have been there since 0076, rendered
+on `/routes/:slug` only. The trek page — where somebody is actually deciding
+whether to spend a fortnight — showed one unheaded sentence. It reads them
+now; the loader change is two words in a `.select()`.
+
+**"What's included" was unclear for a findable reason: there were two of
+them.** A heading in the price box and a section a hundred lines below, saying
+almost the same words. The price-box one is "Add to your quote" now, and the
+section is one titled block with both columns always drawn — a trip that
+listed only exclusions used to render a lone "Not included" and read as a
+warning.
+
+**The hero no longer has the walk drawn over it.** A trek opened on
+`TrailScene`, which put a white elevation curve and up to four "Day 4 ·
+5,364 m" pins across the photograph — obscuring the one thing somebody came to
+look at, and limiting a trek to a single image. Every kind of trip now opens
+on the carousel, which rotates on its own (paused on hover, focus and touch,
+and never for `prefers-reduced-motion`). The day-by-day is still further down,
+where it belongs.

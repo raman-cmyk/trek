@@ -30,10 +30,11 @@ import {
   transportLabels,
   tripLanguages,
 } from "~/lib/offering-details";
+import { Glyph } from "~/components/design/Chip";
 import { FactStrip } from "~/components/design/FactStrip";
 
 export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
-  const { o, photos, availableDays, reviews, rating, permitPp, routeStops, routeHero, routeMaxAltitude } = data;
+  const { o, photos, availableDays, reviews, rating, permitPp, routeStops, routeHero, routeMaxAltitude, routeOverview, routeHighlights } = data;
   const { guideLanguages, guideStats, alsoByGuide, alsoOnRoute, railRatings } = data;
   const { m, code } = useMoney();
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
@@ -150,30 +151,26 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
           stops over the cover, or over the route's own photograph, or over
           terrain — never the blank box most trips without a cover used to
           show. Day experiences keep the carousel; they have no walk to draw. */}
-      {routeStops.length >= 2 ? (
-        <TrailScene
-          photo={o.cover_photo_url ?? photos[0]?.url ?? routeHero}
-          alt={o.title}
-          stops={routeStops}
-          pins={4}
-          eager
-          height="aspect-[4/3] sm:aspect-[21/9]"
-        >
-          <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6">
-            <FactStrip
-              onPhoto
-              facts={[
-                { glyph: "calendar", value: o.days, unit: "days" },
-                routeMaxAltitude ? { glyph: "altitude", value: routeMaxAltitude.toLocaleString("en-US"), unit: "m" } : { value: "" },
-                o.max_party ? { glyph: "people", value: `up to ${o.max_party}` } : { value: "" },
-                (o as any).route_name ? { glyph: "route", value: (o as any).route_name } : { value: "" },
-              ]}
-            />
-          </div>
-        </TrailScene>
-      ) : (
-        <Carousel photos={carousel} />
-      )}
+      {/* The photographs, on every kind of trip alike.
+          A trek used to open on TrailScene, which drew the walk over the
+          picture: a white elevation curve and up to four "Day 4 · 5,364 m"
+          pins. It obscured the one thing somebody came to look at, and it
+          meant a trek that had ten photographs uploaded showed exactly one.
+          The walk is still drawn, further down, where a day-by-day belongs. */}
+      <div className="relative">
+        <Carousel photos={carousel} autoMs={6000} />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/70 p-4 sm:p-6">
+          <FactStrip
+            onPhoto
+            facts={[
+              { glyph: "calendar", value: o.days, unit: "days" },
+              routeMaxAltitude ? { glyph: "altitude", value: routeMaxAltitude.toLocaleString("en-US"), unit: "m" } : { value: "" },
+              o.max_party ? { glyph: "people", value: `up to ${o.max_party}` } : { value: "" },
+              (o as any).route_name ? { glyph: "route", value: (o as any).route_name } : { value: "" },
+            ]}
+          />
+        </div>
+      </div>
 
       {/* Every other photograph of this trip.
           A trek with a route opens on TrailScene, which draws one picture over
@@ -334,8 +331,32 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </div>
           )}
 
+          {/* The overview. This was one unheaded sentence — the trek page
+              asked somebody to weigh a fortnight of their life against a
+              line of card copy. The route's own `overview` and `highlights`
+              have existed since 0076 and were rendered only on /routes/:slug;
+              they are the same words, on the page where the decision is
+              actually made. */}
           <section>
-            <p className="text-ink">{o.summary}</p>
+            <h2 className="font-display text-2xl text-ink">Overview</h2>
+            <p className="mt-3 max-w-[64ch] text-body-l text-ink">{o.summary}</p>
+            {routeOverview?.trim() ? (
+              <div className="mt-4 max-w-[64ch] space-y-4 text-body-l text-ink">
+                {routeOverview.split(/\n{2,}/).map((para: string, i: number) => (
+                  <p key={i}>{para.trim()}</p>
+                ))}
+              </div>
+            ) : null}
+            {routeHighlights?.length ? (
+              <ul className="mt-5 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                {routeHighlights.map((h: string, i: number) => (
+                  <li key={i} className="flex gap-3 text-ink">
+                    <Glyph name="mountain" className="mt-1 shrink-0 text-moss" />
+                    <span>{h}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </section>
 
           {/* Price breakdown — transaction layer: plain, mono, everything shown.
@@ -392,7 +413,11 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
                   price above and travels with the request. */}
               {porterUsdCents > 0 && (
                 <div className="mt-5 border-t border-line pt-4">
-                  <p className="mb-2 text-sm font-medium text-ink">What is included</p>
+                  {/* Named for what it does, not "What is included" — there
+                      is a section with that heading further down the page, and
+                      two headings a hundred lines apart saying almost the same
+                      words is most of why the founder called this unclear. */}
+                  <p className="mb-2 text-sm font-medium text-ink">Add to your quote</p>
                   <label className="flex cursor-pointer items-start justify-between gap-3">
                     <span>
                       <span className="text-sm text-ink">Porter</span>
@@ -515,34 +540,51 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
             </section>
           )}
 
+          {/* What you get and what you do not, as one block with a heading.
+              It was two small <h3>s in a bare grid between the itinerary and
+              the meeting point, with each column disappearing when empty — so
+              a trip that listed exclusions and nothing else rendered a lone
+              "Not included" and read as a warning. Both columns are always
+              drawn now, and an empty one says so. */}
           {(o.included?.length || o.excluded?.length) ? (
-            <section className="grid gap-6 sm:grid-cols-2">
-              {o.included?.length ? (
+            <section className="rounded-card border border-line bg-card p-5">
+              <h2 className="font-display text-2xl text-ink">What's included</h2>
+              <div className="mt-4 grid gap-6 sm:grid-cols-2">
                 <div>
-                  <h3 className="mb-2 font-medium">What's included</h3>
-                  <ul className="space-y-1 text-sm text-ink">
-                    {o.included.map((x: string) => (
-                      <li key={x} className="flex gap-2">
-                        <span className="text-accent">✓</span>
-                        {x}
-                      </li>
-                    ))}
-                  </ul>
+                  <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-ink-soft">
+                    In the price
+                  </h3>
+                  {o.included?.length ? (
+                    <ul className="space-y-1.5 text-ink">
+                      {o.included.map((x: string) => (
+                        <li key={x} className="flex gap-2">
+                          <span aria-hidden className="shrink-0 text-accent">✓</span>
+                          <span>{x}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted">Ask {o.guide_name.split(" ")[0]} what this covers.</p>
+                  )}
                 </div>
-              ) : null}
-              {o.excluded?.length ? (
                 <div>
-                  <h3 className="mb-2 font-medium">Not included</h3>
-                  <ul className="space-y-1 text-sm text-ink-soft">
-                    {o.excluded.map((x: string) => (
-                      <li key={x} className="flex gap-2">
-                        <span>✕</span>
-                        {x}
-                      </li>
-                    ))}
-                  </ul>
+                  <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-ink-soft">
+                    Not in the price
+                  </h3>
+                  {o.excluded?.length ? (
+                    <ul className="space-y-1.5 text-ink-soft">
+                      {o.excluded.map((x: string) => (
+                        <li key={x} className="flex gap-2">
+                          <span aria-hidden className="shrink-0 text-muted">✕</span>
+                          <span>{x}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted">Nothing else to pay on the trail.</p>
+                  )}
                 </div>
-              ) : null}
+              </div>
             </section>
           ) : null}
 

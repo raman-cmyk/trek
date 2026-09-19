@@ -141,8 +141,10 @@ describe("the line never argues against the guide", () => {
     expect(ratingLine(null, { years: 14, tier: 2 }).text).toBe("14 years guiding");
   });
 
-  it("falls back to the licence, which is never nothing", () => {
-    expect(ratingLine(null, { tier: 1 }).text).toBe("Licensed, and we have met them");
+  it("falls back to having been checked, which is never nothing", () => {
+    // Not "Licensed": since 0113 a licence is required for what a guide
+    // leads, and a food host needs none — the card must not claim one.
+    expect(ratingLine(null, { tier: 1 }).text).toBe("Checked, and we have met them");
   });
 
   it("says nothing at all rather than something negative", () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "~/lib/cn";
 import { SmartImage } from "~/components/SmartImage";
 
@@ -18,22 +18,49 @@ export function Carousel({
   photos,
   aspect = "16/9",
   rounded = true,
+  autoMs = 0,
 }: {
   photos: Photo[];
   aspect?: string;
   rounded?: boolean;
+  /** Turn itself over every N ms. 0 is off, which is the default. */
+  autoMs?: number;
 }) {
   const [i, setI] = useState(0);
   const [touchX, setTouchX] = useState<number | null>(null);
-  if (photos.length === 0) return null;
+  const [held, setHeld] = useState(false);
   const n = photos.length;
   const go = (d: number) => setI((p) => (p + d + n) % n);
+
+  // Turning over on its own, but only when there is more than one picture,
+  // only when nobody is looking at a particular one, and never for somebody
+  // who has asked their machine to stop things moving (docs/06).
+  const still = useRef(false);
+  useEffect(() => {
+    still.current =
+      typeof window !== "undefined" &&
+      !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  }, []);
+  useEffect(() => {
+    if (!autoMs || n < 2 || held || still.current) return;
+    const id = setInterval(() => setI((p) => (p + 1) % n), autoMs);
+    return () => clearInterval(id);
+  }, [autoMs, n, held]);
+
+  if (photos.length === 0) return null;
 
   return (
     <div
       className={cn("relative overflow-hidden", rounded && "rounded-card")}
       style={{ aspectRatio: aspect }}
-      onTouchStart={(e) => setTouchX(e.touches[0].clientX)}
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocusCapture={() => setHeld(true)}
+      onBlurCapture={() => setHeld(false)}
+      onTouchStart={(e) => {
+        setHeld(true);
+        setTouchX(e.touches[0].clientX);
+      }}
       onTouchEnd={(e) => {
         if (touchX == null) return;
         const dx = e.changedTouches[0].clientX - touchX;

@@ -4,7 +4,10 @@ import { Form, Link, data, useNavigation } from "react-router";
 import type { Route } from "./+types/apply";
 import { GuideLanguages } from "~/components/GuideLanguages";
 import { GuideRegions } from "~/components/GuideRegions";
-import { PENDING_CHECKS } from "~/lib/guide-checks";
+import { GuideKinds } from "~/components/GuideKinds";
+import { parseGuideKinds } from "~/lib/offering-kinds";
+import { LICENCE_LABEL, licenceAsk, licenceNeededFor, startingChecks } from "~/lib/guide-licence";
+
 import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
 import { parseRegions } from "~/lib/guide-regions";
 import { parseRoutesWalked } from "~/lib/guide-routes";
@@ -182,11 +185,21 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (password.length < 8) {
     return data({ error: "Choose a password of at least 8 characters." }, { status: 400 });
   }
-  if (!licenceNo) {
-    return data({ error: "Your trekking licence number is needed — it is the first thing we check." }, { status: 400 });
+  // Only the guides whose work needs a licence. `validateStep` does the same
+  // on the client; this is the half that actually decides. The rule is a
+  // table in app/lib/guide-licence.ts, not a condition buried here.
+  const kinds = parseGuideKinds(form.getAll("guide_kinds"));
+  if (kinds.length === 0) {
+    return data({ error: "Tell us what you will take people on — it decides which papers we ask for." }, { status: 400 });
   }
-  if (!licenceExpiry) {
-    return data({ error: "Add the date your licence expires. It is printed on the card." }, { status: 400 });
+  const licenceClass = licenceNeededFor(kinds);
+  if (licenceClass !== "none") {
+    if (!licenceNo) {
+      return data({ error: `Your ${LICENCE_LABEL[licenceClass].toLowerCase()} number is needed — it is the first thing we check.` }, { status: 400 });
+    }
+    if (!licenceExpiry) {
+      return data({ error: "Add the date your licence expires. It is printed on the card." }, { status: 400 });
+    }
   }
   if (!district) {
     return data({ error: "Tell us the district you are from." }, { status: 400 });
@@ -195,7 +208,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ error: emergency.error }, { status: 400 });
   }
 
-  const licenceShot = checkFile(form.get("licence_photo"), "licence");
+  // A guide who needs no licence has no card to photograph.
+  const licenceShot =
+    licenceClass === "none"
+      ? { file: null as File | null, error: null as string | null }
+      : checkFile(form.get("licence_photo"), "licence");
   if (licenceShot.error) return data({ error: licenceShot.error }, { status: 400 });
   const idShot = checkFile(form.get("id_photo"), "NID or citizenship");
   if (idShot.error) return data({ error: idShot.error }, { status: 400 });
@@ -275,7 +292,8 @@ export async function action({ request, context }: Route.ActionArgs) {
     slug,
     status: "applied",
     tier: 0,
-    licence_no: licenceNo,
+    guide_kinds: kinds,
+    licence_no: licenceNo || null,
     licence_expiry: licenceExpiry,
     home_district: district,
     regions,
@@ -324,11 +342,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   const { data: checks } = await admin
     .from("guide_verifications")
     .insert(
-      PENDING_CHECKS.map((check_type) => ({
-        guide_id: userId,
-        check_type,
-        status: "pending",
-      })),
+      // Not one flat list any more. A guide who needs no licence gets the
+      // licence row as `not_required` rather than not at all: the office
+      // checklists tick themselves off these rows by name, so an omitted row
+      // would leave "Trekking licence seen" open forever with nothing able
+      // to close it (app/lib/guide-licence.ts).
+      startingChecks(kinds).map((c) => ({ guide_id: userId, ...c })),
     )
     .select("id, check_type");
 
@@ -338,10 +357,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   const checkId = (t: string) =>
     (checks ?? []).find((c: any) => c.check_type === t)?.id ?? null;
   const { uploadGuideDocument } = await import("~/lib/documents.server");
-  await uploadGuideDocument(admin, {
+  if (licenceShot.file) await uploadGuideDocument(admin, {
     guideId: userId,
     kind: "licence",
-    file: licenceShot.file!,
+    file: licenceShot.file,
     label: "Sent with the application",
     verificationId: checkId("licence"),
     expiresOn: licenceExpiry,
@@ -391,6 +410,7 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
   // the screen. `draftKey` changes when the draft lands and remounts them,
   // which is the only way an uncontrolled tree can be re-seeded.
   const [draftRegions, setDraftRegions] = useState<string[]>([]);
+  const [draftKinds, setDraftKinds] = useState<string[]>([]);
   const [draftRoutes, setDraftRoutes] = useState<WalkedRoute[]>([]);
   const [draftKey, setDraftKey] = useState(0);
   const [languages, setLanguages] = useState<LanguageRow[]>([
@@ -455,6 +475,7 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
       const regions = splitRepeated(vals.regions);
       const walked = parseWalkedDraft(vals.routes_walked);
       setDraftRegions(regions);
+      setDraftKinds(splitRepeated(vals.guide_kinds));
       setDraftRoutes(walked);
       if (regions.length || walked.length) setDraftKey((k) => k + 1);
       const drafted = parseLanguages(JSON.stringify(d.languages ?? []));
@@ -490,6 +511,9 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
   // Recomputed on every render so an uncontrolled field's change is picked up
   // the next time anything re-renders, and always on Next.
   const problems = validateStep(here.id, { ...values, ...formSnapshot });
+  // Which licence this applicant is being asked for, from what they ticked a
+  // step ago. Read off the live form snapshot so it changes as they tick.
+  const ask = licenceAsk(splitRepeated({ ...values, ...formSnapshot }.guide_kinds));
   const problemFor = (field: string) => {
     if (!checked) return null;
     const p = problems.find((x) => x.field === field);
@@ -670,6 +694,26 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
                       <GuideLanguages value={languages} onChange={setLanguages} />
                     </div>
                   </div>
+                  {/* First, because it decides what the licence step asks
+                      for. A food host was being made to produce a trekking
+                      licence to get past step three. */}
+                  <div>
+                    <p className="text-ink">{t("kindsLabel", lang)}</p>
+                    <p className="mt-1 text-sm text-muted">{t("kindsHint", lang)}</p>
+                    <div className="mt-2">
+                      <GuideKinds
+                        key={`kinds-${draftKey}`}
+                        selected={draftKinds}
+                        labels={{
+                          trek: t("kindTrek", lang),
+                          day_hike: t("kindDayHike", lang),
+                          food_culture: t("kindFood", lang),
+                          adventure: t("kindAdventure", lang),
+                          city: t("kindCity", lang),
+                        }}
+                      />
+                    </div>
+                  </div>
                   <div>
                     <p className="text-ink">{t("regionsLabel", lang)}</p>
                     <p className="mt-1 text-sm text-muted">{t("regionsHint", lang)}</p>
@@ -695,21 +739,36 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
                 </StepPane>
 
                 <StepPane on={here.id === "licence"} n={3} head={t("step3Head", lang)}>
-                  <TextField
-                    name="licence_no" label={t("licenceNo", lang)} placeholder="TG-12345"
-                    value={values.licence_no ?? ""} onChange={set}
-                    problem={problemFor("licence_no")}
-                  />
-                  <BsAdDate
-                    name="licence_expiry"
-                    value={values.licence_expiry ?? ""}
-                    onChange={(iso) => set("licence_expiry", iso)}
-                    label={t("licenceExpiry", lang)}
-                    problem={
-                      problemFor("licence_expiry") ??
-                      (values.licence_expiry ? licenceExpiryProblem(values.licence_expiry) : null)
-                    }
-                  />
+                  {/* Only the guides whose work needs one. The form used to
+                      demand a trekking licence from everybody, so a momo-crawl
+                      host could not get past this step without a card they
+                      have no reason to hold — and a heritage walk, which does
+                      need a licensed guide, was checked against the wrong one.
+                      The rule lives in app/lib/guide-licence.ts. */}
+                  {ask.need === "none" ? (
+                    <p className="rounded-xl border border-sage/60 bg-mist px-4 py-3 text-sm text-ink">
+                      {t("licenceNone", lang)}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted">{ask.note}</p>
+                      <TextField
+                        name="licence_no" label={ask.heading} placeholder="TG-12345"
+                        value={values.licence_no ?? ""} onChange={set}
+                        problem={problemFor("licence_no")}
+                      />
+                      <BsAdDate
+                        name="licence_expiry"
+                        value={values.licence_expiry ?? ""}
+                        onChange={(iso) => set("licence_expiry", iso)}
+                        label={t("licenceExpiry", lang)}
+                        problem={
+                          problemFor("licence_expiry") ??
+                          (values.licence_expiry ? licenceExpiryProblem(values.licence_expiry) : null)
+                        }
+                      />
+                    </>
+                  )}
                   <DistrictPicker
                     value={values.home_district ?? ""}
                     onChange={(v) => set("home_district", v)}
@@ -717,11 +776,13 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
                     hint={t("districtHint", lang)}
                     problem={problemFor("home_district")}
                   />
-                  <DocUpload
-                    name="licence_photo" label={t("licencePhoto", lang)} glyph="licence"
-                    cta={t("uploadCta", lang)} receivedLabel={t("uploadReceived", lang)}
-                    retryLabel={t("uploadRetry", lang)}
-                  />
+                  {ask.need !== "none" && (
+                    <DocUpload
+                      name="licence_photo" label={t("licencePhoto", lang)} glyph="licence"
+                      cta={t("uploadCta", lang)} receivedLabel={t("uploadReceived", lang)}
+                      retryLabel={t("uploadRetry", lang)}
+                    />
+                  )}
                 </StepPane>
 
                 <StepPane on={here.id === "id"} n={4} head={t("step4Head", lang)}>

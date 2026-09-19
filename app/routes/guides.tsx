@@ -26,7 +26,7 @@ export function meta({ loaderData: data }: Route.MetaArgs) {
   return pageMeta({
     title: "Find your trekking guide in Nepal",
     description:
-      "Search verified, licensed trekking guides in Nepal by name, region, language and the dates you're free. Pick the person you'll walk with.",
+      "Search verified Nepali guides by name, region, language and the dates you're free — each one licensed for what they lead. Pick the person you'll walk with.",
     canonical: data?.canonical ?? "",
   });
 }
@@ -94,7 +94,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const totalGuides = (allGuides ?? []).length;
 
   const ids = rows.map((g) => g.user_id);
-  const [ratings, langMap, allLangs, freeRuns, skillMap] = await Promise.all([
+  const [ratings, langMap, allLangs, freeRuns, skillMap, kindMap] = await Promise.all([
     guideRatings(client, ids),
     (async () => {
       const map: Record<string, string[]> = {};
@@ -118,6 +118,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           .select("guide_id, skill")
           .in("guide_id", ids);
         for (const r of data ?? []) (map[r.guide_id] ??= []).push(r.skill);
+      }
+      return map;
+    })(),
+    // What each of them actually runs, for the card. Batched beside the rest
+    // rather than per row — the card said what a guide charges and how fast
+    // they answer, and never what they would take you on.
+    (async () => {
+      const map: Record<string, string[]> = {};
+      if (ids.length) {
+        const { data } = await client
+          .from("public_offerings")
+          .select("guide_id, kind")
+          .in("guide_id", ids);
+        for (const r of data ?? []) (map[r.guide_id] ??= []).push(r.kind);
       }
       return map;
     })(),
@@ -211,6 +225,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     guides: rows,
     ratings,
     langMap,
+    kindMap,
     totalGuides,
     facets: { districts, languages },
     filters: { q, from: range?.from ?? "", to: range?.to ?? "", fTier, fLang, fDistrict, fWomen, sort },
@@ -230,7 +245,7 @@ const SELECT_CLS =
   "rounded border border-line bg-card px-3 py-2 text-sm text-ink";
 
 export default function Guides({ loaderData }: Route.ComponentProps) {
-  const { guides, ratings, langMap, totalGuides, facets, filters, intent, today, search } =
+  const { guides, ratings, langMap, kindMap, totalGuides, facets, filters, intent, today, search } =
     loaderData;
   const params = new URLSearchParams(search);
   // The lists come from the rows on the page: offering a language nobody
@@ -417,6 +432,7 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
               guide={g}
               rating={ratings[g.user_id]}
               languages={langMap[g.user_id]}
+              kinds={kindMap[g.user_id]}
             />
           ))}
         </div>

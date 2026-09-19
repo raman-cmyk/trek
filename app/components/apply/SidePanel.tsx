@@ -19,6 +19,16 @@ import { cn } from "~/lib/cn";
  * rather than being dropped, because the fear does not go away on a small
  * screen.
  */
+/** The six reasons, in the order a guide weighs them. */
+const WHY = [
+  ["whyNameTitle", "whyNameBody"],
+  ["whyRateTitle", "whyRateBody"],
+  ["whyPaidTitle", "whyPaidBody"],
+  ["whyBackupTitle", "whyBackupBody"],
+  ["whyPaperTitle", "whyPaperBody"],
+  ["whyStandardsTitle", "whyStandardsBody"],
+] as const;
+
 export function SidePanel({
   step,
   lang,
@@ -43,7 +53,8 @@ export function SidePanel({
   if (step === "you" || step === "work" || step === "intro") {
     const earn = nprPerDay && sampleTrek ? earningsFor(nprPerDay, sampleTrek.days) : null;
     return (
-      <div className={cn(box, className)}>
+      <div className={cn("space-y-3", className)}>
+      <div className={box}>
         <p className="label text-muted">{t("earningsHead", lang)}</p>
         {earn && sampleTrek ? (
           <>
@@ -73,6 +84,24 @@ export function SidePanel({
           <span className="text-sm text-ink">{t("keepAll", lang)}</span>
         </p>
         <p className="mt-1 text-caption text-muted">{t("keepAllWhy", lang)}</p>
+      </div>
+
+      {/* What they get for filling this in. The column showed a live preview
+          of their card and a rate hint — and nothing at all about why a guide
+          should be here rather than with the agency they already work for.
+          These six were written for /hosts, a page most applicants never
+          reach. */}
+      <div className={box}>
+        <p className="label text-muted">{t("whyHead", lang)}</p>
+        <ul className="mt-3 space-y-3">
+          {WHY.map(([title, body]) => (
+            <li key={title}>
+              <p className="text-sm font-medium text-ink">{t(title, lang)}</p>
+              <p className="mt-0.5 text-caption text-muted">{t(body, lang)}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
       </div>
     );
   }

@@ -82,7 +82,7 @@ export function ratingLine(
   }
   // The licence is the floor, and it is never nothing: it is the one thing
   // this platform exists to have checked.
-  if (s.tier && s.tier > 0) return line("Licensed, and we have met them");
+  if (s.tier && s.tier > 0) return line("Checked, and we have met them");
   return line(null);
 }
 

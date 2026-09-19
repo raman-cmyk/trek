@@ -1,10 +1,11 @@
 import { Link } from "react-router";
+import { OFFERING_KIND_LABEL, kindsLine } from "~/lib/offering-kinds";
 import { ratingLine, reviewsLabel, starText, type CardRating } from "~/lib/card-rating";
 import { SmartImage } from "~/components/SmartImage";
 import { fromPerPersonUsdCents, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { useMoney } from "~/lib/currency-context";
 import { listPriceUsdCents } from "~/lib/list-price";
-import { GuideChip, OnlyWithMe, ResponseChip, Stars, TierBadge } from "./bits";
+import { GuideChip, OnlyWithMe, Stars, TierBadge } from "./bits";
 import { Fallback } from "~/components/design/Fallback";
 import { GlassPill } from "~/components/design/Glass";
 import { Glyph, type ChipGlyph } from "~/components/design/Chip";
@@ -59,14 +60,6 @@ export interface PublicOffering {
   from_usd_cents?: number | null;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  trek: "Trek",
-  day_hike: "Day hike",
-  food_culture: "Food & culture",
-  adventure: "Adventure",
-  city: "City",
-};
-
 /** The glyph each kind carries on its chip and in its empty state. */
 export const KIND_GLYPH: Record<string, ChipGlyph> = {
   trek: "mountain",
@@ -89,12 +82,6 @@ export function langLabel(languages?: string[] | null): string {
   if (list.length === 0) return "";
   if (list.length <= 2) return list.join(", ");
   return `${list.slice(0, 2).join(", ")} +${list.length - 2}`;
-}
-
-function responseLabel(mins: number): string {
-  if (mins < 60) return `~${mins} min`;
-  const h = Math.round(mins / 60);
-  return `~${h} hr`;
 }
 
 export function offeringPath(o: { kind: string; slug: string }) {
@@ -122,10 +109,13 @@ export function GuideCard({
   guide,
   rating,
   languages,
+  kinds,
 }: {
   guide: PublicGuide;
   rating?: { value: number; count: number };
   languages?: string[];
+  /** The kinds of thing this guide lists — "Treks · Day hikes". */
+  kinds?: string[] | null;
 }) {
   const { mr } = useMoney();
   const line = ratingLine(rating, {
@@ -156,16 +146,15 @@ export function GuideCard({
         ) : (
           <Fallback initial={guide.full_name} />
         )}
-        {/* Tier on a glass pill, top-right (§8); how fast they answer, bottom-left. */}
+        {/* Tier on a glass pill, top-right (§8). Nothing else over the face.
+            There used to be a "~42 min" reply-time chip bottom-left. It was
+            removed because it was not true: nothing in this codebase has ever
+            computed `median_response_mins` — every value on the site was typed
+            into the seed file, and Pemba's was literally 42. A number a
+            trekker weighs a person by has to be measured or absent. */}
         <div className="absolute right-2 top-2">
           <TierBadge tier={guide.tier} static />
         </div>
-        {guide.median_response_mins ? (
-          <GlassPill className="absolute bottom-2 left-2">
-            <Glyph name="clock" className="text-moss" />
-            <span className="font-mono">{responseLabel(guide.median_response_mins)}</span>
-          </GlassPill>
-        ) : null}
       </div>
       <div className="flex flex-1 flex-col p-3.5">
         {/* Her words lead — bold, no quotation marks, the way she said it.
@@ -212,16 +201,31 @@ export function GuideCard({
               to two lines in a 211px card and pushed the rate row 35px below
               its neighbours' — the same misalignment one row lower, which is
               the whole thing this block exists to prevent. */}
+          {/* What they actually run. The card said what a guide charges and
+              how fast they answer, and never once what they would take you
+              on — which is the thing somebody is choosing between. */}
           <div className="mt-1.5 flex h-5 items-center">
-            {line.stars != null ? (
-              <Stars value={line.stars} count={line.count} />
-            ) : line.text ? (
-              <span className="truncate text-sm text-muted">{line.text}</span>
-            ) : null}
-          </div>
-          <div className="flex items-baseline justify-between gap-2 pt-2">
             <span className="truncate text-sm text-muted">
-              {langLabel(languages)}
+              {kinds && kinds.length > 0 ? kindsLine(kinds) : langLabel(languages)}
+            </span>
+          </div>
+          {kinds && kinds.length > 0 && (
+            <div className="flex h-5 items-center">
+              <span className="truncate text-sm text-muted">{langLabel(languages)}</span>
+            </div>
+          )}
+          {/* Reviews last, with the rate, because that is the pair somebody
+              weighs against each other at the end of reading a card. Fixed
+              height rather than trusting the states to match: "Be the first to
+              review" wrapped to two lines in a 211px card and pushed the row
+              35px below its neighbours'. */}
+          <div className="flex h-5 items-baseline justify-between gap-2 pt-2">
+            <span className="flex h-5 items-center">
+              {line.stars != null ? (
+                <Stars value={line.stars} count={line.count} />
+              ) : line.text ? (
+                <span className="truncate text-sm text-muted">{line.text}</span>
+              ) : null}
             </span>
             {guide.day_rate_usd_cents && (
               <span className="shrink-0 text-sm text-muted">
@@ -277,7 +281,7 @@ export function OfferingCard({
             picture (docs/07). */}
         <GlassPill className="absolute left-2 top-2 uppercase tracking-wide">
           <Glyph name={KIND_GLYPH[offering.kind] ?? "mountain"} className="text-moss" />
-          <span className="text-[11px] font-semibold">{KIND_LABEL[offering.kind] ?? offering.kind}</span>
+          <span className="text-[11px] font-semibold">{OFFERING_KIND_LABEL[offering.kind] ?? offering.kind}</span>
         </GlassPill>
         {from != null && (
           <GlassPill className="absolute right-2 top-2">

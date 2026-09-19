@@ -71,6 +71,10 @@ export const PROBLEM: Record<ProblemCode, Pair> = {
     en: "The date on your licence card.",
     ne: "तपाईंको लाइसेन्स कार्डमा लेखिएको म्याद सकिने मिति।",
   },
+  kinds_missing: {
+    en: "Tick what you will take people on. It decides which papers we ask you for.",
+    ne: "तपाईं के-के मा मानिस लैजानुहुन्छ छान्नुहोस्। यसैले कुन कागज माग्ने तय गर्छ।",
+  },
   district_missing: {
     en: "The district you are from.",
     ne: "तपाईं कुन जिल्लाको हो।",
@@ -155,6 +159,55 @@ export const T = {
   // it showed: guides average 0.9 regions each, i.e. almost everybody ticks
   // exactly one, reading it as "your region" rather than "everywhere you
   // would take work". The line says both what to tick and what it buys.
+  kindsLabel: { en: "What will you take people on?", ne: "तपाईं के-के मा मानिस लैजानुहुन्छ?" },
+  kindsHint: {
+    en: "Tick everything you would run. This decides which licence we ask you for — a food walk needs none, a trek needs a trekking licence, and the heritage sites need a tour guide licence.",
+    ne: "तपाईंले चलाउन सक्ने सबै छान्नुहोस्। यसैले कुन इजाजतपत्र माग्ने तय हुन्छ — खाना घुमाइमा चाहिँदैन, ट्रेकमा ट्रेकिङ इजाजतपत्र, सम्पदा क्षेत्रमा टुर गाइड इजाजतपत्र।",
+  },
+  kindTrek: { en: "Multi-day treks", ne: "बहु-दिने ट्रेक" },
+  kindDayHike: { en: "Day hikes", ne: "एक दिने हाइक" },
+  kindFood: { en: "Food & culture walks", ne: "खाना र संस्कृति घुमाइ" },
+  kindAdventure: { en: "Adventure days — rafting, paragliding", ne: "साहसिक दिन — र्‍याफ्टिङ, प्याराग्लाइडिङ" },
+  kindCity: { en: "City & heritage — temples, Durbar Squares", ne: "सहर र सम्पदा — मन्दिर, दरबार क्षेत्र" },
+  licenceNone: {
+    en: "No licence needed for what you run. We still need to see who you are, on the next step.",
+    ne: "तपाईंले चलाउने कामका लागि इजाजतपत्र चाहिँदैन। तर तपाईं को हुनुहुन्छ भन्ने अर्को चरणमा हेर्नुपर्छ।",
+  },
+  // Why a guide should be here at all. These six are the strongest thing we
+  // say to guides anywhere in the product — they were written for /hosts, a
+  // page most applicants never see, while the form that actually asks somebody
+  // to hand over their citizenship card said nothing about what they get.
+  whyHead: { en: "Why guide with us", ne: "हामीसँग किन गाइड गर्ने" },
+  whyNameTitle: { en: "Your name on the trek", ne: "ट्रेकमा तपाईंकै नाम" },
+  whyNameBody: {
+    en: "Trekkers book you, not an agency. Your photo, your voice, your reviews — a reputation that belongs to you.",
+    ne: "ट्रेकरले एजेन्सी होइन, तपाईंलाई बुक गर्छन्। तपाईंको फोटो, तपाईंको आवाज, तपाईंकै समीक्षा।",
+  },
+  whyRateTitle: { en: "You set the rate — and keep it", ne: "दर तपाईंले तोक्नुहोस् — पूरै तपाईंकै" },
+  whyRateBody: {
+    en: "Your day rate is yours to choose and yours in full. Our 10% is added on top and paid by the trekker, printed on their bill.",
+    ne: "दैनिक दर तपाईंले तोक्ने, पूरै तपाईंकै। हाम्रो 10% माथि थपिन्छ र ट्रेकरले तिर्छन्।",
+  },
+  whyPaidTitle: { en: "Paid in rupees, to your own account", ne: "रुपैयाँमा, तपाईंकै खातामा" },
+  whyPaidBody: {
+    en: "eSewa, Khalti or your bank. No waiting for the season to settle.",
+    ne: "इसेवा, खल्ती वा बैंक। सिजन सकिने पर्खनु पर्दैन।",
+  },
+  whyBackupTitle: { en: "A backup, never a black mark", ne: "ब्याकअप, कालो दाग होइन" },
+  whyBackupBody: {
+    en: "Ill before a departure? The named backup guide steps in and your record stays clean.",
+    ne: "हिँड्नु अघि बिरामी? ब्याकअप गाइड जान्छन्, तपाईंको रेकर्ड सफा रहन्छ।",
+  },
+  whyPaperTitle: { en: "We do the paperwork", ne: "कागजपत्र हामी गर्छौं" },
+  whyPaperBody: {
+    en: "Permits, TIMS, contracts, deposits. You do the one thing an agency cannot — be the guide people came for.",
+    ne: "परमिट, टिम्स, सम्झौता, अग्रिम रकम। तपाईं गाइड हुनुहोस्।",
+  },
+  whyStandardsTitle: { en: "Standards that protect you too", ne: "मापदण्डले तपाईंलाई पनि जोगाउँछ" },
+  whyStandardsBody: {
+    en: "Porter-welfare rules, insurance requirements, and a strike system that removes bad actors.",
+    ne: "भरिया कल्याण नियम, बिमा अनिवार्यता, र नराम्रो काम गर्नेलाई हटाउने प्रणाली।",
+  },
   regionsHint: {
     en: "Tick every region you would take work in, not just the one you live in. This is how trekkers browsing Everest or Annapurna find you.",
     ne: "तपाईं काम गर्न जान सक्ने सबै क्षेत्र छान्नुहोस् — बस्ने ठाउँ मात्र होइन। यसैबाट एभरेस्ट वा अन्नपूर्ण हेर्ने ट्रेकरले तपाईंलाई भेट्छन्।",

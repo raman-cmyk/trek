@@ -25,7 +25,7 @@ export default function Trust({ loaderData: d }: Route.ComponentProps) {
         A tier you can look up is trust. One you can't is decoration.
       </h1>
       <p className="mt-4 max-w-[68ch] text-body-l text-ink">
-        Every guide on Trek is a named human with a licence we've seen. Tiers
+        Every guide on Trek is a named human, licensed for what they lead — and we have seen the card. Tiers
         tell you how much further we've checked — never a vague badge with
         nothing behind it.
       </p>

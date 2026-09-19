@@ -85,6 +85,9 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
   // whose own stated regions cover it. The second half matters — a guide new
   // to the platform has listed where they work before they have listed a trip.
   const selling = new Set(trips.map((o: any) => o.guide_id));
+  // Every offering is already in hand, so what each guide runs costs nothing.
+  const kindMap: Record<string, string[]> = {};
+  for (const o of offerings ?? []) (kindMap[(o as any).guide_id] ??= []).push((o as any).kind);
   const names = region.values.map((v) => v.toLowerCase());
   const theirs = (guides ?? []).filter((g: any) => {
     if (selling.has(g.user_id)) return true;
@@ -92,7 +95,23 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
     return rs.some((r) => names.includes(r));
   });
 
-  const ratings = await guideRatings(client, theirs.map((g: any) => g.user_id));
+  const shownIds = theirs.slice(0, 8).map((g: any) => g.user_id);
+  // Languages were never loaded here, so the left half of every card's bottom
+  // row was blank on a region page and filled in on /guides.
+  const [ratings, langMap] = await Promise.all([
+    guideRatings(client, theirs.map((g: any) => g.user_id)),
+    (async () => {
+      const map: Record<string, string[]> = {};
+      if (shownIds.length) {
+        const { data: rows } = await client
+          .from("guide_languages")
+          .select("guide_id, language")
+          .in("guide_id", shownIds);
+        for (const r of rows ?? []) (map[r.guide_id] ??= []).push(r.language);
+      }
+      return map;
+    })(),
+  ]);
 
   return data(
     {
@@ -103,6 +122,8 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
       trips: trips.slice(0, 8),
       guides: theirs.slice(0, 8),
       ratings,
+      langMap,
+      kindMap,
       routeCount: mine.length,
       guideCount: theirs.length,
     },
@@ -110,7 +131,7 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
 }
 
 export default function RegionPage({ loaderData }: Route.ComponentProps) {
-  const { region, routes, trips, guides, ratings, routeCount, guideCount } =
+  const { region, routes, trips, guides, ratings, langMap, kindMap, routeCount, guideCount } =
     loaderData as any;
 
   return (
@@ -144,7 +165,13 @@ export default function RegionPage({ loaderData }: Route.ComponentProps) {
           </div>
           <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {guides.map((g: any) => (
-              <GuideCard key={g.user_id} guide={g} rating={ratings[g.user_id]} />
+              <GuideCard
+                key={g.user_id}
+                guide={g}
+                rating={ratings[g.user_id]}
+                languages={langMap[g.user_id]}
+                kinds={kindMap[g.user_id]}
+              />
             ))}
           </div>
         </section>

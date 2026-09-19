@@ -1,3 +1,4 @@
+import { needsLicence } from "~/lib/guide-licence";
 /**
  * The order a guide is asked things in.
  *
@@ -39,7 +40,7 @@ export const STEPS: Step[] = [
     id: "work",
     index: 2,
     label: "YOUR WORK",
-    fields: ["years_experience", "day_rate_npr", "languages", "regions", "routes_walked", "hook_line"],
+    fields: ["guide_kinds", "years_experience", "day_rate_npr", "languages", "regions", "routes_walked", "hook_line"],
   },
   {
     id: "licence",
@@ -113,6 +114,7 @@ export type ProblemCode =
   | "licence_no_missing"
   | "licence_expiry_missing"
   | "district_missing"
+  | "kinds_missing"
   | "emergency_name_missing"
   | "emergency_phone_missing"
   | "heard_missing";
@@ -160,6 +162,16 @@ export function validateStep(
   }
 
   if (step === "work") {
+    // What they will actually run, asked before the licence step, because it
+    // decides which licence that step asks for — a momo host has no reason
+    // to hold a trekking card, and a heritage walk needs a different one.
+    if (splitRepeated(v("guide_kinds")).length === 0) {
+      out.push({
+        field: "guide_kinds",
+        code: "kinds_missing",
+        message: "Tick what you will take people on. It decides which papers we ask you for.",
+      });
+    }
     const years = Number(v("years_experience"));
     if (v("years_experience") && (!Number.isFinite(years) || years < 0 || years > 60)) {
       out.push({ field: "years_experience", code: "years_range", message: "Years guiding — a number between 0 and 60." });
@@ -173,11 +185,16 @@ export function validateStep(
   }
 
   if (step === "licence") {
-    if (!v("licence_no")) {
-      out.push({ field: "licence_no", code: "licence_no_missing", message: "Your licence number — it is the first thing we check." });
-    }
-    if (!v("licence_expiry")) {
-      out.push({ field: "licence_expiry", code: "licence_expiry_missing", message: "The date on your licence card." });
+    // Only asked of the guides whose work needs it (app/lib/guide-licence.ts).
+    // The district is asked of everybody: it is where they are from, not a
+    // licence detail, and it is how the office groups people.
+    if (needsLicence(splitRepeated(v("guide_kinds")))) {
+      if (!v("licence_no")) {
+        out.push({ field: "licence_no", code: "licence_no_missing", message: "Your licence number — it is the first thing we check." });
+      }
+      if (!v("licence_expiry")) {
+        out.push({ field: "licence_expiry", code: "licence_expiry_missing", message: "The date on your licence card." });
+      }
     }
     if (!v("home_district")) {
       out.push({ field: "home_district", code: "district_missing", message: "The district you are from." });
@@ -238,7 +255,7 @@ export function resumeAt(saved: number | null | undefined, values: Record<string
  * the application draft: a guide ticked five regions, stepped away, came back
  * to one, and reasonably concluded the field meant "pick your region".
  */
-export const REPEATED = new Set(["regions"]);
+export const REPEATED = new Set(["regions", "guide_kinds"]);
 
 /** The separator. A unit separator cannot occur in a region name. */
 const SEP = "\u001f";

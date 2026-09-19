@@ -116,7 +116,7 @@ export function Footer({
                 <span className="font-mono">{data!.guideCount}</span> people. Pick one.
               </span>
               <span className="mt-1 block text-sm text-sage">
-                Every face here is a licensed guide we have met. None of them is an agency.
+                Every face here is a guide we have met, licensed for what they lead. None of them is an agency.
               </span>
             </p>
           </Link>

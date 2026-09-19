@@ -32,6 +32,7 @@ import { PROFICIENCY_LABELS, type Proficiency } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
 import { TAKEN_STATUSES, availabilityCounts, horizonEnd } from "~/lib/open-days";
+import { checklistLabelFor } from "~/lib/guide-licence";
 import { AvatarPicker } from "~/components/AvatarPicker";
 
 /**
@@ -97,7 +98,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       ? admin
           .from("guides")
           .select(
-            "user_id, slug, status, tier, licence_no, licence_expiry, home_district, regions, years_experience, day_rate_usd_cents, bio, hook_line, voice_intro_url, payout_method, payout_account, payout_account_name, response_rate, median_response_mins, treks_completed_platform, created_at",
+            "guide_kinds, user_id, slug, status, tier, licence_no, licence_expiry, home_district, regions, years_experience, day_rate_usd_cents, bio, hook_line, voice_intro_url, payout_method, payout_account, payout_account_name, response_rate, median_response_mins, treks_completed_platform, created_at",
           )
           .eq("user_id", id)
           .maybeSingle()
@@ -259,12 +260,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       await import("~/lib/checklists.server");
     const subject = { type: "guide" as const, id };
     const already = await runningLists(admin, subject);
-    // The core list starts itself; the trekking and day lists are started by
-    // ops, because nothing in the data says which kind of guide somebody is.
+    // The right list starts itself now. `guide_trek` and `guide_day` have
+    // existed since 0106 and had never been matched automatically, because —
+    // in that migration's own words — "nothing in the data says which kind of
+    // guide somebody is". 0113 gives guides a kind, so `pickChecklist` can do
+    // what it was written to do: `appliesTo` is the label those lists already
+    // carry ("trek guide" / "day guide"), and a guide with no kind on file
+    // still falls through to the default core list.
     if (already.length === 0) {
+      const kinds = ((guide as any)?.guide_kinds ?? []) as string[];
       await runChecklist(admin, {
         type: "guide",
         id,
+        appliesTo: kinds.length ? checklistLabelFor(kinds) : null,
         createdAt: (guide as any)?.created_at ?? person?.created_at ?? null,
       });
     }

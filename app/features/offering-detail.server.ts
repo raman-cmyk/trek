@@ -69,8 +69,16 @@ export async function loadOfferingDetail(
         .order("published_at", { ascending: false }),
       // The route's day stops draw the trek on its cover (docs/07).
       o.route_id
-        ? client.from("routes").select("day_stops, hero_photo_url, max_altitude_m").eq("id", o.route_id).maybeSingle()
-        : Promise.resolve({ data: null as null | { day_stops: unknown; hero_photo_url: string | null; max_altitude_m: number | null } }),
+        ? client.from("routes").select("day_stops, hero_photo_url, max_altitude_m, overview, highlights").eq("id", o.route_id).maybeSingle()
+        : Promise.resolve({
+            data: null as null | {
+              day_stops: unknown;
+              hero_photo_url: string | null;
+              max_altitude_m: number | null;
+              overview: string | null;
+              highlights: string[] | null;
+            },
+          }),
     ]);
 
   // The tier of fact the page was missing, and the two rails at its foot.
@@ -183,6 +191,11 @@ export async function loadOfferingDetail(
     }>,
     routeHero: ((routeRow as any)?.hero_photo_url ?? null) as string | null,
     routeMaxAltitude: ((routeRow as any)?.max_altitude_m ?? null) as number | null,
+    // The route already carries a Viator-style overview and highlights (0076)
+    // and this page has never read them — /routes/:slug renders them and the
+    // trek page, where somebody is actually deciding, showed one sentence.
+    routeOverview: ((routeRow as any)?.overview ?? null) as string | null,
+    routeHighlights: (((routeRow as any)?.highlights ?? []) as string[]) ?? [],
     canonical: absoluteUrl(env.SITE_URL, offeringPath(o)),
     ogImage: o.cover_photo_url ?? undefined,
   };

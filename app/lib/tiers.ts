@@ -14,9 +14,9 @@ export const TIERS: TierDef[] = [
   {
     tier: 1,
     name: "Verified",
-    what: "Government licence, photo ID and a working phone — all checked and dated. The bar to appear on Guides of Nepal at all.",
+    what: "The licence their work needs, photo ID against it, and a working phone — all checked and dated. The bar to appear on Guides of Nepal at all.",
     checks: [
-      "TAAN / NMA licence verified",
+      "Licence verified for what they lead — TAAN or NMA for treks, NTB for heritage sites",
       "Photo ID matched to the licence",
       "Reachable phone number",
     ],
@@ -26,7 +26,7 @@ export const TIERS: TierDef[] = [
     name: "Trusted",
     what: "Everything in Verified, plus references called and completed treks on the platform with real reviews behind them.",
     checks: [
-      "TAAN / NMA licence verified",
+      "Licence verified for what they lead — TAAN or NMA for treks, NTB for heritage sites",
       "Photo ID matched to the licence",
       "Reachable phone number",
       "Professional reference called",
@@ -38,7 +38,7 @@ export const TIERS: TierDef[] = [
     name: "Elite",
     what: "Our highest tier: a long track record, top ratings, and a safety record we've audited. Rare by design, and re-checked every year.",
     checks: [
-      "TAAN / NMA licence verified",
+      "Licence verified for what they lead — TAAN or NMA for treks, NTB for heritage sites",
       "Photo ID matched to the licence",
       "Reachable phone number",
       "Professional reference called",
