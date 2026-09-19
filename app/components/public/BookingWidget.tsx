@@ -139,6 +139,16 @@ function DatePick({
    */
   const firstOpen = availableDays[0] || new Date().toISOString().slice(0, 10);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(day || firstOpen));
+  /**
+   * Folded away once the dates are chosen.
+   *
+   * "There is not option to close the calander." On a phone the grid is most
+   * of a screen, and on a span that crosses a month it is two of them — so
+   * party size, the price and the Request button all sat below the fold with
+   * no way to get past. Picking a date closes it, and the dates stay on
+   * screen as a line you can read back.
+   */
+  const [folded, setFolded] = useState(false);
   const end = day ? spanEnd(day, days) : "";
   // Only possible for a date chosen before this component existed, or one
   // that was free when the page loaded and is not now.
@@ -157,44 +167,75 @@ function DatePick({
     }
   }, [day, visibleMonth, showMonths]);
 
+  // A clash keeps it open whatever else is true: "pick another start" is not
+  // an instruction you can follow with the calendar shut.
+  const shown = !folded || !day || !!clash;
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm text-ink-soft">
           {day ? "Your dates" : days > 1 ? "Pick your first day" : "Pick a date"}
         </span>
-        <span className="flex items-center gap-1">
+        {shown ? (
+          <span className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Previous month"
+              onClick={() => setVisibleMonth((m) => shiftMonth(m, -1))}
+              className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="Next month"
+              onClick={() => setVisibleMonth((m) => shiftMonth(m, 1))}
+              className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
+            >
+              ›
+            </button>
+            {day && !clash && (
+              <button
+                type="button"
+                onClick={() => setFolded(true)}
+                className="ml-1 rounded px-2 py-0.5 text-sm font-medium text-moss hover:bg-mist"
+              >
+                Done
+              </button>
+            )}
+          </span>
+        ) : (
           <button
             type="button"
-            aria-label="Previous month"
-            onClick={() => setVisibleMonth((m) => shiftMonth(m, -1))}
-            className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
+            onClick={() => setFolded(false)}
+            className="rounded px-2 py-0.5 text-sm font-medium text-moss underline-offset-4 hover:underline"
           >
-            ‹
+            Change
           </button>
-          <button
-            type="button"
-            aria-label="Next month"
-            onClick={() => setVisibleMonth((m) => shiftMonth(m, 1))}
-            className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
-          >
-            ›
-          </button>
-        </span>
+        )}
       </div>
 
-      <AvailabilityCalendar
-        openDays={availableDays}
-        monthsFrom={visibleMonth}
-        months={showMonths}
-        guideName={o.guide_first_name}
-        compact
-        select="span"
-        days={days}
-        value={{ start: day || null, end: end || null }}
-        requestedDays={requestedDays}
-        onPick={(next) => next.start && setDay(next.start)}
-      />
+      {shown && (
+        <AvailabilityCalendar
+          openDays={availableDays}
+          monthsFrom={visibleMonth}
+          months={showMonths}
+          guideName={o.guide_first_name}
+          compact
+          select="span"
+          days={days}
+          value={{ start: day || null, end: end || null }}
+          requestedDays={requestedDays}
+          onPick={(next) => {
+            if (!next.start) return;
+            setDay(next.start);
+            // Closes itself the moment the question is answered, rather than
+            // leaving a screen of squares between a reader and the price.
+            setFolded(true);
+          }}
+        />
+      )}
 
       {/* The chosen span said in words as well as colour, because a shaded
           row of squares is not something you can read back to yourself to

@@ -1122,7 +1122,7 @@ function TextField({
           className={cn(
             "mt-2 h-[52px] w-full rounded-xl border bg-card px-3 text-ink placeholder:text-muted/50",
             "focus:outline-none focus:ring-2 focus:ring-moss/30",
-            isPassword && "pr-11",
+            isPassword && "pr-16",
             problem ? "border-ember" : "border-line focus:border-moss",
           )}
         />

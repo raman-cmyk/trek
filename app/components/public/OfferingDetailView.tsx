@@ -34,6 +34,7 @@ import { lovedFor, tripFacts, type TripFact } from "~/lib/trip-facts";
 import { FREE_CANCELLATION_DAYS } from "~/lib/policy";
 import { cn } from "~/lib/cn";
 import { galleryPhotos } from "~/lib/offering-photos";
+import { startableDays } from "~/lib/date-span";
 import { Glyph } from "~/components/design/Chip";
 import { FactStrip } from "~/components/design/FactStrip";
 
@@ -44,7 +45,20 @@ export function OfferingDetailView({ data }: { data: OfferingDetailData }) {
   const breakdown = (o.price_breakdown ?? null) as PriceBreakdown | null;
   const showBreakdown = hasBreakdown(breakdown);
   const [party, setParty] = useState(o.min_party || 1);
-  const [day, setDay] = useState(availableDays[0] ?? "");
+  /**
+   * The date the page opens on.
+   *
+   * It was `availableDays[0]` — the first day the guide is free, which on a
+   * fourteen-day trek is very often a day the *span* is not. Every trek page
+   * therefore opened on dates it then refused: "Pemba is not free on Fri,
+   * Oct 30 — pick another start", in red, before the reader had touched
+   * anything. `startableDays` has answered this since the calendar was built
+   * (date-span.ts: "the 30th can be free and still be no use as the start of
+   * a twelve-day walk") and the widget was not asking it.
+   */
+  const [day, setDay] = useState(
+    () => startableDays(availableDays, Math.max(1, o.days || 1))[0] ?? availableDays[0] ?? "",
+  );
   const [addons, setAddons] = useState<Set<string>>(new Set());
   // A porter is the one part of a listed trek people genuinely decide about,
   // so it is a tick box rather than a position on a slider. On by default:

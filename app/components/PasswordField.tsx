@@ -10,8 +10,16 @@ import { cn } from "~/lib/cn";
  * password to you over WhatsApp: the only way to know you typed it right was
  * to submit and find out.
  *
- * The eye is off by default, because the commonest place a password is typed
- * is in public.
+ * It is off by default, because the commonest place a password is typed is in
+ * public.
+ *
+ * The control was an 18px grey eye at the right edge of the box, and the
+ * founder's report on a phone was "client signin maa aaye naa show password"
+ * — there is no show-password on the client sign-in. There was; he could not
+ * see it. So it says the word now, in the colour every other control on the
+ * site uses for "this does something". A word survives a small screen, a
+ * cheap panel and a second language; a glyph the size of a full stop does
+ * none of those.
  */
 export function PasswordField({
   name,
@@ -58,21 +66,11 @@ export function PasswordField({
           defaultValue={defaultValue}
           placeholder={placeholder}
           className={cn(
-            "w-full rounded-button border border-border bg-card px-3 py-2 pr-11 text-ink outline-none focus:border-primary",
+            "w-full rounded-button border border-border bg-card px-3 py-2 pr-16 text-ink outline-none focus:border-primary",
             className,
           )}
         />
-        <button
-          type="button"
-          onClick={() => setShown((v) => !v)}
-          // Not a label change on the same control: a screen reader should
-          // hear what the button does, and the state is announced separately.
-          aria-label={shown ? "Hide password" : "Show password"}
-          aria-pressed={shown}
-          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-ink-soft hover:text-ink"
-        >
-          {shown ? <IconEyeOff /> : <IconEye />}
-        </button>
+        <RevealButton shown={shown} onToggle={() => setShown((v) => !v)} />
       </div>
       {hint}
     </div>
@@ -89,35 +87,27 @@ export function useReveal() {
   const [shown, setShown] = useState(false);
   return {
     type: shown ? ("text" as const) : ("password" as const),
-    button: (
-      <button
-        type="button"
-        onClick={() => setShown((v) => !v)}
-        aria-label={shown ? "Hide password" : "Show password"}
-        aria-pressed={shown}
-        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-ink-soft hover:text-ink"
-      >
-        {shown ? <IconEyeOff /> : <IconEye />}
-      </button>
-    ),
+    button: <RevealButton shown={shown} onToggle={() => setShown((v) => !v)} />,
   };
 }
 
-function IconEye() {
+/**
+ * The word, not a glyph.
+ *
+ * `pr-16` on the input it sits in, so the last characters of a long password
+ * do not run underneath it.
+ */
+function RevealButton({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" />
-      <circle cx="12" cy="12" r="2.8" />
-    </svg>
-  );
-}
-
-function IconEyeOff() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="M2 12s3.6-6.5 10-6.5c1.7 0 3.2.5 4.5 1.1M22 12s-3.6 6.5-10 6.5c-1.7 0-3.2-.5-4.5-1.1" />
-      <path d="M9.6 9.6a3 3 0 0 0 4.2 4.2" />
-      <path d="m3 3 18 18" />
-    </svg>
+    <button
+      type="button"
+      onClick={onToggle}
+      // The visible word already says what it does; `aria-pressed` carries the
+      // state, so a screen reader is not told the same thing twice.
+      aria-pressed={shown}
+      className="absolute inset-y-0 right-0 flex items-center px-3 text-sm font-medium text-moss underline-offset-4 hover:underline"
+    >
+      {shown ? "Hide" : "Show"}
+    </button>
   );
 }

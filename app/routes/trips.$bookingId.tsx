@@ -186,6 +186,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       addedBy: user.id,
     });
     if (!res.ok) return data({ error: res.error }, { status: 400, headers });
+    // Naming everybody was one step; say what the next one is rather than
+    // leaving them to find it.
+    const { nudgeClient } = await import("~/lib/trip-nudge.server");
+    await nudgeClient(admin, b.id);
     return data({ ok: res.message }, { headers });
   }
 
@@ -216,6 +220,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     // upload may have been the last one owed.
     const { applyBookingStatus } = await import("~/lib/booking-status.server");
     await applyBookingStatus(admin, b.id);
+    // This upload may have finished a step, in which case there is a next one.
+    // Sent once per step, so the three people still missing a passport do not
+    // ring the bell three more times.
+    const { nudgeClient } = await import("~/lib/trip-nudge.server");
+    await nudgeClient(admin, b.id);
     return data({ ok: "Uploaded — our team will verify it." }, { headers });
   }
 

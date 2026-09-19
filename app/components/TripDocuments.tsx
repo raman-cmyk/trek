@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Form, Link, useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { docState, liveDocs, outstanding, STATE_LABEL } from "~/lib/doc-review";
@@ -104,6 +105,69 @@ export function TravellerRoster({
       )}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * Choose a file, in words a person can find.
+ *
+ * This was the browser's own control: "Choose file  No file chosen", 13px,
+ * grey on grey, no border, sitting above a green Upload button. The founder,
+ * on his phone: *"The place i need to click that says 'choose file' need to be
+ * more clear. And also the choose file and no file chosen seems like one
+ * word."* Both complaints are about the same rendering — the button and the
+ * status run together because the native control draws them as one line with
+ * no gap and no boundary.
+ *
+ * So: the input is hidden inside a label that looks like what it is, and what
+ * you have chosen gets its own line underneath. Same pattern as the guide
+ * application's DocUpload, which was built for the same reason.
+ *
+ * `required` is deliberately gone. A hidden input that fails validation is one
+ * Chrome cannot scroll to or focus, so the form silently refuses to submit
+ * with no message anywhere. The action already answers this — "Say whose it is
+ * and choose a file" — and that is a sentence rather than a browser tooltip.
+ */
+function FilePick({ name, accept }: { name: string; accept: string }) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  return (
+    <div>
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-button border-2 border-dashed border-sage bg-mist/40 px-4 py-3 text-sm font-medium text-ink transition-colors duration-instant hover:border-moss hover:bg-mist focus-within:border-moss focus-within:ring-2 focus-within:ring-moss/30">
+        <PaperclipGlyph />
+        {chosen ? "Choose a different file" : "Choose a photo or PDF"}
+        <input
+          type="file"
+          name={name}
+          accept={accept}
+          onChange={(e) => setChosen(e.target.files?.[0]?.name ?? null)}
+          className="sr-only"
+        />
+      </label>
+      {/* Its own line, so it can never read as part of the button. With
+          JavaScript off this stays on "Nothing chosen yet" — the label still
+          opens the picker and the upload still works, which is the half that
+          matters. */}
+      <p className="mt-1.5 truncate text-caption text-ink-soft">
+        {chosen ?? "Nothing chosen yet."}
+      </p>
+    </div>
+  );
+}
+
+function PaperclipGlyph() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="h-4 w-4 shrink-0 text-moss"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M13.5 7.5 8 13a2.5 2.5 0 0 1-3.5-3.5l6-6a4 4 0 0 1 5.7 5.7l-6 6a5.5 5.5 0 0 1-7.8-7.8" />
+    </svg>
   );
 }
 
@@ -221,13 +285,7 @@ export function DocumentSlot({
             </option>
           ))}
         </select>
-        <input
-          type="file"
-          name="file"
-          accept="image/*,application/pdf"
-          required
-          className="w-full text-sm"
-        />
+        <FilePick name="file" accept="image/*,application/pdf" />
         {error && <p className="text-sm text-danger">{error}</p>}
         <Button type="submit" size="sm" loading={busy}>
           Upload {title.toLowerCase()}

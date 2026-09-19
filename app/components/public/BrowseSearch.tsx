@@ -69,35 +69,43 @@ export function BrowseSearch({
           />
         </div>
 
-        {/* The label wraps onto its own line on a phone — two bare date fields
-            with no caption are the sort of thing only the person who built it
-            can read. */}
+        {/* Two dates that look like two dates.
+            They were transparent inputs with no border and no background,
+            with the word "From" floating in grey behind each — so the whole
+            control read as the sentence "Departing between From – To" and the
+            founder's note was that it "needs to be much more clear". Each half
+            is a bordered field with its own visible caption now, and the caption
+            says what a date means here rather than repeating the direction:
+            "Leave after", "Back by". */}
         <div
           className={cn(
-            "flex-wrap items-center gap-x-1.5 border-line px-2 sm:flex sm:border-l",
+            "flex-wrap items-end gap-2 border-line px-2 sm:flex sm:border-l",
             open ? "flex" : "hidden",
           )}
         >
-          <span className="shrink-0 basis-full text-caption text-muted sm:basis-auto">
+          <span className="shrink-0 basis-full text-caption text-muted sm:basis-auto sm:self-center">
             {dateLabel}
           </span>
-          <DateField
-            name="from"
-            defaultValue={from}
-            min={today}
-            placeholder="From"
-            className="w-full min-w-0 bg-transparent py-2 font-mono text-sm text-ink outline-none"
-          />
-          <span aria-hidden="true" className="text-muted">
-            –
-          </span>
-          <DateField
-            name="to"
-            defaultValue={to}
-            min={from || today}
-            placeholder="To"
-            className="w-full min-w-0 bg-transparent py-2 font-mono text-sm text-ink outline-none"
-          />
+          <label className="min-w-0 flex-1 sm:flex-none">
+            <span className="mb-0.5 block text-caption text-muted">Earliest</span>
+            <DateField
+              name="from"
+              defaultValue={from}
+              min={today}
+              placeholder="Any day"
+              className="w-full min-w-0 rounded border border-line bg-paper px-3 py-2 font-mono text-sm text-ink outline-none focus:border-moss sm:w-36"
+            />
+          </label>
+          <label className="min-w-0 flex-1 sm:flex-none">
+            <span className="mb-0.5 block text-caption text-muted">Latest</span>
+            <DateField
+              name="to"
+              defaultValue={to}
+              min={from || today}
+              placeholder="Any day"
+              className="w-full min-w-0 rounded border border-line bg-paper px-3 py-2 font-mono text-sm text-ink outline-none focus:border-moss sm:w-36"
+            />
+          </label>
         </div>
 
         <div className="flex gap-2">

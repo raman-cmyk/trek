@@ -129,6 +129,11 @@ export async function notifyDepositPaid(env: Env, admin: SupabaseClient, booking
       { kind: "deposit_paid", about: { type: "booking", id: bookingId } },
     ),
   ]);
+  // "After the deposit is paid, a notification saying 'document needed' needs
+  // to appear for the client." The words "Next: upload documents" were buried
+  // mid-sentence in the receipt above, and nothing followed it.
+  const { nudgeClient } = await import("~/lib/trip-nudge.server");
+  await nudgeClient(admin, bookingId);
 }
 
 export async function notifyNewMessage(
@@ -170,6 +175,8 @@ export async function notifyInstalmentCharged(
     `We charged $${(amountUsdCents / 100).toFixed(2)} for ${c.title}, as scheduled. Full plan: ${env.SITE_URL}/trips/${bookingId}`,
     { kind: "instalment_charged" },
   );
+  const { nudgeClient } = await import("~/lib/trip-nudge.server");
+  await nudgeClient(admin, bookingId);
 }
 
 export async function notifyBalanceCharged(
@@ -187,6 +194,8 @@ export async function notifyBalanceCharged(
     `We charged your remaining balance of $${(amountUsdCents / 100).toFixed(2)} for ${c.title} (14 days before departure, as agreed).\n${env.SITE_URL}/trips/${bookingId}`,
     { kind: "balance_charged" },
   );
+  const { nudgeClient } = await import("~/lib/trip-nudge.server");
+  await nudgeClient(admin, bookingId);
 }
 
 /**

@@ -327,7 +327,7 @@ export default function Signup({ loaderData }: Route.ComponentProps) {
                   type={reveal.type}
                   autoComplete="new-password"
                   placeholder="Create a password"
-                  className="w-full rounded-md border border-line bg-card px-4 py-3 pr-11 text-lg outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
+                  className="w-full rounded-md border border-line bg-card px-4 py-3 pr-16 text-lg outline-none focus:border-moss focus:ring-3 focus:ring-moss/25"
                 />
                 {reveal.button}
               </div>

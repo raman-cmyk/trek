@@ -275,6 +275,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       await sendEmail(env, (b as any)?.trekker?.email, "You're confirmed!", "Your trek is confirmed. Permits are being filed.");
       await sendGuideSms(env, (b as any)?.guide?.users?.phone, "A booking is confirmed — permits filing.");
     }
+    // Checking this one off may have made the next one the trekker's. A
+    // rejection is not nudged here: rejectDocument already writes its own
+    // message, with the reason, which is the more useful one.
+    const { nudgeClient } = await import("~/lib/trip-nudge.server");
+    await nudgeClient(admin, String(params.id));
     return data({ ok: true }, { headers });
   }
 
