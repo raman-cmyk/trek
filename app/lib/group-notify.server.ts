@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { siteUrl } from "~/lib/site-url";
 import { sendRichEmail } from "~/lib/notify.server";
 import { firstName } from "~/lib/names";
 import {
@@ -131,7 +132,7 @@ export async function notifyGroupMessage(
       (readRows ?? []).map((r: any) => [r.user_id as string, r.last_read_at as string]),
     );
 
-    const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
+    const site = siteUrl(env);
     const threadUrl = `${site}/messages/g/${group.id}`;
     const now = new Date();
     const authorName = nameOf(args.authorId);

@@ -17,7 +17,12 @@
   // guide to open. Here rather than a dashboard setting so it is in the repo
   // and cannot be lost with an account.
   "vars": {
-    "SUPPORT_WHATSAPP": "9779861322075"
+    "SUPPORT_WHATSAPP": "9779861322075",
+    // The public address of the site, not a secret. Every email and SMS is
+    // mostly a link, and this is where those links point. Safe to state here
+    // now that guidesofnepal.com resolves and serves the worker; while it did
+    // not, saying so would have sent people to a domain that did not answer.
+    "SITE_URL": "https://guidesofnepal.com"
   },
   // Daily 02:00 UTC — scheduled() fans out to every /api/cron/:job sweep.
   "triggers": {

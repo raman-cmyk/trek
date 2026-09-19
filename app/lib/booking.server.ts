@@ -10,6 +10,7 @@ import { missedRunEndingAt, needsWelfareCheck } from "~/lib/checkin";
 import type { StripeClient } from "~/lib/stripe.server";
 import { generateContractForBooking } from "~/lib/contracts.server";
 import { applyBookingStatus } from "~/lib/booking-status.server";
+import { siteUrl } from "~/lib/site-url";
 
 function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
@@ -762,7 +763,7 @@ async function notifyOpsWelfareCheck(
       "",
       "Call the guide. If you cannot reach them, call the trekker's emergency",
       "contact and the guide's next of kin, both on the booking page:",
-      `${(env as any).SITE_URL ?? ""}/ops/bookings/${bookingId}`,
+      `${siteUrl(env as any)}/ops/bookings/${bookingId}`,
     ].join("\n");
 
     for (const o of ops ?? []) {

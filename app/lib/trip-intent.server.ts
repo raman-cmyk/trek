@@ -1,4 +1,5 @@
 import { createAdminClient } from "~/lib/supabase.server";
+import { siteUrl } from "~/lib/site-url";
 import { sendEmail } from "~/lib/notify.server";
 import {
   cleanPartySize,
@@ -132,7 +133,7 @@ export async function recordTripIntent(
           : "No dates needed yet. Have a look at who walks these trails and keep the ones you like.",
         link
           ? `Open your account: ${link}`
-          : `Browse guides: ${env.SITE_URL ?? ""}${browseSuffix(window)}`,
+          : `Browse guides: ${siteUrl(env)}${browseSuffix(window)}`,
       ].join("\n\n"),
       { kind: "trip_intent_welcome", userId },
     );
@@ -184,7 +185,7 @@ async function findUserByEmail(admin: any, email: string): Promise<string | null
  * sending an email with a dead button in it.
  */
 async function signInLink(admin: any, env: Env, email: string): Promise<string | null> {
-  const site = env.SITE_URL?.replace(/\/$/, "") ?? "";
+  const site = siteUrl(env);
   try {
     const { data, error } = await admin.auth.admin.generateLink({
       type: "magiclink",

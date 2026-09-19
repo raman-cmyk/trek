@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { pauseSms } from "~/lib/pause";
 import { BRAND, SMS_PREFIX } from "~/lib/brand";
+import { siteUrl } from "~/lib/site-url";
 
 /**
  * Event-level notifications (docs/02 §Notifications matrix). One function per
@@ -107,7 +108,7 @@ export async function notifyEnquiryAccepted(env: Env, admin: SupabaseClient, boo
     env,
     c.trekkerEmail,
     `${c.guideName} accepted — pay your deposit to lock it in`,
-    `Good news: ${c.guideName} accepted your request for ${c.title} (${c.startDate}).\n\nPay your deposit within 24 hours to hold the dates:\n${env.SITE_URL}/checkout/${bookingId}`,
+    `Good news: ${c.guideName} accepted your request for ${c.title} (${c.startDate}).\n\nPay your deposit within 24 hours to hold the dates:\n${siteUrl(env)}/checkout/${bookingId}`,
     { kind: "enquiry_accepted" },
   );
 }
@@ -125,7 +126,7 @@ export async function notifyDepositPaid(env: Env, admin: SupabaseClient, booking
       env,
       c.trekkerEmail,
       "Deposit received — you're booked",
-      `Your deposit for ${c.title} is in. Next: upload documents and check your trip page.\n${env.SITE_URL}/trips/${bookingId}`,
+      `Your deposit for ${c.title} is in. Next: upload documents and check your trip page.\n${siteUrl(env)}/trips/${bookingId}`,
       { kind: "deposit_paid", about: { type: "booking", id: bookingId } },
     ),
   ]);
@@ -148,13 +149,13 @@ export async function notifyNewMessage(
     .maybeSingle();
   if (!u) return;
   if (u.role === "guide") {
-    await sendGuideSms(env, u.phone, `${SMS_PREFIX}: new message from ${args.fromName}. Reply: ${env.SITE_URL}${args.threadPath}`);
+    await sendGuideSms(env, u.phone, `${SMS_PREFIX}: new message from ${args.fromName}. Reply: ${siteUrl(env)}${args.threadPath}`);
   } else {
     await sendEmail(
       env,
       u.email,
       `New message from ${args.fromName}`,
-      `${args.fromName} sent you a message on ${BRAND}.\n${env.SITE_URL}${args.threadPath}`,
+      `${args.fromName} sent you a message on ${BRAND}.\n${siteUrl(env)}${args.threadPath}`,
       { kind: "new_message" },
     );
   }
@@ -172,7 +173,7 @@ export async function notifyInstalmentCharged(
     env,
     c.trekkerEmail,
     "Instalment charged",
-    `We charged $${(amountUsdCents / 100).toFixed(2)} for ${c.title}, as scheduled. Full plan: ${env.SITE_URL}/trips/${bookingId}`,
+    `We charged $${(amountUsdCents / 100).toFixed(2)} for ${c.title}, as scheduled. Full plan: ${siteUrl(env)}/trips/${bookingId}`,
     { kind: "instalment_charged" },
   );
   const { nudgeClient } = await import("~/lib/trip-nudge.server");
@@ -191,7 +192,7 @@ export async function notifyBalanceCharged(
     env,
     c.trekkerEmail,
     "Balance charged — see you on the trail",
-    `We charged your remaining balance of $${(amountUsdCents / 100).toFixed(2)} for ${c.title} (14 days before departure, as agreed).\n${env.SITE_URL}/trips/${bookingId}`,
+    `We charged your remaining balance of $${(amountUsdCents / 100).toFixed(2)} for ${c.title} (14 days before departure, as agreed).\n${siteUrl(env)}/trips/${bookingId}`,
     { kind: "balance_charged" },
   );
   const { nudgeClient } = await import("~/lib/trip-nudge.server");
@@ -270,7 +271,7 @@ export async function notifyTimsIssued(env: Env, admin: SupabaseClient, bookingI
     env,
     c.trekkerEmail,
     "Your TIMS card is ready",
-    `Your blue TIMS card for ${c.title} has been issued. Download the PDF from your trip page:\n${env.SITE_URL}/trips/${bookingId}`,
+    `Your blue TIMS card for ${c.title} has been issued. Download the PDF from your trip page:\n${siteUrl(env)}/trips/${bookingId}`,
     { kind: "tims_issued" },
   );
 }
@@ -348,7 +349,7 @@ export async function notifyQuestionAnswered(
       "He said:",
       `  ${q.answer}`,
       "",
-      `It is on his profile now: ${env.SITE_URL ?? ""}/guides/${slug}#ask`,
+      `It is on his profile now: ${siteUrl(env)}/guides/${slug}#ask`,
     ].join("\n"),
     { kind: "question_answered" },
   );
@@ -378,14 +379,14 @@ export async function notifyListingEdited(
     // Trimmed to fit one SMS segment: the longer name costs eleven characters
     // and Sparrow bills per 160. The title is cut rather than the link, which
     // is the part a guide actually taps.
-    `${SMS_PREFIX}: we updated "${args.title.slice(0, 28)}" (${what}). See it: ${env.SITE_URL}/g/experiences/${args.offeringId}`,
+    `${SMS_PREFIX}: we updated "${args.title.slice(0, 28)}" (${what}). See it: ${siteUrl(env)}/g/experiences/${args.offeringId}`,
   );
   if (g?.email) {
     await sendEmail(
       env,
       g.email,
       `We updated your listing: ${args.title}`,
-      `Our office made a change to "${args.title}".\n\nWhat changed: ${args.fields.join(", ")}.\n\nHave a look, and tell us if any of it is wrong:\n${env.SITE_URL}/g/experiences/${args.offeringId}`,
+      `Our office made a change to "${args.title}".\n\nWhat changed: ${args.fields.join(", ")}.\n\nHave a look, and tell us if any of it is wrong:\n${siteUrl(env)}/g/experiences/${args.offeringId}`,
       { kind: "listing_edited" },
     );
   }
@@ -409,7 +410,7 @@ export async function notifyListingPaused(
     .select("phone, email")
     .eq("id", args.guideId)
     .maybeSingle();
-  const url = `${env.SITE_URL}/g/experiences/${args.offeringId}`;
+  const url = `${siteUrl(env)}/g/experiences/${args.offeringId}`;
   await sendGuideSms(env, g?.phone, pauseSms(args.title, args.reason, url));
   if (g?.email) {
     await sendEmail(
@@ -459,7 +460,7 @@ export async function notifyGuideWelcome(
   args: { name: string; email: string; phone?: string | null },
 ) {
   const first = args.name.trim().split(/\s+/)[0] || "there";
-  const site = env.SITE_URL ?? "";
+  const site = siteUrl(env);
   await sendEmail(
     env,
     args.email,
@@ -531,7 +532,7 @@ export async function notifyPackageProposed(
           .eq("id", p.enquiry_id ?? "")
           .maybeSingle(),
   ]);
-  const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
+  const site = siteUrl(env);
   const guideName = firstNameOf(guide?.full_name) || "Your guide";
   const title = (enq as any)?.title ?? (enq as any)?.offering?.title ?? "your trip";
 
@@ -593,7 +594,7 @@ export async function notifyProposalApproved(
     env,
     g?.email,
     "They approved your plan",
-    `Your ${p.days}-day plan for ${p.party_size} starting ${p.start_date} was approved. They pay the deposit next.\n${(env.SITE_URL ?? "").replace(/\/$/, "")}/g/bookings`,
+    `Your ${p.days}-day plan for ${p.party_size} starting ${p.start_date} was approved. They pay the deposit next.\n${siteUrl(env)}/g/bookings`,
     { kind: "proposal_approved", userId: p.guide_id, about: { type: "booking", id: args.bookingId } },
   );
 }

@@ -6,6 +6,7 @@
  * `{ "script:ld+json": {...} }` descriptor so it renders in <head> at SSR.
  */
 import { BRAND } from "~/lib/brand";
+import { siteOrigin } from "~/lib/site-url";
 
 export interface PageMetaInput {
   title: string;
@@ -402,8 +403,15 @@ export function breadcrumbLd(crumbs: Array<{ name: string; url: string }>) {
   };
 }
 
-/** Absolute URL from SITE_URL + path. */
+/**
+ * Absolute URL from SITE_URL + path.
+ *
+ * This feeds every canonical tag, the sitemap and robots.txt, and it used to
+ * fall back to `http://localhost:5173` — so a deployment that lost SITE_URL
+ * would tell search engines that the canonical home of every page was a
+ * laptop. SEO is the primary demand channel here, which makes that the most
+ * expensive default in the codebase. It falls back to the real site now.
+ */
 export function absoluteUrl(siteUrl: string | undefined, path: string) {
-  const base = (siteUrl ?? "http://localhost:5173").replace(/\/$/, "");
-  return `${base}${path}`;
+  return `${siteOrigin(siteUrl)}${path}`;
 }

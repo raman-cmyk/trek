@@ -37,6 +37,7 @@ import { TrailScene } from "~/components/design/TrailScene";
 import { FactStrip } from "~/components/design/FactStrip";
 import { StatRow, StatTile } from "~/components/design/StatTile";
 import { cn } from "~/lib/cn";
+import { siteUrl } from "~/lib/site-url";
 
 export function meta() {
   return [{ title: "Your trip" }, { name: "robots", content: "noindex" }];
@@ -253,7 +254,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
 
     const { sendRichEmail } = await import("~/lib/notify.server");
-    const site = (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
+    const site = siteUrl(env);
     const { data: booking } = await admin
       .from("bookings")
       .select("start_date, party_size, offering:offerings(title, kind)")

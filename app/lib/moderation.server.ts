@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { siteUrl } from "~/lib/site-url";
 import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import {
   actionProblem,
@@ -158,7 +159,7 @@ export async function liftBlock(
     .eq("id", block.user_id)
     .maybeSingle();
   if (person) {
-    const url = `${env.SITE_URL}${person.role === "guide" ? "/g" : "/trips"}`;
+    const url = `${siteUrl(env)}${person.role === "guide" ? "/g" : "/trips"}`;
     if (person.email) {
       await sendEmail(
         env,

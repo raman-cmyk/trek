@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { renderEmail, type EmailContent } from "~/lib/email/render";
 import { recordInApp } from "~/lib/inapp.server";
 import { BRAND } from "~/lib/brand";
+import { siteUrl } from "~/lib/site-url";
 
 /**
  * One door for every email we send.
@@ -56,9 +57,7 @@ const DEFAULT_REPLY_TO = "hello@guidesofnepal.com";
  */
 const POSTAL_ADDRESS = `${BRAND} · Thamel, Kathmandu, Nepal`;
 
-function siteUrl(env: Env): string {
-  return (env.SITE_URL ?? "https://guidesofnepal.com").replace(/\/$/, "");
-}
+
 
 /** Where a person goes to stop receiving this. */
 function unsubscribeUrl(env: Env, token: string): string {
