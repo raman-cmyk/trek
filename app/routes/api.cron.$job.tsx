@@ -36,7 +36,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     // `active` and `completed` are the two statuses nothing else produces —
     // no event happens on the morning a trek starts (0104).
     case "status-sweep":
-      result = await runStatusSweep(admin, today);
+      result = await runStatusSweep(admin, today, env);
       break;
     case "document-retention":
       result = await runDocumentRetentionSweep(admin, today);

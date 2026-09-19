@@ -1166,6 +1166,7 @@ export async function approveProposal(
 export async function runStatusSweep(
   admin: SupabaseClient,
   todayIso: string,
+  env?: Env,
 ): Promise<{ checked: number; moved: Array<{ id: string; status: string }> }> {
   const { data: live } = await admin
     .from("bookings")
@@ -1184,6 +1185,16 @@ export async function runStatusSweep(
       const { createRecap } = await import("~/lib/reviews.server");
       await createRecap(admin, (b as any).id);
       await createPayoutForBooking(admin, (b as any).id);
+      if (env) {
+        const { notifyTripCompleted } = await import("~/lib/notifications.server");
+        await notifyTripCompleted(env, admin, (b as any).id);
+      }
+    }
+    // The morning a trek begins. Only on the transition, so a trip that is
+    // already under way is not told again every night.
+    if (res.changed && res.status === "active" && env) {
+      const { notifyTripStarted } = await import("~/lib/notifications.server");
+      await notifyTripStarted(env, admin, (b as any).id);
     }
   }
   return { checked: (live ?? []).length, moved };

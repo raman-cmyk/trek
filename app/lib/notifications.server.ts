@@ -964,3 +964,80 @@ export async function notifyPaymentFailed(
     { kind, userId: c.trekkerId, about: { type: "booking", id: args.bookingId } },
   );
 }
+
+/**
+ * The trek is under way.
+ *
+ * `active` and `completed` are, by the codebase's own note, "the two statuses
+ * no event produces" — they are reached by a daily sweep noticing a date has
+ * passed. So the morning a trek begins, and the day it ends, both went by
+ * without a word to anyone.
+ *
+ * The trekker's version carries the thing that is genuinely useful on the
+ * morning you set off: their guide's name and number, which unlocked at T-48h
+ * and which nothing told them about either.
+ */
+export async function notifyTripStarted(env: Env, admin: SupabaseClient, bookingId: string) {
+  const c = await bookingContacts(admin, bookingId);
+  if (!c) return;
+  const phone = c.guidePhone ? `\n${c.guideName}'s number: ${c.guidePhone}` : "";
+  await Promise.all([
+    sendEmail(
+      env,
+      c.trekkerEmail,
+      `${c.title} starts today`,
+      `Today is the day. ${c.guideName} is expecting you.${phone}\n\n` +
+        `Everything about the trip — the plan, the meeting point, your permits — is here:\n${siteUrl(env)}/trips/${bookingId}\n\n` +
+        `Walk well.`,
+      { kind: "trip_started", userId: c.trekkerId, about: { type: "booking", id: bookingId } },
+    ),
+    sendEmail(
+      env,
+      c.guideEmail,
+      `${c.title} starts today`,
+      `${c.trekkerName} is with you from today on ${c.title}.\n\n` +
+        `Please check in each day from the app — it is how the office knows everybody is well, and it is what we look at first if anything goes wrong:\n${siteUrl(env)}/g/checkin`,
+      { kind: "trip_started_guide", userId: c.guideUserId, about: { type: "booking", id: bookingId } },
+    ),
+  ]);
+}
+
+/**
+ * The trek is over.
+ *
+ * A review request existed only on the path where a trekker pressed "complete"
+ * themselves. The sweep — which is how nearly every trip actually finishes —
+ * created a recap and a payout row and told nobody anything. As
+ * `review-prompt.ts` puts it: "nothing on this platform has ever asked for
+ * one."
+ *
+ * Reviews are the whole proof mechanism of a guide-first marketplace, so this
+ * is not a courtesy email.
+ */
+export async function notifyTripCompleted(env: Env, admin: SupabaseClient, bookingId: string) {
+  const c = await bookingContacts(admin, bookingId);
+  if (!c) return;
+  await Promise.all([
+    sendEmail(
+      env,
+      c.trekkerEmail,
+      `How was ${c.title}?`,
+      `You are back. We hope it was everything you went for.\n\n` +
+        `${c.guideName} is judged by what the people they walked with say about them, and a trekker deciding whether to book them next month will read your words before anything else on the page.\n\n` +
+        `It takes two minutes:\n${siteUrl(env)}/trips/${bookingId}\n\n` +
+        `Neither of you sees the other's review until you have both written one, or two weeks have passed.`,
+      { kind: "review_request", userId: c.trekkerId, about: { type: "booking", id: bookingId } },
+    ),
+    sendEmail(
+      env,
+      c.guideEmail,
+      `${c.title} is finished — and your payment is queued`,
+      `${c.trekkerName}'s trip is marked complete, so your payment is in the queue for the next batch.\n\n` +
+        `Two things worth doing while it is fresh:\n` +
+        `- Review ${c.trekkerName}. It helps the next guide they walk with.\n` +
+        `- Put up a journal from the trip. It is the best advertising you have, and it stays on your profile.\n\n` +
+        `${siteUrl(env)}/g/bookings`,
+      { kind: "trip_completed_guide", userId: c.guideUserId, about: { type: "booking", id: bookingId } },
+    ),
+  ]);
+}
