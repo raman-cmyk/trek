@@ -3,6 +3,7 @@ import { renderEmail, type EmailContent } from "~/lib/email/render";
 import { recordInApp } from "~/lib/inapp.server";
 import { BRAND } from "~/lib/brand";
 import { siteUrl } from "~/lib/site-url";
+import { undeliverableReason } from "~/lib/undeliverable";
 
 /**
  * One door for every email we send.
@@ -73,6 +74,14 @@ async function gate(
   args: SendArgs,
 ): Promise<{ allow: boolean; reason?: string; token?: string }> {
   if (!args.to) return { allow: false, reason: "no_address" };
+
+  // An address that is certain to bounce is refused before it is spent. The
+  // seed data's 65 @example.com accounts are the immediate case: reserved by
+  // RFC 2606, guaranteed to reject, and harmless only for as long as there
+  // was no API key to send with. A new sending domain cannot afford a run of
+  // hard bounces, and this one started sending today.
+  const dead = undeliverableReason(args.to);
+  if (dead) return { allow: false, reason: dead };
 
   const { data: u } = await admin
     .from("users")
