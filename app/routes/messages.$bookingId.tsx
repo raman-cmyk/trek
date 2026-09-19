@@ -158,6 +158,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     toUserId: otherId,
     fromName: firstName(me?.full_name) || "Someone",
     threadPath: `/messages/${booking.id}`,
+    about: { type: "booking", id: booking.id },
   });
   return data({ ok: true }, { headers });
 }

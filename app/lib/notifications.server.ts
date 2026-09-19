@@ -3,6 +3,7 @@ import { sendEmail, sendGuideSms } from "~/lib/notify.server";
 import { pauseSms } from "~/lib/pause";
 import { BRAND, SMS_PREFIX } from "~/lib/brand";
 import { siteUrl } from "~/lib/site-url";
+import { withinBurstWindow } from "~/lib/group-notify";
 
 /**
  * Event-level notifications (docs/02 §Notifications matrix). One function per
@@ -29,6 +30,8 @@ async function bookingContacts(admin: SupabaseClient, bookingId: string) {
     trekkerEmail: ((b as any).trekker?.email ?? null) as string | null,
     trekkerName: ((b as any).trekker?.full_name ?? "there") as string,
     guidePhone: ((b as any).guide?.users?.phone ?? null) as string | null,
+    // Selected all along and never read, back when guides were an SMS away.
+    guideEmail: ((b as any).guide?.users?.email ?? null) as string | null,
     guideName: ((b as any).guide?.users?.full_name ?? "your guide") as string,
   };
 }
@@ -91,13 +94,28 @@ export async function notifyNewEnquiry(
   await notifyEnquiryInApp(admin, { ...args, guideUserId: args.guideId });
   const { data: g } = await admin
     .from("users")
-    .select("phone")
+    .select("phone, email")
     .eq("id", args.guideId)
     .maybeSingle();
   await sendGuideSms(
     env,
     g?.phone,
     `${SMS_PREFIX}: new request — ${args.offeringTitle}, ${args.startDate}, ${args.partySize}p. Open your dashboard to accept (24h).`,
+  );
+  // The most important email this platform sends. Somebody has asked this
+  // guide, by name, to take them into the mountains, and a clock is running:
+  // the enquiry expires in 24 hours and the trekker goes elsewhere. Until now
+  // the only channel was an SMS that has never been configured, which is why
+  // thirty-seven requests produced two notifications between them.
+  const people = `${args.partySize} ${args.partySize === 1 ? "person" : "people"}`;
+  await sendEmail(
+    env,
+    g?.email,
+    `New request: ${args.offeringTitle}`,
+    `Somebody wants to book you.\n\n${args.offeringTitle}\nStarting ${args.startDate}\nFor ${people}\n\n` +
+      `You have 24 hours to answer. After that the request expires and they will look for another guide.\n\n` +
+      `Answer it: ${siteUrl(env)}/g/enquiries`,
+    { kind: "new_enquiry", userId: args.guideId, about: { type: "enquiry", id: args.enquiryId } },
   );
 }
 
@@ -124,6 +142,14 @@ export async function notifyDepositPaid(env: Env, admin: SupabaseClient, booking
     ),
     sendEmail(
       env,
+      c.guideEmail,
+      `The deposit is in — ${c.title} is on`,
+      `${c.trekkerName} has paid the deposit for ${c.title}, starting ${c.startDate}.\n\n` +
+        `The dates are held in your calendar. Have a look at what they asked for:\n${siteUrl(env)}/g/bookings`,
+      { kind: "deposit_paid_guide", userId: c.guideUserId, about: { type: "booking", id: bookingId } },
+    ),
+    sendEmail(
+      env,
       c.trekkerEmail,
       "Deposit received — you're booked",
       `Your deposit for ${c.title} is in. Next: upload documents and check your trip page.\n${siteUrl(env)}/trips/${bookingId}`,
@@ -137,10 +163,35 @@ export async function notifyDepositPaid(env: Env, admin: SupabaseClient, booking
   await nudgeClient(admin, bookingId);
 }
 
+/**
+ * Somebody said something on a one-to-one thread.
+ *
+ * Two things were wrong here, and both only started costing the moment email
+ * began to send.
+ *
+ * **It fired on every single message.** Group chat was given a burst window on
+ * purpose (DECISIONS, 2026-09-06: a group of six agreeing on a date sends
+ * fifteen messages in four minutes, and without a window that is fifteen
+ * emails each). One-to-one threads never got the same treatment, so two people
+ * arranging a pickup would generate an email per line. The same window, the
+ * same tested predicate, applied here.
+ *
+ * **Guides were sent an SMS and nothing else.** With no Sparrow token that was
+ * a `console.log`, and because the in-app bell is written by the email path
+ * rather than the SMS one, a guide got no email, no bell and no text — a
+ * trekker's question simply vanished. Everybody is emailed now; the SMS call
+ * stays so switching Sparrow back on needs no second edit.
+ */
 export async function notifyNewMessage(
   env: Env,
   admin: SupabaseClient,
-  args: { toUserId: string; fromName: string; threadPath: string },
+  args: {
+    toUserId: string;
+    fromName: string;
+    threadPath: string;
+    /** The thread itself, so the burst window is per conversation. */
+    about: { type: "booking" | "conversation"; id: string };
+  },
 ) {
   const { data: u } = await admin
     .from("users")
@@ -148,17 +199,37 @@ export async function notifyNewMessage(
     .eq("id", args.toUserId)
     .maybeSingle();
   if (!u) return;
-  if (u.role === "guide") {
-    await sendGuideSms(env, u.phone, `${SMS_PREFIX}: new message from ${args.fromName}. Reply: ${siteUrl(env)}${args.threadPath}`);
-  } else {
-    await sendEmail(
-      env,
-      u.email,
-      `New message from ${args.fromName}`,
-      `${args.fromName} sent you a message on ${BRAND}.\n${siteUrl(env)}${args.threadPath}`,
-      { kind: "new_message" },
-    );
+
+  // When did we last mail this person about THIS thread? Read the same way
+  // the group digest reads it — the newest send, not an attempt.
+  const { data: last } = await admin
+    .from("email_log")
+    .select("created_at")
+    .eq("user_id", args.toUserId)
+    .eq("kind", "new_message")
+    .eq("subject_id", args.about.id)
+    .eq("status", "sent")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (withinBurstWindow(last?.created_at, new Date())) {
+    // Deliberately silent. They were told about this thread minutes ago and
+    // the link they already have shows everything said since.
+    return;
   }
+
+  await sendGuideSms(
+    env,
+    u.phone,
+    `${SMS_PREFIX}: new message from ${args.fromName}. Reply: ${siteUrl(env)}${args.threadPath}`,
+  );
+  await sendEmail(
+    env,
+    u.email,
+    `New message from ${args.fromName}`,
+    `${args.fromName} sent you a message on ${BRAND}.\n${siteUrl(env)}${args.threadPath}`,
+    { kind: "new_message", userId: args.toUserId, about: args.about },
+  );
 }
 
 export async function notifyInstalmentCharged(
@@ -261,6 +332,14 @@ export async function notifyBookingCancelled(
       { kind: "booking_cancelled", about: { type: "booking", id: bookingId } },
     ),
     sendGuideSms(env, c.guidePhone, `${SMS_PREFIX}: booking cancelled — ${c.title}, ${c.startDate}. Your calendar is open again.`),
+    sendEmail(
+      env,
+      c.guideEmail,
+      `Cancelled: ${c.title}`,
+      `${c.trekkerName}'s booking for ${c.title} on ${c.startDate} has been cancelled.\n\n` +
+        `Those days are open in your calendar again, so somebody else can book them.\n${siteUrl(env)}/g/bookings`,
+      { kind: "booking_cancelled_guide", userId: c.guideUserId, about: { type: "booking", id: bookingId } },
+    ),
   ]);
 }
 
@@ -284,7 +363,7 @@ export async function notifyGuideVerification(
 ) {
   const { data: u } = await admin
     .from("users")
-    .select("phone")
+    .select("phone, email")
     .eq("id", guideUserId)
     .maybeSingle();
   await sendGuideSms(
@@ -293,6 +372,24 @@ export async function notifyGuideVerification(
     approved
       ? `${SMS_PREFIX}: you're verified! Your profile is live. Sign in to set your calendar.`
       : `${SMS_PREFIX}: we couldn't verify your application yet. Sign in to see what's missing.`,
+  );
+  // The day a guide can start earning, or the day they find out they cannot.
+  // It was an SMS and nothing else, on a channel that has never been switched
+  // on — so somebody who filled in six screens and waited heard nothing at all.
+  await sendEmail(
+    env,
+    u?.email,
+    approved ? "You're verified — your profile is live" : "We could not verify your application yet",
+    approved
+      ? `Your profile is live on ${BRAND}. Trekkers can find you and ask you to take them out.\n\n` +
+        `Two things worth doing now:\n` +
+        `- Mark the days you are free, so people only ask about dates you can walk\n` +
+        `- Put up your first trek or experience\n\n` +
+        `Start here: ${siteUrl(env)}/g`
+      : `We have not been able to verify your application yet.\n\n` +
+        `Sign in and your dashboard will show exactly which check is outstanding and what to send:\n${siteUrl(env)}/g\n\n` +
+        `If you think we have this wrong, reply to this email and a person will read it.`,
+    { kind: approved ? "guide_verified" : "guide_not_verified", userId: guideUserId },
   );
 }
 
@@ -311,7 +408,7 @@ export async function notifyGuideOfQuestion(
 ) {
   const { data: g } = await admin
     .from("users")
-    .select("phone")
+    .select("phone, email")
     .eq("id", args.guideId)
     .maybeSingle();
   const snippet = args.body.length > 70 ? `${args.body.slice(0, 67)}…` : args.body;
@@ -319,6 +416,18 @@ export async function notifyGuideOfQuestion(
     env,
     g?.phone,
     `${SMS_PREFIX}: ${args.askerName} asked you "${snippet}" — answer it and it goes on your profile.`,
+  );
+  // A public question is free marketing for the guide who answers it — the
+  // answer goes on their profile where the next trekker reads it. SMS-only
+  // meant it reached nobody, so questions sat unanswered on live profiles.
+  await sendEmail(
+    env,
+    g?.email,
+    `${args.askerName} asked you a question`,
+    `${args.askerName} asked, on your profile:\n\n"${args.body}"\n\n` +
+      `Your answer goes on your public profile, where the next person deciding whether to book you will read it.\n\n` +
+      `Answer it: ${siteUrl(env)}/g/questions`,
+    { kind: "guide_question", userId: args.guideId },
   );
 }
 
@@ -440,6 +549,16 @@ export async function notifyListingLive(
     env,
     g?.phone,
     `${SMS_PREFIX}: "${args.title.slice(0, 30)}" is back on the marketplace. People can book it again.`,
+  );
+  // `email` has been in that select since the function was written and was
+  // never used — so the one notification that is good news arrived by a
+  // channel that does not run, while the pause that cost them money did not.
+  await sendEmail(
+    env,
+    g?.email,
+    `Back on the marketplace: ${args.title}`,
+    `"${args.title}" is live again. People can book it from now on.\n\n${siteUrl(env)}/g/experiences/${args.offeringId}`,
+    { kind: "listing_live", userId: args.guideId, about: { type: "offering", id: args.offeringId } },
   );
 }
 
