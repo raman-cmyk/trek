@@ -143,3 +143,75 @@ export function monthInView(iso: string, firstMonth: string, monthCount: number)
   const last = shiftMonth(firstMonth, Math.max(1, monthCount) - 1);
   return month >= monthStart(firstMonth) && month <= last;
 }
+
+/* ── Paging the calendar ────────────────────────────────────────────────── */
+
+export interface MonthBounds {
+  /** Earliest month the arrows may reach. Usually this month. */
+  min: string;
+  /** Latest. Beyond the open horizon every day draws as "booked", which is a lie. */
+  max: string;
+}
+
+/**
+ * How many months to draw for a trip.
+ *
+ * Measured from the TRIP — its own start and end — and never from the month
+ * currently on screen. It used to be `end.slice(0,7) !== visibleMonth.slice(0,7)`,
+ * so paging to any month other than the trip's own flipped the window to two
+ * months: a one-day trip in September drew August AND September the moment
+ * you pressed ‹. Worse, the size of the window fed back into the rule that
+ * decided whether to snap the view back (see `shouldFollowDate`), which is
+ * what made the arrows dead.
+ */
+export function spanMonths(start: string, end: string): number {
+  if (!start || !end) return 1;
+  return end.slice(0, 7) === start.slice(0, 7) ? 1 : 2;
+}
+
+/** The month `delta` steps away, clamped to the bounds. */
+export function pageMonth(current: string, delta: number, bounds: MonthBounds): string {
+  const next = shiftMonth(current, delta);
+  const min = monthStart(bounds.min);
+  const max = monthStart(bounds.max);
+  if (next < min) return min;
+  if (next > max) return max;
+  return next;
+}
+
+/**
+ * Is there anywhere to go in this direction?
+ *
+ * For disabling the arrow at either end. A button that silently does nothing
+ * is the thing this whole fix is about — replacing one dead arrow with two
+ * dead arrows at the edges would be no better.
+ */
+export function canPage(current: string, delta: number, bounds: MonthBounds): boolean {
+  return pageMonth(current, delta, bounds) !== monthStart(current);
+}
+
+/**
+ * Should the calendar jump to the chosen date?
+ *
+ * **This predicate is the bug, written down.** The view used to follow any
+ * date that was off screen, whatever had just happened — and paging is
+ * precisely the act that takes the chosen date off screen. So pressing ›
+ * moved the view one month and this rule dragged it straight back, inside the
+ * same commit. The arrow looked broken because it was: the only two views a
+ * reader could reach were the chosen month and the one before it.
+ *
+ * The missing signal is simply whether the DATE changed. A date arriving from
+ * somewhere other than a click — a fresh page, a group's agreed dates — is
+ * worth following. A view the reader moved themselves is not.
+ */
+export function shouldFollowDate(args: {
+  day: string;
+  /** The day this component last followed. Equal to `day` means: nothing new. */
+  previousDay: string;
+  visibleMonth: string;
+  monthCount: number;
+}): boolean {
+  const { day, previousDay, visibleMonth, monthCount } = args;
+  if (!day || day === previousDay) return false;
+  return !monthInView(day, visibleMonth, monthCount);
+}

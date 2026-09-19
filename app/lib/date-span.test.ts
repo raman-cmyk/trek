@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  canPage,
   canStart,
   daysLabel,
   firstTakenDay,
   formatSpan,
   monthInView,
   monthStart,
+  pageMonth,
+  shouldFollowDate,
+  spanMonths,
   rangeDays,
   shiftMonth,
   spanDays,
@@ -153,5 +157,151 @@ describe("which month the calendar is looking at", () => {
     // A trek starting 24 Nov runs into December, so two months are drawn.
     // Clicking 1 Dec used to move the anchor to December and redraw.
     expect(monthInView("2026-12-01", "2026-11-01", 2)).toBe(true);
+  });
+});
+
+describe("paging the calendar", () => {
+  const BOUNDS = { min: "2026-09-01", max: "2027-08-01" };
+
+  describe("spanMonths", () => {
+    it("draws one month for a trip that stays inside one", () => {
+      expect(spanMonths("2026-09-25", "2026-09-25")).toBe(1);
+      expect(spanMonths("2026-09-01", "2026-09-30")).toBe(1);
+    });
+
+    it("draws two when the walk runs into the next one", () => {
+      expect(spanMonths("2026-09-24", "2026-10-05")).toBe(2);
+      expect(spanMonths("2026-12-28", "2027-01-08")).toBe(2);
+    });
+
+    it("draws one when no date is chosen yet", () => {
+      expect(spanMonths("", "")).toBe(1);
+    });
+
+    it("does not change when the reader pages away — the whole point", () => {
+      // It used to be measured against the month on screen, so paging back to
+      // August made a one-day September trip draw two months, and the size of
+      // that window then fed the rule that snapped the view back.
+      const before = spanMonths("2026-09-25", "2026-09-25");
+      const after = spanMonths("2026-09-25", "2026-09-25");
+      expect(before).toBe(after);
+      expect(after).toBe(1);
+    });
+  });
+
+  describe("pageMonth", () => {
+    it("steps a month at a time in either direction", () => {
+      expect(pageMonth("2026-09-01", 1, BOUNDS)).toBe("2026-10-01");
+      expect(pageMonth("2026-10-01", -1, BOUNDS)).toBe("2026-09-01");
+    });
+
+    it("crosses a year without incident", () => {
+      expect(pageMonth("2026-12-01", 1, BOUNDS)).toBe("2027-01-01");
+    });
+
+    it("stops at this month rather than offering the past", () => {
+      expect(pageMonth("2026-09-01", -1, BOUNDS)).toBe("2026-09-01");
+    });
+
+    it("stops at the last month we know anything about", () => {
+      // Past the open horizon every day draws struck-through as "booked",
+      // which would be a wall of months the guide is not actually busy in.
+      expect(pageMonth("2027-08-01", 1, BOUNDS)).toBe("2027-08-01");
+    });
+  });
+
+  describe("canPage", () => {
+    it("is false at each end, so the arrow can be disabled rather than dead", () => {
+      expect(canPage("2026-09-01", -1, BOUNDS)).toBe(false);
+      expect(canPage("2027-08-01", 1, BOUNDS)).toBe(false);
+    });
+
+    it("is true in the middle", () => {
+      expect(canPage("2026-09-01", 1, BOUNDS)).toBe(true);
+      expect(canPage("2027-08-01", -1, BOUNDS)).toBe(true);
+    });
+  });
+
+  describe("shouldFollowDate", () => {
+    it("THE BUG: paging away from the chosen date does not drag the view back", () => {
+      // His screenshot exactly: a one-day trip on 25 Sep 2026. Pressing ›
+      // moved the view to October, this rule found the chosen day off screen
+      // and snapped it to September inside the same commit — so the arrow was
+      // inert and the only reachable views were September and August+September.
+      expect(
+        shouldFollowDate({
+          day: "2026-09-25",
+          previousDay: "2026-09-25",
+          visibleMonth: "2026-10-01",
+          monthCount: 1,
+        }),
+      ).toBe(false);
+    });
+
+    it("still follows a date that arrived from somewhere other than a click", () => {
+      // A fresh page, or a group's agreed dates — nobody saw that happen, so
+      // a view showing a different month is just wrong.
+      expect(
+        shouldFollowDate({
+          day: "2027-03-02",
+          previousDay: "2026-09-25",
+          visibleMonth: "2026-09-01",
+          monthCount: 1,
+        }),
+      ).toBe(true);
+    });
+
+    it("leaves the view alone when the new date is already on screen", () => {
+      // Clicking a day you can see must never redraw underneath your finger.
+      expect(
+        shouldFollowDate({
+          day: "2026-09-28",
+          previousDay: "2026-09-25",
+          visibleMonth: "2026-09-01",
+          monthCount: 1,
+        }),
+      ).toBe(false);
+      // Including in the trailing month of a two-month span.
+      expect(
+        shouldFollowDate({
+          day: "2026-12-01",
+          previousDay: "2026-11-24",
+          visibleMonth: "2026-11-01",
+          monthCount: 2,
+        }),
+      ).toBe(false);
+    });
+
+    it("has nothing to follow when no date is chosen", () => {
+      expect(
+        shouldFollowDate({
+          day: "",
+          previousDay: "",
+          visibleMonth: "2026-09-01",
+          monthCount: 1,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  it("the arrows now walk a reader across the whole year and stop at the end", () => {
+    // The shape of the fix end to end, against the case in the screenshot: a
+    // one-day trip chosen on 25 Sep, and nothing but › presses. Before, the
+    // reader could reach exactly two views; now every month to the horizon,
+    // one at a time, with the chosen date untouched in September throughout.
+    const FIXED = { day: "2026-09-25", previousDay: "2026-09-25", monthCount: 1 };
+    let view = "2026-09-01";
+    const seen: string[] = [view];
+    for (let i = 0; i < 14; i++) {
+      view = pageMonth(view, 1, BOUNDS);
+      expect(shouldFollowDate({ ...FIXED, visibleMonth: view })).toBe(false);
+      seen.push(view);
+    }
+    expect(seen[1]).toBe("2026-10-01");
+    expect(seen[4]).toBe("2027-01-01");
+    // Eleven steps reach the horizon; the remaining presses sit on it.
+    expect(seen[11]).toBe("2027-08-01");
+    expect(seen[14]).toBe("2027-08-01");
+    expect(new Set(seen).size).toBe(12);
   });
 });

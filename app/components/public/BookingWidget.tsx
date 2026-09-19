@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/cn";
 import { askNotice } from "~/lib/standing-ask";
 import { useFetcher } from "react-router";
@@ -14,14 +14,16 @@ import { depositLine, freeCancellationLine } from "~/lib/policy-copy";
 import { Link } from "react-router";
 import { AvailabilityCalendar } from "~/components/public/AvailabilityCalendar";
 import {
+  canPage,
   daysLabel,
   firstTakenDay,
   formatSpan,
-  monthInView,
   monthStart,
-  shiftMonth,
+  pageMonth,
+  shouldFollowDate,
   spanDays,
   spanEnd,
+  spanMonths,
 } from "~/lib/date-span";
 
 export interface BookingWidgetOffering {
@@ -140,6 +142,18 @@ function DatePick({
   const firstOpen = availableDays[0] || new Date().toISOString().slice(0, 10);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(day || firstOpen));
   /**
+   * How far the arrows may go.
+   *
+   * `availableDays` stops at the open horizon — a year out — and
+   * AvailabilityCalendar draws any day it does not hold as struck-through
+   * "booked". So paging past the last open day would show a wall of months
+   * the guide is not busy in at all, which is worse than not offering them.
+   */
+  const bounds = {
+    min: monthStart(availableDays[0] || new Date().toISOString().slice(0, 10)),
+    max: monthStart(availableDays[availableDays.length - 1] || firstOpen),
+  };
+  /**
    * Folded away once the dates are chosen.
    *
    * "There is not option to close the calander." On a phone the grid is most
@@ -157,14 +171,29 @@ function DatePick({
   // Show the second month when the trip runs into it. The whole point is
   // seeing the walk on a calendar; "20 Sep – 1 Oct" with only September on
   // screen shows two thirds of the answer.
-  const showMonths = end && end.slice(0, 7) !== visibleMonth.slice(0, 7) ? 2 : 1;
+  //
+  // Measured from the trip, never from the month on screen. It used to
+  // compare `end` against `visibleMonth`, so paging back one month made a
+  // ONE-DAY trip draw two months — and the width of that window then fed the
+  // rule below, which is what killed the arrows.
+  const showMonths = spanMonths(day, end);
 
-  // A start date that is not on screen, set by something other than a click
-  // — a fresh page, a group's dates. Follow it; otherwise stay put.
+  /**
+   * A start date that is not on screen, set by something other than a click
+   * — a fresh page, a group's dates. Follow it; otherwise stay put.
+   *
+   * The ref is the signal this was missing. Without it the rule fired on
+   * every render, and paging is precisely the act that takes the chosen day
+   * off screen: press › and the view snapped back inside the same commit.
+   * The founder's report was "only shows two months and gets stuck in
+   * september", which is exactly the two views that were reachable.
+   */
+  const followed = useRef(day);
   useEffect(() => {
-    if (day && !monthInView(day, visibleMonth, showMonths)) {
+    if (shouldFollowDate({ day, previousDay: followed.current, visibleMonth, monthCount: showMonths })) {
       setVisibleMonth(monthStart(day));
     }
+    followed.current = day;
   }, [day, visibleMonth, showMonths]);
 
   // A clash keeps it open whatever else is true: "pick another start" is not
@@ -179,22 +208,21 @@ function DatePick({
         </span>
         {shown ? (
           <span className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Previous month"
-              onClick={() => setVisibleMonth((m) => shiftMonth(m, -1))}
-              className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              aria-label="Next month"
-              onClick={() => setVisibleMonth((m) => shiftMonth(m, 1))}
-              className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink"
-            >
-              ›
-            </button>
+            {/* Disabled at each end rather than silently doing nothing —
+                replacing one dead arrow with two at the edges would be no
+                improvement at all. */}
+            {[-1, 1].map((d) => (
+              <button
+                key={d}
+                type="button"
+                aria-label={d < 0 ? "Previous month" : "Next month"}
+                disabled={!canPage(visibleMonth, d, bounds)}
+                onClick={() => setVisibleMonth((m) => pageMonth(m, d, bounds))}
+                className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-mist hover:text-ink disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                {d < 0 ? "‹" : "›"}
+              </button>
+            ))}
             {day && !clash && (
               <button
                 type="button"
