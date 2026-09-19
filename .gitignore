@@ -10,6 +10,12 @@ build/
 .env
 .env.*
 
+# working notes and credential env files for the Supabase Management API and
+# wrangler. Nothing here has ever been committed and nothing here ever should
+# be: the session stages with `git add -A`, and this is the only thing
+# standing between that and a token in the history.
+scratchpad/
+
 # supabase local
 supabase/.temp/
 supabase/.branches/
