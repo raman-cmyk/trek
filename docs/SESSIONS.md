@@ -3870,7 +3870,80 @@ Verified against the live site, not assumed:
 - `/checkout/:id` redirects an anonymous visitor to `/login` on
   `guidesofnepal.com`, so the route still works and `SITE_URL` is right.
 
-### Still not verified: the card field has never been drawn
+### The card field works. Watched, on a 360px screen.
+
+A throwaway booking was seeded (Raman approved it, and it has since been
+deleted along with its traveller row), Sarah Klein's demo password was set,
+and the whole thing was driven in Chromium at 360x780:
+
+- The Payment Element renders — card number, expiry, CVC, country, ZIP —
+  and fits a 360px screen without horizontal scroll.
+- `4242 4242 4242 4242` paid. Stripe reports `succeeded`, `amount_received`
+  22302.
+- The browser landed on `/trips/:id` and the booking read `deposit_paid`
+  with `deposit_paid_at` set.
+
+Two things the browser found that nothing else could have.
+
+**The payments table stayed empty.** See below — the bug of the day.
+
+**The card form says "GREY ECOM MARKETING LLC".** That is the Stripe
+account's business name, and it is what a trekker reads directly above the
+card field: "you allow GREY ECOM MARKETING LLC to charge your card". On a
+platform whose entire proposition is trusting a named human in Nepal, being
+asked for a card by an unrelated company is exactly the wrong sentence in
+exactly the wrong place. Fixed in the Stripe dashboard, not in code —
+public business name and statement descriptor.
+
+### The bug of the day: a deposit that succeeds leaves no record
+
+Money moved, the booking advanced, `payments` stayed empty. Both upserts
+against that table have failed since migration 0028 — the migration that
+added the index they depend on — because the index is PARTIAL:
+
+    create unique index payments_intent_type_uniq
+      on payments(stripe_payment_intent, type)
+      where stripe_payment_intent is not null;
+
+Postgres only infers a non-partial unique index for `ON CONFLICT (cols)`;
+using a partial one means repeating its predicate, and PostgREST's
+`on_conflict=` takes column names with nowhere to put a WHERE. Every call
+returned 42P10. The feature 0028 was written to enable — reusing a pending
+intent across page loads — has never worked once.
+
+It stayed invisible because both callers `await` the upsert without reading
+the result, the exact thing CLAUDE.md warns about, and because until today no
+real money had ever moved, so there was nothing to fail to record. The
+checkout loader also named `onConflict: "stripe_payment_intent"` when the
+index is on the pair, so it would have missed even a non-partial index.
+
+0114 drops the predicate. Both call sites now read their result, and
+`fulfillDeposit` refuses to advance a booking it cannot record — a trek
+marked paid with no payment row cannot be reconciled or refunded, and the
+idempotency guard reads that very row.
+
+**Not deployed, deliberately.** 0114 has to be applied first: until the index
+exists the upsert still fails, and `fulfillDeposit` now treats that as fatal.
+Applying it needs a Supabase personal access token (`sbp_…`) for
+`scripts/remote-apply.sh` — the service_role key cannot run DDL.
+
+### Email sends, and the 65 addresses that would have poisoned it
+
+The Resend domain was already added on 14 Sep and sitting in `failed`; it had
+been checked while the Cloudflare zone was still initializing. Its three
+records were read from Resend's API, written into Cloudflare as DNS-only, and
+re-verified — DKIM and both CNAMEs green. `RESEND_API_KEY` is on the worker.
+A test message from `no-reply@guidesofnepal.com` reached Resend and was
+dispatched.
+
+Before that could be turned on safely: all 65 seed accounts use
+`@example.com`, an IANA-reserved domain that is guaranteed to hard bounce.
+Harmless while there was no key; the next guide accepting an enquiry would
+have started firing them at a sending domain with no reputation to spend.
+`app/lib/undeliverable.ts` refuses addresses known to bounce, logged as
+`reserved_domain` so ops reads "seed data" rather than hunting a fault.
+
+### Older note, now superseded
 
 Everything above is the server. Nobody has seen the Payment Element render,
 because reaching a checkout page needs a booking in `pending_deposit`, and a
