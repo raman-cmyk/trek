@@ -353,6 +353,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     await systemLine(admin, group.id, user.id, `${myName} invited ${email}.`);
     await recomputeShares(admin, group.id);
+    // The row has always carried the address; nothing was ever sent to it, so
+    // the organiser had to go and tell them by hand.
+    const { notifyGroupInvite } = await import("~/lib/notifications.server");
+    await notifyGroupInvite(env, admin, { groupId: group.id, email, invitedByName: myName });
     return data({ ok: true }, { headers });
   }
 

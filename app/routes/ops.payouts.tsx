@@ -117,6 +117,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     "the payouts as paid",
   );
   if (!done.ok) return data({ error: done.error }, { status: 500, headers });
+  // The end of the only loop a guide genuinely cares about, and until now it
+  // closed in silence. After the write, so nobody is told about money that
+  // did not get marked as sent.
+  const { notifyPayoutsSent } = await import("~/lib/notifications.server");
+  await notifyPayoutsSent(env, admin, ids);
   return data({ ok: ids.length }, { headers });
 }
 

@@ -819,3 +819,91 @@ export async function notifyHoldReleased(env: Env, admin: SupabaseClient, bookin
     ),
   ]);
 }
+
+/**
+ * Somebody has been asked to come on a trip.
+ *
+ * The invite row has always been written with the address on it, and nothing
+ * was ever sent to that address — the organiser was handed a link to copy and
+ * paste somewhere else. So the platform knew who was invited and left the
+ * telling to WhatsApp, which is exactly the kind of gap that makes a group
+ * trip feel like a spreadsheet.
+ *
+ * Sent to somebody who may well have no account, so `userId` is deliberately
+ * absent: the gate falls back to matching on the address, and no bell is
+ * written for a person who cannot sign in to see it.
+ */
+export async function notifyGroupInvite(
+  env: Env,
+  admin: SupabaseClient,
+  args: { groupId: string; email: string; invitedByName: string },
+) {
+  const { data: g } = await admin
+    .from("trip_groups")
+    .select("id, slug, name, start_date, offering:offerings(title)")
+    .eq("id", args.groupId)
+    .maybeSingle();
+  if (!g) return;
+  const trip = ((g as any).offering?.title ?? (g as any).name ?? "a trip") as string;
+  const when = (g as any).start_date ? ` on ${(g as any).start_date}` : "";
+  await sendEmail(
+    env,
+    args.email,
+    `${args.invitedByName} invited you on ${trip}`,
+    `${args.invitedByName} is putting together a group for ${trip}${when}, and has asked you along.\n\n` +
+      `You can see the plan, who else is coming and what your share would be before you decide anything:\n` +
+      `${siteUrl(env)}/groups/${(g as any).slug}\n\n` +
+      `Nothing is booked in your name and nothing is charged until you say yes.`,
+    { kind: "group_invite", about: { type: "trip_group", id: args.groupId } },
+  );
+}
+
+/**
+ * The money has actually left.
+ *
+ * `/ops/payouts` has been able to mark a batch paid since it was built, and
+ * the guide was never told — the page's own comment notes twelve payouts
+ * outstanding and none ever marked paid. This is the end of the only loop a
+ * guide genuinely cares about, and it ran in silence.
+ *
+ * One email per guide per batch, not per booking: somebody owed for three
+ * treks should be told once, with the three named.
+ */
+export async function notifyPayoutsSent(env: Env, admin: SupabaseClient, payoutIds: string[]) {
+  if (!payoutIds.length) return;
+  const { data: rows } = await admin
+    .from("payouts")
+    .select("id, guide_id, amount_npr_paisa, batch_ref, booking:bookings(start_date, offering:offerings(title))")
+    .in("id", payoutIds);
+  if (!rows?.length) return;
+
+  const byGuide = new Map<string, { total: number; lines: string[]; ref: string | null }>();
+  for (const r of rows as any[]) {
+    if (!r.guide_id) continue;
+    const g = byGuide.get(r.guide_id) ?? { total: 0, lines: [] as string[], ref: r.batch_ref ?? null };
+    g.total += r.amount_npr_paisa ?? 0;
+    const title = r.booking?.offering?.title ?? "a trip";
+    g.lines.push(r.booking?.start_date ? `${title} (${r.booking.start_date})` : title);
+    byGuide.set(r.guide_id, g);
+  }
+
+  const ids = [...byGuide.keys()];
+  const { data: users } = await admin.from("users").select("id, email").in("id", ids);
+  const emailOf = new Map((users ?? []).map((u: any) => [u.id, u.email]));
+
+  for (const [guideId, g] of byGuide) {
+    const rupees = (g.total / 100).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    await sendEmail(
+      env,
+      emailOf.get(guideId),
+      `We have sent you NPR ${rupees}`,
+      `Your payment has gone out to the account on file.\n\n` +
+        `For:\n${g.lines.map((l) => `- ${l}`).join("\n")}\n\n` +
+        `Total: NPR ${rupees}\n` +
+        (g.ref ? `Reference: ${g.ref}\n` : "") +
+        `\nBank transfers inside Nepal usually land the same day. If it has not arrived in two working days, reply to this email.\n\n` +
+        `Your earnings: ${siteUrl(env)}/g/earnings`,
+      { kind: "payout_sent", userId: guideId },
+    );
+  }
+}
