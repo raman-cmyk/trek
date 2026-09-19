@@ -336,20 +336,16 @@ alter table public.offerings enable trigger user;
 -- All are `where not exists` / idempotent updates, so re-running is a no-op for
 -- the original twelve.
 
--- Calendars: open for the next 270 days, with a scattered handful blocked so
--- no two guides have an identical month.
+-- Calendars: only the blocked days, so no two guides have an identical month.
+-- A day with no row is free (migration 0111) — storing 271 'open' rows per
+-- guide is what made this seed hide the bug it was meant to demonstrate.
 insert into public.availability (guide_id, day, status)
-select c.user_id, d::date, 'open'
+select c.user_id, d::date, 'blocked'
 from (select ('11111111-1111-1111-1111-' || lpad((n + 100)::text, 12, '0'))::uuid as user_id
       from _seed_cohort) c,
      generate_series(current_date, current_date + 270, interval '1 day') d
+where (abs(hashtext(c.user_id::text || d::date::text)) % 11) = 0
 on conflict do nothing;
-
-update public.availability a set status = 'blocked'
-from _seed_cohort c
-where a.guide_id = ('11111111-1111-1111-1111-' || lpad((c.n + 100)::text, 12, '0'))::uuid
-  and a.status = 'open'
-  and (abs(hashtext(a.guide_id::text || a.day::text)) % 11) = 0;
 
 -- v3 price breakdowns on the new treks.
 update public.offerings o set price_breakdown = jsonb_build_object(

@@ -3310,3 +3310,61 @@ the core list starts itself, ops picks the trekking or day list, and
 
 Green: 1,744 tests in 120 files, typecheck clean, build passing, deployed
 (`095f30d2`).
+
+---
+
+## Session — the guide's own screen (items 7, 8, 9)
+
+### A verified guide on the marketplace could not be booked
+
+Chasing "let the guides calendar be open from the start" turned up a live
+bug rather than a preference. `availability` only ever records what happened
+to a day; nothing in the app writes a row meaning "free". The booking server
+reads that silence as free (`clashingDays`); every page that shows or searches
+guides read it as busy. Consequence in production:
+
+- Every guide who joined through the real application form has **zero**
+  availability rows.
+- **Laxman shah — verified, one live experience — could not be sent a booking
+  request at all.** His trek page rendered "No open dates right now" *in place
+  of* the request form, and he was absent from every dated search.
+- The 49 guides whose calendars worked were seed data (271 rows each).
+
+Fixed by making the read side agree with the booking server: a day is open
+unless a row says otherwise, out to a one-year horizon. New pure
+`app/lib/open-days.ts` (18 tests); every reader inverted to query taken days
+and subtract — `openRunsByGuide`, the trek page, the public profile, the
+matcher, the guide dashboard, the ops person page. `clashingDays` and
+`g.calendar.tsx` needed no change: both already believed this.
+
+Two more caught on the way. `/match` was ranking availability off a silently
+truncated query (`.limit(5000)` against ~17,500 rows). And `supabase/seed.sql`
+now stores only blocked days, so a fresh clone has production's shape instead
+of one that hides this class of bug.
+
+- **0111** — realigns the partial indexes with the question now being asked
+  (taken days, per day and per guide) and puts the rule in a table comment.
+  Rows with `status = 'open'` stay valid and mean the same as no row, so
+  nothing needed backfilling.
+
+### Home is one list now
+
+Six tiles, two full-width cards and a pair of stat tiles became a single
+column of plain sentences (`app/lib/guide-home.ts` + `components/guide/
+HomeList.tsx`, 9 tests). "Your experiences" and "Booked trips" — the pair
+doing the most damage — are "Trips you offer" and "Trips you're leading".
+Every string goes through `copy.guide.home`.
+
+The tab bar went back to five: "Experiences" does not fit in sixty pixels at
+360px, and it is the one tab nobody is waiting behind. "Journeys from other
+guides" is gone from `/g`, as asked.
+
+"Get more work" lost its open-days line — after the fix it would read "89 open
+days" for everybody — and gained the line that is now the true reason a guide
+is not being found: no trip listed means not on the site (0110).
+
+Green: 1,848 tests in 122 files, typecheck clean, build passing.
+
+**Not applied or deployed.** This container started fresh and `scratchpad/`
+went with it, so there is no Supabase token, no Cloudflare token and no DB
+access this session. Migration 0111 and the deploy are waiting on those.

@@ -160,16 +160,20 @@ insert into public.offering_photos (offering_id, url, alt_text, source, approved
   ('55555555-5555-5555-5555-000000000004','https://img.example/o/annapurna-1a.jpg','Thorong La pass sign at 5416 metres','guide',true,0),
   ('55555555-5555-5555-5555-000000000011','https://img.example/o/food-pokhara-1a.jpg','A plate of Newari samay baji','guide',true,0);
 
--- ============ AVAILABILITY (open for the next 270 days, a few blocked) ============
+-- ============ AVAILABILITY (blocked days only — free is the default) ============
+-- This used to insert 271 'open' rows per guide, ~13,000 in all, and that is
+-- precisely what hid a production bug for months: every demo guide was born
+-- with a full calendar while every real guide had none, and the pages that
+-- searched for 'open' rows quietly dropped the real ones. A day with no row
+-- is free (migration 0111, app/lib/open-days.ts), so the seed now stores only
+-- what a guide has actually said: a scattered handful of blocked days, so no
+-- two calendars look identical.
 insert into public.availability (guide_id, day, status)
-select g.user_id, d::date, 'open'
+select g.user_id, d::date, 'blocked'
 from public.guides g,
      generate_series(current_date, current_date + 270, interval '1 day') d
+where (abs(hashtext(g.user_id::text || d::date::text)) % 11) = 0
 on conflict do nothing;
-
--- Block a scattered handful of days per guide so calendars look real.
-update public.availability set status = 'blocked'
-where (abs(hashtext(guide_id::text || day::text)) % 11) = 0;
 
 -- ============ COMPLETED BOOKINGS + PUBLISHED REVIEWS ============
 -- Ten completed bookings back ten released trekker→guide reviews.

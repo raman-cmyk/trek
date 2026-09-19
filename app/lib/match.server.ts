@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { budgetConfigs, computeExperiencePricing, type PriceBreakdown , hasBreakdown } from "~/lib/experience-pricing";
 import { guideRatings } from "~/lib/ratings.server";
 import { rankGuides, type GuideFacts, type MatchQuery, type MatchResult, type Region } from "~/lib/match";
+import { TAKEN_STATUSES, horizonEnd, openDaysIn } from "~/lib/open-days";
 
 /**
  * Gather every verified guide's facts (offerings, routes, languages, calendar,
@@ -12,9 +13,7 @@ export async function matchGuides(
   q: MatchQuery,
 ): Promise<{ results: MatchResult[]; guides: Map<string, any> }> {
   const todayIso = new Date().toISOString().slice(0, 10);
-  const yearOut = new Date();
-  yearOut.setUTCFullYear(yearOut.getUTCFullYear() + 1);
-  const oneYearOut = yearOut.toISOString().slice(0, 10);
+  const oneYearOut = horizonEnd(todayIso);
 
   const [{ data: guides }, { data: offerings }, { data: routes }, { data: langs }, { data: avail }] =
     await Promise.all([
@@ -24,10 +23,15 @@ export async function matchGuides(
         .select("id, slug, kind, title, days, route_id, guide_id, price_usd_cents, price_breakdown"),
       client.from("routes").select("id, region, difficulty, season_months"),
       client.from("guide_languages").select("guide_id, language, proficiency"),
+      // Taken days, not open ones. Two bugs in one line: absence means open
+      // (open-days.ts), so guides who never touched a calendar scored zero on
+      // availability; and `.limit(5000)` against roughly 17,500 open rows was
+      // already truncating in silence, so even the seeded guides were ranked
+      // on a partial calendar. Held/booked/blocked days are a few hundred.
       client
         .from("availability")
         .select("guide_id, day")
-        .eq("status", "open")
+        .in("status", TAKEN_STATUSES as unknown as string[])
         .gte("day", todayIso)
         .lte("day", oneYearOut)
         .limit(5000),
@@ -44,15 +48,26 @@ export async function matchGuides(
   const nowMonth = Number(todayIso.slice(5, 7));
   const nowYear = Number(todayIso.slice(0, 4));
   const targetYear = (month: number) => (month >= nowMonth ? nowYear : nowYear + 1);
-  const openByGuide = new Map<string, Record<number, number>>();
+  const takenByGuide = new Map<string, Set<string>>();
   for (const a of avail ?? []) {
-    const y = Number(a.day.slice(0, 4));
-    const mth = Number(a.day.slice(5, 7));
-    if (y !== targetYear(mth)) continue; // only the upcoming occurrence counts
-    const rec = openByGuide.get(a.guide_id) ?? {};
-    rec[mth] = (rec[mth] ?? 0) + 1;
-    openByGuide.set(a.guide_id, rec);
+    let set = takenByGuide.get(a.guide_id);
+    if (!set) takenByGuide.set(a.guide_id, (set = new Set()));
+    set.add(a.day);
   }
+  // Every day between today and the horizon that this guide has not given
+  // away, bucketed by month. A guide with an empty calendar now scores as
+  // free, which is what the booking server has always believed.
+  const window = { from: todayIso, to: oneYearOut };
+  const monthsFree = (guideId: string): Record<number, number> => {
+    const rec: Record<number, number> = {};
+    for (const day of openDaysIn(window, takenByGuide.get(guideId) ?? new Set(), todayIso)) {
+      const y = Number(day.slice(0, 4));
+      const mth = Number(day.slice(5, 7));
+      if (y !== targetYear(mth)) continue; // only the upcoming occurrence counts
+      rec[mth] = (rec[mth] ?? 0) + 1;
+    }
+    return rec;
+  };
 
   const ratings = await guideRatings(client, (guides ?? []).map((g) => g.user_id));
 
@@ -64,7 +79,7 @@ export async function matchGuides(
     porterWelfare: !!g.porter_welfare,
     medianResponseMins: g.median_response_mins,
     languages: langsByGuide.get(g.user_id) ?? [],
-    openDaysByMonth: openByGuide.get(g.user_id) ?? {},
+    openDaysByMonth: monthsFree(g.user_id),
     offerings: (offerings ?? [])
       .filter((o) => o.guide_id === g.user_id)
       .map((o) => {

@@ -45,6 +45,30 @@ export const copy = {
   guide: {
     earningsExplainer:
       "Your fee is yours in full — Guides of Nepal' 10% is added on top of the package, paid by the trekker.",
+    // The guide's home screen, in the order a guide actually works. Short
+    // sentences, no platform words: "experiences" and "journeys" were two of
+    // the six labels that sent a guide to the wrong screen. "Trips you offer"
+    // and "Trips you're leading" cannot be mistaken for one another.
+    home: {
+      offerLabel: "Trips you offer",
+      offerNote: "What people can book.",
+      calendarLabel: "Your calendar",
+      calendarNote: "Block the days you're away.",
+      leadingLabel: "Trips you're leading",
+      leadingNote: "Who's coming, and when.",
+      questionsLabel: "Questions people asked you",
+      questionsNote: "Answer them on your page, where everyone can read it.",
+      questionsWaiting: "waiting on an answer",
+      moneyLabel: "Your money",
+      moneyNote: "What you're owed, and what's been paid.",
+      reviewsLabel: "Reviews",
+      reviewsNote: "What trekkers said about walking with you.",
+      writeUpLabel: "Write up a trek",
+      writeUpNote: "Your photos and your words. This is what makes people pick you.",
+      noTripListed:
+        "Your page is not shown to anyone until you list one trip.",
+      listOneTrip: "List a trip →",
+    },
   },
   empty: {
     noEnquiries:

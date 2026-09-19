@@ -31,6 +31,7 @@ import {
 import { PROFICIENCY_LABELS, type Proficiency } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
 import { getEnv, requireOps } from "~/lib/supabase.server";
+import { TAKEN_STATUSES, availabilityCounts, horizonEnd } from "~/lib/open-days";
 import { AvatarPicker } from "~/components/AvatarPicker";
 
 /**
@@ -164,12 +165,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
           .order("start_date", { ascending: false })
           .limit(20)
       : Promise.resolve({ data: [] }),
+    // Only the days that are spoken for. A guide is open on every other day
+    // out to the horizon (open-days.ts), so "open" is a subtraction, not a
+    // count of rows — there are no rows to count for most guides.
     isGuide
       ? admin
           .from("availability")
-          .select("status")
+          .select("day, status")
           .eq("guide_id", id)
+          .in("status", TAKEN_STATUSES as unknown as string[])
           .gte("day", new Date().toISOString().slice(0, 10))
+          .lte("day", horizonEnd(new Date().toISOString().slice(0, 10)))
       : Promise.resolve({ data: [] }),
     // The papers a trekker gave us: passports and insurance, per booking.
     !isGuide && bookingIds.length
@@ -296,11 +302,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       incidents: (incidentsRes as any).data ?? [],
       routeExperience: (routeExpRes as any).data ?? [],
       accessLog,
-      availability: {
-        open: avail.filter((a: any) => a.status === "open").length,
-        booked: avail.filter((a: any) => a.status === "booked").length,
-        blocked: avail.filter((a: any) => a.status === "blocked").length,
-      },
+      availability: availabilityCounts(avail, new Date().toISOString().slice(0, 10)),
     },
     { headers },
   );
@@ -891,7 +893,7 @@ export default function OpsPerson({ loaderData, actionData }: Route.ComponentPro
                   />
                   <Row
                     label="Calendar"
-                    value={`${d.availability.open} open · ${d.availability.booked} booked · ${d.availability.blocked} blocked`}
+                    value={`${d.availability.open} free · ${d.availability.booked} booked · ${d.availability.blocked} blocked`}
                   />
                   <Row label="Voice intro" value={g.voice_intro_url ? "recorded" : "—"} />
                 </dl>

@@ -13,7 +13,10 @@ import { formatNpr } from "~/lib/pricing";
 import { fmtDate } from "~/lib/format";
 import { firstName } from "~/lib/names";
 import { checkinIsDue, dayLabel, needsClosing, trekDay } from "~/lib/checkin";
-import { SmartImage } from "~/components/SmartImage";
+import { TAKEN_STATUSES, openDayCount } from "~/lib/open-days";
+import { homeRows, mustListATrip } from "~/lib/guide-home";
+import { HomeList } from "~/components/guide/HomeList";
+import { copy } from "~/lib/copy";
 
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -83,6 +86,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   let active: any = null;
   let nextBooking: any = null;
   let enquiries = 0;
+  let upcomingCount = 0;
   let unansweredQuestions = 0;
   let checkedInToday = false;
   let work: { openDays: number; unrepliedReviews: number; responseMins: number | null } | null =
@@ -95,9 +99,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const [
       { data: act },
       { data: next },
+      { count: upcoming },
       { count },
       { count: qCount },
-      { count: openDays },
+      { data: busyDays },
       { count: unreplied },
     ] = await Promise.all([
       // Not limit(1) with no order — that returned whichever row the planner
@@ -119,6 +124,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .order("start_date")
         .limit(1)
         .maybeSingle(),
+      // How many trips are ahead of them, not just the next one. The home
+      // list says so on the row, so a guide can see there is work coming
+      // without opening the screen.
+      admin
+        .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("guide_id", user.id)
+        .in("status", ["deposit_paid", "docs_pending", "confirmed"])
+        .gte("start_date", today),
       admin
         .from("enquiries")
         .select("id", { count: "exact", head: true })
@@ -131,13 +145,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         .select("id", { count: "exact", head: true })
         .eq("guide_id", user.id)
         .eq("status", "pending"),
-      // The levers that decide whether the next booking comes. Each is a real
-      // number the guide can move today, not a score.
+      // Days in the next three months somebody else has already taken. Free
+      // days are the subtraction (open-days.ts) — there is no such thing as a
+      // row that means "free", which is why this used to read zero for every
+      // guide who had never opened the calendar.
       admin
         .from("availability")
-        .select("day", { count: "exact", head: true })
+        .select("day")
         .eq("guide_id", user.id)
-        .eq("status", "open")
+        .in("status", TAKEN_STATUSES as unknown as string[])
         .gte("day", today)
         .lte("day", in90),
       admin
@@ -158,10 +174,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       active = picked ? (act ?? []).find((r: any) => r.id === picked.id) ?? null : null;
     }
     nextBooking = next;
+    upcomingCount = upcoming ?? 0;
     enquiries = count ?? 0;
     unansweredQuestions = qCount ?? 0;
     work = {
-      openDays: openDays ?? 0,
+      openDays: openDayCount(
+        { from: today, to: in90 },
+        (busyDays ?? []).map((r: { day: string }) => r.day),
+        today,
+      ),
       unrepliedReviews: unreplied ?? 0,
       responseMins: guide?.median_response_mins ?? null,
     };
@@ -175,19 +196,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       checkedInToday = !!ci;
     }
   }
-
-  // What other guides have written up lately. A guide's home screen was
-  // entirely about their own admin; this is the half of the product they are
-  // competing in, and the fastest way to learn what a good write-up looks like
-  // is to read somebody else's.
-  const { data: feed } = await admin
-    .from("public_journals")
-    .select(
-      "slug, title, cover_photo_url, guide_name, guide_slug, guide_avatar_url, route_name, days, like_count, comment_count, published_at",
-    )
-    .neq("guide_id", user.id)
-    .order("published_at", { ascending: false })
-    .limit(6);
 
   const setup = [
     {
@@ -252,13 +260,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       active,
       nextBooking,
       enquiries,
+      upcomingCount,
+      offeringCount: offeringCount ?? 0,
       unansweredQuestions,
       work,
       checkedInToday,
       today,
       backupFor: backupFor ?? [],
       payableNprPaisa,
-      feed: feed ?? [],
     },
     { headers },
   );
@@ -282,8 +291,22 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export default function GuideHome({ loaderData }: Route.ComponentProps) {
-  const { name, setup, guide, active, nextBooking, enquiries, unansweredQuestions, work, checkedInToday, today, backupFor, payableNprPaisa, feed } =
-    loaderData as any;
+  const {
+    name,
+    setup,
+    guide,
+    active,
+    nextBooking,
+    enquiries,
+    upcomingCount,
+    offeringCount,
+    unansweredQuestions,
+    work,
+    checkedInToday,
+    today,
+    backupFor,
+    payableNprPaisa,
+  } = loaderData as any;
   const status: string = guide?.status ?? "applied";
   const first = name.split(" ")[0];
 
@@ -294,7 +317,6 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
   // This used to be "days since the start date" with no ceiling, so a
   // fourteen-day trek that nobody had closed read "day 34".
   const window = active ? trekDay(active.start_date, active.end_date, today) : null;
-  const dayNum = window?.day ?? 0;
 
   return (
     <div className="space-y-5">
@@ -313,74 +335,9 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
 
       <SetupChecklist steps={setup} />
 
-      {/* The order of this page is the founder's, and it is the order a
-          guide actually works in: first the six places they go, then the
-          trip that is next, then the two things somebody is waiting on them
-          for, then the trek they are on, then the money, and last the
-          advice about winning more work. It holds whether or not the setup
-          checklist is still showing above it. */}
-
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/g/experiences" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
-          Your experiences →
-        </Link>
-        <Link to="/g/journals" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
-          Your journeys →
-        </Link>
-        <Link to="/g/bookings" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
-          Booked trips →
-        </Link>
-        <Link to="/g/calendar" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
-          Block dates →
-        </Link>
-        <Link to="/g/earnings" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
-          Your money →
-        </Link>
-        <Link to="/g/reviews" className="rounded-photo border border-border bg-card p-4 text-sm font-medium">
-          Reviews →
-        </Link>
-      </div>
-
-      {nextBooking && (
-        <section className="rounded-photo border border-border bg-card p-4">
-          <p className="text-xs text-ink-soft">Next trip</p>
-          <p className="font-medium text-ink">{nextBooking.offering?.title}</p>
-          <p className="text-sm text-ink-soft">
-            {firstName(nextBooking.trekker?.full_name)} · {fmtDate(nextBooking.start_date)}
-          </p>
-        </section>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        {/* Journals are how a guide wins the next booking, so they sit with
-            the money links, not buried in profile settings. */}
-        <Link
-          to="/g/questions"
-          className={cn(
-            "col-span-2 flex items-center justify-between rounded-photo border p-4 text-sm font-medium",
-            unansweredQuestions > 0
-              ? "border-moss/50 bg-mist text-ink"
-              : "border-border bg-card text-ink",
-          )}
-        >
-          <span>
-            {unansweredQuestions > 0
-              ? `${unansweredQuestions} ${unansweredQuestions === 1 ? "person is" : "people are"} waiting on an answer`
-              : "Questions people asked you"}
-          </span>
-          <span className="text-primary">→</span>
-        </Link>
-
-        <Link
-          to="/g/journals"
-          className="col-span-2 rounded-photo bg-chartreuse p-4 text-sm font-medium text-pine shadow-card"
-        >
-          Write up a trek →
-          <span className="mt-0.5 block text-xs font-normal text-ink-soft">
-            Your photos and your words. This is what makes people pick you.
-          </span>
-        </Link>
-      </div>
+      {/* What is happening right now, then what you can do about it.
+          A guide opening this at 5am wants one of two answers: the trek
+          they are on, or the trip that is next. Everything else is a list. */}
 
       {active ? (
         <Link
@@ -393,17 +350,45 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
           <p className="mt-0.5 font-medium text-ink">{active.offering?.title}</p>
           <p className="mt-1 text-sm text-primary">Open the trek →</p>
         </Link>
-      ) : (
-        <section className="grid grid-cols-2 gap-3">
-          <Tile to="/g/enquiries" label="Open enquiries" value={enquiries} highlight={enquiries > 0} />
-          <Tile
-            to="/g/bookings"
-            label="Next trip"
-            value={nextBooking ? nextBooking.offering?.title ?? "—" : "None yet"}
-            small
-          />
-        </section>
+      ) : nextBooking ? (
+        <Link to="/g/bookings" className="block rounded-photo border border-border bg-card p-4">
+          <p className="text-xs text-ink-soft">Next trip</p>
+          <p className="mt-0.5 font-medium text-ink">{nextBooking.offering?.title}</p>
+          <p className="text-sm text-ink-soft">
+            {firstName(nextBooking.trekker?.full_name)} · {fmtDate(nextBooking.start_date)}
+          </p>
+        </Link>
+      ) : null}
+
+      {/* Requests keep a card of their own rather than a row in the list:
+          somebody is waiting on an answer, and CLAUDE.md rule 8 says two taps
+          to accept a booking. This is the first of them. */}
+      {enquiries > 0 && (
+        <Link
+          to="/g/enquiries"
+          className="flex items-center justify-between gap-3 rounded-photo border border-primary bg-primary/5 p-4"
+        >
+          <span className="text-sm font-medium text-ink">
+            <span className="font-mono">{enquiries}</span>{" "}
+            {enquiries === 1 ? "person wants" : "people want"} to book you
+          </span>
+          <span aria-hidden className="text-primary">
+            →
+          </span>
+        </Link>
       )}
+
+      {/* One list, in the order a guide works. It replaced six tiles, two
+          full-width cards and a pair of stat tiles — four shapes pointing at
+          the same handful of screens, three of them twice. */}
+      <HomeList
+        rows={homeRows({
+          offerings: offeringCount ?? 0,
+          upcoming: upcomingCount ?? 0,
+          questions: unansweredQuestions ?? 0,
+          unrepliedReviews: work?.unrepliedReviews ?? 0,
+        })}
+      />
 
       {backupFor.length > 0 && (
         <section className="rounded-photo border border-border bg-card p-4">
@@ -435,34 +420,48 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
       )}
 
       {/* ── How the next booking comes ─────────────────────────────────
-           Not a score, not a percentage: three real numbers, each with the
-           thing to do about it. The calendar one matters most — a guide with
-           no open days is invisible in every dated search, and nothing on
-           this phone told him that. */}
+           Not a score, not a percentage: real numbers, each with the thing to
+           do about it. The old first line counted open calendar days and told
+           a guide he was invisible — true then, because no guide had any. Now
+           a guide is free unless he says otherwise, so that line would read
+           "89 open days" for everybody and mean nothing. The line that IS
+           true is below: a guide with nothing listed is not on the site.
+           Blocking every day is the only way back to zero, and it is worth
+           saying when it happens. */}
       {work && (
         <section className="rounded-photo border border-border bg-card p-4">
           <p className="text-sm font-medium text-ink">Get more work</p>
           <ul className="mt-3 space-y-2.5 text-sm">
-            <li>
-              {work.openDays === 0 ? (
+            {mustListATrip({
+              offerings: offeringCount ?? 0,
+              upcoming: 0,
+              questions: 0,
+              unrepliedReviews: 0,
+            }) && (
+              <li>
+                <Link to="/g/experiences/new" className="flex items-start gap-2 text-ink">
+                  <Dot tone="ember" />
+                  <span>
+                    <span className="font-medium text-ember">{copy.guide.home.noTripListed}</span>{" "}
+                    <span className="text-primary underline">{copy.guide.home.listOneTrip}</span>
+                  </span>
+                </Link>
+              </li>
+            )}
+            {work.openDays === 0 && (
+              <li>
                 <Link to="/g/calendar" className="flex items-start gap-2 text-ink">
                   <Dot tone="ember" />
                   <span>
-                    <span className="font-medium text-ember">Your calendar has no open days.</span>{" "}
-                    People searching with dates cannot find you at all.{" "}
-                    <span className="text-primary underline">Open days →</span>
+                    <span className="font-medium text-ember">
+                      You have blocked every day for the next three months.
+                    </span>{" "}
+                    Nobody searching with dates can find you.{" "}
+                    <span className="text-primary underline">Open some days →</span>
                   </span>
                 </Link>
-              ) : (
-                <Link to="/g/calendar" className="flex items-start gap-2 text-ink">
-                  <Dot tone={work.openDays < 20 ? "amber" : "moss"} />
-                  <span>
-                    <span className="font-mono">{work.openDays}</span> open days in the
-                    next 3 months. More open days, more searches you appear in.
-                  </span>
-                </Link>
-              )}
-            </li>
+              </li>
+            )}
             {work.responseMins != null && (
               <li className="flex items-start gap-2">
                 <Dot tone={work.responseMins <= 120 ? "moss" : "amber"} />
@@ -515,93 +514,7 @@ export default function GuideHome({ loaderData }: Route.ComponentProps) {
         </Link>
       )}
 
-      {/* Other guides' write-ups. The rest of this screen is a guide's own
-          admin; this is the product they are competing in, and reading three
-          of somebody else's is the fastest way to learn what a good one looks
-          like. */}
-      {feed.length > 0 && (
-        <section>
-          <div className="mb-2 flex items-baseline justify-between gap-2">
-            <h2 className="font-display text-lg text-ink">Journeys from other guides</h2>
-            <Link to="/journals" className="text-sm text-primary hover:underline">
-              See all →
-            </Link>
-          </div>
-          <ul className="space-y-2">
-            {feed.slice(0, 4).map((f: any) => (
-              <li key={f.slug}>
-                <Link
-                  to={`/journals/${f.slug}`}
-                  prefetch="intent"
-                  className="flex items-center gap-3 rounded-photo border border-border bg-card p-2.5 hover:border-sage hover:bg-mist"
-                >
-                  <SmartImage
-                    src={f.cover_photo_url ?? ""}
-                    alt=""
-                    width={72}
-                    height={56}
-                    className="h-12 w-16 shrink-0 rounded object-cover"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-ink">{f.title}</span>
-                    <span className="block truncate text-xs text-ink-soft">
-                      {f.guide_name}
-                      {f.route_name ? ` · ${f.route_name}` : ""}
-                    </span>
-                    <span className="mt-0.5 block font-mono text-[11px] text-muted">
-                      {f.like_count > 0 && `${f.like_count} ♥`}
-                      {f.like_count > 0 && f.comment_count > 0 && " · "}
-                      {f.comment_count > 0 &&
-                        `${f.comment_count} ${f.comment_count === 1 ? "comment" : "comments"}`}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* This went to the edit form, so "View my profile" showed a guide the
-          same boxes they had just filled in. It now opens the page a trekker
-          actually sees — and that page works before verification too, so a
-          guide can look at what they are building. */}
-      <Link
-        to={guide?.slug ? `/guides/${guide.slug}` : "/g/profile"}
-        className="block rounded-photo border border-border bg-card px-4 py-3 text-center text-sm font-medium text-primary hover:bg-mist"
-      >
-        See your page the way trekkers see it →
-      </Link>
     </div>
-  );
-}
-
-function Tile({
-  to,
-  label,
-  value,
-  highlight,
-  small,
-}: {
-  to: string;
-  label: string;
-  value: React.ReactNode;
-  highlight?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      className={cn(
-        "rounded-photo border p-4",
-        highlight ? "border-primary bg-primary/5" : "border-border bg-card",
-      )}
-    >
-      <p className="text-xs text-ink-soft">{label}</p>
-      <p className={cn("mt-1 font-medium text-ink", small ? "text-sm" : "text-2xl")}>
-        {value}
-      </p>
-    </Link>
   );
 }
 

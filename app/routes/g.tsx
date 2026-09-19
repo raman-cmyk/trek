@@ -80,7 +80,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 // pathless layout is never the target of a form post. It is /g/logout now.
 
 /**
- * Five tabs is the 360px ceiling — Earnings lives as a quick link on Home.
+ * Five tabs is the 360px ceiling, and it had grown to six.
+ *
+ * At 360px six tabs are sixty pixels each. "Experiences" does not fit in
+ * sixty pixels at 11px, so the longest word on the bar wrapped or clipped on
+ * exactly the phone this dashboard is built for (CLAUDE.md rule 6). It is
+ * also the odd one out in kind: Requests, Messages, Calendar and Safety are
+ * places a guide goes because somebody is waiting; listing a trip is
+ * something you do once and then edit. It lives at the top of Home now,
+ * where it is the first row and says what it is — "Trips you offer".
+ *
+ * Earnings has always lived on Home for the same reason.
  *
  * The bar used to appear only once a guide was verified, which meant a guide
  * who had just applied had no navigation at all: the one screen they could
@@ -101,7 +111,6 @@ const TABS = [
   { to: "/g", label: "Home", end: true, badge: 0, icon: IconHome },
   { to: "/g/enquiries", label: "Requests", badge: "enquiryCount" as const, icon: IconInbox },
   { to: "/g/messages", label: "Messages", badge: "unreadTotal" as const, icon: IconChat },
-  { to: "/g/experiences", label: "Experiences", badge: 0, icon: IconBoot },
   { to: "/g/calendar", label: "Calendar", badge: 0, icon: IconCalendar },
   { to: "/g/checkin", label: "Safety", badge: "checkinDue" as const, icon: IconShield },
 ];
@@ -223,8 +232,8 @@ export default function GuideLayout({ loaderData }: Route.ComponentProps) {
 
 /* ── Tab icons ──────────────────────────────────────────────────────────────
    Drawn here rather than pulled from a set: five glyphs is not worth a
-   dependency, and "Trips" wants a boot, which no icon library ships. Stroke
-   only, 1.6px, filled softly when active so the change reads at a glance. */
+   dependency. Stroke only, 1.6px, filled softly when active so the change
+   reads at a glance. */
 
 type IconProps = { active?: boolean };
 const S = (active?: boolean) => ({
@@ -256,16 +265,6 @@ function IconChat({ active }: IconProps) {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" {...S(active)}>
       <path d="M17 10.2c0 3-3.1 5.4-7 5.4a8.6 8.6 0 0 1-2.2-.27L4 16.5l1.1-2.6A5 5 0 0 1 3 10.2C3 7.3 6.1 4.8 10 4.8s7 2.5 7 5.4Z" />
-    </svg>
-  );
-}
-
-/** Trips: a boot. Nothing else on the bar says "you are walking somewhere". */
-function IconBoot({ active }: IconProps) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" {...S(active)}>
-      <path d="M6.4 3.2h2.4v6.1l4.6 2.2a2.6 2.6 0 0 1 1.5 2.3v1.4a.8.8 0 0 1-.8.8H5.3a.8.8 0 0 1-.8-.8V4a.8.8 0 0 1 .8-.8Z" />
-      <path d="M4.5 13.4h10.4" />
     </svg>
   );
 }

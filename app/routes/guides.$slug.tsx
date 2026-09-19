@@ -17,6 +17,7 @@ import {
 import { guideRatings } from "~/lib/ratings.server";
 import { getProfile, getSessionUser } from "~/lib/auth.server";
 import { QuestionWall } from "~/components/public/QuestionWall";
+import { TAKEN_STATUSES, horizonEnd, openDaysIn } from "~/lib/open-days";
 import { validateQuestion, type PublicQuestion } from "~/lib/questions";
 import { notifyGuideOfQuestion } from "~/lib/notifications.server";
 import { useMoney } from "~/lib/currency-context";
@@ -201,12 +202,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
             "id, slug, kind, title, summary, days, price_usd_cents, price_breakdown, max_party, included, meeting_point, cover_photo_url, route_id, guide_slug, guide_name, guide_avatar_url, guide_tier, guide_day_rate_usd_cents, guide_years_experience, route_slug, route_name",
           )
           .eq("guide_id", guide.user_id),
+    // The days this guide is NOT free for. Absence means open (open-days.ts) —
+    // asking for rows marked "open" returned nothing for every guide who
+    // joined through the real form, and their public calendar was twelve
+    // months of struck-through squares.
     client
       .from("availability")
       .select("day")
       .eq("guide_id", guide.user_id)
-      .eq("status", "open")
+      .in("status", TAKEN_STATUSES as unknown as string[])
       .gte("day", todayIso)
+      .lte("day", horizonEnd(todayIso))
       .order("day"),
     client
       .from("public_reviews")
@@ -427,9 +433,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const in90 = new Date(Date.parse(todayIso) + 90 * 86_400_000)
     .toISOString()
     .slice(0, 10);
-  const openIn90 = (avail ?? [])
-    .map((a: { day: string }) => a.day)
-    .filter((d: string) => d <= in90).length;
+  const busy = (avail ?? []).map((a: { day: string }) => a.day);
+  const openDays = openDaysIn({ from: todayIso, to: horizonEnd(todayIso) }, busy, todayIso);
+  const openIn90 = openDays.filter((d: string) => d <= in90).length;
 
   return {
     guide,
@@ -449,7 +455,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     journals: js,
     gallery,
     routeChips: [...routeCounts.values()].sort((a, b) => b.count - a.count),
-    openDays: (avail ?? []).map((a: { day: string }) => a.day),
+    openDays,
     reviews: reviews ?? [],
     receipts: receipts ?? [],
     rating: ratings[guide.user_id] ?? null,

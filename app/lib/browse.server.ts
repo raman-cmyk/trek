@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { addDays, escapeLike, type DateRange } from "./browse";
+import { escapeLike, type DateRange } from "./browse";
+import { TAKEN_STATUSES, clipToHorizon, longestOpenRun } from "./open-days";
 
 /**
  * The database half of browse search, shared by /guides and /experiences.
@@ -12,18 +13,35 @@ import { addDays, escapeLike, type DateRange } from "./browse";
  */
 
 /**
- * Guides with open calendar days inside the range.
+ * How long a stretch each guide is free for inside the range.
  *
  * Returns a map guide_id → longest run of CONSECUTIVE open days, so a caller
  * can ask "free at all?" (>= 1) or "free for a 14-day trek?" (>= 14) from the
- * same query. `booked`/`held`/`blocked` days simply aren't returned.
+ * same query.
+ *
+ * It asks for the days that are TAKEN and subtracts them, rather than asking
+ * for the days marked open. Nothing in the application ever writes a row that
+ * means "free" — only the demo seed does — so the old question returned
+ * nothing at all for every guide who joined through the real form, and every
+ * dated search dropped them. `open-days.ts` has the whole story. The query is
+ * also an order of magnitude smaller: a few hundred held/booked/blocked rows
+ * across the roster instead of thirteen thousand open ones.
+ *
+ * `guideIds` is required now. Absence means open, so an answer has to be
+ * given for every guide asked about — including the ones with no rows at all,
+ * which are precisely the ones this fixes — and that is only possible if the
+ * caller says who they are. All three callers already passed them.
  */
 export async function openRunsByGuide(
   client: SupabaseClient,
   range: DateRange,
-  guideIds?: string[],
+  guideIds: string[],
+  today = new Date().toISOString().slice(0, 10),
 ): Promise<Record<string, number>> {
-  if (guideIds && guideIds.length === 0) return {};
+  if (guideIds.length === 0) return {};
+  const win = clipToHorizon(range, today);
+  if (!win) return Object.fromEntries(guideIds.map((id) => [id, 0]));
+
   // Paged, because PostgREST refuses to return more than `db.max_rows` (1,000)
   // however large a limit is asked for — and it says so nowhere in the
   // response. A single `.limit(100_000)` therefore came back quietly truncated
@@ -31,24 +49,24 @@ export async function openRunsByGuide(
   // guide got a partial, gap-riddled set of days, every longest-run collapsed
   // below the length of the trek, and the page rendered "nothing available"
   // for dates that were completely free. Forty-eight guides over thirty days
-  // is 1,338 rows — just past the edge, which is why it looked fine in
-  // testing.
+  // was 1,338 rows — just past the edge, which is why it looked fine in
+  // testing. Taken days are far fewer and it will rarely page now, but a busy
+  // season across the roster can still cross the line.
   const PAGE = 900;
   const rows: Array<{ guide_id: string; day: string }> = [];
   for (let offset = 0; ; offset += PAGE) {
-    let q = client
+    const { data } = await client
       .from("availability")
       .select("guide_id, day")
-      .eq("status", "open")
-      .gte("day", range.from)
-      .lte("day", range.to)
+      .in("status", TAKEN_STATUSES as unknown as string[])
+      .gte("day", win.from)
+      .lte("day", win.to)
+      .in("guide_id", guideIds)
       // Ordered so the pages are stable; without it the same row can appear
       // on two pages and another never appear at all.
       .order("guide_id")
       .order("day")
       .range(offset, offset + PAGE - 1);
-    if (guideIds?.length) q = q.in("guide_id", guideIds);
-    const { data } = await q;
     const page = data ?? [];
     rows.push(...page);
     if (page.length < PAGE) break;
@@ -57,21 +75,12 @@ export async function openRunsByGuide(
     if (rows.length >= 200_000) break;
   }
 
-  const byGuide: Record<string, string[]> = {};
-  for (const row of rows) (byGuide[row.guide_id] ??= []).push(row.day);
+  const takenByGuide: Record<string, Set<string>> = {};
+  for (const row of rows) (takenByGuide[row.guide_id] ??= new Set()).add(row.day);
 
   const runs: Record<string, number> = {};
-  for (const [id, days] of Object.entries(byGuide)) {
-    days.sort();
-    let best = 0;
-    let run = 0;
-    let prev: string | null = null;
-    for (const d of days) {
-      run = prev && addDays(prev, 1) === d ? run + 1 : 1;
-      if (run > best) best = run;
-      prev = d;
-    }
-    runs[id] = best;
+  for (const id of guideIds) {
+    runs[id] = longestOpenRun(win, takenByGuide[id] ?? new Set(), today);
   }
   return runs;
 }

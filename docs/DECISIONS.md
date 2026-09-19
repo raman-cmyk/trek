@@ -554,3 +554,75 @@ the six papers `guide_verifications` already holds tick the guide's list, and
 an experience's photographs and capacity tick its own. What is left is the
 work nothing else knows about — the introduction call, the reference, the
 test booking — which is what a checklist is actually for.
+
+---
+
+## A guide is free unless they say otherwise
+
+`availability` records what happened to a day, never that a day is free. Four
+writers touch it and every one is a reaction: a guide blocking a stretch, a
+booking holding days, a deposit confirming them, a cancellation releasing
+them. Nothing in the application has ever inserted a row meaning "open".
+
+The two halves of the product read that silence in opposite directions.
+`clashingDays` asks only for held/booked/blocked and treats everything else as
+free — its docblock says so outright. Every page that displays or searches
+guides asked for `status = 'open'` and considered only the rows that came
+back, so a day with no row was a day the guide was busy.
+
+What that cost, checked against production: **every guide who joined through
+the real application form had zero availability rows.** A verified guide with
+a live trip therefore had zero open days, so his own trek page rendered "No
+open dates right now" *instead of* the request form — no booking request could
+be sent to him at all — and he was absent from every dated search. The 49
+guides whose calendars worked were seed data. `supabase/seed.sql` handed each
+demo guide 271 open rows, which is exactly why this looked healthy in
+development for months.
+
+**The decision: absence means open, derived on read, out to a one-year
+horizon** (`app/lib/open-days.ts`, migration 0111). Every reader now queries
+the taken days and subtracts — a few hundred rows across the roster instead of
+thirteen thousand.
+
+The alternative was to materialise the rows: a trigger on verification plus a
+rolling job, mirroring what the seed does by hand. Rejected because it needs a
+backfill, needs a job that must never fail, stores ~365 rows per guide to say
+nothing, and ends in a horizon that runs out in silence — the same bug again,
+a year later. Deriving it has no state to go stale.
+
+Two things fell out of it. `/match` was scoring availability off a truncated
+set: `.limit(5000)` against roughly 17,500 open rows, silently. And the seed
+now stores only blocked days, so a fresh clone has production's shape rather
+than one that hides this class of bug.
+
+Rows with `status = 'open'` remain valid and mean the same as no row, so the
+guide's own calendar screen and the 13,000 seeded rows needed no migration.
+
+## The guide's home screen is a list, not a menu
+
+The founder, on a phone: *"Your experiences → Your journeys → Booked trips →
+Block dates → Your money → Reviews → these areas look confusing as hell to the
+guide."*
+
+The styling was not the problem. Home had four shapes competing to be the
+list — a 2×3 grid of six nouns with arrows, a full-width card for questions,
+another for writing up a trek, and a pair of stat tiles — pointing at the same
+handful of screens, three of them twice. Two labels were actively misleading:
+"Your experiences" is the trips a guide sells, "Booked trips" is the trips
+they lead, and nothing in either phrase says which is which to somebody
+reading English as a third language. They are **"Trips you offer"** and
+**"Trips you're leading"** now.
+
+One list, built from data (`app/lib/guide-home.ts`) rather than six
+hand-written `<Link>`s with their hrefs typed into the JSX, which is how the
+screen drifted out of step with itself in the first place.
+
+The tab bar went back to five. Its own docblock said five was the 360px
+ceiling and it had grown to six; "Experiences" is the longest word on it and
+does not fit in sixty pixels. It is also the odd one out in kind — the other
+four are places a guide goes because somebody is waiting.
+
+And "Journeys from other guides" is gone from `/g`, as asked. It was built so
+a guide could learn what a good write-up looks like; the "Write up a trek" row
+keeps that door open without giving a guide's own admin screen over to other
+people's work.

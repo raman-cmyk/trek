@@ -5,6 +5,7 @@ import { one } from "~/lib/ops.server";
 import { guideRatings } from "~/lib/ratings.server";
 import { absoluteUrl } from "~/lib/seo";
 import { offeringPath } from "~/components/public/cards";
+import { TAKEN_STATUSES, horizonEnd, openDaysIn } from "~/lib/open-days";
 
 type Kind = "trek" | "experience";
 
@@ -35,7 +36,7 @@ export async function loadOfferingDetail(
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: photos }, { data: permits }, { data: avail }, { data: reviews }, { data: routeRow }] =
+  const [{ data: photos }, { data: permits }, { data: busyDays }, { data: reviews }, { data: routeRow }] =
     await Promise.all([
       client
         .from("offering_photos")
@@ -46,12 +47,19 @@ export async function loadOfferingDetail(
       isTrek && o.route_id
         ? client.from("permits").select("cost_usd_cents").eq("route_id", o.route_id)
         : Promise.resolve({ data: [] as { cost_usd_cents: number }[] }),
+      // The days this guide is NOT free for. Absence means open (open-days.ts):
+      // nothing in the app ever writes an "open" row, so asking for them
+      // returned an empty list for every guide who joined through the real
+      // form — and an empty list is why this page rendered "No open dates
+      // right now" instead of the request form for a verified guide with a
+      // live trip.
       client
         .from("availability")
         .select("day")
         .eq("guide_id", o.guide_id)
-        .eq("status", "open")
+        .in("status", TAKEN_STATUSES as unknown as string[])
         .gte("day", today)
+        .lte("day", horizonEnd(today))
         .order("day")
         .limit(400),
       client
@@ -133,7 +141,11 @@ export async function loadOfferingDetail(
     // guide must be open for EVERY day of the trek from that start (audit 6.3 —
     // a 14-day EBC could previously be requested for tomorrow on a 1-day gap).
     availableDays: bookableStartDays(
-      (avail ?? []).map((a: { day: string }) => a.day),
+      openDaysIn(
+        { from: today, to: horizonEnd(today) },
+        (busyDays ?? []).map((a: { day: string }) => a.day),
+        today,
+      ),
       isTrek ? o.days : 1,
       today,
     ),

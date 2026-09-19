@@ -341,9 +341,14 @@ function ConfigBody({
       ) : null}
 
       {availableDays.length === 0 ? (
+        /* A guide is free unless they say otherwise (app/lib/open-days.ts),
+           so this now means what it says: {guide} has blocked or sold every
+           day of the next year. It used to be the normal state of every guide
+           who joined through the real application form, and it hid the
+           request form from their own trek page. */
         <p className="rounded-button bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No open dates right now — message {o.guide_first_name} above and they can
-          open their calendar for you.
+          {o.guide_first_name} has no free days left this year — message them
+          above and ask what they can do.
         </p>
       ) : notice.canAskAgain && notice.state !== "none" ? (
         /* The answer was no, or nobody answered. Say so, keep the guide, and
