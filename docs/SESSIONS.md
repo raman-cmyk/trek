@@ -3550,3 +3550,122 @@ the same generic file. The Everest Base Camp hero is a forested gorge with no
 mountain in it. The founder's answer: *"All of the guides and experiences that
 we have rn are place holders chill"* — so the gallery is built and waiting,
 and real photographs are a content job, not a code one.
+
+---
+
+## Session — the Viator round, part two
+
+Five items from two annotated comparisons against Viator plus three lines of
+text. Four were real work; the fifth turned out to be a switch, not a feature.
+
+### 1. `/routes` is one grid
+
+Twelve regions over twenty-four routes meant **seven shelves held exactly one
+route** — a heading, a rule and a lone card in a three-wide row, seven times
+down the page. Worse, the page disagreed with itself: the shelf counts were
+built from the list minus the three featured routes while the filter bar
+counted all twenty-four, and the sort control only ordered *within* a shelf.
+
+Region is a filter now, in the `FilterSheet` that was already on the page,
+alongside the three other questions people ask of a trek: how hard, how long,
+and what month they are coming. The length buckets split the twenty-four
+3/7/8/6; the month list is built from the data, so January is not offered
+(nothing is in season) and June to August comes back with three, which is the
+honest answer about the monsoon.
+
+The page also ended on the same green face band the site footer already ends
+on — two identical bands, same headline, same sentence, stacked. Gone, with
+the fifty-four-avatar query behind it.
+
+### 2. The homepage review
+
+One quotation on a half-screen stock photograph of Gokyo, in a square-cornered
+card pulled up over the left third of it. The photograph had nothing to do
+with the review, the right half was empty, and the quotation named nobody and
+linked nowhere — so the most persuasive thing on the page was the one thing a
+reader could not act on.
+
+Three now, each about a different guide, each with that guide's face, name,
+rating and the trip they led. `topReviews()` keeps the floors `featuredReview`
+already applied and passes over a second review about a guide already quoted:
+Pemba has the two strongest reviews we hold, and three quotations about one man
+argues for Pemba rather than for a marketplace of fifty-six.
+
+### 3. Trip facts on the trek page
+
+> "The section directly below the images includes details like timing, pickup
+> availability, discounts and English language availability, and a 'Why
+> travellers love this' block."
+
+We held nearly all of it, scattered: the meeting point two screens down, how
+hard it is at the very bottom under "Other details", the languages beside it,
+the party size only inside the booking widget. One block now, under "Message
+Pemba for free".
+
+`app/lib/trip-facts.ts` shows only what a trip has filled in. Viator's row
+includes "Mobile ticket"; we issue no tickets, so there is no such line and a
+test says there never will be. "Cheaper with more of you" appears only where
+`computeExperiencePricing` actually returns less per person at max party than
+at min. A 4:30 start — the most consequential fact about a sunrise hike, on no
+page until now — sits under the duration.
+
+### 4. A slider on the experience card
+
+`public_offerings` carries `cover_photo_url` and no photo array, so a card had
+one picture even where a guide had uploaded five. One batched `offering_photos`
+select feeds all seven places that render a card. `Carousel` gains
+`size="card"`. Three things the browser caught that a test could not:
+
+- the title link stretches an invisible `::after` over the whole card, so the
+  arrows sat under it and a tap opened the trip instead of turning the photo;
+- the guide chip overlaps the photo's bottom edge and was sitting on the dots;
+- every frame is in the DOM at opacity 0 and all of them get fetched — one
+  hero can afford that, twelve tiles × five photographs over 3G cannot. A card
+  renders the frame on screen and the next one, and always the first.
+
+### 5. Categories: the system existed and was switched off
+
+The whole thing shipped in 0067 and worked. What did not exist was a way to
+reach it from a guide: eighteen action intents on `ops.people.$id.tsx` and not
+one mention of categories, so putting one guide in five rows meant opening five
+panels on the category page and scrolling the whole roster in each.
+`guide_categories_guide_idx` was created for that query and used by nothing.
+
+Also fixed: `guide_categories.sort` was dead — `membersOf` has ordered by it
+since 0067 and no screen ever wrote it, so every hand-pick sat at 100.
+
+And the reason it looked missing is now said out loud on both screens. All four
+categories were drafts with nobody in them, so the homepage went on showing the
+hard-coded rows from `intents.ts` and nothing done in ops changed anything a
+visitor could see.
+
+### Checked on the live site
+
+- `/routes`: one grid of twenty-four, "All 24 routes", no lonely shelves, one
+  face band.
+- The homepage review band at 1280 and 360. **At 360 the cards rendered 447px
+  wide and were silently clipped by an ancestor's `overflow-hidden`** — no
+  scrollbar, just cut words. The grid column was floored by the nowrap "led
+  their &lt;trip&gt;" line; `min-w-0` on the grid items.
+- `/treks/ebc-classic-with-pemba`: eight facts and the review block, at 1280
+  and 390.
+- An experience card on `/experiences`: arrows on hover, the photo turns over,
+  the URL does not change. With JavaScript off, two frames in the DOM and the
+  first one visible.
+- **Categories end to end**: one guide into three rows with positions, two more
+  guides into one of them, that row switched live, and the row appeared on the
+  homepage above the built-in ones with the guide first. Put back to a draft
+  afterwards — which rows go live is the founder's call, not a test's.
+
+Green: 1,957 tests in 128 files, typecheck clean, build passing. No migration
+this session.
+
+### Waiting
+
+Five phone screenshots arrived mid-session and are queued: show-password on the
+client sign-in, a way to close the booking calendar, a reminder notification at
+every pending step of a booking, a document upload button that looks like a
+button, and the "Departing between From – To" filter.
+
+**The credentials still need rotating** — the Supabase token, the two
+Cloudflare tokens and the database password.

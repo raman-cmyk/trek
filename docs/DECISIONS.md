@@ -887,3 +887,45 @@ look at, and limiting a trek to a single image. Every kind of trip now opens
 on the carousel, which rotates on its own (paused on hover, focus and touch,
 and never for `prefers-reduced-motion`). The day-by-day is still further down,
 where it belongs.
+
+## `/routes` is one grid, not shelves
+
+The shelves were a defensible idea — "a reader picks a region first" — and the
+data killed it. Twelve regions over twenty-four routes puts seven of them alone
+on a shelf, and a heading with one card under it reads as a bug. Region is a
+filter now. The facets are the four questions somebody actually asks about a
+trek, and each is built from the data rather than from a list: the month filter
+does not offer January because nothing is in season then, and offering a month
+that returns an empty page is the same lie as a shelf with one card on it.
+
+`groupByRegion` stays in `route-cards.ts` — the trail picker built last round
+uses it for its `<optgroup>`s.
+
+## Only claim what we hold
+
+The trip facts strip is modelled on Viator's and deliberately misses a line of
+it. Viator says "Mobile ticket"; we issue no ticket, and a tick beside a thing
+that does not exist is exactly what `standards.ts` was written to stop. Same
+rule for "Group discounts", which Viator prints on every listing: ours appears
+only where the real pricing function returns a lower per-person figure at max
+party than at min.
+
+## A card renders the frame it needs, not all of them
+
+`Carousel` keeps every frame in the DOM at opacity 0, which is how it SSRs a
+complete page with JavaScript off. One hero can afford that. Twelve tiles of
+five photographs on a browse grid is sixty images fetched on the cheap Android
+phone over 3G that rule 6 is about, so `size="card"` renders the frame on
+screen and the one after it — and always the first, so the no-JavaScript page
+still shows a photograph.
+
+## The categories were a switch, not a feature
+
+Asked for "a system in which i can create a categorization based on profile",
+the honest answer was that it shipped in 0067 and worked. Four categories
+existed, all drafts, none with a member — so the homepage showed the hard-coded
+rows from `intents.ts` and nothing done in ops changed anything visible. The
+build was the missing half: a way to reach it from a guide rather than only
+from a category, the dead `sort` column wired to a control, and a sentence on
+both screens saying what makes a row appear. Writing a second category system
+beside the first would have been the easy thing and the wrong one.
