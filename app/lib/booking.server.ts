@@ -337,7 +337,7 @@ export async function fulfillDeposit(
 
   // Checkout may have pre-created this row as `pending` (PI reuse) — settle it
   // rather than inserting a duplicate.
-  await admin.from("payments").upsert(
+  const { error: payErr } = await admin.from("payments").upsert(
     {
       booking_id: bookingId,
       stripe_payment_intent: paymentIntentId,
@@ -347,6 +347,16 @@ export async function fulfillDeposit(
     },
     { onConflict: "stripe_payment_intent,type" },
   );
+  // This is the record that money arrived, and it used to be fired without
+  // anyone reading the answer. It always failed (0114), so the first real
+  // deposit taken on this platform advanced a booking while leaving the
+  // payments table empty. If it fails again, the booking must NOT advance:
+  // a trek marked paid with no payment row cannot be reconciled or refunded,
+  // and the idempotency guard above reads this very row.
+  if (payErr) {
+    console.error("[fulfillDeposit] could not record payment", bookingId, payErr.message);
+    throw new Error(`could not record payment for booking ${bookingId}: ${payErr.message}`);
+  }
 
   await advanceOnDepositPaid(admin, bookingId);
   return { applied: true };

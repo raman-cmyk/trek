@@ -88,7 +88,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       clientSecret: created.clientSecret,
       mock: created.mock,
     };
-    await admin.from("payments").upsert(
+    // The conflict target has to name the real index, which is on the PAIR
+    // (see 0114). Naming the column alone was a second reason this upsert
+    // could never succeed, on top of the index being partial.
+    const { error: payErr } = await admin.from("payments").upsert(
       {
         booking_id: b.id,
         stripe_payment_intent: created.paymentIntentId,
@@ -96,8 +99,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         amount_usd_cents: b.deposit_usd_cents,
         status: "pending",
       },
-      { onConflict: "stripe_payment_intent" },
+      { onConflict: "stripe_payment_intent,type" },
     );
+    // Looked at, not fired and forgotten. This write failing silently for
+    // months is why a real deposit could succeed at Stripe and leave no trace
+    // in the payments table. It must not block the checkout — the intent is
+    // made and the trekker can still pay — but it must be visible.
+    if (payErr) console.error("[checkout] could not record pending payment", payErr.message);
   }
 
   const balance = b.total_usd_cents - b.deposit_usd_cents;
