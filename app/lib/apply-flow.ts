@@ -227,3 +227,51 @@ export function resumeAt(saved: number | null | undefined, values: Record<string
   }
   return wanted;
 }
+
+/* ── Fields that can appear more than once in one form ───────────────────── */
+
+/**
+ * Names the browser may send several times over.
+ *
+ * `FormData.entries()` yields one pair per ticked box, so code that assigns
+ * `out[name] = value` in a loop keeps only the last. That is what happened to
+ * the application draft: a guide ticked five regions, stepped away, came back
+ * to one, and reasonably concluded the field meant "pick your region".
+ */
+export const REPEATED = new Set(["regions"]);
+
+/** The separator. A unit separator cannot occur in a region name. */
+const SEP = "\u001f";
+
+/** Join values for storage in the flat draft record. */
+export function joinRepeated(existing: string | undefined, value: string): string {
+  return existing ? `${existing}${SEP}${value}` : value;
+}
+
+/** Read them back out. Tolerates a draft written before this existed. */
+export function splitRepeated(raw: string | undefined | null): string[] {
+  if (!raw) return [];
+  return raw.split(SEP).filter(Boolean);
+}
+
+/**
+ * The walked-trails rows out of the draft's hidden JSON field.
+ *
+ * Never throws: a corrupt draft should cost a guide their trail list, not the
+ * whole page.
+ */
+export function parseWalkedDraft(raw: string | undefined | null): Array<{
+  routeId: string;
+  times: number;
+}> {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((r) => r && typeof r.routeId === "string" && Number.isFinite(Number(r.times)))
+      .map((r) => ({ routeId: String(r.routeId), times: Math.max(1, Math.floor(Number(r.times))) }));
+  } catch {
+    return [];
+  }
+}

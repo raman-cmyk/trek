@@ -55,6 +55,19 @@ export function AuthSplit({
         )}
       >
         <div className="order-2 flex flex-col justify-center px-6 py-8 sm:px-10 sm:py-12 md:order-1">
+          {/* The way back to the site.
+              Every sign-in screen had the wordmark as plain text, so somebody
+              who landed on /ops/login or /login and simply wanted the site had
+              no way out but the browser's back button. Only /signup linked it.
+              The picture on the right does carry one link, but it is
+              `hidden md:block`, so on a phone there was nothing at all —
+              which is the screen most of these are read on. */}
+          <Link
+            to="/"
+            className="mb-5 inline-flex w-fit items-center gap-1.5 font-display text-lg text-ink-soft transition-colors hover:text-ink"
+          >
+            <span aria-hidden>←</span> Guides of Nepal
+          </Link>
           {children}
         </div>
 

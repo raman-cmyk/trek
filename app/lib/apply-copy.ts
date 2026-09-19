@@ -151,6 +151,14 @@ export const T = {
   dayRateHint: { en: "In rupees. You keep all of it.", ne: "रुपैयाँमा। पूरै तपाईंको हुन्छ।" },
   languagesLabel: { en: "Languages you guide in", ne: "तपाईं गाइड गर्ने भाषाहरू" },
   regionsLabel: { en: "Regions you work in", ne: "तपाईं काम गर्ने क्षेत्रहरू" },
+  // The field had no hint at all, while the one directly below it did — and
+  // it showed: guides average 0.9 regions each, i.e. almost everybody ticks
+  // exactly one, reading it as "your region" rather than "everywhere you
+  // would take work". The line says both what to tick and what it buys.
+  regionsHint: {
+    en: "Tick every region you would take work in, not just the one you live in. This is how trekkers browsing Everest or Annapurna find you.",
+    ne: "तपाईं काम गर्न जान सक्ने सबै क्षेत्र छान्नुहोस् — बस्ने ठाउँ मात्र होइन। यसैबाट एभरेस्ट वा अन्नपूर्ण हेर्ने ट्रेकरले तपाईंलाई भेट्छन्।",
+  },
   routesLabel: { en: "Trails you have led", ne: "तपाईंले नेतृत्व गरेका बाटोहरू" },
   routesHint: { en: "Tap a trail, then set how many times", ne: "बाटो छान्नुहोस्, कति पटक भन्नुहोस्" },
   hookLabel: { en: "One line about you", ne: "तपाईंको बारेमा एक वाक्य" },

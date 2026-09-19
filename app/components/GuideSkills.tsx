@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MAX_SKILLS, SKILL_GROUPS } from "~/lib/guide-skills";
+import { MAX_PER_GROUP, SKILL_GROUPS, countByGroup } from "~/lib/guide-skills";
 
 /**
  * What a guide is interesting for, as chips.
@@ -10,6 +10,11 @@ import { MAX_SKILLS, SKILL_GROUPS } from "~/lib/guide-skills";
  * when you already know the word you are looking for, and a live count,
  * because the cap is the one rule here and finding out about it by having a
  * tick refused is a bad way to learn it.
+ *
+ * The count is PER GROUP now. It used to be one pool of eight spent in the
+ * order the boxes happen to sit on the page, so a guide who ticked generously
+ * in the first group was locked out of the last one before scrolling to it,
+ * with a single counter that gave no clue that was what had happened.
  *
  * The chips are `has-[:checked]:` on a visually hidden checkbox, the same
  * pattern as the regions picker — the whole thing renders on the server and
@@ -28,7 +33,7 @@ export function GuideSkills({
   const [q, setQ] = useState("");
 
   const needle = q.trim().toLowerCase();
-  const full = chosen.length >= MAX_SKILLS;
+  const counts = countByGroup(chosen);
 
   const groups = SKILL_GROUPS.map((g) => ({
     ...g,
@@ -60,32 +65,40 @@ export function GuideSkills({
           aria-label="Search what you are good at"
           className="min-w-0 flex-1 basis-40 rounded-button border border-border bg-card px-3 py-2 text-base text-ink outline-none focus:border-primary"
         />
-        <p
-          className={`shrink-0 text-sm ${full ? "font-medium text-primary" : "text-ink-soft"}`}
-          aria-live="polite"
-        >
-          {chosen.length} of {MAX_SKILLS} chosen
+        <p className="shrink-0 text-sm text-ink-soft" aria-live="polite">
+          {chosen.length} chosen
         </p>
       </div>
 
-      {full && (
-        <p className="-mt-1 text-xs text-ink-soft">
-          That is the limit. Untick one to put another in its place — eight
-          honest ones beat twenty hopeful.
-        </p>
-      )}
+      <p className="-mt-1 text-xs text-ink-soft">
+        Up to {MAX_PER_GROUP} in each group below — a few honest ones beat
+        twenty hopeful.
+      </p>
 
-      {groups.map((group) => (
+      {groups.map((group) => {
+        const used = counts[group.key] ?? 0;
+        const left = Math.max(0, MAX_PER_GROUP - used);
+        return (
         <fieldset key={group.key}>
-          <legend className="text-xs font-medium uppercase tracking-wide text-ink-soft">
-            {group.label}
+          <legend className="flex w-full items-baseline justify-between gap-2 text-xs font-medium uppercase tracking-wide text-ink-soft">
+            <span>{group.label}</span>
+            {/* Each group carries its own allowance, where the group is —
+                so "it ran out" is visible before it happens, and in the
+                place it happened. */}
+            <span
+              className={left === 0 ? "font-semibold normal-case text-primary" : "normal-case"}
+              aria-live="polite"
+            >
+              {left === 0 ? `${MAX_PER_GROUP} of ${MAX_PER_GROUP} — untick one to swap` : `${left} of ${MAX_PER_GROUP} left`}
+            </span>
           </legend>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {group.skills.map((sk) => {
               const on = chosen.includes(sk.key);
-              // Full and not ticked: still shown, still readable, just not
-              // takeable. Hiding them would make the list jump about.
-              const locked = full && !on;
+              // This group is full and this chip is not ticked: still shown,
+              // still readable, just not takeable. Hiding them would make the
+              // list jump about.
+              const locked = left === 0 && !on;
               return (
                 <label
                   key={sk.key}
@@ -112,7 +125,8 @@ export function GuideSkills({
             })}
           </div>
         </fieldset>
-      ))}
+        );
+      })}
 
       {groups.length === 0 && (
         <p className="text-sm text-ink-soft">Nothing matches “{q.trim()}”.</p>

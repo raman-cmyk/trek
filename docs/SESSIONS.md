@@ -3448,3 +3448,59 @@ text, worked.
 
 Green: 1,870 tests in 123 files, typecheck clean, build passing. Applied and
 deployed (`90764b95`).
+
+---
+
+## Session — four screenshots (and one already fixed)
+
+The bank-name note was shipped earlier the same day; checked on the live site
+and left alone.
+
+### Built
+
+- **`/apply` regions**: a hint line in both languages, **Solukhumbu added** to
+  the region list (Pikey Peak could never have a guide without it), and the
+  draft bug fixed so ticks survive leaving the page.
+- **Trails, typed not scrolled**: new shared `app/components/RouteField.tsx` —
+  a grouped `<datalist>` over the 24 routes — replacing the flat A–Z select in
+  *both* the application form and the profile, which had separate pickers.
+- **Chips**: `MAX_SKILLS = 8` shared → `MAX_PER_GROUP = 3`, each group showing
+  its own allowance. The save now reports what it kept instead of truncating
+  silently.
+- **Voice**: `VoiceRecorder` + `app/lib/voice-recording.ts` (16 tests). Record,
+  hear it back, re-record, send. Feature-detected after mount, renders nothing
+  where it cannot work, file picker never hidden.
+- **`AuthSplit`**: a wordmark link home — one file, six sign-in screens.
+
+### Three bugs the browser found that the tests did not
+
+Chromium would not trust the agent proxy's CA, so earlier sessions had no
+browser at all. Importing the bundle into the NSS store fixed it, and the
+first real run immediately paid for itself:
+
+1. **The voice upload was refused.** Chromium reports
+   `audio/webm;codecs=opus`; the route and bucket allow-lists hold bare types.
+   `400 Sound files only`. Now stripped, and pinned in a test.
+2. **Regions still vanished on reload** after the first fix — the restore
+   handed values to components that read them only at mount.
+3. **And still vanished after the second fix** — the draft save effect did not
+   depend on the form snapshot, so a checkbox tick never wrote a draft at all.
+
+Each was hidden behind the one before it, and none was visible from the SSR
+HTML, because this form renders its steps client-side.
+
+### Checked on the live site
+
+- Typing "eve" in the trails picker → Everest Base Camp, Everest Three Passes,
+  Everest View & Tengboche. A trail we do not list warns; a real one does not.
+- 24 routes in 12 region shelves, with the English glosses.
+- Five regions ticked, full page reload, **all five still ticked**.
+- Posting 5 chips in one group and 3 in another keeps 3 + 3 and answers
+  *"Saved 6. 2 ticks did not fit — 3 to a group."*
+- A four-second recording made in the browser: uploaded `200`, stored `.webm`,
+  saved, and playing on the public profile.
+- Home link present on `/ops/login`, `/login`, `/g/login`, `/forgot`.
+- 360px throughout, no horizontal overflow.
+
+Green: 1,890 tests in 124 files, typecheck clean, build passing. Deployed
+(`661a2c7a`).

@@ -8,7 +8,7 @@ import { PENDING_CHECKS } from "~/lib/guide-checks";
 import { parseLanguages, type LanguageRow } from "~/lib/guide-languages";
 import { parseRegions } from "~/lib/guide-regions";
 import { parseRoutesWalked } from "~/lib/guide-routes";
-import { RoutesWalked } from "~/components/RoutesWalked";
+import { RoutesWalked, type WalkedRoute } from "~/components/RoutesWalked";
 import { HEARD_OPTIONS, cleanDetail, heardProblem } from "~/lib/heard-about";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { emergencyPatch, parseEmergency } from "~/lib/emergency";
@@ -16,7 +16,16 @@ import { pageMeta, absoluteUrl } from "~/lib/seo";
 import { createAdminClient, getEnv } from "~/lib/supabase.server";
 import { earningsFor, formatNpr, rateRange, usdCentsFromNpr } from "~/lib/guide-earnings";
 import { pickLang, problemText, t, tf, LANGS, type Lang } from "~/lib/apply-copy";
-import { NUMBERED, resumeAt, stepAt, validateStep } from "~/lib/apply-flow";
+import {
+  NUMBERED,
+  REPEATED,
+  joinRepeated,
+  parseWalkedDraft,
+  resumeAt,
+  splitRepeated,
+  stepAt,
+  validateStep,
+} from "~/lib/apply-flow";
 import { licenceExpiryProblem } from "~/lib/bikram";
 import { TrailProgress } from "~/components/apply/TrailProgress";
 import { LiveGuideCard } from "~/components/apply/LiveGuideCard";
@@ -372,6 +381,18 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
   const [lang, setLang] = useState<Lang>(browserLang ?? "en");
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<Record<string, string>>({});
+  // The two pickers that own their own DOM and so cannot be restored through
+  // `values`.
+  //
+  // Both read their prop ONCE, at mount — `GuideRegions` through
+  // `defaultChecked`, `RoutesWalked` through `useState(initial)`. The restore
+  // effect necessarily runs after that first render, so handing them a value
+  // later changes nothing: the ticks came back in the draft and never reached
+  // the screen. `draftKey` changes when the draft lands and remounts them,
+  // which is the only way an uncontrolled tree can be re-seeded.
+  const [draftRegions, setDraftRegions] = useState<string[]>([]);
+  const [draftRoutes, setDraftRoutes] = useState<WalkedRoute[]>([]);
+  const [draftKey, setDraftKey] = useState(0);
   const [languages, setLanguages] = useState<LanguageRow[]>([
     { language: "Nepali", proficiency: "native" },
   ]);
@@ -407,7 +428,11 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
       // and, on restore, be written into a text field as that literal.
       if (v instanceof File) continue;
       if (k === "password") continue;
-      out[k] = String(v);
+      // `regions` is a repeated checkbox name. Assigning each one in turn
+      // left only the LAST region ticked in the draft, so a guide who ticked
+      // five and came back found one — which is half of why the field reads
+      // as "pick your region". Repeated names are kept as a list.
+      out[k] = REPEATED.has(k) ? joinRepeated(out[k], String(v)) : String(v);
     }
     return out;
   }, [values]);
@@ -424,6 +449,14 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
         vals[k] = String(v);
       }
       setValues(vals);
+      // Put the DOM-owned pickers back. `setValues` alone never could: it
+      // feeds the controlled TextFields and nothing else, so the regions and
+      // the walked trails were saved and then silently dropped on the floor.
+      const regions = splitRepeated(vals.regions);
+      const walked = parseWalkedDraft(vals.routes_walked);
+      setDraftRegions(regions);
+      setDraftRoutes(walked);
+      if (regions.length || walked.length) setDraftKey((k) => k + 1);
       const drafted = parseLanguages(JSON.stringify(d.languages ?? []));
       if (drafted.length) setLanguages(drafted);
       if (d.__lang === "ne" || d.__lang === "en") setLang(d.__lang);
@@ -446,7 +479,12 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
     } catch {
       /* private mode: a lost draft beats a thrown page */
     }
-  }, [values, languages, step, lang, readForm]);
+    // `formSnapshot` is in here on purpose. It is the only dependency that
+    // moves when a field the components own themselves changes — a region
+    // ticked, a trail added — and without it the draft was written only when
+    // a *controlled* field changed. So a guide could tick five regions, leave,
+    // and come back to none: the ticks were never in the draft to restore.
+  }, [values, languages, step, lang, readForm, formSnapshot]);
 
   const here = stepAt(step);
   // Recomputed on every render so an uncontrolled field's change is picked up
@@ -560,6 +598,10 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
                 // writes straight to the DOM — puts the whole form in state,
                 // which saves the draft and refreshes validation.
                 onChange={() => setFormSnapshot(readForm())}
+                // A click, because adding or removing a walked trail is a
+                // button press that rewrites a hidden field — React state,
+                // which fires no change event of its own.
+                onClick={() => setFormSnapshot(readForm())}
                 className="mx-auto mt-8 max-w-[35rem]"
               >
                 {/* Honeypot — humans never see it, bots fill it. */}
@@ -630,15 +672,19 @@ export default function Apply({ loaderData, actionData }: Route.ComponentProps) 
                   </div>
                   <div>
                     <p className="text-ink">{t("regionsLabel", lang)}</p>
+                    <p className="mt-1 text-sm text-muted">{t("regionsHint", lang)}</p>
                     <div className="mt-2">
-                      <GuideRegions />
+                      {/* `selected` matters: without it a restored draft put
+                          the ticks nowhere, so a guide who stepped back and
+                          forward found the field empty again. */}
+                      <GuideRegions key={`regions-${draftKey}`} selected={draftRegions} />
                     </div>
                   </div>
                   <div>
                     <p className="text-ink">{t("routesLabel", lang)}</p>
                     <p className="mt-1 text-sm text-muted">{t("routesHint", lang)}</p>
                     <div className="mt-2">
-                      <RoutesWalked routes={routes} />
+                      <RoutesWalked key={`walked-${draftKey}`} routes={routes} initial={draftRoutes} />
                     </div>
                   </div>
                   <TextField

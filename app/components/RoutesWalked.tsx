@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MAX_TIMES_WALKED } from "~/lib/guide-routes";
+import { RouteField, type PickableRoute } from "~/components/RouteField";
 
 /**
  * Which trails a guide has walked, and how many times.
@@ -14,6 +15,20 @@ import { MAX_TIMES_WALKED } from "~/lib/guide-routes";
  * saves nothing until the form is sent — there is no account to save against
  * yet. Whole rows go in and out at once: a half-typed row cannot be submitted,
  * which is what stops "Manaslu, ? times" reaching the office.
+ *
+ * You TYPE the trail now. It was a flat A-Z `<select>` over twenty-four
+ * routes, with the region fetched from the database and never rendered — so
+ * Everest Base Camp, Everest Three Passes and Everest View sat apart from
+ * Gokyo Lakes with nothing connecting them, and a guide had to know our name
+ * for their own trek. **Five guides out of fifty-six had filled this in**,
+ * for the field the form itself calls the first thing a trekker reads.
+ *
+ * A native `<datalist>`, grouped by region, for the reasons `DistrictPicker`
+ * already gives about the seventy-seven districts two fields further down:
+ * it is the Android keyboard's own filter, it needs no JavaScript to be
+ * usable, it costs nothing on a slow connection, and a guide can type "eve"
+ * and see the three Everest routes together. A hand-rolled listbox would look
+ * better on a laptop and be worse on the phone this page is for.
  */
 
 export interface WalkedRoute {
@@ -31,18 +46,21 @@ export function RoutesWalked({
   initial?: WalkedRoute[];
 }) {
   const [rows, setRows] = useState<WalkedRoute[]>(initial);
-  const [routeId, setRouteId] = useState("");
+  const [typed, setTyped] = useState("");
+  const [picked, setPicked] = useState<PickableRoute | null>(null);
   const [times, setTimes] = useState("");
 
   const nameOf = (id: string) => routes.find((r) => r.id === id)?.name ?? "That route";
   const left = routes.filter((r) => !rows.some((w) => w.routeId === r.id));
+
   const n = Math.round(Number(times));
-  const canAdd = !!routeId && Number.isFinite(n) && n >= 1;
+  const canAdd = !!picked && Number.isFinite(n) && n >= 1;
 
   const add = () => {
-    if (!canAdd) return;
-    setRows((all) => [...all, { routeId, times: Math.min(MAX_TIMES_WALKED, n) }]);
-    setRouteId("");
+    if (!picked || !canAdd) return;
+    setRows((all) => [...all, { routeId: picked.id, times: Math.min(MAX_TIMES_WALKED, n) }]);
+    setTyped("");
+    setPicked(null);
     setTimes("");
   };
 
@@ -77,22 +95,17 @@ export function RoutesWalked({
       )}
 
       <div className="grid grid-cols-[1fr_5.5rem_auto] items-end gap-2">
-        <label className="block text-sm text-ink-soft">
-          Route
-          <select
-            value={routeId}
-            onChange={(e) => setRouteId(e.target.value)}
-            className={field}
-            aria-label="Which route have you walked"
-          >
-            <option value="">— pick one —</option>
-            {left.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* No `name`: the application posts its whole list as one hidden
+            JSON field below, not a route id per row. */}
+        <RouteField
+          routes={left}
+          name=""
+          value={typed}
+          onChange={(next, match) => {
+            setTyped(next);
+            setPicked(match);
+          }}
+        />
         <label className="block text-sm text-ink-soft">
           Times
           <input

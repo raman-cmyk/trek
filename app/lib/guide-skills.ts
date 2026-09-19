@@ -98,26 +98,80 @@ export const SKILLS = SKILL_GROUPS.flatMap((g) => g.skills);
 const BY_KEY = new Map(SKILLS.map((s) => [s.key, s]));
 
 /**
- * How many one guide may claim.
+ * How many one guide may claim, PER GROUP.
  *
- * Without a cap the honest guide ticks four and the optimistic one ticks
- * twenty-three, and the twenty-three-tick guide wins every filter. A limit is
- * what keeps this a claim rather than a checklist.
+ * The cap itself is not negotiable: without one the honest guide ticks four
+ * and the optimistic one ticks twenty-three, and the twenty-three-tick guide
+ * wins every filter. A limit is what keeps this a claim rather than a
+ * checklist.
+ *
+ * But it used to be one pool of eight shared across all five groups, counted
+ * in the order the boxes appear on the page — so a guide who ticked
+ * generously in "What you know" was locked out of "What you bring" before
+ * they had scrolled to it, and had no way to know that was what had happened.
+ * The founder read it exactly right: *"I think there is a limit... which
+ * might mean I have not finished all the categories before the number of
+ * options I can select runs out."*
+ *
+ * Three per group. Fifteen possible rather than eight, so a real guide can
+ * say something in every category — and still nobody can claim everything.
  */
-export const MAX_SKILLS = 8;
+export const MAX_PER_GROUP = 3;
+
+/** Which group a key belongs to, for counting. */
+const GROUP_OF = new Map(
+  SKILL_GROUPS.flatMap((g) => g.skills.map((s) => [s.key, g.key] as const)),
+);
+
+export function skillGroupOf(key: string): string | null {
+  return GROUP_OF.get(key) ?? null;
+}
 
 export function skillLabel(key: string): string | null {
   return BY_KEY.get(key)?.label ?? null;
 }
 
-/** Keys we recognise, deduplicated, capped. Anything else is dropped. */
+/**
+ * Keys we recognise, deduplicated, capped within each group.
+ *
+ * Order is preserved, and a group that is over its allowance loses its LAST
+ * ticks rather than its first — so what a guide sees kept is what they ticked
+ * first, which is the one they meant most.
+ */
 export function parseSkills(raw: Iterable<unknown>): string[] {
   const out: string[] = [];
+  const perGroup: Record<string, number> = {};
   for (const v of raw) {
     const key = typeof v === "string" ? v.trim() : "";
     if (!BY_KEY.has(key) || out.includes(key)) continue;
+    const group = GROUP_OF.get(key) ?? "";
+    if ((perGroup[group] ?? 0) >= MAX_PER_GROUP) continue;
+    perGroup[group] = (perGroup[group] ?? 0) + 1;
     out.push(key);
-    if (out.length >= MAX_SKILLS) break;
   }
   return out;
+}
+
+/** How many of each group are ticked. Both the form and the server count. */
+export function countByGroup(keys: Iterable<string>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const g of SKILL_GROUPS) counts[g.key] = 0;
+  for (const key of keys) {
+    const group = GROUP_OF.get(key);
+    if (group) counts[group] += 1;
+  }
+  return counts;
+}
+
+/**
+ * What to tell a guide whose ticks did not all survive.
+ *
+ * The save used to truncate in silence and answer "ok" — and these chips are
+ * built to work with JavaScript off, so somebody could tick fifteen, press
+ * Save, be congratulated, and lose seven without a word.
+ */
+export function droppedNote(asked: number, kept: number): string | null {
+  if (kept >= asked) return null;
+  const lost = asked - kept;
+  return `Saved ${kept}. ${lost === 1 ? "One tick" : `${lost} ticks`} did not fit — ${MAX_PER_GROUP} to a group.`;
 }

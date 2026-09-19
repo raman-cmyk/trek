@@ -708,3 +708,87 @@ verified guide now sees a PAN field on the money page — where a tax number
 belongs — validated as nine digits, and blocking nothing. Supplying one moves
 the check off the `not_required` that 0109 left it at; clearing it does not
 drag the office back into reviewing something that is no longer there.
+
+---
+
+## Three fields nobody was filling in
+
+Four of the five screenshots in this round were separate complaints. Three of
+them turned out to be the same thing, and the production numbers say it
+better than the screenshots did:
+
+| Field | What its own copy claims | Guides who had filled it in |
+|---|---|---|
+| Trails you have led | "the first thing a trekker reads on your page" | **5 of 56** |
+| Your voice | "the strongest thing on your profile" | **4 of 56** |
+| Regions you work in | — (no hint at all) | 48 of 56, averaging **0.9 each** |
+
+A multi-select where almost everybody picks exactly one is not a multi-select
+anybody understood.
+
+**Regions.** The field had no explanatory line while the one directly below it
+did. It now says to tick every region you would *take work in*, not the one
+you live in, and says what that buys. Worth knowing and not fixed here: the
+field does less than a guide assumes — it feeds `/nepal/:region`, the atlas
+and one profile line, but not `/guides` search, not the matcher, and the
+office never sees it when deciding to verify somebody.
+
+**Solukhumbu was missing from the list**, which `guide-regions.ts` claimed was
+"the regions that actually exist on the routes table". Pikey Peak is filed
+under it and `atlas.ts` matches by exact string, so that route could never
+have a guide attached — no guide had a box to tick.
+
+**Trails.** A flat A–Z `<select>` over 24 routes, with the region fetched from
+the database and never rendered. Now typed, grouped by region, in a shared
+`RouteField` used by both the application form and the profile, which had
+grown *two separate* pickers. A native `<datalist>` rather than a hand-rolled
+combobox, for the reason `DistrictPicker` already gives about the 77
+districts: it is the Android keyboard's own filter and it needs no JavaScript.
+
+**The draft bug behind the regions confusion.** Ticking five regions and
+coming back gave you none. Two causes, both found by driving a real browser:
+`readForm` collapsed the repeated `regions` field to its last value, and the
+save effect did not depend on the form snapshot at all — so a tick, which
+changes no controlled field, never wrote a draft. And the restore then handed
+the values to components that read them only at mount, so they had to be
+remounted with a key. Three bugs in a row, each hidden behind the one before.
+
+## The chip limit was one pool, not one per group
+
+`MAX_SKILLS = 8` was shared across all five groups and counted in page order,
+so a guide who ticked generously in "What you know" was locked out of "What
+you bring" before scrolling to it — with a single counter that gave no clue
+that was what had happened. The founder diagnosed it exactly.
+
+Now three per group, each group carrying its own live allowance where the
+group is. Fifteen possible instead of eight, and the reason the cap exists
+survives: *"the honest guide ticks four and the optimistic one ticks
+twenty-three, and the twenty-three-tick guide wins every filter."*
+
+The save also **stopped truncating in silence**. These chips are built to work
+with JavaScript off, so a guide could tick fifteen, press Save, be told it
+worked, and lose seven without a word. It says what it kept.
+
+## Recording a voice, and the codec parameter that broke it
+
+"Record one" was the label on a file picker. The recorder is an addition, not
+a replacement: the file picker opens the phone's own voice-memo app, needs no
+microphone permission, and is the only path left when permission is refused —
+so it is never hidden, and the recorder renders nothing at all on a browser
+that cannot record.
+
+No migration was needed: the upload route and the `guide-audio` bucket already
+allow `audio/webm` (Chrome/Android) and `audio/mp4` (Safari).
+
+**Which is exactly where it broke.** Chromium reports its recording as
+`audio/webm;codecs=opus`, and both allow-lists hold *bare* types — so the
+first real recording came back `400 Sound files only`. The tests passed; the
+browser did not. The codec parameter is stripped before the blob becomes a
+file, and a test now pins the difference between what a browser reports and
+what the server accepts.
+
+## A way back to the site from the sign-in pages
+
+Every sign-in screen had the wordmark as plain text. The one link on the page
+lived on the photograph and was `hidden md:block`, so on a phone there was
+nothing at all. One `<Link>` in `AuthSplit` fixes all six screens.

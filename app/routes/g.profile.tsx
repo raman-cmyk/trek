@@ -17,12 +17,14 @@ import {
   type Proficiency,
 } from "~/lib/guide-languages";
 import { MAX_TIMES_WALKED, parseTimesWalked } from "~/lib/guide-routes";
-import { MAX_SKILLS, parseSkills } from "~/lib/guide-skills";
+import { MAX_PER_GROUP, droppedNote, parseSkills } from "~/lib/guide-skills";
 import { parseRegions } from "~/lib/guide-regions";
 import { GuideSkills } from "~/components/GuideSkills";
 import { EmergencyFields } from "~/components/EmergencyFields";
 import { emergencyPatch, hasEmergency, parseEmergency } from "~/lib/emergency";
 import { GuideRegions } from "~/components/GuideRegions";
+import { RouteField } from "~/components/RouteField";
+import { VoiceRecorder } from "~/components/guide/VoiceRecorder";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv(context);
@@ -102,7 +104,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   // form posts the complete set of ticks, and a checkbox that was cleared
   // sends nothing at all.
   if (intent === "skills") {
-    const chosen = parseSkills(form.getAll("skill"));
+    const asked = form.getAll("skill");
+    const chosen = parseSkills(asked);
     const saved = await writeAll([
       {
         query: admin.from("guide_skills").delete().eq("guide_id", user.id),
@@ -120,7 +123,10 @@ export async function action({ request, context }: Route.ActionArgs) {
         : []),
     ]);
     if (!saved.ok) return data({ error: saved.error }, { status: 500, headers });
-    return data({ ok: true }, { headers });
+    // Say what was kept. These chips are built to work with JavaScript off —
+    // so without this a guide could tick fifteen, press Save, be told it
+    // worked, and quietly lose the ones that did not fit.
+    return data({ ok: droppedNote(asked.length, chosen.length) ?? true }, { headers });
   }
 
   // The guide's own next of kin. Every guide who applied before this existed
@@ -687,9 +693,9 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
         <div>
           <p className="text-sm font-medium text-ink">What you are good at</p>
           <p className="mt-0.5 text-sm text-ink-soft">
-            Tick what is true — up to {MAX_SKILLS}. These are what trekkers
-            filter by, so a tick you cannot back up costs you the booking when
-            they arrive.
+            Tick what is true — up to {MAX_PER_GROUP} in each group. These
+            are what trekkers filter by, so a tick you cannot back up costs
+            you the booking when they arrive.
           </p>
         </div>
 
@@ -767,21 +773,16 @@ export default function GuideProfile({ loaderData, actionData }: Route.Component
             className="flex flex-wrap items-end gap-2 rounded-button border border-dashed border-border p-3"
           >
             <input type="hidden" name="intent" value="route" />
-            <label className="flex-1 text-sm text-ink-soft">
-              Add a route
-              <select
-                name="route_id"
-                required
-                className="mt-1 w-full rounded-button border border-border px-3 py-2 text-base text-ink"
-              >
-                {spareRoutes.map((r: any) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                    {r.region ? ` — ${r.region}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/* Typed, grouped by region, shared with the application form.
+                It was a flat A-Z select over twenty-four routes with the
+                first one preselected — so the easiest thing to do was add a
+                trail you had never walked. */}
+            <RouteField
+              routes={spareRoutes as any[]}
+              label="Add a trail"
+              required
+              className="flex-1"
+            />
             <label className="text-sm text-ink-soft">
               Times
               <input
@@ -1150,10 +1151,14 @@ function GuidePhotos({
 /**
  * The voice introduction.
  *
- * A file picker rather than an in-browser recorder: `accept="audio/*"` opens
- * the phone's own voice-memo app on both Android and iOS, which is a recorder
- * the guide already knows how to use and which does not need microphone
- * permission inside a web page on a cheap handset.
+ * Two ways in, and the order matters. The recorder is first because "Record
+ * one" was the label on a file picker and **4 of 56 guides had a voice** —
+ * the founder's note was simply "there is no option to record the voice in
+ * app". The file picker stays underneath, for the reason it was chosen in the
+ * first place: `accept="audio/*"` opens the phone's own voice-memo app on
+ * both Android and iOS, which a guide already knows and which needs no
+ * microphone permission inside a web page on a cheap handset. It is also the
+ * only path left when permission is refused, so it is never hidden.
  */
 function GuideVoice({ url, busy }: { url: string | null; busy: boolean }) {
   const [fresh, setFresh] = useState<string | null>(null);
@@ -1203,8 +1208,13 @@ function GuideVoice({ url, busy }: { url: string | null; busy: boolean }) {
       <Form method="post" className="space-y-2">
         <input type="hidden" name="intent" value="voice" />
         <input type="hidden" name="url" value={fresh ?? ""} />
+
+        {/* Renders nothing at all on a browser that cannot record, so the
+            file picker below is simply the only option there. */}
+        <VoiceRecorder onRecorded={send} disabled={uploading} />
+
         <label className="block text-sm text-ink-soft">
-          {url ? "Record a new one" : "Record one"}
+          {url ? "Or send a new file" : "Or send a file from your phone"}
           <input
             type="file"
             accept="audio/*"
