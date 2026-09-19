@@ -1,0 +1,51 @@
+# Production deploys, from one place only.
+#
+# Written on 19 Sep 2026, the second time in five days that two sessions
+# deployed over each other. That afternoon the live site was rolled back to
+# code from the 15th — against a database four days newer — because the
+# repository's default branch still pointed at an abandoned line, so anyone
+# who cloned it and ran `wrangler deploy` shipped the wrong thing.
+#
+# The rule this file enforces: production is whatever is on `main`, it is
+# deployed by CI and not from a laptop, and it is never deployed without the
+# typecheck, the tests and the build passing first.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Kept for a deliberate re-deploy (a rolled-back secret, a Cloudflare blip).
+  workflow_dispatch:
+
+# One deploy at a time, and never cancel one half-way: a cancelled
+# `wrangler deploy` can leave the worker on a version nobody chose.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # The same gate CI runs on every branch. Repeated here rather than
+      # assumed, because a red build must not be able to reach production
+      # even if somebody pushes straight to main.
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to Cloudflare Workers
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
