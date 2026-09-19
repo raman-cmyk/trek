@@ -929,3 +929,31 @@ build was the missing half: a way to reach it from a guide rather than only
 from a category, the dead `sort` column wired to a control, and a sentence on
 both screens saying what makes a row appear. Writing a second category system
 beside the first would have been the easy thing and the wrong one.
+
+## The bug goes in the test, not the component
+
+`vitest.config.ts` is `environment: "node"`, `include: app/**/*.test.ts` —
+there is no DOM setup and no component test anywhere in the repo, which is why
+a calendar whose arrows did nothing shipped. Rather than add a DOM harness for
+one fix, the decision that was wrong moved into a pure function:
+`shouldFollowDate` is the bug stated as a predicate, and its first test is the
+founder's screenshot. The rule for this area now: if a component behaviour can
+be got wrong, the deciding is a function in `lib` and the component only obeys.
+
+## A wordmark is a way home, in the dashboards too
+
+Every public, auth and apply header links its wordmark to `/`. Both signed-in
+shells left it as inert text, so a guide deep in the experience editor and an
+office person deep in ops had the browser's back button and nothing else. They
+link to their own roots — `/g` and `/ops` — rather than to the marketing site:
+a wordmark inside an app means "take me to the top of this app".
+
+## The homepage stays the trekker's page
+
+Asked where a guide's way in should go, the answer was a line, not the
+section. `GuideCall` is placed after the Split deliberately — a guide reading
+it has just seen exactly what a trekker pays and exactly what the guide keeps
+— and moving it up would have put a recruitment pitch above a trekker's first
+guide, which fails the question in CLAUDE.md that every feature is measured
+by. A one-line band a screen and a half in is unmissable to the reader it is
+addressed to and skippable by the one it is not.

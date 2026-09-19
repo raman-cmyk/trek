@@ -3669,3 +3669,103 @@ button, and the "Departing between From – To" filter.
 
 **The credentials still need rotating** — the Supabase token, the two
 Cloudflare tokens and the database password.
+
+---
+
+## Session — five more from the phone
+
+### The calendar arrows were fighting the calendar
+
+> "The button to change the calander month is not working proerly only shows
+>  two months and gets stuck in september"
+
+A real bug, and a satisfying one. Two rules in `DatePick` fed each other:
+`showMonths` asked whether the trip's end month differed from the month **on
+screen**, so paging changed the size of the window as well as its position;
+and an effect followed the chosen date whenever it fell outside that window,
+with no way to tell a date arriving programmatically from one the reader had
+just paged away from.
+
+His exact case, a one-day trip on 25 Sep 2026:
+
+- **›** → October → `showMonths` flips to 2 → 25 Sep is outside → snapped back
+  to September inside the same commit. The arrow was inert.
+- **‹** → August → `showMonths` flips to 2 → September is still in the window
+  → it sticks, and draws **two months for a one-day trip**.
+- **‹** again → July → outside → teleported back to September.
+
+Two reachable views, `{Aug+Sep}` and `{Sep}`, which is his report word for
+word. `vitest` here is `environment: "node"` with no DOM setup, so the fix
+went where a test can reach it: `spanMonths`, `pageMonth`, `canPage` and
+`shouldFollowDate` in `date-span.ts`, the last of which is the bug written
+down as a predicate — never follow a date that has not changed.
+
+The bounds turned out to matter as much as the fix. `availableDays` stops at
+the 365-day horizon and `AvailabilityCalendar` draws anything it does not hold
+as struck-through "booked", so **working** arrows would have walked into a wall
+of months the guide is not busy in. Paging stops at this month and at the last
+open one, with the arrow visibly disabled rather than dying quietly.
+
+### A guide could not find the way in
+
+Two screenshots, one problem, and the numbers are the argument. At 390px the
+homepage is **24.5 screens** tall and held exactly **two** links to `/apply`:
+the masthead's, which is `display: none` below 1024px, and one **twenty
+screens down**. A guide opening the site on a phone had no way in.
+
+- The menu card was already a link; it simply had no arrow, no hover and no
+  prefetch under five browse rows that had all three. It is the sixth row now,
+  in the same idiom, saying "Guide with us" — the founder's own observation
+  that the laptop's wording was the clearer one.
+- The laptop's link was `text-ink-soft`, the quietest thing in a row holding a
+  filled Sign up. An outline, not a fill.
+- A one-line band after the numbers, at **1,194px — a screen and a half in**.
+  A line and not the section: "Your name on the work" stays after the Split,
+  because a recruitment pitch above a trekker's first guide fails the one-line
+  test.
+- The footer said "Guide with us" → `/hosts` while the header said it →
+  `/apply`. One label, two destinations. The footer's is "What you'd earn
+  guiding" now.
+
+### A wordmark is a way home
+
+`g.tsx:133` was a plain `<span>` — a guide three steps into the experience
+editor had the browser's back button and nothing else. It goes to `/g`.
+
+`ops.tsx:110` had the same defect plus one more: it still read **"Trek Ops"**,
+the last visible pre-rename wordmark in the UI and exactly what `brand.ts`
+exists to have eliminated. It reads `BRAND` now and links to `/ops`.
+`AuthSplit` records this same bug being fixed once for the sign-in screens;
+both dashboard shells were missed in that pass.
+
+### Checked on the live site
+
+- A one-day experience: **Sep → Oct → Nov → Dec** and back, one month at a
+  time, never drawing two, Previous disabled at September.
+- A 14-day trek: **Nov 2026 → Sep 2027**, thirteen presses, Next disabled at
+  the horizon, the chosen span untouched throughout.
+- The homepage at 390px: first `/apply` link now at 1,194px, was 16,331px.
+- The menu at 390px: "Guide with us" as a display-size row with the arrow.
+- `/ops`: wordmark links to `/ops`, reads "Guides of Nepal — Ops · Grey Floor
+  Pvt. Ltd.", fits the 224px sidebar, and "Trek Ops" is gone from the page.
+
+Green: 1,982 tests in 128 files, typecheck clean, build passing. No migration.
+
+### Not verified
+
+The guide wordmark is a `<Link to="/g">` and typechecks, but I have no guide
+password so it was not tapped on the live site. Likewise the booking-step
+reminders from earlier today: the logic is tested and every column it reads
+was checked against the live schema, but no booking has moved since, so none
+has fired yet.
+
+### Blocked
+
+**Stripe.** `getStripe` falls back to a mock whenever `STRIPE_SECRET_KEY` is
+absent, which is the state of the live worker — the two banners on the
+checkout page are correct and there is nothing to fix. Raman is sending the
+test keys; when they land, walk a deposit end to end and watch the "document
+needed" reminder fire.
+
+**Rotate the credentials** — the Supabase token, the two Cloudflare tokens and
+the database password.
