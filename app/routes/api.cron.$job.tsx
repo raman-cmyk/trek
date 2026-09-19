@@ -28,7 +28,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   let result: unknown;
   switch (params.job) {
     case "enquiry-expiry":
-      result = await runEnquiryExpirySweep(admin);
+      result = await runEnquiryExpirySweep(admin, env);
       break;
     case "balance-sweep":
       result = await runBalanceSweep(admin, getStripe(env), today, env);

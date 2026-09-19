@@ -807,7 +807,12 @@ async function notifyOpsWelfareCheck(
 }
 
 /** Expire open enquiries past their TTL, and release accepted-but-unpaid holds. */
-export async function runEnquiryExpirySweep(admin: SupabaseClient) {
+/**
+ * `env` is optional only because two callers predate it. Without it this sweep
+ * does exactly what it always did — end things silently — which is the bug it
+ * now exists to fix, so pass it.
+ */
+export async function runEnquiryExpirySweep(admin: SupabaseClient, env?: Env) {
   const now = new Date().toISOString();
   const { data: expired } = await admin
     .from("enquiries")
@@ -815,6 +820,15 @@ export async function runEnquiryExpirySweep(admin: SupabaseClient) {
     .lt("expires_at", now)
     .eq("status", "open")
     .select("id");
+
+  // Telling people is deliberately outside the update: the status change is
+  // the thing that must not fail, and a mail problem must never leave an
+  // enquiry looking open when it is not. Each send is also its own try/catch
+  // inside sendEmail, so one bad address cannot stop the rest of the sweep.
+  if (env) {
+    const { notifyEnquiryExpired } = await import("~/lib/notifications.server");
+    for (const e of expired ?? []) await notifyEnquiryExpired(env, admin, e.id);
+  }
 
   // Release accepted-but-unpaid holds past their TTL (audit B3): cancel the
   // pending_deposit booking and re-open its held calendar days.
@@ -835,6 +849,12 @@ export async function runEnquiryExpirySweep(admin: SupabaseClient) {
       .update({ status: "open", booking_id: null })
       .eq("booking_id", b.id)
       .eq("status", "held");
+    // Both sides. The trekker lost the dates their guide had agreed to, and
+    // the guide has days to sell again — neither used to be told either thing.
+    if (env) {
+      const { notifyHoldReleased } = await import("~/lib/notifications.server");
+      await notifyHoldReleased(env, admin, b.id);
+    }
     released++;
   }
   return { expiredEnquiries: expired?.length ?? 0, releasedHolds: released };

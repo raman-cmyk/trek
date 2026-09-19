@@ -110,12 +110,19 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ ok: "Accepted. They pay the deposit next." }, { headers });
   }
 
-  await admin
+  const { data: declined } = await admin
     .from("enquiries")
     .update({ status: "declined" })
     .eq("id", id)
     .eq("guide_id", user.id)
-    .in("status", ["open", "quoted"]);
+    .in("status", ["open", "quoted"])
+    .select("id");
+  // Only when a row actually moved — a second tap on the same card must not
+  // send a second "they cannot take your dates" to somebody already told.
+  if (declined?.length) {
+    const { notifyEnquiryDeclined } = await import("~/lib/notifications.server");
+    await notifyEnquiryDeclined(env, admin, id);
+  }
   return data({ ok: "Declined." }, { headers });
 }
 

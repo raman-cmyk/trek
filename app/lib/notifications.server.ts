@@ -722,3 +722,100 @@ export async function notifyProposalApproved(
 function firstNameOf(full: string | null | undefined): string {
   return (full ?? "").trim().split(/\s+/)[0] || "";
 }
+
+/* ── Things that end quietly ────────────────────────────────────────────── */
+
+/** Everyone attached to an enquiry, for the messages that end one. */
+async function enquiryContacts(admin: SupabaseClient, enquiryId: string) {
+  const { data: e } = await admin
+    .from("enquiries")
+    .select(
+      "id, start_date, party_size, guide_id, trekker:users!enquiries_trekker_id_fkey(id, email, full_name), guide:guides!enquiries_guide_id_fkey(slug, users(email, full_name)), offering:offerings(title, slug)",
+    )
+    .eq("id", enquiryId)
+    .maybeSingle();
+  if (!e) return null;
+  return {
+    startDate: (e as any).start_date as string,
+    guideUserId: ((e as any).guide_id ?? null) as string | null,
+    title: ((e as any).offering?.title ?? "your trip") as string,
+    trekkerId: ((e as any).trekker?.id ?? null) as string | null,
+    trekkerEmail: ((e as any).trekker?.email ?? null) as string | null,
+    trekkerName: ((e as any).trekker?.full_name ?? "there") as string,
+    guideEmail: ((e as any).guide?.users?.email ?? null) as string | null,
+    guideName: ((e as any).guide?.users?.full_name ?? "your guide") as string,
+  };
+}
+
+/**
+ * Nobody answered in time.
+ *
+ * The expiry sweep has always done this silently: a trekker who asked a guide
+ * to take them trekking simply never heard back, and had no way to tell a
+ * request sitting in somebody's list from one that had quietly died. Telling
+ * them is also the only chance to keep them — the message exists to point at
+ * other guides while they still want to go.
+ */
+export async function notifyEnquiryExpired(env: Env, admin: SupabaseClient, enquiryId: string) {
+  const c = await enquiryContacts(admin, enquiryId);
+  if (!c) return;
+  await sendEmail(
+    env,
+    c.trekkerEmail,
+    `${c.guideName} did not answer in time`,
+    `Your request to ${c.guideName} for ${c.title} on ${c.startDate} has expired — they did not answer within 24 hours.\n\n` +
+      `That usually means they were on a trek and out of signal, not that they did not want the work.\n\n` +
+      `Plenty of other guides walk this route, and most answer the same day:\n${siteUrl(env)}/guides`,
+    { kind: "enquiry_expired", userId: c.trekkerId, about: { type: "enquiry", id: enquiryId } },
+  );
+}
+
+/**
+ * The guide said no.
+ *
+ * Declining sent nothing at all, so the trekker's list just went quiet and
+ * they were left to work out for themselves whether to keep waiting.
+ */
+export async function notifyEnquiryDeclined(env: Env, admin: SupabaseClient, enquiryId: string) {
+  const c = await enquiryContacts(admin, enquiryId);
+  if (!c) return;
+  await sendEmail(
+    env,
+    c.trekkerEmail,
+    `${c.guideName} cannot take ${c.startDate}`,
+    `${c.guideName} is not able to guide ${c.title} on ${c.startDate}.\n\n` +
+      `Guides turn dates down for all sorts of reasons — usually another trek already in the diary.\n\n` +
+      `Other guides walk this route and can take you:\n${siteUrl(env)}/guides`,
+    { kind: "enquiry_declined", userId: c.trekkerId, about: { type: "enquiry", id: enquiryId } },
+  );
+}
+
+/**
+ * The 24-hour hold ran out before the deposit arrived.
+ *
+ * This is the most expensive silence in the sweep: a trekker whose guide said
+ * yes, who did not pay in time, and who was told nothing by anybody. The dates
+ * went back on the calendar and both sides found out by looking.
+ */
+export async function notifyHoldReleased(env: Env, admin: SupabaseClient, bookingId: string) {
+  const c = await bookingContacts(admin, bookingId);
+  if (!c) return;
+  await Promise.all([
+    sendEmail(
+      env,
+      c.trekkerEmail,
+      `Your dates for ${c.title} have been released`,
+      `${c.guideName} held ${c.startDate} for you for 24 hours, and the deposit did not arrive, so those days have gone back on their calendar.\n\n` +
+        `Nothing has been charged. If you still want to go, ask again — the dates may well still be free:\n${siteUrl(env)}/guides`,
+      { kind: "hold_released", about: { type: "booking", id: bookingId } },
+    ),
+    sendEmail(
+      env,
+      c.guideEmail,
+      `Dates free again: ${c.title}`,
+      `${c.trekkerName} did not pay the deposit for ${c.title} within 24 hours, so ${c.startDate} is open in your calendar again.\n\n` +
+        `Somebody else can book those days now:\n${siteUrl(env)}/g/bookings`,
+      { kind: "hold_released_guide", userId: c.guideUserId, about: { type: "booking", id: bookingId } },
+    ),
+  ]);
+}
