@@ -10,6 +10,8 @@ interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PUBLISHABLE_KEY?: string;
   RESEND_API_KEY?: string;
+  /** Svix signing secret for the Resend webhook. Without it the route 404s. */
+  RESEND_WEBHOOK_SECRET?: string;
   SPARROW_SMS_TOKEN?: string;
   POSTHOG_KEY?: string;
   CRON_SECRET?: string;

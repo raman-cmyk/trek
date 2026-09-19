@@ -200,6 +200,9 @@ export default [
   route("pdf/tims/:bookingId", "routes/pdf.tims.$bookingId.tsx"),
   route("pdf/contract/:bookingId", "routes/pdf.contract.$bookingId.tsx"),
   route("api/webhooks/stripe", "routes/api.webhooks.stripe.tsx"),
+  // Resend tells us here when mail bounces or somebody marks it spam —
+  // the only thing that ever writes users.email_blocked_at.
+  route("api/webhooks/resend", "routes/api.webhooks.resend.tsx"),
   route("api/cron/:job", "routes/api.cron.$job.tsx"),
   route("api/journal-photo", "routes/api.journal-photo.tsx"),
   // Add a route without leaving the listing you are writing (api.route.tsx).
