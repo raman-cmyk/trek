@@ -3986,3 +3986,99 @@ throwaway booking to be seeded and the page driven in a real browser.
 - **Rotate the credentials** once the list above is done — the Supabase
   token, the two Cloudflare tokens and the database password. Deferred
   deliberately, still outstanding.
+
+## 19 Sep 2026 (third stretch) — email, switched on and made to behave
+
+Raman: "Get the Stripe live then resend", then "plan and create fkn awesome
+automation — think everywhere the email would be absolutely necessary", then
+"No SMS, let's not do any sms at least for now".
+
+That last sentence is the one that shaped everything, because of a structural
+fact worth stating at the top:
+
+> The in-app bell is written by the EMAIL path (`send.server.ts:157` calls
+> `recordInApp`). `sendGuideSms` never touches it.
+
+So every notification that was SMS-only produced no email **and** no bell. It
+reached nobody. Including the most important event in the marketplace: a
+trekker asking a named guide to take them into the mountains.
+
+### Deliverability first, because the domain is one day old
+
+`_dmarc` did not exist. DKIM was verified and `send.` carried SPF, but Gmail
+now asks bulk senders for DMARC and the first test email sat in
+`delivery_delayed` for over half an hour. Published `p=none` (monitor only,
+cannot reject) and a root SPF naming Resend — safe, because the root has no MX
+and no other sender. A second test sent afterwards went to `sent` with no
+deferral.
+
+`app/lib/resend-events.ts` + `api/webhooks/resend` close the other half of the
+loop. `users.email_blocked_at` has existed since 0055 and the gate has always
+honoured it; nothing had ever written it, so a dead address would be mailed
+forever. The judgement that matters: **only a permanent bounce blocks.** A
+transient one is a full mailbox, and treating it as permanent locks a trekker
+out of their own booking receipts.
+
+Verified live: forged signature, unsigned request and a delivery replayed from
+two days ago each get 400; a correctly signed one gets 200. A permanent bounce
+set `email_blocked_at` on a seed account (restored); a transient one did not.
+
+### A burst window on 1:1 threads, before any volume
+
+`notifyNewMessage` fired on every single message. Group chat was given a window
+deliberately in September; 1:1 never was. With email live, two people arranging
+a pickup would have generated an email per line. Same 30-minute window, same
+tested `withinBurstWindow`, keyed per thread.
+
+### The silences, closed
+
+Guide side, all previously SMS-only and therefore nothing at all: a new
+request, the deposit landing, verification (approved or not), a public
+question, a cancellation, a listing going back up. That last one had `email`
+in its select since the day it was written and never read it.
+
+Sweeps, all previously silent: an enquiry expiring, a 24-hour hold lapsing
+(both sides), a trip starting, a trip finishing — the last of which is where
+the review request belongs, since the manual "complete" path was the only one
+that ever asked and almost nothing finishes that way.
+
+Actions: a guide declining (the trekker's list simply went quiet), a group
+invite (the address was stored and nothing was ever sent to it), a payout
+batch being marked paid.
+
+**The most expensive one was two missing branches.** `runBalanceSweep` read
+`if (res.status === "succeeded")` with no else, and `sweepInstalments` read
+`if (res.status !== "succeeded") continue`. A declined card produced nothing,
+and the trekker's next contact from us was their trip being cancelled at T-10
+with the deposit forfeit. Four silent days. The instalment case retried
+silently every day until departure. Both now warn, counting down to the
+cancellation, with the `kind` carrying the day so each day's warning is its
+own send and a sweep run twice says nothing twice.
+
+### The first real email
+
+At 14:59, a guide accepted an enquiry on the live site and
+`enquiry_accepted` went to a real trekker on Gmail. Resend reports
+**delivered**. That is the first email this platform has ever successfully
+sent to a real person, and it happened unprompted, through the normal flow.
+
+Green: 2,035 tests in 132 files, typecheck clean, build passing, deployed.
+
+### Left for the next stretch
+
+- **`supabase/migrations/0115_email_claims.sql` is written and NOT applied.**
+  It is the claim-before-send table that makes a double-send impossible under
+  a real race. Nothing is blocked on it — the warnings above use `alreadySent`
+  with day-keyed kinds — but applying it needs a Supabase personal access
+  token (`sbp_…`) for `scripts/remote-apply.sh`. The service_role key cannot
+  run DDL; there is no SQL endpoint on PostgREST and every `rpc/exec_sql`
+  shape 404s.
+- Still silent: check-in due and missed-L1 to the guide, permit rejected,
+  insurance cover-short, the T-7 brief unlock, `close_help` on /ops/insurance,
+  a guide moved to `in_review`, and verifying a document from
+  `/ops/verifications` (which sends nothing, while the same action from
+  `/ops/bookings/:id` sends the confirmation).
+- Phase 3 (the readiness sweep over `tripReadiness`) and Phase 4
+  (`cron_runs`, an ops bell) are planned and not started.
+- `CRON_SECRET` was rotated to a value this session holds, so sweeps can be
+  triggered by hand for testing.
